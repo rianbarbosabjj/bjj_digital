@@ -96,23 +96,19 @@ def salvar_resultado(usuario, modo, tema, pontuacao, tempo):
 
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-    topo_path = "assets/topo.webp"
+    topo_path = "assets/topo.png"
     if os.path.exists(topo_path):
         topo_img = Image.open(topo_path)
         st.image(topo_img, use_container_width=True)
-    else:
-        st.warning("Imagem topo.webp não encontrada na pasta assets.")
 
 # =========================================
 # EXIBIÇÃO DE IMAGEM E VÍDEO
 # =========================================
 def exibir_midia(pergunta):
-    """Exibe imagem e/ou vídeo da questão, se existirem."""
+    """Exibe imagem e/ou vídeo da questão somente se existirem."""
     if "imagem" in pergunta and pergunta["imagem"]:
         if os.path.exists(pergunta["imagem"]):
             st.image(pergunta["imagem"], use_container_width=True)
-        else:
-            st.warning(f"Imagem não encontrada: {pergunta['imagem']}")
     if "video" in pergunta and pergunta["video"]:
         st.video(pergunta["video"])
 
