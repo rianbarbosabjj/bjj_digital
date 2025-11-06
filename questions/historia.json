@@ -1,0 +1,27 @@
+[
+  {
+    "pergunta": "O jiu-jitsu tem origem em qual país?",
+    "opcoes": ["A) Japão", "B) China", "C) Brasil", "D) Índia"],
+    "resposta": "D"
+  },
+  {
+    "pergunta": "Quem é considerado o introdutor do jiu-jitsu no Brasil?",
+    "opcoes": ["A) Jigoro Kano", "B) Mitsuyo Maeda", "C) Hélio Gracie", "D) Carlos Gracie"],
+    "resposta": "B"
+  },
+  {
+    "pergunta": "O jiu-jitsu brasileiro se originou a partir de qual outra arte marcial?",
+    "opcoes": ["A) Judô", "B) Karate", "C) Aikido", "D) Sumô"],
+    "resposta": "A"
+  },
+  {
+    "pergunta": "Qual membro da família Gracie é reconhecido por adaptar o jiu-jitsu para pessoas mais leves e fracas?",
+    "opcoes": ["A) Hélio Gracie", "B) Rorion Gracie", "C) Rickson Gracie", "D) Royce Gracie"],
+    "resposta": "A"
+  },
+  {
+    "pergunta": "Em que país o jiu-jitsu brasileiro se tornou mundialmente conhecido através do UFC?",
+    "opcoes": ["A) Japão", "B) Estados Unidos", "C) França", "D) Brasil"],
+    "resposta": "B"
+  }
+]
