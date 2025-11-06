@@ -1,27 +1,42 @@
 [
   {
+    "nivel": 1,
     "pergunta": "Qual é a ordem correta das faixas no jiu-jitsu adulto?",
+    "imagem": "assets/faixas_adultos.png",
+    "video": "",
     "opcoes": ["A) Branca, Azul, Roxa, Marrom, Preta", "B) Azul, Branca, Roxa, Marrom, Preta", "C) Branca, Roxa, Azul, Marrom, Preta", "D) Branca, Azul, Preta, Marrom"],
     "resposta": "A"
   },
   {
+    "nivel": 2,
     "pergunta": "Após quantos graus na faixa preta o atleta se torna faixa coral?",
+    "imagem": "assets/faixa_coral.png",
+    "video": "",
     "opcoes": ["A) 4º grau", "B) 5º grau", "C) 6º grau", "D) 7º grau"],
     "resposta": "D"
   },
   {
+    "nivel": 2,
+    "pergunta": "Assista ao vídeo e identifique a faixa apresentada.",
+    "imagem": "",
+    "video": "https://www.youtube.com/watch?v=GmvfSyJfGPo",
+    "opcoes": ["A) Faixa azul", "B) Faixa roxa", "C) Faixa marrom", "D) Faixa preta"],
+    "resposta": "B"
+  },
+  {
+    "nivel": 3,
     "pergunta": "A faixa vermelha é atribuída a mestres com quantos anos de prática e contribuição?",
+    "imagem": "assets/faixa_vermelha.png",
+    "video": "",
     "opcoes": ["A) 20 anos", "B) 30 anos", "C) 40 anos", "D) 50 anos"],
     "resposta": "C"
   },
   {
-    "pergunta": "Qual é a faixa imediatamente anterior à faixa roxa?",
-    "opcoes": ["A) Azul", "B) Verde", "C) Laranja", "D) Marrom"],
-    "resposta": "A"
-  },
-  {
-    "pergunta": "Em competições, qual faixa é a primeira a poder aplicar finalizações envolvendo o pescoço?",
-    "opcoes": ["A) Branca", "B) Azul", "C) Roxa", "D) Marrom"],
-    "resposta": "B"
+    "nivel": 3,
+    "pergunta": "Qual dessas imagens representa corretamente uma faixa coral?",
+    "imagem": "assets/opcao_faixa_coral.png",
+    "video": "",
+    "opcoes": ["A) Faixa azul", "B) Faixa roxa", "C) Faixa coral", "D) Faixa preta"],
+    "resposta": "C"
   }
 ]
