@@ -4,7 +4,6 @@ import sqlite3
 import json
 import random
 import os
-import pandas as pd
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -16,14 +15,13 @@ st.set_page_config(
 )
 
 # Paleta de cores (baseada na GFTeam IAPC)
-COR_FUNDO = "#0e2d26"        # verde escuro
+COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
-COR_DESTAQUE = "#FFD700"     # dourado
-COR_BOTAO = "#078B6C"        # verde GFTeam
+COR_DESTAQUE = "#FFD700"
+COR_BOTAO = "#078B6C"
 COR_HOVER = "#FFD700"
-COR_TABELA = "#1a4037"
 
-# Estilo CSS Global
+# Estilo visual
 st.markdown(f"""
     <style>
     body {{
@@ -34,17 +32,15 @@ st.markdown(f"""
     .stButton>button {{
         background: linear-gradient(90deg, {COR_BOTAO}, #056853);
         color: white;
-        font-weight: 600;
+        font-weight: bold;
         border: none;
         padding: 0.6em 1.2em;
         border-radius: 10px;
         transition: 0.3s;
-        font-size: 1em;
     }}
     .stButton>button:hover {{
         background: {COR_HOVER};
         color: {COR_FUNDO};
-        transform: scale(1.05);
     }}
     h1, h2, h3 {{
         color: {COR_DESTAQUE};
@@ -53,22 +49,6 @@ st.markdown(f"""
     }}
     .stSelectbox label {{
         color: {COR_DESTAQUE};
-    }}
-    .block-container {{
-        padding-top: 2rem;
-        padding-bottom: 2rem;
-    }}
-    .ranking-table td {{
-        text-align: center;
-        padding: 8px;
-        background-color: {COR_TABELA};
-        color: white;
-    }}
-    .ranking-table th {{
-        background-color: {COR_BOTAO};
-        color: {COR_TEXTO};
-        text-align: center;
-        padding: 10px;
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -120,9 +100,24 @@ def mostrar_cabecalho(titulo):
     if os.path.exists(topo_path):
         topo_img = Image.open(topo_path)
         st.image(topo_img, use_container_width=True)
+    else:
+        st.warning("Imagem topo.png não encontrada na pasta assets.")
 
 # =========================================
-# MODO EXAME DE FAIXA (CORRIGIDO)
+# EXIBIÇÃO DE IMAGEM E VÍDEO
+# =========================================
+def exibir_midia(pergunta):
+    """Exibe imagem e/ou vídeo da questão, se existirem."""
+    if "imagem" in pergunta and pergunta["imagem"]:
+        if os.path.exists(pergunta["imagem"]):
+            st.image(pergunta["imagem"], use_container_width=True)
+        else:
+            st.warning(f"Imagem não encontrada: {pergunta['imagem']}")
+    if "video" in pergunta and pergunta["video"]:
+        st.video(pergunta["video"])
+
+# =========================================
+# MODO EXAME DE FAIXA
 # =========================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
@@ -137,19 +132,15 @@ def modo_exame():
         random.shuffle(questoes)
         pontuacao = 0
         total = len(questoes[:5])
-        respostas_usuario = {}
 
         for i, q in enumerate(questoes[:5], 1):
-            st.subheader(f"{i}. {q['pergunta']}")
-            resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"q{i}", index=None)
-            respostas_usuario[i] = resposta
+            st.markdown(f"### {i}. {q['pergunta']}")
+            exibir_midia(q)
+            resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"exame_{i}", index=None)
+            if resposta and resposta.startswith(q["resposta"]):
+                pontuacao += 1
 
         if st.button("Finalizar Exame"):
-            for i, q in enumerate(questoes[:5], 1):
-                resposta = respostas_usuario.get(i)
-                if resposta and resposta.startswith(q["resposta"]):
-                    pontuacao += 1
-
             salvar_resultado(usuario, "Exame", faixa, pontuacao, "00:05:00")
             st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
             st.info(f"Resultado salvo para a faixa {faixa}.")
@@ -169,15 +160,14 @@ def modo_estudo():
         return
 
     q = random.choice(questoes)
-    st.subheader(q["pergunta"])
+    st.markdown(f"### {q['pergunta']}")
+    exibir_midia(q)
     resposta = st.radio("Escolha a alternativa:", q["opcoes"], index=None)
     if st.button("Verificar"):
         if resposta and resposta.startswith(q["resposta"]):
             st.success("✅ Correto!")
-        elif resposta:
-            st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
         else:
-            st.warning("⚠️ Escolha uma opção antes de verificar.")
+            st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
 
 # =========================================
 # MODO TREINO (ROLA)
@@ -193,41 +183,54 @@ def modo_rola():
         random.shuffle(questoes)
         pontos = 0
         total = len(questoes[:5])
-        respostas_usuario = {}
 
         for i, q in enumerate(questoes[:5], 1):
-            st.write(f"**{i}. {q['pergunta']}**")
-            resposta = st.radio("", q["opcoes"], key=f"rola{i}", index=None)
-            respostas_usuario[i] = resposta
+            st.markdown(f"### {i}. {q['pergunta']}")
+            exibir_midia(q)
+            resposta = st.radio("", q["opcoes"], key=f"rola_{i}", index=None)
+            if resposta and resposta.startswith(q["resposta"]):
+                pontos += 1
 
         if st.button("Finalizar Rola"):
-            for i, q in enumerate(questoes[:5], 1):
-                resposta = respostas_usuario.get(i)
-                if resposta and resposta.startswith(q["resposta"]):
-                    pontos += 1
-
             salvar_resultado(usuario, "Rola", tema, pontos, "00:04:00")
             st.success(f"🎯 Resultado: {pontos}/{total} acertos")
 
 # =========================================
-# RANKING (VISUAL MODERNO)
+# RANKING
 # =========================================
 def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
 
     conn = sqlite3.connect(DB_PATH)
     dados = conn.execute("""
-        SELECT usuario AS 'Aluno', modo AS 'Modo', tema AS 'Tema',
-               pontuacao AS 'Pontuação', data AS 'Data'
-        FROM resultados ORDER BY pontuacao DESC, data DESC LIMIT 20
+        SELECT usuario, modo, tema, pontuacao, data
+        FROM resultados
+        ORDER BY pontuacao DESC, data DESC
+        LIMIT 20
     """).fetchall()
     conn.close()
 
     if dados:
-        df = pd.DataFrame(dados, columns=["Aluno", "Modo", "Tema", "Pontuação", "Data"])
-        df.index = df.index + 1
-        st.markdown("<h3 style='text-align:center;'>Top 20 Melhores Resultados</h3>", unsafe_allow_html=True)
-        st.table(df)
+        st.markdown("""
+        <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th {
+            background-color: #078B6C;
+            color: white;
+            padding: 10px;
+        }
+        td {
+            background-color: #123831;
+            color: white;
+            text-align: center;
+            padding: 8px;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+        st.table(dados)
     else:
         st.info("Nenhum resultado registrado ainda.")
 
