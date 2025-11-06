@@ -204,13 +204,13 @@ def ranking():
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola", "🏆 Ranking"])
+    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"])
 
     if menu == "🏁 Exame de Faixa":
         modo_exame()
     elif menu == "📘 Estudo":
         modo_estudo()
-    elif menu == "🤼‍♂️ Rola":
+    elif menu == "🤼‍♂️ Rola" (Modo Treino):
         modo_rola()
     elif menu == "🏆 Ranking":
         ranking()
