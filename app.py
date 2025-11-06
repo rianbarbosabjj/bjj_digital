@@ -102,15 +102,27 @@ def mostrar_cabecalho(titulo):
         st.image(topo_img, use_container_width=True)
 
 # =========================================
-# EXIBIÇÃO DE IMAGEM E VÍDEO
+# EXIBIÇÃO DE IMAGEM E VÍDEO (sem espaços vazios)
 # =========================================
 def exibir_midia(pergunta):
-    """Exibe imagem e/ou vídeo da questão somente se existirem."""
+    """Exibe imagem e/ou vídeo da questão apenas se existirem, sem reservar espaço vazio."""
+    col = st.container()
+    has_midia = False
+
     if "imagem" in pergunta and pergunta["imagem"]:
-        if os.path.exists(pergunta["imagem"]):
-            st.image(pergunta["imagem"], use_container_width=True)
+        caminho_imagem = pergunta["imagem"]
+        if os.path.exists(caminho_imagem):
+            col.image(caminho_imagem, use_container_width=True)
+            has_midia = True
+
     if "video" in pergunta and pergunta["video"]:
-        st.video(pergunta["video"])
+        video = pergunta["video"]
+        if video.strip():  # só exibe se tiver conteúdo real
+            col.video(video)
+            has_midia = True
+
+    if not has_midia:
+        col.empty()
 
 # =========================================
 # MODO EXAME DE FAIXA
