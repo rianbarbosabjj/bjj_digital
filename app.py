@@ -122,7 +122,7 @@ def mostrar_cabecalho(titulo):
         st.image(topo_img, use_container_width=True)
 
 # =========================================
-# MODO EXAME DE FAIXA
+# MODO EXAME DE FAIXA (CORRIGIDO)
 # =========================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
@@ -137,14 +137,19 @@ def modo_exame():
         random.shuffle(questoes)
         pontuacao = 0
         total = len(questoes[:5])
+        respostas_usuario = {}
 
         for i, q in enumerate(questoes[:5], 1):
             st.subheader(f"{i}. {q['pergunta']}")
             resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"q{i}", index=None)
-            if resposta.startswith(q["resposta"]):
-                pontuacao += 1
+            respostas_usuario[i] = resposta
 
         if st.button("Finalizar Exame"):
+            for i, q in enumerate(questoes[:5], 1):
+                resposta = respostas_usuario.get(i)
+                if resposta and resposta.startswith(q["resposta"]):
+                    pontuacao += 1
+
             salvar_resultado(usuario, "Exame", faixa, pontuacao, "00:05:00")
             st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
             st.info(f"Resultado salvo para a faixa {faixa}.")
@@ -167,10 +172,12 @@ def modo_estudo():
     st.subheader(q["pergunta"])
     resposta = st.radio("Escolha a alternativa:", q["opcoes"], index=None)
     if st.button("Verificar"):
-        if resposta.startswith(q["resposta"]):
+        if resposta and resposta.startswith(q["resposta"]):
             st.success("✅ Correto!")
-        else:
+        elif resposta:
             st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
+        else:
+            st.warning("⚠️ Escolha uma opção antes de verificar.")
 
 # =========================================
 # MODO TREINO (ROLA)
@@ -186,14 +193,19 @@ def modo_rola():
         random.shuffle(questoes)
         pontos = 0
         total = len(questoes[:5])
+        respostas_usuario = {}
 
         for i, q in enumerate(questoes[:5], 1):
             st.write(f"**{i}. {q['pergunta']}**")
             resposta = st.radio("", q["opcoes"], key=f"rola{i}", index=None)
-            if resposta.startswith(q["resposta"]):
-                pontos += 1
+            respostas_usuario[i] = resposta
 
         if st.button("Finalizar Rola"):
+            for i, q in enumerate(questoes[:5], 1):
+                resposta = respostas_usuario.get(i)
+                if resposta and resposta.startswith(q["resposta"]):
+                    pontos += 1
+
             salvar_resultado(usuario, "Rola", tema, pontos, "00:04:00")
             st.success(f"🎯 Resultado: {pontos}/{total} acertos")
 
