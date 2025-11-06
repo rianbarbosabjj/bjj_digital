@@ -1,0 +1,27 @@
+[
+  {
+    "pergunta": "Quando o árbitro estende o braço à frente e faz movimento vertical em direção ao solo, o que ele indica?",
+    "opcoes": ["A) Parar a luta", "B) Início da luta", "C) Punição", "D) Declaração do vencedor"],
+    "resposta": "B"
+  },
+  {
+    "pergunta": "O árbitro ergue dois dedos (indicador e médio). O que significa?",
+    "opcoes": ["A) Duas vantagens", "B) Dois pontos (queda, raspagem ou joelho na barriga)", "C) Punição dupla", "D) Pedido de médico"],
+    "resposta": "B"
+  },
+  {
+    "pergunta": "Quantos pontos são concedidos pela passagem de guarda estabilizada?",
+    "opcoes": ["A) 2 pontos", "B) 3 pontos", "C) 4 pontos", "D) Apenas vantagem"],
+    "resposta": "B"
+  },
+  {
+    "pergunta": "O árbitro deve contar quantos segundos de estabilização para validar uma posição de pontuação?",
+    "opcoes": ["A) 2 segundos", "B) 3 segundos", "C) 5 segundos", "D) 10 segundos"],
+    "resposta": "B"
+  },
+  {
+    "pergunta": "O gesto de braços cruzados sobre a cabeça com punhos fechados indica:",
+    "opcoes": ["A) Desclassificação", "B) Punição", "C) Vantagem", "D) Finalização"],
+    "resposta": "A"
+  }
+]
