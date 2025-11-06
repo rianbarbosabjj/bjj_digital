@@ -4,7 +4,6 @@ import sqlite3
 import json
 import random
 import os
-import pandas as pd  # ✅ novo: para ranking mais bonito
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -22,7 +21,7 @@ COR_DESTAQUE = "#FFD700"     # dourado
 COR_BOTAO = "#078B6C"        # verde GFTeam
 COR_HOVER = "#FFD700"
 
-# Estilo CSS
+# Estilo CSS moderno e responsivo
 st.markdown(f"""
     <style>
     body {{
@@ -38,10 +37,12 @@ st.markdown(f"""
         padding: 0.6em 1.2em;
         border-radius: 10px;
         transition: 0.3s;
+        box-shadow: 0px 3px 8px rgba(0,0,0,0.2);
     }}
     .stButton>button:hover {{
         background: {COR_HOVER};
         color: {COR_FUNDO};
+        transform: scale(1.03);
     }}
     h1, h2, h3 {{
         color: {COR_DESTAQUE};
@@ -50,6 +51,10 @@ st.markdown(f"""
     }}
     .stSelectbox label {{
         color: {COR_DESTAQUE};
+    }}
+    img {{
+        border-radius: 12px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.25);
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -97,12 +102,12 @@ def salvar_resultado(usuario, modo, tema, pontuacao, tempo):
 
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-    topo_path = "assets/pr_logo.png"
+    topo_path = "assets/topo.webp"  # imagem ajustável ao tamanho da tela
     if os.path.exists(topo_path):
         topo_img = Image.open(topo_path)
         st.image(topo_img, use_container_width=True)
     else:
-        st.warning("Imagem topo.png não encontrada na pasta assets.")
+        st.warning("Imagem topo.webp não encontrada na pasta assets.")
 
 # =========================================
 # MODO EXAME DE FAIXA
@@ -177,24 +182,33 @@ def modo_rola():
                 pontos += 1
 
         if st.button("Finalizar Rola"):
-            salvar_resultado(usuario, "Rola", tema, pontos, "00:04:00")
+            salvar_resultado(usuario, "Rola (Modo Treino)", tema, pontos, "00:04:00")
             st.success(f"🎯 Resultado: {pontos}/{total} acertos")
 
 # =========================================
-# RANKING (melhorado com DataFrame)
+# RANKING (VISUAL MODERNO)
 # =========================================
 def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
 
     conn = sqlite3.connect(DB_PATH)
     dados = conn.execute(
-        "SELECT usuario, modo, tema, pontuacao, data FROM resultados ORDER BY pontuacao DESC, data DESC LIMIT 20"
+        "SELECT usuario, modo, tema, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20"
     ).fetchall()
     conn.close()
 
     if dados:
-        df = pd.DataFrame(dados, columns=["Usuário", "Modo", "Tema", "Pontuação", "Data"])
-        st.dataframe(df.style.highlight_max(subset=["Pontuação"], color="#FFD700"), use_container_width=True)
+        st.markdown(
+            "<h3 style='color:#FFD700;text-align:center;'>Top 20 Participantes</h3>",
+            unsafe_allow_html=True,
+        )
+        for i, (usuario, modo, tema, pontuacao, data) in enumerate(dados, 1):
+            st.markdown(f"""
+            <div style='background-color:#0a211d;border-radius:10px;padding:10px;margin:6px 0;'>
+                <b style='color:#FFD700;'>{i}. {usuario}</b> — 
+                <span style='color:#FFFFFF;'>Modo: {modo} | Tema: {tema} | Pontos: {pontuacao} | Data: {data}</span>
+            </div>
+            """, unsafe_allow_html=True)
     else:
         st.info("Nenhum resultado registrado ainda.")
 
@@ -202,9 +216,19 @@ def ranking():
 # MENU PRINCIPAL
 # =========================================
 def main():
-    st.sidebar.image("assets/logo.png", use_container_width=True)
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        st.sidebar.image(logo_path, use_container_width=True)
+    else:
+        st.sidebar.markdown("🥋 **BJJ Digital**")
+
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"])
+    menu = st.sidebar.radio("Navegar:", [
+        "🏁 Exame de Faixa",
+        "📘 Estudo",
+        "🤼‍♂️ Rola (Modo Treino)",
+        "🏆 Ranking"
+    ])
 
     if menu == "🏁 Exame de Faixa":
         modo_exame()
