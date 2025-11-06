@@ -14,20 +14,20 @@ st.set_page_config(
     layout="wide",
 )
 
-# Paleta de cores baseada no site GFTeam IAPC
-COR_FUNDO = "#0e2d26"
+# Paleta de cores (baseada na GFTeam IAPC)
+COR_FUNDO = "#0e2d26"        # verde escuro
 COR_TEXTO = "#FFFFFF"
-COR_DESTAQUE = "#FFD700"
-COR_BOTAO = "#078B6C"
+COR_DESTAQUE = "#FFD700"     # dourado
+COR_BOTAO = "#078B6C"        # verde GFTeam
 COR_HOVER = "#FFD700"
 
-# CSS personalizado
+# Estilo CSS
 st.markdown(f"""
     <style>
     body {{
         background-color: {COR_FUNDO};
         color: {COR_TEXTO};
-        font-family: 'Raleway', sans-serif;
+        font-family: 'Poppins', sans-serif;
     }}
     .stButton>button {{
         background: linear-gradient(90deg, {COR_BOTAO}, #056853);
@@ -35,16 +35,20 @@ st.markdown(f"""
         font-weight: bold;
         border: none;
         padding: 0.6em 1.2em;
-        border-radius: 8px;
+        border-radius: 10px;
         transition: 0.3s;
     }}
     .stButton>button:hover {{
         background: {COR_HOVER};
         color: {COR_FUNDO};
     }}
-    h1, h2, h3, h4 {{
+    h1, h2, h3 {{
         color: {COR_DESTAQUE};
+        text-align: center;
         font-weight: 700;
+    }}
+    .stSelectbox label {{
+        color: {COR_DESTAQUE};
     }}
     </style>
 """, unsafe_allow_html=True)
@@ -58,7 +62,6 @@ def criar_banco():
     os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
     cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario TEXT,
@@ -68,14 +71,13 @@ def criar_banco():
         tempo TEXT,
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
-
     conn.commit()
     conn.close()
 
 criar_banco()
 
 # =========================================
-# FUNÇÃO PARA CARREGAR QUESTÕES
+# FUNÇÕES AUXILIARES
 # =========================================
 def carregar_questoes(tema):
     path = f"questions/{tema}.json"
@@ -84,9 +86,6 @@ def carregar_questoes(tema):
             return json.load(f)
     return []
 
-# =========================================
-# FUNÇÃO PARA SALVAR RESULTADOS
-# =========================================
 def salvar_resultado(usuario, modo, tema, pontuacao, tempo):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -95,19 +94,14 @@ def salvar_resultado(usuario, modo, tema, pontuacao, tempo):
     conn.commit()
     conn.close()
 
-# =========================================
-# CABEÇALHO VISUAL
-# =========================================
 def mostrar_cabecalho(titulo):
-    col1, col2, col3 = st.columns([1, 4, 1])
-    with col2:
-        st.markdown(f"<h1 style='text-align: center;'>{titulo}</h1>", unsafe_allow_html=True)
-        topo_path = "assets/topo.png"
-        if os.path.exists(topo_path):
-            topo_img = Image.open(topo_path)
-            st.image(topo_img, use_container_width=True)
-        else:
-            st.warning("Imagem topo.png não encontrada em /assets")
+    st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
+    topo_path = "assets/topo.png"
+    if os.path.exists(topo_path):
+        topo_img = Image.open(topo_path)
+        st.image(topo_img, use_container_width=True)
+    else:
+        st.warning("Imagem topo.png não encontrada na pasta assets.")
 
 # =========================================
 # MODO EXAME DE FAIXA
@@ -117,7 +111,6 @@ def modo_exame():
 
     faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
     faixa = st.selectbox("Selecione a faixa para o exame:", faixas)
-
     usuario = st.text_input("Nome do aluno:")
     tema = "regras"
 
@@ -139,7 +132,7 @@ def modo_exame():
             st.info(f"Resultado salvo para a faixa {faixa}.")
 
 # =========================================
-# MODO ESTUDO (QUIZ)
+# MODO ESTUDO
 # =========================================
 def modo_estudo():
     mostrar_cabecalho("📘 Estudo Interativo")
@@ -193,17 +186,20 @@ def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
 
     conn = sqlite3.connect(DB_PATH)
-    df = st.dataframe(
-        conn.execute("SELECT usuario, modo, tema, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall(),
-        use_container_width=True
-    )
+    dados = conn.execute("SELECT usuario, modo, tema, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall()
     conn.close()
+
+    if dados:
+        st.table(dados)
+    else:
+        st.info("Nenhum resultado registrado ainda.")
 
 # =========================================
 # MENU PRINCIPAL
 # =========================================
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
+    st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
     menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola", "🏆 Ranking"])
 
     if menu == "🏁 Exame de Faixa":
