@@ -102,26 +102,31 @@ def mostrar_cabecalho(titulo):
         st.image(topo_img, use_container_width=True)
 
 # =========================================
-# EXIBIÇÃO DE IMAGEM E VÍDEO (sem espaços vazios)
+# EXIBIÇÃO DE IMAGEM E VÍDEO (com validação completa)
 # =========================================
 def exibir_midia(pergunta):
-    """Exibe imagem e/ou vídeo da questão apenas se existirem, sem reservar espaço vazio."""
+    """Exibe imagem e/ou vídeo apenas se existirem e forem válidos, sem deixar espaços vazios."""
     col = st.container()
-    has_midia = False
+    midia_exibida = False
 
+    # === IMAGEM ===
     if "imagem" in pergunta and pergunta["imagem"]:
-        caminho_imagem = pergunta["imagem"]
-        if os.path.exists(caminho_imagem):
-            col.image(caminho_imagem, use_container_width=True)
-            has_midia = True
+        caminho_imagem = pergunta["imagem"].strip()
+        if caminho_imagem:
+            if os.path.exists(caminho_imagem) or caminho_imagem.startswith("http"):
+                col.image(caminho_imagem, use_container_width=True)
+                midia_exibida = True
 
+    # === VÍDEO ===
     if "video" in pergunta and pergunta["video"]:
-        video = pergunta["video"]
-        if video.strip():  # só exibe se tiver conteúdo real
-            col.video(video)
-            has_midia = True
+        video_link = pergunta["video"].strip()
+        # Só renderiza se for um link válido ou arquivo existente
+        if video_link and (video_link.startswith("http") or os.path.exists(video_link)):
+            col.video(video_link)
+            midia_exibida = True
 
-    if not has_midia:
+    # === Nenhuma mídia válida ===
+    if not midia_exibida:
         col.empty()
 
 # =========================================
