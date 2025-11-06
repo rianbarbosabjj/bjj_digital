@@ -4,6 +4,7 @@ import sqlite3
 import json
 import random
 import os
+import pandas as pd  # ✅ novo: para ranking mais bonito
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -180,17 +181,20 @@ def modo_rola():
             st.success(f"🎯 Resultado: {pontos}/{total} acertos")
 
 # =========================================
-# RANKING
+# RANKING (melhorado com DataFrame)
 # =========================================
 def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
 
     conn = sqlite3.connect(DB_PATH)
-    dados = conn.execute("SELECT usuario, modo, tema, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall()
+    dados = conn.execute(
+        "SELECT usuario, modo, tema, pontuacao, data FROM resultados ORDER BY pontuacao DESC, data DESC LIMIT 20"
+    ).fetchall()
     conn.close()
 
     if dados:
-        st.table(dados)
+        df = pd.DataFrame(dados, columns=["Usuário", "Modo", "Tema", "Pontuação", "Data"])
+        st.dataframe(df.style.highlight_max(subset=["Pontuação"], color="#FFD700"), use_container_width=True)
     else:
         st.info("Nenhum resultado registrado ainda.")
 
