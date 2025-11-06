@@ -1,0 +1,27 @@
+[
+  {
+    "pergunta": "Qual é a ordem correta das faixas no jiu-jitsu adulto?",
+    "opcoes": ["A) Branca, Azul, Roxa, Marrom, Preta", "B) Azul, Branca, Roxa, Marrom, Preta", "C) Branca, Roxa, Azul, Marrom, Preta", "D) Branca, Azul, Preta, Marrom"],
+    "resposta": "A"
+  },
+  {
+    "pergunta": "Após quantos graus na faixa preta o atleta se torna faixa coral?",
+    "opcoes": ["A) 4º grau", "B) 5º grau", "C) 6º grau", "D) 7º grau"],
+    "resposta": "D"
+  },
+  {
+    "pergunta": "A faixa vermelha é atribuída a mestres com quantos anos de prática e contribuição?",
+    "opcoes": ["A) 20 anos", "B) 30 anos", "C) 40 anos", "D) 50 anos"],
+    "resposta": "C"
+  },
+  {
+    "pergunta": "Qual é a faixa imediatamente anterior à faixa roxa?",
+    "opcoes": ["A) Azul", "B) Verde", "C) Laranja", "D) Marrom"],
+    "resposta": "A"
+  },
+  {
+    "pergunta": "Em competições, qual faixa é a primeira a poder aplicar finalizações envolvendo o pescoço?",
+    "opcoes": ["A) Branca", "B) Azul", "C) Roxa", "D) Marrom"],
+    "resposta": "B"
+  }
+]
