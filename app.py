@@ -101,7 +101,7 @@ def mostrar_cabecalho(titulo):
         topo_img = Image.open(topo_path)
         st.image(topo_img, use_container_width=True)
     else:
-        st.warning("Imagem topo.png não encontrada na pasta assets.")
+        st.warning("Imagem topo.webp não encontrada na pasta assets.")
 
 # =========================================
 # EXIBIÇÃO DE IMAGEM E VÍDEO
