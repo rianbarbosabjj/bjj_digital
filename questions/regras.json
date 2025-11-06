@@ -1,27 +1,42 @@
 [
   {
+    "nivel": 1,
     "pergunta": "Quando o árbitro estende o braço à frente e faz movimento vertical em direção ao solo, o que ele indica?",
+    "imagem": "assets/gesto_inicio.png",
+    "video": "",
     "opcoes": ["A) Parar a luta", "B) Início da luta", "C) Punição", "D) Declaração do vencedor"],
     "resposta": "B"
   },
   {
-    "pergunta": "O árbitro ergue dois dedos (indicador e médio). O que significa?",
-    "opcoes": ["A) Duas vantagens", "B) Dois pontos (queda, raspagem ou joelho na barriga)", "C) Punição dupla", "D) Pedido de médico"],
-    "resposta": "B"
+    "nivel": 1,
+    "pergunta": "Assista ao vídeo e identifique o gesto mostrado pelo árbitro.",
+    "imagem": "",
+    "video": "https://www.youtube.com/watch?v=HhJ4V2hSk6U",
+    "opcoes": ["A) Punição", "B) Interrupção", "C) Reinício da luta", "D) Desclassificação"],
+    "resposta": "C"
   },
   {
+    "nivel": 2,
     "pergunta": "Quantos pontos são concedidos pela passagem de guarda estabilizada?",
+    "imagem": "assets/passagem_de_guarda.png",
+    "video": "",
     "opcoes": ["A) 2 pontos", "B) 3 pontos", "C) 4 pontos", "D) Apenas vantagem"],
     "resposta": "B"
   },
   {
-    "pergunta": "O árbitro deve contar quantos segundos de estabilização para validar uma posição de pontuação?",
-    "opcoes": ["A) 2 segundos", "B) 3 segundos", "C) 5 segundos", "D) 10 segundos"],
-    "resposta": "B"
-  },
-  {
+    "nivel": 3,
     "pergunta": "O gesto de braços cruzados sobre a cabeça com punhos fechados indica:",
+    "imagem": "assets/desclassificacao.png",
+    "video": "",
     "opcoes": ["A) Desclassificação", "B) Punição", "C) Vantagem", "D) Finalização"],
     "resposta": "A"
+  },
+  {
+    "nivel": 3,
+    "pergunta": "Assista ao vídeo e marque a penalidade aplicada.",
+    "imagem": "",
+    "video": "https://www.youtube.com/watch?v=WLp7h8kAbpQ",
+    "opcoes": ["A) Vantagem", "B) Falta leve", "C) Punição", "D) Desclassificação"],
+    "resposta": "C"
   }
 ]
