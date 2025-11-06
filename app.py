@@ -210,7 +210,7 @@ def main():
         modo_exame()
     elif menu == "📘 Estudo":
         modo_estudo()
-    elif menu == "🤼‍♂️ Rola" (Modo Treino):
+    elif menu == "🤼‍♂️ Rola (Modo Treino)":
         modo_rola()
     elif menu == "🏆 Ranking":
         ranking()
