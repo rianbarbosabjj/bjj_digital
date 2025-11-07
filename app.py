@@ -10,11 +10,7 @@ from datetime import datetime
 # =========================================
 # CONFIGURAÇÕES GERAIS
 # =========================================
-st.set_page_config(
-    page_title="BJJ Digital",
-    page_icon="🥋",
-    layout="wide",
-)
+st.set_page_config(page_title="BJJ Digital", page_icon="🥋", layout="wide")
 
 COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
@@ -54,9 +50,9 @@ st.markdown(f"""
 # BANCO DE DADOS
 # =========================================
 DB_PATH = "database/bjj_digital.db"
+os.makedirs("database", exist_ok=True)
 
 def criar_banco():
-    os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
@@ -94,68 +90,6 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo):
     conn.commit()
     conn.close()
 
-def gerar_pdf(usuario, faixa, pontuacao, total):
-    pdf = FPDF()
-    pdf.add_page()
-
-    # === CORES ===
-    verde_escuro = (14, 45, 38)
-    dourado = (255, 215, 0)
-    branco = (255, 255, 255)
-
-    # === FUNDO ===
-    pdf.set_fill_color(*verde_escuro)
-    pdf.rect(0, 0, 210, 297, "F")
-
-    # === TÍTULO ===
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 22)
-    pdf.cell(0, 20, "Relatório de Exame de Faixa", ln=True, align="C")
-
-    # === LINHA DOURADA ===
-    pdf.set_draw_color(*dourado)
-    pdf.set_line_width(1)
-    pdf.line(10, 30, 200, 30)
-
-    # === LOGO ===
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        pdf.image(logo_path, x=85, y=35, w=40)
-
-    pdf.ln(60)
-    pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 14)
-
-    pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
-    pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
-    pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
-    pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
-    pdf.ln(15)
-
-    # === RESULTADO ===
-    pdf.set_font("Helvetica", "B", 16)
-    resultado = "✅ APROVADO" if pontuacao >= (total * 0.6) else "❌ NÃO APROVADO"
-    pdf.set_text_color(*dourado)
-    pdf.cell(0, 15, resultado, ln=True, align="C")
-
-    # === ASSINATURA ===
-    pdf.ln(30)
-    pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 10, "Assinatura do Professor:", ln=True, align="C")
-    pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
-
-    # === RODAPÉ ===
-    pdf.set_y(-30)
-    pdf.set_font("Helvetica", "I", 10)
-    pdf.set_text_color(*dourado)
-    pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Irajá — BJJ Digital", ln=True, align="C")
-
-    # === SALVAR ===
-    os.makedirs("relatorios", exist_ok=True)
-    caminho_pdf = f"relatorios/Relatorio_{usuario}_{faixa}.pdf"
-    pdf.output(caminho_pdf)
-    return caminho_pdf
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
     topo_path = "assets/topo.webp"
@@ -163,8 +97,61 @@ def mostrar_cabecalho(titulo):
         topo_img = Image.open(topo_path)
         st.image(topo_img, use_container_width=True)
 
+def gerar_pdf(usuario, faixa, pontuacao, total):
+    pdf = FPDF()
+    pdf.add_page()
+
+    verde_escuro = (14, 45, 38)
+    dourado = (255, 215, 0)
+    branco = (255, 255, 255)
+
+    pdf.set_fill_color(*verde_escuro)
+    pdf.rect(0, 0, 210, 297, "F")
+
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.cell(0, 20, "Relatório de Exame de Faixa", ln=True, align="C")
+
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(1)
+    pdf.line(10, 30, 200, 30)
+
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=85, y=35, w=40)
+
+    pdf.ln(60)
+    pdf.set_text_color(*branco)
+    pdf.set_font("Helvetica", "", 14)
+    pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
+    pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
+    pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
+    pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+    pdf.ln(15)
+
+    pdf.set_font("Helvetica", "B", 16)
+    resultado = "APROVADO" if pontuacao >= (total * 0.6) else "NÃO APROVADO"
+    pdf.set_text_color(*dourado)
+    pdf.cell(0, 15, resultado, ln=True, align="C")
+
+    pdf.ln(30)
+    pdf.set_text_color(*branco)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 10, "Assinatura do Professor:", ln=True, align="C")
+    pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
+
+    pdf.set_y(-30)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.set_text_color(*dourado)
+    pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Irajá — BJJ Digital", ln=True, align="C")
+
+    os.makedirs("relatorios", exist_ok=True)
+    caminho_pdf = f"relatorios/Relatorio_{usuario}_{faixa}.pdf"
+    pdf.output(caminho_pdf)
+    return caminho_pdf
+
 # =========================================
-# MODO EXAME DE FAIXA
+# MODO EXAME DE FAIXA (fixado)
 # =========================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
@@ -174,23 +161,36 @@ def modo_exame():
     usuario = st.text_input("Nome do aluno:")
     tema = "regras"
 
-    if st.button("Iniciar Exame"):
-        questoes = carregar_questoes(tema)
-        random.shuffle(questoes)
-        pontuacao = 0
-        total = len(questoes[:5])
+    if "questoes" not in st.session_state:
+        st.session_state.questoes = []
+        st.session_state.respostas = {}
+        st.session_state.finalizado = False
 
-        for i, q in enumerate(questoes[:5], 1):
+    if st.button("Iniciar Exame"):
+        st.session_state.questoes = carregar_questoes(tema)
+        random.shuffle(st.session_state.questoes)
+        st.session_state.respostas = {}
+        st.session_state.finalizado = False
+
+    if st.session_state.questoes and not st.session_state.finalizado:
+        pontuacao = 0
+        total = len(st.session_state.questoes[:5])
+
+        for i, q in enumerate(st.session_state.questoes[:5], 1):
             if "video" in q and q["video"]:
                 st.video(q["video"])
             if "imagem" in q and q["imagem"]:
                 st.image(q["imagem"], use_container_width=True)
             st.subheader(f"{i}. {q['pergunta']}")
+
             resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"q{i}", index=None)
-            if resposta and resposta.startswith(q["resposta"]):
-                pontuacao += 1
+            st.session_state.respostas[i] = resposta
 
         if st.button("Finalizar Exame"):
+            for i, q in enumerate(st.session_state.questoes[:5], 1):
+                if st.session_state.respostas.get(i) and st.session_state.respostas[i].startswith(q["resposta"]):
+                    pontuacao += 1
+
             salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00")
             caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total)
             with open(caminho_pdf, "rb") as file:
@@ -202,13 +202,13 @@ def modo_exame():
                 )
             st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
             st.info(f"Resultado salvo para a faixa {faixa}.")
+            st.session_state.finalizado = True
 
 # =========================================
-# MODO ESTUDO
+# RESTANTE DOS MODOS
 # =========================================
 def modo_estudo():
     mostrar_cabecalho("📘 Estudo Interativo")
-
     temas = ["regras", "graduacoes", "historia"]
     tema = st.selectbox("Escolha um tema:", temas)
 
@@ -231,12 +231,8 @@ def modo_estudo():
         else:
             st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
 
-# =========================================
-# MODO TREINO (ROLA)
-# =========================================
 def modo_rola():
     mostrar_cabecalho("🤼‍♂️ Rola (Modo Treino)")
-
     usuario = st.text_input("Digite seu nome:")
     tema = st.selectbox("Selecione o tema:", ["regras", "graduacoes", "historia"])
 
@@ -260,16 +256,11 @@ def modo_rola():
             salvar_resultado(usuario, "Rola", tema, None, pontos, "00:04:00")
             st.success(f"🎯 Resultado: {pontos}/{total} acertos")
 
-# =========================================
-# RANKING
-# =========================================
 def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
-
     conn = sqlite3.connect(DB_PATH)
     dados = conn.execute("SELECT usuario, modo, tema, faixa, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall()
     conn.close()
-
     if dados:
         st.dataframe(dados)
     else:
