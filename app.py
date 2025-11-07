@@ -114,7 +114,7 @@ def mostrar_cabecalho(titulo):
         st.image(topo_img, use_container_width=True)
 
 # ==========================================================
-# MODO EXAME DE FAIXA (atualizado)
+# MODO EXAME DE FAIXA
 # ==========================================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
@@ -145,10 +145,20 @@ def modo_exame():
 
         for i, q in enumerate(questoes[:5], 1):
             st.markdown(f"### {i}. {q['pergunta']}")
-            if "imagem" in q and q["imagem"] and os.path.exists(q["imagem"]):
-                st.image(q["imagem"], use_container_width=True)
+
+            # Exibir imagem (se existir)
+            if "imagem" in q and q["imagem"]:
+                if os.path.exists(q["imagem"]):
+                    st.image(q["imagem"], use_container_width=True)
+                elif q["imagem"].startswith("http"):
+                    st.image(q["imagem"], use_container_width=True)
+
+            # Exibir vídeo (com tratamento de erro)
             if "video" in q and q["video"]:
-                st.video(q["video"])
+                try:
+                    st.video(q["video"])
+                except Exception:
+                    st.warning("🎥 Erro ao carregar o vídeo.")
 
             resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"exame_{i}", index=None)
             if resposta and resposta.startswith(q["resposta"]):
@@ -179,8 +189,12 @@ def modo_estudo():
     q = random.choice(questoes)
     st.markdown("<div class='question'>", unsafe_allow_html=True)
 
-    if "imagem" in q and q["imagem"] and os.path.exists(q["imagem"]):
-        st.image(q["imagem"], use_container_width=True)
+    # Exibir imagem (local ou link)
+    if "imagem" in q and q["imagem"]:
+        if os.path.exists(q["imagem"]):
+            st.image(q["imagem"], use_container_width=True)
+        elif q["imagem"].startswith("http"):
+            st.image(q["imagem"], use_container_width=True)
 
     st.subheader(q["pergunta"])
 
@@ -191,8 +205,12 @@ def modo_estudo():
         else:
             st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
 
+    # Exibir vídeo (com segurança)
     if "video" in q and q["video"]:
-        st.video(q["video"])
+        try:
+            st.video(q["video"])
+        except Exception:
+            st.warning("🎥 Erro ao carregar o vídeo.")
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -217,13 +235,22 @@ def modo_rola():
 
         for i, q in enumerate(questoes[:5], 1):
             st.markdown(f"### {i}. {q['pergunta']}")
-            if "imagem" in q and q["imagem"] and os.path.exists(q["imagem"]):
-                st.image(q["imagem"], use_container_width=True)
+
+            if "imagem" in q and q["imagem"]:
+                if os.path.exists(q["imagem"]):
+                    st.image(q["imagem"], use_container_width=True)
+                elif q["imagem"].startswith("http"):
+                    st.image(q["imagem"], use_container_width=True)
+
             resposta = st.radio("", q["opcoes"], key=f"rola_{i}", index=None)
             if resposta and resposta.startswith(q["resposta"]):
                 pontos += 1
+
             if "video" in q and q["video"]:
-                st.video(q["video"])
+                try:
+                    st.video(q["video"])
+                except Exception:
+                    st.warning("🎥 Erro ao carregar o vídeo.")
 
         if st.button("Finalizar Rola"):
             salvar_resultado(usuario, "Rola", tema, pontos, "00:04:00")
