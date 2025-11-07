@@ -10,7 +10,7 @@ from datetime import datetime
 # =========================================
 # CONFIGURAÇÕES GERAIS
 # =========================================
-st.set_page_config(page_title="BJJ Digital", page_icon="🥋", layout="wide")
+st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
 
 COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
