@@ -2,7 +2,7 @@
   {
     "nivel": 1,
     "pergunta": "Quando o árbitro estende o braço à frente e faz um movimento vertical em direção ao solo, o que ele indica?",
-    "imagem": "https://raw.githubusercontent.com/jessicaleal/bjjdigital/main/assets/jiujitsu/inicio_luta.png",
+    "imagem": "https://raw.githubusercontent.com/rianbarbosabjj/bjjdigital/main/assets/jiujitsu/inicio_luta.png",
     "video": "https://www.youtube.com/watch?v=cEniQm5Mfn0",
     "opcoes": [
       "A) Parar a luta",
@@ -15,7 +15,7 @@
   {
     "nivel": 1,
     "pergunta": "Quando o árbitro abre os braços horizontalmente na altura dos ombros, o que está sinalizando?",
-    "imagem": "https://raw.githubusercontent.com/jessicaleal/bjjdigital/main/assets/jiujitsu/parar_luta.png",
+    "imagem": "https://raw.githubusercontent.com/rianbarbosabjj/bjjdigital/main/assets/jiujitsu/parar_luta.png",
     "video": "https://www.youtube.com/watch?v=UnjU6Lx4w20",
     "opcoes": [
       "A) Parar a luta",
@@ -28,7 +28,7 @@
   {
     "nivel": 2,
     "pergunta": "Qual gesto o árbitro realiza para indicar dois pontos por raspagem?",
-    "imagem": "https://raw.githubusercontent.com/jessicaleal/bjjdigital/main/assets/jiujitsu/dois_pontos.png",
+    "imagem": "https://raw.githubusercontent.com/rianbarbosabjj/bjjdigital/main/assets/jiujitsu/dois_pontos.png",
     "video": "https://www.youtube.com/watch?v=yC75JjhmJQY",
     "opcoes": [
       "A) Dois dedos erguidos",
@@ -41,7 +41,7 @@
   {
     "nivel": 2,
     "pergunta": "O gesto de braços cruzados sobre a cabeça com punhos fechados indica:",
-    "imagem": "https://raw.githubusercontent.com/jessicaleal/bjjdigital/main/assets/jiujitsu/desclassificacao.png",
+    "imagem": "https://raw.githubusercontent.com/rianbarbosabjj/bjjdigital/main/assets/jiujitsu/desclassificacao.png",
     "video": "https://www.youtube.com/watch?v=8Jc3mZ7pXek",
     "opcoes": [
       "A) Punição leve",
@@ -54,7 +54,7 @@
   {
     "nivel": 3,
     "pergunta": "Qual o tempo mínimo de estabilização exigido para validar uma posição de pontuação?",
-    "imagem": "https://raw.githubusercontent.com/jessicaleal/bjjdigital/main/assets/jiujitsu/cronometro.png",
+    "imagem": "https://raw.githubusercontent.com/rianbarbosabjj/bjjdigital/main/assets/jiujitsu/cronometro.png",
     "video": "",
     "opcoes": [
       "A) 2 segundos",
