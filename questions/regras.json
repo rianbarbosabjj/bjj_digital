@@ -2,41 +2,181 @@
   {
     "nivel": 1,
     "pergunta": "Quando o árbitro estende o braço à frente e faz movimento vertical em direção ao solo, o que ele indica?",
-    "imagem": "assets/gesto_inicio.png",
-    "video": "",
-    "opcoes": ["A) Parar a luta", "B) Início da luta", "C) Punição", "D) Declaração do vencedor"],
-    "resposta": "B"
+    "opcoes": [
+      "A) Parar a luta",
+      "B) Início da luta",
+      "C) Punição",
+      "D) Declaração do vencedor"
+    ],
+    "resposta": "B",
+    "imagem": "assets/regras/inicio_luta.png",
+    "video": ""
   },
   {
     "nivel": 1,
-    "pergunta": "Assista ao vídeo e identifique o gesto mostrado pelo árbitro.",
-    "imagem": "",
-    "video": "https://www.youtube.com/watch?v=HhJ4V2hSk6U",
-    "opcoes": ["A) Punição", "B) Interrupção", "C) Reinício da luta", "D) Desclassificação"],
-    "resposta": "C"
+    "pergunta": "O árbitro cruza os braços à frente do peito. O que significa esse gesto?",
+    "opcoes": [
+      "A) Punição",
+      "B) Interrupção temporária",
+      "C) Desclassificação",
+      "D) Pedido médico"
+    ],
+    "resposta": "C",
+    "imagem": "assets/regras/desclassificacao.png",
+    "video": ""
+  },
+  {
+    "nivel": 1,
+    "pergunta": "O árbitro ergue dois dedos (indicador e médio). O que ele está sinalizando?",
+    "opcoes": [
+      "A) Duas vantagens",
+      "B) Dois pontos (queda, raspagem ou joelho na barriga)",
+      "C) Punição dupla",
+      "D) Pedido de médico"
+    ],
+    "resposta": "B",
+    "imagem": "assets/regras/dois_pontos.png",
+    "video": ""
+  },
+  {
+    "nivel": 1,
+    "pergunta": "O que significa quando o árbitro abre os braços na altura dos ombros?",
+    "opcoes": [
+      "A) Interrupção ou pausa na luta",
+      "B) Indicação de vantagem",
+      "C) Pedido de tempo médico",
+      "D) Indicação de finalização"
+    ],
+    "resposta": "A",
+    "imagem": "assets/regras/interrupcao.png",
+    "video": ""
+  },
+  {
+    "nivel": 1,
+    "pergunta": "Qual é o gesto usado para indicar o vencedor de uma luta?",
+    "opcoes": [
+      "A) Cruzar os braços sobre a cabeça",
+      "B) Apontar para a mesa central",
+      "C) Levantar o braço do atleta vencedor",
+      "D) Girar o punho acima da cabeça"
+    ],
+    "resposta": "C",
+    "imagem": "assets/regras/vencedor.png",
+    "video": ""
   },
   {
     "nivel": 2,
     "pergunta": "Quantos pontos são concedidos pela passagem de guarda estabilizada?",
-    "imagem": "assets/passagem_de_guarda.png",
-    "video": "",
     "opcoes": ["A) 2 pontos", "B) 3 pontos", "C) 4 pontos", "D) Apenas vantagem"],
-    "resposta": "B"
+    "resposta": "B",
+    "imagem": "assets/regras/passagem_guarda.png",
+    "video": ""
+  },
+  {
+    "nivel": 2,
+    "pergunta": "Quantos segundos o atleta deve manter a posição de controle para validar a pontuação?",
+    "opcoes": ["A) 2 segundos", "B) 3 segundos", "C) 5 segundos", "D) 10 segundos"],
+    "resposta": "B",
+    "imagem": "assets/regras/cronometro.png",
+    "video": ""
+  },
+  {
+    "nivel": 2,
+    "pergunta": "Qual a pontuação correta para uma raspagem bem executada?",
+    "opcoes": ["A) 2 pontos", "B) 3 pontos", "C) 4 pontos", "D) 5 pontos"],
+    "resposta": "A",
+    "imagem": "assets/regras/raspagem.png",
+    "video": ""
+  },
+  {
+    "nivel": 2,
+    "pergunta": "O árbitro levanta uma das mãos com o punho fechado acima da cabeça. O que ele indica?",
+    "opcoes": [
+      "A) Pedido de médico",
+      "B) Punição ao atleta",
+      "C) Indicação de vantagem",
+      "D) Chamada de atenção"
+    ],
+    "resposta": "B",
+    "imagem": "assets/regras/punicao.png",
+    "video": ""
+  },
+  {
+    "nivel": 2,
+    "pergunta": "Quando o árbitro aponta os dedos para o chão em direção a um atleta, o que está indicando?",
+    "opcoes": [
+      "A) Posição ilegal",
+      "B) Pontuação concedida",
+      "C) Advertência verbal",
+      "D) Reinício da luta"
+    ],
+    "resposta": "B",
+    "imagem": "assets/regras/pontuacao.png",
+    "video": ""
   },
   {
     "nivel": 3,
-    "pergunta": "O gesto de braços cruzados sobre a cabeça com punhos fechados indica:",
-    "imagem": "assets/desclassificacao.png",
-    "video": "",
-    "opcoes": ["A) Desclassificação", "B) Punição", "C) Vantagem", "D) Finalização"],
-    "resposta": "A"
+    "pergunta": "Qual é a sequência correta de punições no jiu-jitsu competitivo?",
+    "opcoes": [
+      "A) Aviso, vantagem ao oponente, 2 pontos, desclassificação",
+      "B) Vantagem, ponto, desclassificação direta",
+      "C) Advertência, ponto, reinício da luta",
+      "D) Aviso, reinício, desclassificação"
+    ],
+    "resposta": "A",
+    "imagem": "assets/regras/punicoes.png",
+    "video": ""
   },
   {
     "nivel": 3,
-    "pergunta": "Assista ao vídeo e marque a penalidade aplicada.",
-    "imagem": "",
-    "video": "https://www.youtube.com/watch?v=WLp7h8kAbpQ",
-    "opcoes": ["A) Vantagem", "B) Falta leve", "C) Punição", "D) Desclassificação"],
-    "resposta": "C"
+    "pergunta": "O que caracteriza uma falta de combatividade (passividade)?",
+    "opcoes": [
+      "A) Aplicar golpe ilegal",
+      "B) Evitar o combate e não tentar progredir na posição",
+      "C) Gritar durante a luta",
+      "D) Usar o kimono incorretamente"
+    ],
+    "resposta": "B",
+    "imagem": "assets/regras/combatividade.png",
+    "video": ""
+  },
+  {
+    "nivel": 3,
+    "pergunta": "Em caso de empate em pontos e vantagens, o que decide o vencedor?",
+    "opcoes": [
+      "A) Sorteio",
+      "B) Penalidades",
+      "C) Decisão dos árbitros",
+      "D) Tempo total de domínio"
+    ],
+    "resposta": "B",
+    "imagem": "assets/regras/desempate.png",
+    "video": ""
+  },
+  {
+    "nivel": 3,
+    "pergunta": "Quando o árbitro leva a mão à orelha, o que ele está indicando?",
+    "opcoes": [
+      "A) Comunicação com a mesa para revisão de vídeo (replay)",
+      "B) Pedido de silêncio",
+      "C) Pedido de técnico",
+      "D) Alerta de punição"
+    ],
+    "resposta": "A",
+    "imagem": "assets/regras/replay.png",
+    "video": "assets/regras/replay_demo.mp4"
+  },
+  {
+    "nivel": 3,
+    "pergunta": "Quando o atleta realiza um movimento ilegal intencionalmente, o que o árbitro deve fazer?",
+    "opcoes": [
+      "A) Parar a luta e advertir verbalmente",
+      "B) Retirar pontos do atleta",
+      "C) Desclassificá-lo imediatamente",
+      "D) Ignorar se não houver lesão"
+    ],
+    "resposta": "C",
+    "imagem": "assets/regras/falta_grave.png",
+    "video": ""
   }
 ]
