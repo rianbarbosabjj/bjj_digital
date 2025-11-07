@@ -1,4 +1,5 @@
 import streamlit as st
+from PIL import Image
 import sqlite3
 import json
 import random
@@ -7,48 +8,44 @@ import os
 # =========================================
 # CONFIGURAÇÕES GERAIS
 # =========================================
-st.set_page_config(
-    page_title="BJJ Digital",
-    page_icon="🥋",
-    layout="wide",
-)
+st.set_page_config(page_title="BJJ Digital", page_icon="🥋", layout="wide")
 
-# Paleta de cores (baseada na GFTeam IAPC)
-COR_FUNDO = "#0e2d26"        # verde escuro
+# Paleta de cores GFTeam IAPC
+COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
-COR_DESTAQUE = "#FFD700"     # dourado
-COR_BOTAO = "#078B6C"        # verde GFTeam
+COR_DESTAQUE = "#FFD700"
+COR_BOTAO = "#078B6C"
 COR_HOVER = "#FFD700"
 
-# Estilo CSS
+# CSS customizado
 st.markdown(f"""
     <style>
-    body {{
-        background-color: {COR_FUNDO};
-        color: {COR_TEXTO};
-        font-family: 'Poppins', sans-serif;
-    }}
-    .stButton>button {{
-        background: linear-gradient(90deg, {COR_BOTAO}, #056853);
-        color: white;
-        font-weight: bold;
-        border: none;
-        padding: 0.6em 1.2em;
-        border-radius: 10px;
-        transition: 0.3s;
-    }}
-    .stButton>button:hover {{
-        background: {COR_HOVER};
-        color: {COR_FUNDO};
-    }}
-    h1, h2, h3 {{
-        color: {COR_DESTAQUE};
-        text-align: center;
-        font-weight: 700;
-    }}
-    .stSelectbox label {{
-        color: {COR_DESTAQUE};
-    }}
+        body {{
+            background-color: {COR_FUNDO};
+            color: {COR_TEXTO};
+            font-family: 'Poppins', sans-serif;
+        }}
+        .stButton>button {{
+            background: linear-gradient(90deg, {COR_BOTAO}, #056853);
+            color: white;
+            font-weight: bold;
+            border: none;
+            padding: 0.6em 1.2em;
+            border-radius: 10px;
+            transition: 0.3s;
+        }}
+        .stButton>button:hover {{
+            background: {COR_HOVER};
+            color: {COR_FUNDO};
+        }}
+        h1, h2, h3 {{
+            color: {COR_DESTAQUE};
+            text-align: center;
+            font-weight: 700;
+        }}
+        .stSelectbox label {{
+            color: {COR_DESTAQUE};
+        }}
     </style>
 """, unsafe_allow_html=True)
 
@@ -95,11 +92,9 @@ def salvar_resultado(usuario, modo, tema, pontuacao, tempo):
 
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-    topo_path = "assets/topo.webp"
+    topo_path = "assets/topo.png"
     if os.path.exists(topo_path):
         st.image(topo_path, use_container_width=True)
-    else:
-        st.warning("Imagem topo.png não encontrada na pasta assets.")
 
 # =========================================
 # MODO EXAME DE FAIXA
@@ -119,16 +114,20 @@ def modo_exame():
         total = len(questoes[:5])
 
         for i, q in enumerate(questoes[:5], 1):
-            # Mostra vídeo (se existir)
-            if "video" in q and q["video"]:
+            # vídeo (só se existir)
+            if q.get("video"):
                 st.video(q["video"])
 
-            # Mostra imagem (se existir)
-            if "imagem" in q and q["imagem"]:
-                st.image(q["imagem"], use_container_width=True)
+            # imagem (só se existir)
+            if q.get("imagem"):
+                if os.path.exists(q["imagem"]):
+                    st.image(q["imagem"], use_container_width=True)
+                else:
+                    st.write("⚠️ Imagem não encontrada")
 
             st.subheader(f"{i}. {q['pergunta']}")
-            resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"exame_{i}", index=None)
+            resposta = st.radio("Escolha uma opção:", q["opcoes"], index=None, key=f"q{i}")
+
             if resposta and resposta.startswith(q["resposta"]):
                 pontuacao += 1
 
@@ -153,13 +152,17 @@ def modo_estudo():
 
     q = random.choice(questoes)
 
-    if "video" in q and q["video"]:
+    # exibe vídeo (se existir)
+    if q.get("video"):
         st.video(q["video"])
-    if "imagem" in q and q["imagem"]:
+
+    # exibe imagem (se existir)
+    if q.get("imagem") and os.path.exists(q["imagem"]):
         st.image(q["imagem"], use_container_width=True)
 
     st.subheader(q["pergunta"])
     resposta = st.radio("Escolha a alternativa:", q["opcoes"], index=None)
+
     if st.button("Verificar"):
         if resposta and resposta.startswith(q["resposta"]):
             st.success("✅ Correto!")
@@ -182,13 +185,14 @@ def modo_rola():
         total = len(questoes[:5])
 
         for i, q in enumerate(questoes[:5], 1):
-            if "video" in q and q["video"]:
+            if q.get("video"):
                 st.video(q["video"])
-            if "imagem" in q and q["imagem"]:
+
+            if q.get("imagem") and os.path.exists(q["imagem"]):
                 st.image(q["imagem"], use_container_width=True)
 
             st.write(f"**{i}. {q['pergunta']}**")
-            resposta = st.radio("", q["opcoes"], key=f"rola_{i}", index=None)
+            resposta = st.radio("", q["opcoes"], index=None, key=f"rola{i}")
             if resposta and resposta.startswith(q["resposta"]):
                 pontos += 1
 
@@ -207,12 +211,9 @@ def ranking():
     conn.close()
 
     if dados:
-        st.markdown("<h3 style='text-align:center;'>Top 20 Desempenhos</h3>", unsafe_allow_html=True)
-        st.dataframe(
-            dados,
-            use_container_width=True,
-            hide_index=True
-        )
+        st.markdown("### 🥋 Melhores Desempenhos")
+        for i, (usuario, modo, tema, pontuacao, data) in enumerate(dados, 1):
+            st.markdown(f"**{i}. {usuario}** — {modo} ({tema}) — 🏅 {pontuacao} pontos — *{data[:10]}*")
     else:
         st.info("Nenhum resultado registrado ainda.")
 
