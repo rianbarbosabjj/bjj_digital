@@ -2,6 +2,4 @@ streamlit
 pillow
 altair
 pandas
-weasyprint
-qrcode
-jinja2
+fpdf2==2.7.9
