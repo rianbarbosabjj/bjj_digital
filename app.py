@@ -5,23 +5,23 @@ import json
 import random
 import os
 
-# =========================================
+# ==========================================================
 # CONFIGURAÇÕES GERAIS
-# =========================================
+# ==========================================================
 st.set_page_config(
     page_title="BJJ Digital",
     page_icon="🥋",
     layout="wide",
 )
 
-# Paleta de cores (baseada na GFTeam IAPC)
-COR_FUNDO = "#0e2d26"
+# Paleta de cores (GFTeam IAPC)
+COR_FUNDO = "#0E2D26"       # verde escuro
 COR_TEXTO = "#FFFFFF"
-COR_DESTAQUE = "#FFD700"
-COR_BOTAO = "#078B6C"
+COR_DESTAQUE = "#FFD700"    # dourado
+COR_BOTAO = "#078B6C"       # verde GFTeam
 COR_HOVER = "#FFD700"
 
-# Estilo visual
+# Estilo CSS
 st.markdown(f"""
     <style>
     body {{
@@ -34,13 +34,15 @@ st.markdown(f"""
         color: white;
         font-weight: bold;
         border: none;
-        padding: 0.6em 1.2em;
+        padding: 0.7em 1.4em;
         border-radius: 10px;
         transition: 0.3s;
+        font-size: 1em;
     }}
     .stButton>button:hover {{
         background: {COR_HOVER};
         color: {COR_FUNDO};
+        transform: scale(1.05);
     }}
     h1, h2, h3 {{
         color: {COR_DESTAQUE};
@@ -49,13 +51,20 @@ st.markdown(f"""
     }}
     .stSelectbox label {{
         color: {COR_DESTAQUE};
+        font-weight: 600;
+    }}
+    .question {{
+        background-color: #143D33;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
     }}
     </style>
 """, unsafe_allow_html=True)
 
-# =========================================
-# BANCO DE DADOS
-# =========================================
+# ==========================================================
+# BANCO DE DADOS (criado automaticamente se não existir)
+# ==========================================================
 DB_PATH = "database/bjj_digital.db"
 
 def criar_banco():
@@ -76,9 +85,9 @@ def criar_banco():
 
 criar_banco()
 
-# =========================================
+# ==========================================================
 # FUNÇÕES AUXILIARES
-# =========================================
+# ==========================================================
 def carregar_questoes(tema):
     path = f"questions/{tema}.json"
     if os.path.exists(path):
@@ -101,66 +110,53 @@ def mostrar_cabecalho(titulo):
         topo_img = Image.open(topo_path)
         st.image(topo_img, use_container_width=True)
 
-# =========================================
-# EXIBIÇÃO DE IMAGEM E VÍDEO (com validação completa)
-# =========================================
-def exibir_midia(pergunta):
-    """Exibe imagem e/ou vídeo apenas se existirem e forem válidos, sem deixar espaços vazios."""
-    col = st.container()
-    midia_exibida = False
-
-    # === IMAGEM ===
-    if "imagem" in pergunta and pergunta["imagem"]:
-        caminho_imagem = pergunta["imagem"].strip()
-        if caminho_imagem:
-            if os.path.exists(caminho_imagem) or caminho_imagem.startswith("http"):
-                col.image(caminho_imagem, use_container_width=True)
-                midia_exibida = True
-
-    # === VÍDEO ===
-    if "video" in pergunta and pergunta["video"]:
-        video_link = pergunta["video"].strip()
-        # Só renderiza se for um link válido ou arquivo existente
-        if video_link and (video_link.startswith("http") or os.path.exists(video_link)):
-            col.video(video_link)
-            midia_exibida = True
-
-    # === Nenhuma mídia válida ===
-    if not midia_exibida:
-        col.empty()
-
-# =========================================
+# ==========================================================
 # MODO EXAME DE FAIXA
-# =========================================
+# ==========================================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
 
     faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
     faixa = st.selectbox("Selecione a faixa para o exame:", faixas)
     usuario = st.text_input("Nome do aluno:")
-    tema = "regras"
+    tema = st.selectbox("Selecione o tema do exame:", ["regras", "graduacoes", "historia"])
 
     if st.button("Iniciar Exame"):
         questoes = carregar_questoes(tema)
+        if not questoes:
+            st.warning("❌ Nenhuma questão encontrada para este tema.")
+            return
+
         random.shuffle(questoes)
         pontuacao = 0
         total = len(questoes[:5])
 
         for i, q in enumerate(questoes[:5], 1):
-            st.markdown(f"### {i}. {q['pergunta']}")
-            exibir_midia(q)
-            resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"exame_{i}", index=None)
-            if resposta and resposta.startswith(q["resposta"]):
-                pontuacao += 1
+            with st.container():
+                st.markdown(f"### {i}. {q['pergunta']}")
+
+                # Exibe imagem se houver
+                if "imagem" in q and q["imagem"]:
+                    img_path = q["imagem"]
+                    if os.path.exists(img_path):
+                        st.image(img_path, use_container_width=True)
+
+                # Exibe vídeo se houver
+                if "video" in q and q["video"]:
+                    st.video(q["video"])
+
+                resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"exame_{i}")
+                if resposta.startswith(q["resposta"]):
+                    pontuacao += 1
 
         if st.button("Finalizar Exame"):
             salvar_resultado(usuario, "Exame", faixa, pontuacao, "00:05:00")
             st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
             st.info(f"Resultado salvo para a faixa {faixa}.")
 
-# =========================================
+# ==========================================================
 # MODO ESTUDO
-# =========================================
+# ==========================================================
 def modo_estudo():
     mostrar_cabecalho("📘 Estudo Interativo")
 
@@ -169,22 +165,35 @@ def modo_estudo():
 
     questoes = carregar_questoes(tema)
     if not questoes:
-        st.warning("Nenhuma questão encontrada.")
+        st.warning("Nenhuma questão encontrada para este tema.")
         return
 
     q = random.choice(questoes)
-    st.markdown(f"### {q['pergunta']}")
-    exibir_midia(q)
-    resposta = st.radio("Escolha a alternativa:", q["opcoes"], index=None)
+    st.markdown("<div class='question'>", unsafe_allow_html=True)
+
+    # Exibe imagem se houver
+    if "imagem" in q and q["imagem"]:
+        if os.path.exists(q["imagem"]):
+            st.image(q["imagem"], use_container_width=True)
+
+    st.subheader(q["pergunta"])
+
+    resposta = st.radio("Escolha a alternativa:", q["opcoes"], key="estudo")
     if st.button("Verificar"):
-        if resposta and resposta.startswith(q["resposta"]):
+        if resposta.startswith(q["resposta"]):
             st.success("✅ Correto!")
         else:
             st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
 
-# =========================================
+    # Exibe vídeo se houver
+    if "video" in q and q["video"]:
+        st.video(q["video"])
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ==========================================================
 # MODO TREINO (ROLA)
-# =========================================
+# ==========================================================
 def modo_rola():
     mostrar_cabecalho("🤼‍♂️ Rola (Modo Treino)")
 
@@ -193,73 +202,86 @@ def modo_rola():
 
     if st.button("Iniciar Rola"):
         questoes = carregar_questoes(tema)
+        if not questoes:
+            st.warning("❌ Nenhuma questão encontrada para este tema.")
+            return
+
         random.shuffle(questoes)
         pontos = 0
         total = len(questoes[:5])
 
         for i, q in enumerate(questoes[:5], 1):
-            st.markdown(f"### {i}. {q['pergunta']}")
-            exibir_midia(q)
-            resposta = st.radio("", q["opcoes"], key=f"rola_{i}", index=None)
-            if resposta and resposta.startswith(q["resposta"]):
-                pontos += 1
+            with st.container():
+                st.markdown(f"### {i}. {q['pergunta']}")
+
+                # Exibe imagem se houver
+                if "imagem" in q and q["imagem"]:
+                    if os.path.exists(q["imagem"]):
+                        st.image(q["imagem"], use_container_width=True)
+
+                resposta = st.radio("", q["opcoes"], key=f"rola_{i}")
+                if resposta.startswith(q["resposta"]):
+                    pontos += 1
+
+                # Exibe vídeo se houver
+                if "video" in q and q["video"]:
+                    st.video(q["video"])
 
         if st.button("Finalizar Rola"):
             salvar_resultado(usuario, "Rola", tema, pontos, "00:04:00")
             st.success(f"🎯 Resultado: {pontos}/{total} acertos")
 
-# =========================================
+# ==========================================================
 # RANKING
-# =========================================
+# ==========================================================
 def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
 
     conn = sqlite3.connect(DB_PATH)
-    dados = conn.execute("""
-        SELECT usuario, modo, tema, pontuacao, data
-        FROM resultados
-        ORDER BY pontuacao DESC, data DESC
-        LIMIT 20
-    """).fetchall()
+    dados = conn.execute("SELECT usuario, modo, tema, pontuacao, data FROM resultados ORDER BY pontuacao DESC, data DESC LIMIT 20").fetchall()
     conn.close()
 
     if dados:
-        st.markdown("""
-        <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th {
-            background-color: #078B6C;
-            color: white;
-            padding: 10px;
-        }
-        td {
-            background-color: #123831;
-            color: white;
-            text-align: center;
-            padding: 8px;
-        }
-        </style>
-        """, unsafe_allow_html=True)
+        st.markdown(
+            f"""
+            <style>
+            table {{
+                width: 100%;
+                border-collapse: collapse;
+                margin-top: 20px;
+            }}
+            th {{
+                background-color: {COR_DESTAQUE};
+                color: {COR_FUNDO};
+                padding: 10px;
+                text-align: center;
+            }}
+            td {{
+                background-color: #12382F;
+                color: {COR_TEXTO};
+                text-align: center;
+                padding: 8px;
+            }}
+            </style>
+            """, unsafe_allow_html=True
+        )
         st.table(dados)
     else:
         st.info("Nenhum resultado registrado ainda.")
 
-# =========================================
+# ==========================================================
 # MENU PRINCIPAL
-# =========================================
+# ==========================================================
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Modulos:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"])
+    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola", "🏆 Ranking"])
 
     if menu == "🏁 Exame de Faixa":
         modo_exame()
     elif menu == "📘 Estudo":
         modo_estudo()
-    elif menu == "🤼‍♂️ Rola (Modo Treino)":
+    elif menu == "🤼‍♂️ Rola":
         modo_rola()
     elif menu == "🏆 Ranking":
         ranking()
