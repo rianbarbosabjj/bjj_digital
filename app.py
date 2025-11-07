@@ -143,7 +143,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total):
     pdf.set_y(-30)
     pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(*dourado)
-    pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Irajá — BJJ Digital", ln=True, align="C")
+    pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Iraja — BJJ Digital", ln=True, align="C")
 
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = f"relatorios/Relatorio_{usuario}_{faixa}.pdf"
