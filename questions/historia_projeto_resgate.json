@@ -1,0 +1,196 @@
+[
+  {
+    "nivel": 1,
+    "pergunta": "Qual é o principal objetivo do Projeto Resgate?",
+    "opcoes": [
+      "A) Formar atletas de alto rendimento",
+      "B) Promover inclusão social e cidadania através do jiu-jitsu",
+      "C) Ganhar campeonatos internacionais",
+      "D) Criar uma nova equipe independente"
+    ],
+    "resposta": "B",
+    "imagem": "assets/resgate/treino_criancas.png",
+    "video": ""
+  },
+  {
+    "nivel": 1,
+    "pergunta": "Onde o Projeto Resgate iniciou suas atividades?",
+    "opcoes": [
+      "A) Copacabana",
+      "B) Inhaúma",
+      "C) Irajá",
+      "D) São Gonçalo"
+    ],
+    "resposta": "C",
+    "imagem": "assets/resgate/iapc_sede.png",
+    "video": ""
+  },
+  {
+    "nivel": 1,
+    "pergunta": "Quem é o mestre responsável pela fundação do Projeto Resgate?",
+    "opcoes": [
+      "A) Julio Cesar Pereira",
+      "B) Luciano Cordeiro (Bolão)",
+      "C) Rian Barbosa",
+      "D) Mestre Hulk"
+    ],
+    "resposta": "B",
+    "imagem": "assets/resgate/mestre_bolao.png",
+    "video": ""
+  },
+  {
+    "nivel": 1,
+    "pergunta": "O Projeto Resgate é vinculado a qual equipe?",
+    "opcoes": [
+      "A) Alliance",
+      "B) Nova União",
+      "C) GFTeam",
+      "D) Gracie Barra"
+    ],
+    "resposta": "C",
+    "imagem": "assets/resgate/logo_resgate.png",
+    "video": ""
+  },
+  {
+    "nivel": 1,
+    "pergunta": "Além do jiu-jitsu, o Projeto Resgate também promove ações em qual área?",
+    "opcoes": [
+      "A) Cultura e educação",
+      "B) Lutas de MMA",
+      "C) Atletismo",
+      "D) Boxe"
+    ],
+    "resposta": "A",
+    "imagem": "assets/resgate/atividade_cultural.png",
+    "video": "https://www.youtube.com/watch?v=SdN1bHk3aGE"
+  },
+  {
+    "nivel": 2,
+    "pergunta": "Qual é a missão do Projeto Resgate?",
+    "opcoes": [
+      "A) Ensinar técnicas de jiu-jitsu esportivo",
+      "B) Resgatar vidas e promover transformação social",
+      "C) Formar campeões mundiais",
+      "D) Representar a GFTeam em competições"
+    ],
+    "resposta": "B",
+    "imagem": "assets/resgate/missao.png",
+    "video": ""
+  },
+  {
+    "nivel": 2,
+    "pergunta": "Quem é o líder do núcleo 'Parque Irajá'?",
+    "opcoes": [
+      "A) Mestre Bolão",
+      "B) Rian Barbosa",
+      "C) Mestre Júlio",
+      "D) Douglas"
+    ],
+    "resposta": "B",
+    "imagem": "assets/resgate/rian_barbosa.png",
+    "video": ""
+  },
+  {
+    "nivel": 2,
+    "pergunta": "Quais valores o Projeto Resgate busca transmitir?",
+    "opcoes": [
+      "A) Força e vitória",
+      "B) Disciplina, solidariedade e respeito",
+      "C) Competição e poder",
+      "D) Defesa e ataque"
+    ],
+    "resposta": "B",
+    "imagem": "",
+    "video": "https://www.youtube.com/watch?v=pFxXEmrcdmE"
+  },
+  {
+    "nivel": 2,
+    "pergunta": "Qual é o papel dos instrutores no Projeto Resgate?",
+    "opcoes": [
+      "A) Apenas ensinar golpes e técnicas",
+      "B) Ser exemplo e referência de conduta e cidadania",
+      "C) Treinar apenas atletas graduados",
+      "D) Avaliar apenas competições"
+    ],
+    "resposta": "B",
+    "imagem": "assets/resgate/instrutores.png",
+    "video": ""
+  },
+  {
+    "nivel": 2,
+    "pergunta": "O Projeto Resgate tem parceria com qual instituição social?",
+    "opcoes": [
+      "A) IAPC – Instituto de Apoio e Promoção Comunitária",
+      "B) Sesc",
+      "C) Prefeitura de Niterói",
+      "D) IBJJF"
+    ],
+    "resposta": "A",
+    "imagem": "assets/resgate/iapc_logo.png",
+    "video": ""
+  },
+  {
+    "nivel": 3,
+    "pergunta": "O lema 'Resgatar para Transformar' está relacionado a qual princípio?",
+    "opcoes": [
+      "A) Transformação através do esporte",
+      "B) Motivação para competições",
+      "C) Técnica sobre força",
+      "D) Vitória em campeonatos"
+    ],
+    "resposta": "A",
+    "imagem": "assets/resgate/lema.png",
+    "video": ""
+  },
+  {
+    "nivel": 3,
+    "pergunta": "Qual é o maior objetivo dos exames de faixa dentro do Projeto Resgate?",
+    "opcoes": [
+      "A) Selecionar os melhores atletas para a equipe",
+      "B) Reconhecer o esforço e o crescimento pessoal do aluno",
+      "C) Classificar os alunos por idade",
+      "D) Premiar os que vencem campeonatos"
+    ],
+    "resposta": "B",
+    "imagem": "",
+    "video": ""
+  },
+  {
+    "nivel": 3,
+    "pergunta": "O Projeto Resgate já realizou eventos conjuntos com quais outras áreas?",
+    "opcoes": [
+      "A) Saúde, cultura e educação",
+      "B) Comércio e turismo",
+      "C) Meio ambiente e transporte",
+      "D) Música e gastronomia"
+    ],
+    "resposta": "A",
+    "imagem": "assets/resgate/eventos_comunitarios.png",
+    "video": ""
+  },
+  {
+    "nivel": 3,
+    "pergunta": "Como o Projeto Resgate utiliza o jiu-jitsu para além do tatame?",
+    "opcoes": [
+      "A) Como ferramenta de inclusão social e transformação de vidas",
+      "B) Como esporte competitivo apenas",
+      "C) Para formar lutadores profissionais",
+      "D) Para criar campeonatos regionais"
+    ],
+    "resposta": "A",
+    "imagem": "assets/resgate/transformacao.png",
+    "video": "https://www.youtube.com/watch?v=tKKR5Vcn2hA"
+  },
+  {
+    "nivel": 3,
+    "pergunta": "Qual é a principal meta do Projeto Resgate para os próximos anos?",
+    "opcoes": [
+      "A) Expandir sua atuação e formar novos instrutores comunitários",
+      "B) Tornar-se uma federação independente",
+      "C) Participar de campeonatos internacionais",
+      "D) Criar um novo sistema de graduação",
+    "resposta": "A",
+    "imagem": "assets/resgate/expansao.png",
+    "video": ""
+  }
+]
