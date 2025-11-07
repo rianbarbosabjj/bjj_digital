@@ -92,7 +92,7 @@ def salvar_resultado(usuario, modo, tema, pontuacao, tempo):
 
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-    topo_path = "assets/topo.png"
+    topo_path = "assets/logo_pr.png"
     if os.path.exists(topo_path):
         st.image(topo_path, use_container_width=True)
 
