@@ -161,34 +161,52 @@ def modo_exame():
     usuario = st.text_input("Nome do aluno:")
     tema = "regras"
 
+    # Inicializa estados
     if "questoes" not in st.session_state:
         st.session_state.questoes = []
         st.session_state.respostas = {}
-        st.session_state.finalizado = False
+        st.session_state.exame_iniciado = False
+        st.session_state.exame_finalizado = False
 
+    # Botão para iniciar exame
     if st.button("Iniciar Exame"):
         st.session_state.questoes = carregar_questoes(tema)
         random.shuffle(st.session_state.questoes)
-        st.session_state.respostas = {}
-        st.session_state.finalizado = False
+        st.session_state.respostas = {i: None for i in range(len(st.session_state.questoes[:5]))}
+        st.session_state.exame_iniciado = True
+        st.session_state.exame_finalizado = False
 
-    if st.session_state.questoes and not st.session_state.finalizado:
-        pontuacao = 0
-        total = len(st.session_state.questoes[:5])
+    # Exibir questões
+    if st.session_state.exame_iniciado and not st.session_state.exame_finalizado:
+        questoes = st.session_state.questoes[:5]
+        st.markdown("### 📋 Responda às questões abaixo:")
 
-        for i, q in enumerate(st.session_state.questoes[:5], 1):
+        for i, q in enumerate(questoes):
+            st.markdown(f"**{i + 1}. {q['pergunta']}**")
             if "video" in q and q["video"]:
                 st.video(q["video"])
             if "imagem" in q and q["imagem"]:
                 st.image(q["imagem"], use_container_width=True)
-            st.subheader(f"{i}. {q['pergunta']}")
 
-            resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"q{i}", index=None)
+            # radio controlado manualmente
+            resposta = st.radio(
+                f"Escolha a opção para a questão {i + 1}:",
+                q["opcoes"],
+                index=q["opcoes"].index(st.session_state.respostas[i]) if st.session_state.respostas[i] else None,
+                key=f"radio_q{i}"
+            )
+
             st.session_state.respostas[i] = resposta
 
+            st.divider()
+
+        # Botão de finalização
         if st.button("Finalizar Exame"):
-            for i, q in enumerate(st.session_state.questoes[:5], 1):
-                if st.session_state.respostas.get(i) and st.session_state.respostas[i].startswith(q["resposta"]):
+            pontuacao = 0
+            total = len(questoes)
+
+            for i, q in enumerate(questoes):
+                if st.session_state.respostas[i] and st.session_state.respostas[i].startswith(q["resposta"]):
                     pontuacao += 1
 
             salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00")
@@ -202,7 +220,10 @@ def modo_exame():
                 )
             st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
             st.info(f"Resultado salvo para a faixa {faixa}.")
-            st.session_state.finalizado = True
+            st.session_state.exame_finalizado = True
+
+    elif st.session_state.exame_finalizado:
+        st.info("Exame finalizado. Clique em *Iniciar Exame* para começar outro.")
 
 # =========================================
 # RESTANTE DOS MODOS
