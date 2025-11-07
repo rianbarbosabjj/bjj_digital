@@ -1,268 +1,253 @@
-import streamlit as st
-from PIL import Image
-import sqlite3
-import json
-import random
-import os
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Resultado de Exame - Projeto Resgate GFTeam IAPC de Irajá</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@500;700&family=Inter:wght@400;500;600&display=swap');
 
-# =========================================
-# CONFIGURAÇÕES GERAIS
-# =========================================
-st.set_page_config(
-    page_title="BJJ Digital",
-    page_icon="🥋",
-    layout="wide",
-)
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #0e2d26;
+      color: #fff;
+      margin: 0;
+      padding: 0;
+    }
 
-# Paleta de cores (baseada na GFTeam IAPC)
-COR_FUNDO = "#0e2d26"
-COR_TEXTO = "#FFFFFF"
-COR_DESTAQUE = "#FFD700"
-COR_BOTAO = "#078B6C"
-COR_HOVER = "#FFD700"
+    /* CAPA - AJUSTADO */
+    .capa {
+      /* ADICIONADO: Altura fixa para o container da imagem */
+      height: 200px; 
+      background-color: #0e2d26;
+      text-align: center;
+      border-bottom: 3px solid #FFD700;
+      /* Opcional: centraliza a imagem verticalmente se ela não preencher tudo */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    
+    /* CAPA IMG - AJUSTADO */
+    .capa img {
+      width: 100%;
+      /* A imagem vai preencher 100% da altura do container (200px) */
+      height: 100%; 
+      
+      /* ADICIONADO: Esta é a mágica!
+         Faz a imagem caber INTEIRA, mantendo a proporção,
+         sem cortar e sem distorcer. */
+      object-fit: contain; 
+    }
 
-# Estilo visual
-st.markdown(f"""
-    <style>
-    body {{
-        background-color: {COR_FUNDO};
-        color: {COR_TEXTO};
-        font-family: 'Poppins', sans-serif;
-    }}
-    .stButton>button {{
-        background: linear-gradient(90deg, {COR_BOTAO}, #056853);
-        color: white;
-        font-weight: bold;
-        border: none;
-        padding: 0.6em 1.2em;
-        border-radius: 10px;
-        transition: 0.3s;
-    }}
-    .stButton>button:hover {{
-        background: {COR_HOVER};
-        color: {COR_FUNDO};
-    }}
-    h1, h2, h3 {{
-        color: {COR_DESTAQUE};
+    /* LOGOS ABAIXO DA CAPA */
+    .logos {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 50px;
+      margin-top: 20px;
+      flex-wrap: wrap; 
+    }
+    .logos img {
+      width: 130px;
+      height: auto;
+    }
+
+    /* CONTEÚDO */
+    .container {
+      padding: 40px;
+      max-width: 850px;
+      margin: auto;
+    }
+    h3 {
+      text-align: center;
+      color: #FFD700;
+      font-size: 24px;
+      margin-bottom: 25px;
+    }
+    .info {
+      font-size: 16px;
+      line-height: 1.7;
+      margin-bottom: 25px;
+      word-break: break-word; 
+    }
+    .info strong { color: #FFD700; }
+
+    .quadro-temas {
+      background: rgba(255,255,255,0.05);
+      border-radius: 8px;
+      padding: 15px;
+      margin: 20px 0;
+      overflow-x: auto;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; text-align: left; }
+    th { color: #FFD700; border-bottom: 1px solid rgba(255,255,255,0.2); }
+
+    .resultado-final {
+      text-align: center;
+      margin: 30px 0;
+      padding: 20px;
+      border-radius: 10px;
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .aprovado { background: rgba(76,175,80,0.2); color: #4caf50; }
+    .reprovado { background: rgba(178,34,34,0.2); color: #ff6b6b; }
+
+    .obs {
+      background: rgba(255,255,255,0.05);
+      border-left: 4px solid #ffd700;
+      padding: 10px 15px;
+      margin-top: 30px;
+      font-size: 15px;
+      color: #ccc;
+    }
+
+    .assinatura {
+      text-align: right;
+      margin-top: 60px;
+      color: #ccc;
+      font-size: 14px;
+    }
+    .assinatura img {
+      width: 150px;
+      margin-bottom: 5px;
+    }
+
+    .rodape {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255,255,255,0.2);
+      padding-top: 20px;
+      margin-top: 40px;
+      flex-wrap: wrap; 
+      gap: 20px;
+    }
+    .codigo {
+      font-size: 12px;
+      color: #999;
+      word-break: break-all;
+    }
+    .qr img {
+      width: 90px;
+      height: 90px;
+    }
+
+    /* ======================================== */
+    /* Media Queries para Responsividade */
+    /* ======================================== */
+
+    /* Para telas menores que 768px (tablets e celulares) */
+    @media (max-width: 768px) {
+      .container {
+        padding: 20px; 
+      }
+    }
+
+    /* Para telas menores que 600px (celulares) - AJUSTADO */
+    @media (max-width: 600px) {
+      
+      .capa {
+        /* Reduz a altura da capa em celulares */
+        height: 150px;
+      }
+
+      .logos {
+        flex-direction: column;
+        gap: 20px;
+      }
+
+      h3 {
+        font-size: 20px;
+      }
+      .resultado-final {
+        font-size: 18px;
+      }
+
+      .assinatura {
+        text-align: center; 
+      }
+
+      .rodape {
+        flex-direction: column; 
+        align-items: center;
         text-align: center;
-        font-weight: 700;
-    }}
-    .stSelectbox label {{
-        color: {COR_DESTAQUE};
-    }}
-    </style>
-""", unsafe_allow_html=True)
+        gap: 25px;
+      }
 
-# =========================================
-# BANCO DE DADOS
-# =========================================
-DB_PATH = "database/bjj_digital.db"
+      .qr {
+        margin-left: 0;
+      }
+    }
+  </style>
+</head>
 
-def criar_banco():
-    os.makedirs("database", exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario TEXT,
-        modo TEXT,
-        tema TEXT,
-        pontuacao INTEGER,
-        tempo TEXT,
-        data DATETIME DEFAULT CURRENT_TIMESTAMP
-    )''')
-    conn.commit()
-    conn.close()
+<body>
+  <div class="capa">
+    <img src="imagens/topo_resultado.png" alt="Topo Resultado de Exame">
+  </div>
 
-criar_banco()
+  <div class="logos">
+    <img src="imagens/Logo_CORRETA.png" alt="GFTeam IAPC de Irajá">
+    <img src="imagens/Projeto_Resgate.png" alt="Projeto Resgate">
+  </div>
 
-# =========================================
-# FUNÇÕES AUXILIARES
-# =========================================
-def carregar_questoes(tema):
-    path = f"questions/{tema}.json"
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+  <div class="container">
+    <h3>Dados do Exame</h3>
+    <div class="info">
+      <strong>Aluno:</strong> {{nome_aluno}}<br>
+      <strong>E-mail:</strong> {{email}}<br>
+      <strong>Faixa Atual:</strong> {{faixa_atual}}<br>
+      <strong>Faixa Proposta:</strong> {{faixa_proposta}}<br>
+      <strong>Professor Responsável:</strong> {{nome_professor}}<br>
+      <strong>Data:</strong> {{data}}<br>
+      <strong>Tempo Total:</strong> {{tempo_minutos}} min {{tempo_segundos}} s
+    </div>
 
-def salvar_resultado(usuario, modo, tema, pontuacao, tempo):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("INSERT INTO resultados (usuario, modo, tema, pontuacao, tempo) VALUES (?, ?, ?, ?, ?)",
-                   (usuario, modo, tema, pontuacao, tempo))
-    conn.commit()
-    conn.close()
+    <div class="quadro-temas">
+      <table>
+        <tr><th>Tema</th><th>Desempenho</th></tr>
+        {% for tema, desempenho in desempenho_temas.items() %}
+        <tr><td>{{tema}}</td><td>{{desempenho}}%</td></tr>
+        {% endfor %}
+      </table>
+    </div>
 
-def mostrar_cabecalho(titulo):
-    st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-    topo_path = "assets/topo.png"
-    if os.path.exists(topo_path):
-        topo_img = Image.open(topo_path)
-        st.image(topo_img, use_container_width=True)
+    {% if aprovado %}
+    <div class="resultado-final aprovado">
+      ✅ APROVADO PARA {{faixa_proposta.upper()}}
+    </div>
+    {% else %}
+    <div class="resultado-final reprovado">
+      ❌ EXAME NÃO APROVADO — REFAZER EM 3 DIAS
+    </div>
+    {% endif %}
 
-# =========================================
-# EXIBIÇÃO DE IMAGEM E VÍDEO (com validação completa)
-# =========================================
-def exibir_midia(pergunta):
-    """Exibe imagem e/ou vídeo apenas se existirem e forem válidos, sem deixar espaços vazios."""
-    col = st.container()
-    midia_exibida = False
+    {% if observacoes %}
+    <div class="obs">
+      <strong>Observações do Professor:</strong><br>
+      {{observacoes}}
+    </div>
+    {% endif %}
 
-    # === IMAGEM ===
-    if "imagem" in pergunta and pergunta["imagem"]:
-        caminho_imagem = pergunta["imagem"].strip()
-        if caminho_imagem:
-            if os.path.exists(caminho_imagem) or caminho_imagem.startswith("http"):
-                col.image(caminho_imagem, use_container_width=True)
-                midia_exibida = True
+    <div class="assinatura">
+      <img src="{{assinatura_professor}}" alt="Assinatura do Professor"><br>
+      {{nome_professor}}
+    </div>
 
-    # === VÍDEO ===
-    if "video" in pergunta and pergunta["video"]:
-        video_link = pergunta["video"].strip()
-        # Só renderiza se for um link válido ou arquivo existente
-        if video_link and (video_link.startswith("http") or os.path.exists(video_link)):
-            col.video(video_link)
-            midia_exibida = True
+    <div class="rodape">
+      <div class="codigo">
+        Código de verificação: <strong>{{codigo_validacao}}</strong><br>
+        Valide em: <em>https://quiz.projetoresgate.org/validar</em>
+      </div>
+      <div class="qr">
+        <img src="{{qr_code}}" alt="QR Code de validação">
+      </div>
+    </div>
+  </div>
 
-    # === Nenhuma mídia válida ===
-    if not midia_exibida:
-        col.empty()
-
-# =========================================
-# MODO EXAME DE FAIXA
-# =========================================
-def modo_exame():
-    mostrar_cabecalho("🏁 Exame de Faixa")
-
-    faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-    faixa = st.selectbox("Selecione a faixa para o exame:", faixas)
-    usuario = st.text_input("Nome do aluno:")
-    tema = "regras"
-
-    if st.button("Iniciar Exame"):
-        questoes = carregar_questoes(tema)
-        random.shuffle(questoes)
-        pontuacao = 0
-        total = len(questoes[:5])
-
-        for i, q in enumerate(questoes[:5], 1):
-            st.markdown(f"### {i}. {q['pergunta']}")
-            exibir_midia(q)
-            resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"exame_{i}", index=None)
-            if resposta and resposta.startswith(q["resposta"]):
-                pontuacao += 1
-
-        if st.button("Finalizar Exame"):
-            salvar_resultado(usuario, "Exame", faixa, pontuacao, "00:05:00")
-            st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
-            st.info(f"Resultado salvo para a faixa {faixa}.")
-
-# =========================================
-# MODO ESTUDO
-# =========================================
-def modo_estudo():
-    mostrar_cabecalho("📘 Estudo Interativo")
-
-    temas = ["regras", "graduacoes", "historia"]
-    tema = st.selectbox("Escolha um tema:", temas)
-
-    questoes = carregar_questoes(tema)
-    if not questoes:
-        st.warning("Nenhuma questão encontrada.")
-        return
-
-    q = random.choice(questoes)
-    st.markdown(f"### {q['pergunta']}")
-    exibir_midia(q)
-    resposta = st.radio("Escolha a alternativa:", q["opcoes"], index=None)
-    if st.button("Verificar"):
-        if resposta and resposta.startswith(q["resposta"]):
-            st.success("✅ Correto!")
-        else:
-            st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
-
-# =========================================
-# MODO TREINO (ROLA)
-# =========================================
-def modo_rola():
-    mostrar_cabecalho("🤼‍♂️ Rola (Modo Treino)")
-
-    usuario = st.text_input("Digite seu nome:")
-    tema = st.selectbox("Selecione o tema:", ["regras", "graduacoes", "historia"])
-
-    if st.button("Iniciar Rola"):
-        questoes = carregar_questoes(tema)
-        random.shuffle(questoes)
-        pontos = 0
-        total = len(questoes[:5])
-
-        for i, q in enumerate(questoes[:5], 1):
-            st.markdown(f"### {i}. {q['pergunta']}")
-            exibir_midia(q)
-            resposta = st.radio("", q["opcoes"], key=f"rola_{i}", index=None)
-            if resposta and resposta.startswith(q["resposta"]):
-                pontos += 1
-
-        if st.button("Finalizar Rola"):
-            salvar_resultado(usuario, "Rola", tema, pontos, "00:04:00")
-            st.success(f"🎯 Resultado: {pontos}/{total} acertos")
-
-# =========================================
-# RANKING
-# =========================================
-def ranking():
-    mostrar_cabecalho("🏆 Ranking Geral")
-
-    conn = sqlite3.connect(DB_PATH)
-    dados = conn.execute("""
-        SELECT usuario, modo, tema, pontuacao, data
-        FROM resultados
-        ORDER BY pontuacao DESC, data DESC
-        LIMIT 20
-    """).fetchall()
-    conn.close()
-
-    if dados:
-        st.markdown("""
-        <style>
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        th {
-            background-color: #078B6C;
-            color: white;
-            padding: 10px;
-        }
-        td {
-            background-color: #123831;
-            color: white;
-            text-align: center;
-            padding: 8px;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        st.table(dados)
-    else:
-        st.info("Nenhum resultado registrado ainda.")
-
-# =========================================
-# MENU PRINCIPAL
-# =========================================
-def main():
-    st.sidebar.image("assets/logo.png", use_container_width=True)
-    st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Modulos:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"])
-
-    if menu == "🏁 Exame de Faixa":
-        modo_exame()
-    elif menu == "📘 Estudo":
-        modo_estudo()
-    elif menu == "🤼‍♂️ Rola (Modo Treino)":
-        modo_rola()
-    elif menu == "🏆 Ranking":
-        ranking()
-
-if __name__ == "__main__":
-    main()
+</body>
+</html>
