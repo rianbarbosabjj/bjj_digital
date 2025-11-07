@@ -1,13 +1,11 @@
 import streamlit as st
+from fpdf import FPDF
 from PIL import Image
 import sqlite3
 import json
 import random
 import os
 from datetime import datetime
-from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
-import qrcode
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -18,14 +16,12 @@ st.set_page_config(
     layout="wide",
 )
 
-# Paleta de cores (baseada na GFTeam IAPC)
-COR_FUNDO = "#0e2d26"        # verde escuro
+COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
-COR_DESTAQUE = "#FFD700"     # dourado
-COR_BOTAO = "#078B6C"        # verde GFTeam
+COR_DESTAQUE = "#FFD700"
+COR_BOTAO = "#078B6C"
 COR_HOVER = "#FFD700"
 
-# CSS global
 st.markdown(f"""
     <style>
     body {{
@@ -68,6 +64,7 @@ def criar_banco():
         usuario TEXT,
         modo TEXT,
         tema TEXT,
+        faixa TEXT,
         pontuacao INTEGER,
         tempo TEXT,
         data DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -87,59 +84,45 @@ def carregar_questoes(tema):
             return json.load(f)
     return []
 
-def salvar_resultado(usuario, modo, tema, pontuacao, tempo):
+def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO resultados (usuario, modo, tema, pontuacao, tempo) VALUES (?, ?, ?, ?, ?)",
-                   (usuario, modo, tema, pontuacao, tempo))
+    cursor.execute("""
+        INSERT INTO resultados (usuario, modo, tema, faixa, pontuacao, tempo)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (usuario, modo, tema, faixa, pontuacao, tempo))
     conn.commit()
     conn.close()
 
+def gerar_pdf(usuario, faixa, pontuacao, total):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", "B", 16)
+    pdf.set_text_color(34, 139, 34)
+    pdf.cell(0, 10, "Relatório de Exame - BJJ Digital", ln=True, align="C")
+
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(10)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 10, f"Aluno: {usuario}", ln=True)
+    pdf.cell(0, 10, f"Faixa: {faixa}", ln=True)
+    pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True)
+    pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True)
+    pdf.ln(15)
+    resultado = "✅ Aprovado!" if pontuacao >= (total * 0.6) else "❌ Não aprovado!"
+    pdf.cell(0, 10, resultado, ln=True, align="C")
+
+    os.makedirs("relatorios", exist_ok=True)
+    caminho_pdf = f"relatorios/Relatorio_{usuario}_{faixa}.pdf"
+    pdf.output(caminho_pdf)
+    return caminho_pdf
+
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-    topo_path = "assets/topo.png"
+    topo_path = "assets/topo.webp"
     if os.path.exists(topo_path):
-        st.image(topo_path, use_container_width=True)
-
-# =========================================
-# GERAÇÃO DE RELATÓRIO PDF
-# =========================================
-def gerar_relatorio_pdf(aluno, faixa, pontuacao, total, tempo, professor, aprovado):
-    os.makedirs("output", exist_ok=True)
-    codigo = f"RESGATE-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-    qrcode_path = f"output/{codigo}_qrcode.png"
-    pdf_path = f"output/{codigo}_relatorio.pdf"
-
-    qr = qrcode.make(f"BJJ Digital - Código de verificação: {codigo}")
-    qr.save(qrcode_path)
-
-    faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-    try:
-        proxima_faixa = faixas[faixas.index(faixa) + 1]
-    except:
-        proxima_faixa = faixa
-
-    dados = {
-        "aluno": aluno,
-        "faixa": faixa,
-        "pontuacao": pontuacao,
-        "total": total,
-        "tempo": tempo,
-        "data": datetime.now().strftime("%d/%m/%Y"),
-        "professor": professor,
-        "qrcode_path": qrcode_path,
-        "codigo": codigo,
-        "aprovado": aprovado,
-        "proxima_faixa": proxima_faixa
-    }
-
-    env = Environment(loader=FileSystemLoader("templates"))
-    template = env.get_template("relatorio.html")
-    html_content = template.render(**dados)
-
-    HTML(string=html_content, base_url=".").write_pdf(pdf_path)
-
-    return pdf_path
+        topo_img = Image.open(topo_path)
+        st.image(topo_img, use_container_width=True)
 
 # =========================================
 # MODO EXAME DE FAIXA
@@ -158,41 +141,28 @@ def modo_exame():
         pontuacao = 0
         total = len(questoes[:5])
 
-        respostas = {}
         for i, q in enumerate(questoes[:5], 1):
             if "video" in q and q["video"]:
                 st.video(q["video"])
             if "imagem" in q and q["imagem"]:
                 st.image(q["imagem"], use_container_width=True)
-
             st.subheader(f"{i}. {q['pergunta']}")
             resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"q{i}", index=None)
-            respostas[f"q{i}"] = resposta
+            if resposta and resposta.startswith(q["resposta"]):
+                pontuacao += 1
 
         if st.button("Finalizar Exame"):
-            for i, q in enumerate(questoes[:5], 1):
-                resp = respostas.get(f"q{i}")
-                if resp and resp.startswith(q["resposta"]):
-                    pontuacao += 1
-
-            aprovado = pontuacao >= 3
-            salvar_resultado(usuario, "Exame", faixa, pontuacao, "00:05:00")
-
-            if aprovado:
-                st.success(f"✅ {usuario}, você foi aprovado para a faixa {faixa}!")
-            else:
-                st.error(f"❌ {usuario}, você não atingiu a pontuação mínima. Tente novamente em 3 dias.")
-
-            professor = "Professor Responsável - GFTeam IAPC de Irajá"
-            pdf_path = gerar_relatorio_pdf(usuario, faixa, pontuacao, total, "00:05:00", professor, aprovado)
-
-            with open(pdf_path, "rb") as pdf_file:
+            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00")
+            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total)
+            with open(caminho_pdf, "rb") as file:
                 st.download_button(
-                    label="📄 Baixar Relatório do Exame (PDF)",
-                    data=pdf_file,
-                    file_name=os.path.basename(pdf_path),
+                    label="📄 Baixar Relatório PDF",
+                    data=file,
+                    file_name=os.path.basename(caminho_pdf),
                     mime="application/pdf"
                 )
+            st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
+            st.info(f"Resultado salvo para a faixa {faixa}.")
 
 # =========================================
 # MODO ESTUDO
@@ -237,24 +207,18 @@ def modo_rola():
         pontos = 0
         total = len(questoes[:5])
 
-        respostas = {}
         for i, q in enumerate(questoes[:5], 1):
             if "video" in q and q["video"]:
                 st.video(q["video"])
             if "imagem" in q and q["imagem"]:
                 st.image(q["imagem"], use_container_width=True)
-
             st.write(f"**{i}. {q['pergunta']}**")
             resposta = st.radio("", q["opcoes"], key=f"rola{i}", index=None)
-            respostas[f"rola{i}"] = resposta
+            if resposta and resposta.startswith(q["resposta"]):
+                pontos += 1
 
         if st.button("Finalizar Rola"):
-            for i, q in enumerate(questoes[:5], 1):
-                resp = respostas.get(f"rola{i}")
-                if resp and resp.startswith(q["resposta"]):
-                    pontos += 1
-
-            salvar_resultado(usuario, "Rola", tema, pontos, "00:04:00")
+            salvar_resultado(usuario, "Rola", tema, None, pontos, "00:04:00")
             st.success(f"🎯 Resultado: {pontos}/{total} acertos")
 
 # =========================================
@@ -264,11 +228,11 @@ def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
 
     conn = sqlite3.connect(DB_PATH)
-    dados = conn.execute("SELECT usuario, modo, tema, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall()
+    dados = conn.execute("SELECT usuario, modo, tema, faixa, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall()
     conn.close()
 
     if dados:
-        st.dataframe(dados, use_container_width=True)
+        st.dataframe(dados)
     else:
         st.info("Nenhum resultado registrado ainda.")
 
