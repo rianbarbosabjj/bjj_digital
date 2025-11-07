@@ -123,42 +123,14 @@ def mostrar_cabecalho(titulo):
         st.image(topo_img, use_container_width=True)
 
 # =========================================
-# MODO EXAME DE FAIXA (só exibe quando ativo)
+# MODO EXAME DE FAIXA (controlado por professor)
 # =========================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
-    faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-    faixa = st.selectbox("Selecione a faixa para o exame:", faixas)
-    usuario = st.text_input("Nome do aluno:")
-    tema = "regras"
-
-    if st.button("Iniciar Exame"):
-        questoes = carregar_questoes(tema)
-        random.shuffle(questoes)
-        total = len(questoes[:5])
-        pontuacao = 0
-
-        st.session_state["inicio_tempo"] = time.time()
-
-        for i, q in enumerate(questoes[:5]):
-            st.markdown(f"<div class='question-box'><h3>{i+1}. {q['pergunta']}</h3></div>", unsafe_allow_html=True)
-
-            if q.get("imagem"):
-                st.image(q["imagem"], use_container_width=True)
-            if q.get("video"):
-                st.video(q["video"])
-
-            resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"exam_q{i}", index=None)
-            if resposta and resposta.startswith(q["resposta"]):
-                pontuacao += 1
-
-        if st.button("Finalizar Exame"):
-            tempo_total = round(time.time() - st.session_state["inicio_tempo"])
-            salvar_resultado(usuario, "Exame", faixa, pontuacao, f"{tempo_total}s")
-            st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos em {tempo_total} segundos.")
+    st.info("🔒 Este módulo só será habilitado para os alunos quando o professor liberar o exame.")
 
 # =========================================
-# MODO ESTUDO
+# MODO ESTUDO (com correção de recarregamento)
 # =========================================
 def modo_estudo():
     mostrar_cabecalho("📘 Estudo Interativo")
@@ -171,33 +143,56 @@ def modo_estudo():
         st.warning("Nenhuma questão encontrada.")
         return
 
+    # Inicializa estado
     if "indice_q" not in st.session_state:
-        st.session_state["indice_q"] = 0
-        st.session_state["acertos"] = 0
+        st.session_state.indice_q = 0
+        st.session_state.acertos = 0
+        st.session_state.respondeu = False
 
-    q = questoes[st.session_state["indice_q"]]
+    q = questoes[st.session_state.indice_q]
+    total = len(questoes)
+
+    # Barra de progresso
+    progresso = (st.session_state.indice_q + 1) / total
+    st.progress(progresso)
+    st.caption(f"Questão {st.session_state.indice_q + 1} de {total}")
 
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if q.get("imagem"):
-            st.image(q["imagem"], use_container_width=True)
+        # 🎥 Primeiro vídeo
         if q.get("video"):
             st.video(q["video"])
+        # 🖼️ Depois imagem
+        if q.get("imagem"):
+            st.image(q["imagem"], use_container_width=True)
+
+        # Pergunta e alternativas
         st.markdown(f"<div class='question-box'><h3>{q['pergunta']}</h3></div>", unsafe_allow_html=True)
-        resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"estudo_{st.session_state['indice_q']}", index=None)
+        resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"estudo_{st.session_state.indice_q}", index=None)
 
         if st.button("Verificar resposta"):
-            if resposta and resposta.startswith(q["resposta"]):
-                st.success("✅ Correto!")
-                st.session_state["acertos"] += 1
+            if not resposta:
+                st.warning("Escolha uma alternativa antes de verificar.")
             else:
-                st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
-            if st.session_state["indice_q"] < len(questoes) - 1:
-                st.session_state["indice_q"] += 1
-                st.experimental_rerun()
+                if resposta.startswith(q["resposta"]):
+                    st.success("✅ Correto!")
+                    st.session_state.acertos += 1
+                else:
+                    st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
+                st.session_state.respondeu = True
+
+        if st.session_state.respondeu:
+            if st.session_state.indice_q < total - 1:
+                if st.button("Próxima questão"):
+                    st.session_state.indice_q += 1
+                    st.session_state.respondeu = False
+                    st.rerun()
             else:
-                st.info(f"Fim do estudo! Você acertou {st.session_state['acertos']}/{len(questoes)} questões.")
-                st.session_state.clear()
+                st.success(f"🎉 Fim do estudo! Você acertou {st.session_state.acertos}/{total} questões.")
+                if st.button("Recomeçar"):
+                    for k in list(st.session_state.keys()):
+                        del st.session_state[k]
+                    st.rerun()
 
 # =========================================
 # MODO TREINO (ROLA)
@@ -216,10 +211,10 @@ def modo_rola():
 
         for i, q in enumerate(questoes[:5]):
             st.markdown(f"<div class='question-box'><h3>{i+1}. {q['pergunta']}</h3></div>", unsafe_allow_html=True)
-            if q.get("imagem"):
-                st.image(q["imagem"], use_container_width=True)
             if q.get("video"):
                 st.video(q["video"])
+            if q.get("imagem"):
+                st.image(q["imagem"], use_container_width=True)
 
             resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"rola{i}", index=None)
             if resposta and resposta.startswith(q["resposta"]):
@@ -272,14 +267,14 @@ def ranking():
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"])
+    menu = st.sidebar.radio("Navegar:", ["📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏁 Exame de Faixa", "🏆 Ranking"])
 
-    if menu == "🏁 Exame de Faixa":
-        modo_exame()
-    elif menu == "📘 Estudo":
+    if menu == "📘 Estudo":
         modo_estudo()
     elif menu == "🤼‍♂️ Rola (Modo Treino)":
         modo_rola()
+    elif menu == "🏁 Exame de Faixa":
+        modo_exame()
     elif menu == "🏆 Ranking":
         ranking()
 
