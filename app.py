@@ -49,10 +49,6 @@ st.markdown(f"""
         text-align: center;
         font-weight: 700;
     }}
-    .stSelectbox label {{
-        color: {COR_DESTAQUE};
-        font-weight: 600;
-    }}
     .question {{
         background-color: #143D33;
         padding: 20px;
@@ -71,6 +67,8 @@ def criar_banco():
     os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
+    # tabela de resultados
     cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario TEXT,
@@ -80,6 +78,16 @@ def criar_banco():
         tempo TEXT,
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
+
+    # tabela de exames disponíveis (para o futuro painel do professor)
+    cursor.execute('''CREATE TABLE IF NOT EXISTS exames_disponiveis (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        equipe TEXT,
+        faixa TEXT,
+        questoes TEXT,
+        ativo INTEGER DEFAULT 0
+    )''')
+
     conn.commit()
     conn.close()
 
@@ -111,20 +119,32 @@ def mostrar_cabecalho(titulo):
         st.image(topo_img, use_container_width=True)
 
 # ==========================================================
-# MODO EXAME DE FAIXA
+# MODO EXAME DE FAIXA (com controle de habilitação)
 # ==========================================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
 
-    faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-    faixa = st.selectbox("Selecione a faixa para o exame:", faixas)
+    # Simulação: flag que indica se o exame está ativo
+    exame_ativo = True  # futuramente será controlado por professor
+
+    if not exame_ativo:
+        st.warning("⛔ O exame de faixa ainda não foi liberado pelo seu professor.")
+        return
+
+    # Quando ativo, exibe o exame
     usuario = st.text_input("Nome do aluno:")
-    tema = st.selectbox("Selecione o tema do exame:", ["regras", "graduacoes", "historia"])
+    faixa = st.selectbox("Faixa em exame:", 
+                         ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+
+    st.info("📘 As questões foram selecionadas pelo seu professor.")
+
+    # Por enquanto, escolhemos um tema fixo (regras), mas será substituído por uma seleção vinda do BD
+    tema = "regras"
+    questoes = carregar_questoes(tema)
 
     if st.button("Iniciar Exame"):
-        questoes = carregar_questoes(tema)
         if not questoes:
-            st.warning("❌ Nenhuma questão encontrada para este tema.")
+            st.warning("❌ Nenhuma questão encontrada para este exame.")
             return
 
         random.shuffle(questoes)
@@ -132,26 +152,23 @@ def modo_exame():
         total = len(questoes[:5])
 
         for i, q in enumerate(questoes[:5], 1):
-            with st.container():
-                st.markdown(f"### {i}. {q['pergunta']}")
+            st.markdown(f"### {i}. {q['pergunta']}")
+            if "imagem" in q and q["imagem"]:
+                if os.path.exists(q["imagem"]):
+                    st.image(q["imagem"], use_container_width=True)
+            if "video" in q and q["video"]:
+                st.video(q["video"])
 
-                # Exibe imagem se houver
-                if "imagem" in q and q["imagem"]:
-                    img_path = q["imagem"]
-                    if os.path.exists(img_path):
-                        st.image(img_path, use_container_width=True)
-
-                # Exibe vídeo se houver
-                if "video" in q and q["video"]:
-                    st.video(q["video"])
-
-                resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"exame_{i}")
-                if resposta.startswith(q["resposta"]):
-                    pontuacao += 1
+            resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"exame_{i}")
+            if resposta.startswith(q["resposta"]):
+                pontuacao += 1
 
         if st.button("Finalizar Exame"):
             salvar_resultado(usuario, "Exame", faixa, pontuacao, "00:05:00")
-            st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
+            if pontuacao >= total * 0.7:
+                st.success(f"✅ Parabéns {usuario}! Você foi aprovado(a) com {pontuacao}/{total} acertos.")
+            else:
+                st.error(f"❌ {usuario}, infelizmente você não atingiu a pontuação mínima. Refaça em 3 dias.")
             st.info(f"Resultado salvo para a faixa {faixa}.")
 
 # ==========================================================
@@ -171,10 +188,8 @@ def modo_estudo():
     q = random.choice(questoes)
     st.markdown("<div class='question'>", unsafe_allow_html=True)
 
-    # Exibe imagem se houver
-    if "imagem" in q and q["imagem"]:
-        if os.path.exists(q["imagem"]):
-            st.image(q["imagem"], use_container_width=True)
+    if "imagem" in q and q["imagem"] and os.path.exists(q["imagem"]):
+        st.image(q["imagem"], use_container_width=True)
 
     st.subheader(q["pergunta"])
 
@@ -185,7 +200,6 @@ def modo_estudo():
         else:
             st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
 
-    # Exibe vídeo se houver
     if "video" in q and q["video"]:
         st.video(q["video"])
 
@@ -211,21 +225,15 @@ def modo_rola():
         total = len(questoes[:5])
 
         for i, q in enumerate(questoes[:5], 1):
-            with st.container():
-                st.markdown(f"### {i}. {q['pergunta']}")
-
-                # Exibe imagem se houver
-                if "imagem" in q and q["imagem"]:
-                    if os.path.exists(q["imagem"]):
-                        st.image(q["imagem"], use_container_width=True)
-
-                resposta = st.radio("", q["opcoes"], key=f"rola_{i}")
-                if resposta.startswith(q["resposta"]):
-                    pontos += 1
-
-                # Exibe vídeo se houver
-                if "video" in q and q["video"]:
-                    st.video(q["video"])
+            st.markdown(f"### {i}. {q['pergunta']}")
+            if "imagem" in q and q["imagem"]:
+                if os.path.exists(q["imagem"]):
+                    st.image(q["imagem"], use_container_width=True)
+            resposta = st.radio("", q["opcoes"], key=f"rola_{i}")
+            if resposta.startswith(q["resposta"]):
+                pontos += 1
+            if "video" in q and q["video"]:
+                st.video(q["video"])
 
         if st.button("Finalizar Rola"):
             salvar_resultado(usuario, "Rola", tema, pontos, "00:04:00")
@@ -275,7 +283,15 @@ def ranking():
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola", "🏆 Ranking"])
+
+    # Simulação: exame ativo
+    exame_disponivel = True  # futuramente controlado por professor
+
+    opcoes_menu = ["📘 Estudo", "🤼‍♂️ Rola", "🏆 Ranking"]
+    if exame_disponivel:
+        opcoes_menu.insert(0, "🏁 Exame de Faixa")
+
+    menu = st.sidebar.radio("Navegar:", opcoes_menu)
 
     if menu == "🏁 Exame de Faixa":
         modo_exame()
