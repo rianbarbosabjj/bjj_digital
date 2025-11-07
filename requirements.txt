@@ -2,3 +2,6 @@ streamlit
 pillow
 altair
 pandas
+weasyprint
+qrcode
+jinja2
