@@ -97,26 +97,65 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo):
 def gerar_pdf(usuario, faixa, pontuacao, total):
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Helvetica", "B", 16)
-    pdf.set_text_color(34, 139, 34)
-    pdf.cell(0, 10, "Relatório de Exame - BJJ Digital", ln=True, align="C")
 
-    pdf.set_text_color(0, 0, 0)
-    pdf.ln(10)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 10, f"Aluno: {usuario}", ln=True)
-    pdf.cell(0, 10, f"Faixa: {faixa}", ln=True)
-    pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True)
-    pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True)
+    # === CORES ===
+    verde_escuro = (14, 45, 38)
+    dourado = (255, 215, 0)
+    branco = (255, 255, 255)
+
+    # === FUNDO ===
+    pdf.set_fill_color(*verde_escuro)
+    pdf.rect(0, 0, 210, 297, "F")
+
+    # === TÍTULO ===
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.cell(0, 20, "Relatório de Exame de Faixa", ln=True, align="C")
+
+    # === LINHA DOURADA ===
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(1)
+    pdf.line(10, 30, 200, 30)
+
+    # === LOGO ===
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=85, y=35, w=40)
+
+    pdf.ln(60)
+    pdf.set_text_color(*branco)
+    pdf.set_font("Helvetica", "", 14)
+
+    pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
+    pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
+    pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
+    pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
     pdf.ln(15)
-    resultado = "✅ Aprovado!" if pontuacao >= (total * 0.6) else "❌ Não aprovado!"
-    pdf.cell(0, 10, resultado, ln=True, align="C")
 
+    # === RESULTADO ===
+    pdf.set_font("Helvetica", "B", 16)
+    resultado = "✅ APROVADO" if pontuacao >= (total * 0.6) else "❌ NÃO APROVADO"
+    pdf.set_text_color(*dourado)
+    pdf.cell(0, 15, resultado, ln=True, align="C")
+
+    # === ASSINATURA ===
+    pdf.ln(30)
+    pdf.set_text_color(*branco)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 10, "Assinatura do Professor:", ln=True, align="C")
+    pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
+
+    # === RODAPÉ ===
+    pdf.set_y(-30)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.set_text_color(*dourado)
+    pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Irajá — BJJ Digital", ln=True, align="C")
+
+    # === SALVAR ===
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = f"relatorios/Relatorio_{usuario}_{faixa}.pdf"
     pdf.output(caminho_pdf)
     return caminho_pdf
-
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
     topo_path = "assets/topo.webp"
