@@ -12,11 +12,7 @@ from datetime import datetime
 # =========================================
 # CONFIGURAÇÕES GERAIS
 # =========================================
-st.set_page_config(
-    page_title="BJJ Digital",
-    page_icon="🥋",
-    layout="wide",
-)
+st.set_page_config(page_title="BJJ Digital", page_icon="🥋", layout="wide")
 
 COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
@@ -150,9 +146,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 22)
     pdf.cell(0, 20, "Relatório de Exame de Faixa", ln=True, align="C")
-
-    pdf.set_draw_color(*dourado)
-    pdf.set_line_width(1)
     pdf.line(10, 30, 200, 30)
 
     logo_path = "assets/logo.png"
@@ -179,20 +172,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(caminho_qr):
         pdf.image(caminho_qr, x=85, y=200, w=40)
 
-    pdf.ln(45)
-    pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 12)
-    if professor:
-        nome_normalizado = normalizar_nome(professor)
-        assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
-        if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=75, y=pdf.get_y() - 5, w=60)
-        else:
-            pdf.cell(0, 10, "(Assinatura digital não encontrada)", ln=True, align="C")
-
-    pdf.cell(0, 15, "Assinatura do Professor:", ln=True, align="C")
-    pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
-
     pdf.set_y(-30)
     pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(*dourado)
@@ -211,8 +190,33 @@ def mostrar_cabecalho(titulo):
         st.image(topo_img, use_container_width=True)
 
 # =========================================
-# MODO EXAME DE FAIXA (CORRIGIDO)
+# MODOS
 # =========================================
+def modo_estudo():
+    mostrar_cabecalho("📘 Modo Estudo")
+    st.info("Aqui você poderá estudar as regras e fundamentos do Jiu-Jitsu.")
+    temas = ["regras", "historia", "posicoes"]
+    tema = st.selectbox("Selecione o tema:", temas)
+    questoes = carregar_questoes(tema)
+    for i, q in enumerate(questoes, 1):
+        st.markdown(f"**{i}. {q['pergunta']}**")
+        st.write("👉", q["resposta"])
+        st.markdown("---")
+
+def modo_treino():
+    mostrar_cabecalho("🥋 Modo Treino")
+    st.info("Pratique sem limite de tempo e veja as respostas após responder.")
+    tema = st.selectbox("Selecione o tema:", ["regras", "historia"])
+    questoes = carregar_questoes(tema)
+    random.shuffle(questoes)
+    for i, q in enumerate(questoes[:5], 1):
+        resposta = st.radio(q["pergunta"], q["opcoes"], key=f"treino_{i}")
+        if resposta:
+            if resposta.startswith(q["resposta"]):
+                st.success("✅ Correto!")
+            else:
+                st.error(f"❌ Resposta certa: {q['resposta']}")
+
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
 
@@ -224,9 +228,7 @@ def modo_exame():
 
     if "exame_iniciado" not in st.session_state:
         st.session_state.exame_iniciado = False
-        st.session_state.questoes_exame = []
         st.session_state.respostas_exame = {}
-        st.session_state.pontuacao_exame = 0
 
     if not st.session_state.exame_iniciado:
         if st.button("Iniciar Exame"):
@@ -234,15 +236,13 @@ def modo_exame():
             random.shuffle(questoes)
             st.session_state.questoes_exame = questoes[:5]
             st.session_state.exame_iniciado = True
-            st.experimental_rerun()
+            st.rerun()
 
     if st.session_state.exame_iniciado:
         questoes = st.session_state.questoes_exame
         total = len(questoes)
-        st.markdown("### Responda todas as questões abaixo:")
 
         for i, q in enumerate(questoes, 1):
-            st.markdown(f"---")
             st.markdown(f"### {i}. {q['pergunta']}")
             if "video" in q and q["video"]:
                 st.video(q["video"])
@@ -254,41 +254,33 @@ def modo_exame():
                 "Escolha uma opção:",
                 q["opcoes"],
                 key=key_resp,
-                index=None
+                index=q["opcoes"].index(st.session_state.respostas_exame.get(key_resp, q["opcoes"][0]))
+                if key_resp in st.session_state.respostas_exame else 0
             )
-
-            if resposta:
-                st.session_state.respostas_exame[key_resp] = resposta
+            st.session_state.respostas_exame[key_resp] = resposta
 
         pontuacao = sum(
             1 for i, q in enumerate(questoes, 1)
-            if f"resposta_{i}" in st.session_state.respostas_exame and
-               st.session_state.respostas_exame[f"resposta_{i}"].startswith(q["resposta"])
+            if st.session_state.respostas_exame.get(f"resposta_{i}", "").startswith(q["resposta"])
         )
-        st.session_state.pontuacao_exame = pontuacao
 
-        if len(st.session_state.respostas_exame) == total:
-            st.success("✅ Todas as questões foram respondidas.")
-            if st.button("Finalizar Exame"):
-                codigo = gerar_codigo_unico()
-                salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
-                caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+        if st.button("Finalizar Exame"):
+            codigo = gerar_codigo_unico()
+            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
 
-                with open(caminho_pdf, "rb") as file:
-                    st.download_button(
-                        label="📄 Baixar Relatório PDF",
-                        data=file,
-                        file_name=os.path.basename(caminho_pdf),
-                        mime="application/pdf"
-                    )
+            st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
+            st.info(f"Código de verificação: {codigo}")
 
-                st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
-                st.info(f"Código de verificação: {codigo}")
+            with open(caminho_pdf, "rb") as file:
+                st.download_button(
+                    label="📄 Baixar Relatório PDF",
+                    data=file,
+                    file_name=os.path.basename(caminho_pdf),
+                    mime="application/pdf"
+                )
 
-                for key in ["exame_iniciado", "questoes_exame", "respostas_exame", "pontuacao_exame"]:
-                    if key in st.session_state:
-                        del st.session_state[key]
-                st.experimental_rerun()
+            st.session_state.exame_iniciado = False
 
 # =========================================
 # MENU PRINCIPAL
@@ -296,10 +288,18 @@ def modo_exame():
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa"])
+
+    menu = st.sidebar.radio(
+        "Navegar:",
+        ["🏁 Exame de Faixa", "🥋 Modo Treino", "📘 Modo Estudo"]
+    )
 
     if menu == "🏁 Exame de Faixa":
         modo_exame()
+    elif menu == "🥋 Modo Treino":
+        modo_treino()
+    elif menu == "📘 Modo Estudo":
+        modo_estudo()
 
 if __name__ == "__main__":
     main()
