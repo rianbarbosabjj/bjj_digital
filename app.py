@@ -68,21 +68,17 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP,
         codigo_verificacao TEXT
     )''')
+    cursor.execute('''CREATE TABLE IF NOT EXISTS config_exame (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        faixa TEXT,
+        questoes_json TEXT,
+        professor TEXT,
+        data_config DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
     conn.commit()
     conn.close()
 
-def atualizar_banco():
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(resultados)")
-    colunas = [col[1] for col in cursor.fetchall()]
-    if "codigo_verificacao" not in colunas:
-        cursor.execute("ALTER TABLE resultados ADD COLUMN codigo_verificacao TEXT")
-        conn.commit()
-    conn.close()
-
 criar_banco()
-atualizar_banco()
 
 # =========================================
 # FUNÇÕES AUXILIARES
@@ -143,7 +139,6 @@ def gerar_qrcode(codigo):
     os.makedirs("certificados/qrcodes", exist_ok=True)
     caminho_qr = os.path.abspath(f"certificados/qrcodes/{codigo}.png")
 
-    # URL de verificação hospedada no Netlify
     url_verificacao = f"https://bjjdigital.netlify.app/verificar?codigo={codigo}"
 
     qr = qrcode.QRCode(
@@ -176,7 +171,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 297, 210, "F")
 
-    # Título
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 26)
     pdf.set_xy(0, 20)
@@ -193,7 +187,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # Texto e nome
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*branco)
     pdf.set_xy(25, 78)
@@ -221,7 +214,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0, 122)
     pdf.cell(297, 10, resultado, align="C")
 
-    # Assinatura
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_xy(0, 138)
@@ -270,6 +262,20 @@ def mostrar_cabecalho(titulo):
         topo_img = Image.open(topo_path)
         st.image(topo_img, use_container_width=True)
 
+def obter_questoes_configuradas(faixa):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT questoes_json FROM config_exame
+        WHERE faixa = ?
+        ORDER BY data_config DESC LIMIT 1
+    """, (faixa,))
+    registro = cursor.fetchone()
+    conn.close()
+    if registro:
+        return json.loads(registro[0])
+    return None
+
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
 
@@ -286,6 +292,9 @@ def modo_exame():
     if not st.session_state.exame_iniciado:
         if st.button("Iniciar Exame"):
             questoes = carregar_questoes(tema)
+            configuradas = obter_questoes_configuradas(faixa)
+            if configuradas:
+                questoes = [questoes[int(i)-1] for i in configuradas if int(i)-1 < len(questoes)]
             random.shuffle(questoes)
             st.session_state.questoes_exame = questoes[:5]
             st.session_state.exame_iniciado = True
@@ -338,7 +347,7 @@ def modo_exame():
                 st.session_state.exame_iniciado = False
 
 # =========================================
-# HISTÓRICO DE CERTIFICADOS (Painel Restrito)
+# HISTÓRICO DE CERTIFICADOS
 # =========================================
 def painel_certificados():
     mostrar_cabecalho("📜 Histórico de Certificados")
@@ -368,7 +377,6 @@ def painel_certificados():
                 WHERE LOWER(tema) = 'regras'
                 ORDER BY data DESC
             """)
-
         resultados = cursor.fetchall()
         conn.close()
 
@@ -398,8 +406,86 @@ def painel_certificados():
                         mime="application/pdf",
                         key=f"download_{codigo}"
                     )
-            else:
-                st.error("Arquivo PDF não encontrado para este certificado.")
+
+# =========================================
+# DASHBOARD DO PROFESSOR
+# =========================================
+def dashboard_professor():
+    mostrar_cabecalho("📈 Dashboard do Professor")
+    aba = st.tabs(["📊 Desempenho das Turmas", "⚙️ Gerenciar Questões"])
+
+    with aba[0]:
+        professor = st.text_input("Digite seu nome completo (professor):")
+        if st.button("🔍 Carregar Dados de Desempenho"):
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT usuario, faixa, pontuacao, data, codigo_verificacao
+                FROM resultados
+                WHERE LOWER(tema) = 'regras'
+                ORDER BY data DESC
+            """)
+            resultados = cursor.fetchall()
+            conn.close()
+
+            if not resultados:
+                st.info("Nenhum resultado encontrado.")
+                return
+
+            total = len(resultados)
+            media = sum([r[2] for r in resultados]) / total
+            aprovados = sum(1 for r in resultados if r[2] >= 3)
+            taxa = (aprovados / total) * 100
+
+            st.metric("Total de Exames", total)
+            st.metric("Média de Pontuação", f"{media:.2f}")
+            st.metric("Taxa de Aprovação", f"{taxa:.1f}%")
+
+            faixas = [r[1] for r in resultados]
+            freq = {f: faixas.count(f) for f in set(faixas)}
+            st.bar_chart(freq)
+
+    with aba[1]:
+        st.markdown("### ⚙️ Configurar Questões por Faixa")
+
+        professor = st.text_input("Professor responsável pela configuração:")
+        faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+        faixa = st.selectbox("Selecione a faixa para configurar:", faixas)
+
+        if faixa and professor:
+            questoes = carregar_questoes("regras")
+            if not questoes:
+                st.error("Nenhum arquivo de questões encontrado.")
+                return
+
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT questoes_json FROM config_exame
+                WHERE faixa = ? AND professor = ?
+                ORDER BY data_config DESC LIMIT 1
+            """, (faixa, professor))
+            registro = cursor.fetchone()
+            conn.close()
+
+            selecionadas = set(json.loads(registro[0])) if registro else set()
+
+            novas_selecionadas = []
+            for i, q in enumerate(questoes, 1):
+                checked = st.checkbox(f"{i}. {q['pergunta']}", value=(str(i) in selecionadas))
+                if checked:
+                    novas_selecionadas.append(str(i))
+
+            if st.button("💾 Salvar Configuração"):
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT INTO config_exame (faixa, questoes_json, professor)
+                    VALUES (?, ?, ?)
+                """, (faixa, json.dumps(novas_selecionadas), professor))
+                conn.commit()
+                conn.close()
+                st.success(f"Configuração salva com sucesso para a faixa {faixa}.")
 
 # =========================================
 # MENU PRINCIPAL
@@ -408,12 +494,18 @@ def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
 
-    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📜 Histórico de Certificados"])
+    menu = st.sidebar.radio("Navegar:", [
+        "🏁 Exame de Faixa",
+        "📜 Histórico de Certificados",
+        "📈 Dashboard do Professor"
+    ])
 
     if menu == "🏁 Exame de Faixa":
         modo_exame()
     elif menu == "📜 Histórico de Certificados":
         painel_certificados()
+    elif menu == "📈 Dashboard do Professor":
+        dashboard_professor()
 
 if __name__ == "__main__":
     main()
