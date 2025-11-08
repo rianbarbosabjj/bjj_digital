@@ -152,7 +152,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
     pdf.cell(0, 15, resultado, ln=True, align="C")
-    pdf.ln(20)
+    pdf.ln(25)
 
     # Assinatura do professor (centralizada)
     pdf.set_font("Helvetica", "", 12)
@@ -170,12 +170,9 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
             pdf.cell(0, 10, "(Assinatura digital não encontrada)", ln=True, align="C")
 
     # QR Code no canto inferior direito
-    caminho_qr = gerar_qrcode(codigo)
+    caminho_qr = gerar_qrcode(codigo)  # nome correto da função!
     if os.path.exists(caminho_qr):
-        # Posição: canto inferior direito
         pdf.image(caminho_qr, x=160, y=240, w=35)
-
-        # Código de verificação abaixo do QR
         pdf.set_xy(160, 277)
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(*dourado)
@@ -192,7 +189,8 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     caminho_pdf = os.path.abspath(f"relatorios/Relatorio_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
-def normalizar_nome(nome):
+    
+    def normalizar_nome(nome):
     nfkd = unicodedata.normalize("NFKD", nome)
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
