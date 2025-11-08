@@ -3,4 +3,4 @@ pillow
 altair
 pandas
 fpdf2==2.7.9
-qrcode
+qrcode==7.4.2
