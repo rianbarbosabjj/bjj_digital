@@ -5,6 +5,7 @@ import sqlite3
 import json
 import random
 import os
+import qrcode
 from datetime import datetime
 
 # =========================================
@@ -77,14 +78,11 @@ def atualizar_banco():
     """Adiciona a coluna codigo_verificacao se ainda não existir."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
     cursor.execute("PRAGMA table_info(resultados)")
     colunas = [col[1] for col in cursor.fetchall()]
-
     if "codigo_verificacao" not in colunas:
         cursor.execute("ALTER TABLE resultados ADD COLUMN codigo_verificacao TEXT")
         conn.commit()
-
     conn.close()
 
 criar_banco()
@@ -120,6 +118,14 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo, codigo):
     conn.commit()
     conn.close()
 
+def gerar_qrcode(codigo):
+    """Gera o QR Code com o código de verificação."""
+    os.makedirs("relatorios/qrcodes", exist_ok=True)
+    img = qrcode.make(f"Código de verificação: {codigo}")
+    caminho_qr = f"relatorios/qrcodes/{codigo}.png"
+    img.save(caminho_qr)
+    return caminho_qr
+
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf = FPDF()
     pdf.add_page()
@@ -146,7 +152,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf.ln(60)
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
-
     pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
     pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
     pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
@@ -154,12 +159,20 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
     pdf.ln(15)
 
+    # Resultado
     pdf.set_font("Helvetica", "B", 16)
     resultado = "✅ APROVADO" if pontuacao >= (total * 0.6) else "❌ NÃO APROVADO"
     pdf.set_text_color(*dourado)
     pdf.cell(0, 15, resultado, ln=True, align="C")
 
-    pdf.ln(30)
+    pdf.ln(20)
+
+    # Gera e insere o QR Code
+    caminho_qr = gerar_qrcode(codigo)
+    if os.path.exists(caminho_qr):
+        pdf.image(caminho_qr, x=85, y=200, w=40)
+
+    pdf.ln(50)
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 10, "Assinatura do Professor:", ln=True, align="C")
