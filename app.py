@@ -154,7 +154,9 @@ def gerar_qrcode(codigo):
     )
     qr.add_data(url_verificacao)
     qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
+    
+    # 🔧 Converter para RGB antes de salvar (evita imagem corrompida)
+    img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     img.save(caminho_qr)
     return caminho_qr
 
