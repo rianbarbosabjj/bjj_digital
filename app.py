@@ -228,28 +228,33 @@ def modo_exame():
     professor = st.text_input("Nome do professor responsável:")
     tema = "regras"
 
-    if "exame_em_andamento" not in st.session_state:
-        st.session_state.exame_em_andamento = False
-    if "questoes_exame" not in st.session_state:
+    # Inicializa variáveis persistentes
+    if "exame_iniciado" not in st.session_state:
+        st.session_state.exame_iniciado = False
         st.session_state.questoes_exame = []
-    if "respostas_exame" not in st.session_state:
-        st.session_state.respostas_exame = {}
-    if "pontuacao_exame" not in st.session_state:
-        st.session_state.pontuacao_exame = 0
-
-    if st.button("Iniciar Exame") and not st.session_state.exame_em_andamento:
-        questoes = carregar_questoes(tema)
-        random.shuffle(questoes)
-        st.session_state.questoes_exame = questoes[:5]
-        st.session_state.exame_em_andamento = True
         st.session_state.respostas_exame = {}
         st.session_state.pontuacao_exame = 0
 
-    if st.session_state.exame_em_andamento:
+    # Inicia o exame
+    if not st.session_state.exame_iniciado:
+        if st.button("Iniciar Exame"):
+            questoes = carregar_questoes(tema)
+            random.shuffle(questoes)
+            st.session_state.questoes_exame = questoes[:5]
+            st.session_state.exame_iniciado = True
+            st.session_state.respostas_exame = {}
+            st.session_state.pontuacao_exame = 0
+            st.experimental_rerun()
+
+    # Mostra as questões (sem recarregar)
+    if st.session_state.exame_iniciado:
         questoes = st.session_state.questoes_exame
         total = len(questoes)
 
+        st.markdown("### Responda todas as questões abaixo:")
+
         for i, q in enumerate(questoes, 1):
+            st.markdown(f"---")
             st.markdown(f"### {i}. {q['pergunta']}")
             if "video" in q and q["video"]:
                 st.video(q["video"])
@@ -264,16 +269,24 @@ def modo_exame():
                 index=None
             )
 
-            if resposta and key_resp not in st.session_state.respostas_exame:
+            if resposta:
                 st.session_state.respostas_exame[key_resp] = resposta
-                if resposta.startswith(q["resposta"]):
-                    st.session_state.pontuacao_exame += 1
 
+        # Contabiliza pontuação
+        pontuacao = 0
+        for i, q in enumerate(questoes, 1):
+            key_resp = f"resposta_{i}"
+            if key_resp in st.session_state.respostas_exame:
+                resposta = st.session_state.respostas_exame[key_resp]
+                if resposta.startswith(q["resposta"]):
+                    pontuacao += 1
+        st.session_state.pontuacao_exame = pontuacao
+
+        # Exibe botão de finalização apenas após todas as respostas
         if len(st.session_state.respostas_exame) == total:
-            st.success("Todas as questões foram respondidas!")
+            st.success("✅ Todas as questões foram respondidas.")
             if st.button("Finalizar Exame"):
                 codigo = gerar_codigo_unico()
-                pontuacao = st.session_state.pontuacao_exame
                 salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
                 caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
 
@@ -286,12 +299,13 @@ def modo_exame():
                     )
 
                 st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
-                st.info(f"Resultado salvo para a faixa {faixa}. Código: {codigo}")
+                st.info(f"Código de verificação: {codigo}")
 
-                st.session_state.exame_em_andamento = False
-                st.session_state.questoes_exame = []
-                st.session_state.respostas_exame = {}
-                st.session_state.pontuacao_exame = 0
+                # Reset
+                for key in ["exame_iniciado", "questoes_exame", "respostas_exame", "pontuacao_exame"]:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.experimental_rerun()
 
 # =========================================
 # MENU PRINCIPAL
