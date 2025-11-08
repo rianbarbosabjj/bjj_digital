@@ -163,7 +163,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.ln(15)
 
     pdf.set_font("Helvetica", "B", 16)
-    resultado = "✅ APROVADO" if pontuacao >= (total * 0.6) else "❌ NÃO APROVADO"
+    resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
     pdf.cell(0, 15, resultado, ln=True, align="C")
     pdf.ln(20)
@@ -213,9 +213,9 @@ def modo_treino():
         resposta = st.radio(q["pergunta"], q["opcoes"], key=f"treino_{i}")
         if resposta:
             if resposta.startswith(q["resposta"]):
-                st.success("✅ Correto!")
+                st.success("Correto!")
             else:
-                st.error(f"❌ Resposta certa: {q['resposta']}")
+                st.error(f"Resposta certa: {q['resposta']}")
 
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
@@ -254,33 +254,34 @@ def modo_exame():
                 "Escolha uma opção:",
                 q["opcoes"],
                 key=key_resp,
-                index=q["opcoes"].index(st.session_state.respostas_exame.get(key_resp, q["opcoes"][0]))
-                if key_resp in st.session_state.respostas_exame else 0
+                index=None
             )
-            st.session_state.respostas_exame[key_resp] = resposta
+            if resposta:
+                st.session_state.respostas_exame[key_resp] = resposta
 
         pontuacao = sum(
             1 for i, q in enumerate(questoes, 1)
             if st.session_state.respostas_exame.get(f"resposta_{i}", "").startswith(q["resposta"])
         )
 
-        if st.button("Finalizar Exame"):
-            codigo = gerar_codigo_unico()
-            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
-            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+        if len(st.session_state.respostas_exame) == total:
+            if st.button("Finalizar Exame"):
+                codigo = gerar_codigo_unico()
+                salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+                caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
 
-            st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
-            st.info(f"Código de verificação: {codigo}")
+                st.success(f"{usuario}, você fez {pontuacao}/{total} pontos.")
+                st.info(f"Código de verificação: {codigo}")
 
-            with open(caminho_pdf, "rb") as file:
-                st.download_button(
-                    label="📄 Baixar Relatório PDF",
-                    data=file,
-                    file_name=os.path.basename(caminho_pdf),
-                    mime="application/pdf"
-                )
+                with open(caminho_pdf, "rb") as file:
+                    st.download_button(
+                        label="📄 Baixar Relatório PDF",
+                        data=file,
+                        file_name=os.path.basename(caminho_pdf),
+                        mime="application/pdf"
+                    )
 
-            st.session_state.exame_iniciado = False
+                st.session_state.exame_iniciado = False
 
 # =========================================
 # MENU PRINCIPAL
