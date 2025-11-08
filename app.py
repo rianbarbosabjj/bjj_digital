@@ -116,13 +116,17 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo, codigo):
 def gerar_qrcode(codigo):
     os.makedirs("relatorios/qrcodes", exist_ok=True)
     caminho_qr = os.path.abspath(f"relatorios/qrcodes/{codigo}.png")
+
+    # URL de verificação (ajuste conforme o domínio real)
+    url_verificacao = f"https://bjjdigital.vercel.app/verificar?codigo={codigo}"
+
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
         box_size=8,
         border=2,
     )
-    qr.add_data(f"Código de verificação: {codigo}")
+    qr.add_data(url_verificacao)
     qr.make(fit=True)
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(caminho_qr)
