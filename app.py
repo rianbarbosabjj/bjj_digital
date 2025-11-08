@@ -149,7 +149,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # --- Título ---
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 24)
-    pdf.set_xy(0, 10)  # margem superior reduzida
+    pdf.set_xy(0, 10)
     pdf.cell(297, 12, "Certificado de Exame de Faixa", align="C")
 
     # --- Linha e logo ---
@@ -161,7 +161,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=128, y=25, w=40)
 
-    # --- Texto central (sem multi_cell para evitar quebra de página) ---
+    # --- Texto principal ---
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
     percentual = int((pontuacao / total) * 100)
@@ -169,32 +169,30 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     texto = (f"Certificamos que o(a) aluno(a) {usuario} concluiu o exame teórico "
              f"para a faixa {faixa}, obtendo {percentual}% de aproveitamento, "
              f"realizado em {data_hora}.")
-
-    # Reduzir margens verticais e centralizar texto em uma linha controlada
-    pdf.set_xy(15, 70)
+    pdf.set_xy(15, 68)
     pdf.multi_cell(267, 7, texto, align="C")
 
     # --- Resultado ---
     pdf.set_font("Helvetica", "B", 18)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 110)
+    pdf.set_xy(0, 107)
     pdf.cell(297, 10, resultado, align="C")
 
     # --- Assinatura ---
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
-    pdf.set_xy(0, 135)
+    pdf.set_xy(0, 132)
     pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
-    pdf.line(105, 143, 192, 143)
+    pdf.line(105, 140, 192, 140)
 
     if professor:
         nome_normalizado = normalizar_nome(professor)
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=118, y=125, w=60)
+            pdf.image(assinatura_path, x=118, y=122, w=60)
         else:
-            pdf.set_xy(0, 145)
+            pdf.set_xy(0, 142)
             pdf.cell(297, 8, "(Assinatura digital não encontrada)", align="C")
 
     # --- QR code canto inferior direito ---
@@ -202,17 +200,17 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(caminho_qr):
         qr_w = 25
         qr_x = 297 - qr_w - 15
-        qr_y = 145  # margem inferior reduzida
+        qr_y = 142  # subiu 3 mm
         pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
-        pdf.set_xy(qr_x - 2, qr_y + qr_w + 1)
+        pdf.set_xy(qr_x - 2, qr_y + qr_w - 1)  # espaço reduzido
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(*dourado)
         pdf.cell(35, 5, f"Código: {codigo}", align="C")
 
-    # --- Rodapé ---
+    # --- Rodapé (subiu 3mm) ---
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 190)  # margem inferior ajustada
+    pdf.set_xy(0, 184)
     pdf.cell(297, 8, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
     # --- Salvar ---
