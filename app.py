@@ -75,7 +75,6 @@ def criar_banco():
     conn.close()
 
 def atualizar_banco():
-    """Adiciona a coluna codigo_verificacao se ainda não existir."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(resultados)")
@@ -119,9 +118,10 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo, codigo):
     conn.close()
 
 def gerar_qrcode(codigo):
-    """Gera e retorna o caminho ABSOLUTO do QR Code."""
+    """Gera QR Code com caminho absoluto"""
     os.makedirs("relatorios/qrcodes", exist_ok=True)
     caminho_qr = os.path.abspath(f"relatorios/qrcodes/{codigo}.png")
+
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -133,7 +133,6 @@ def gerar_qrcode(codigo):
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(caminho_qr)
     return caminho_qr
-
 
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf = FPDF()
@@ -164,7 +163,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
     pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
     pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
-    pdf.cell(0, 10, f"Código de Verificação: {codigo}", ln=True, align="C")
+    pdf.cell(0, 10, f"Código: {codigo}", ln=True, align="C")
     pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
     pdf.ln(15)
 
@@ -175,16 +174,15 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
 
     pdf.ln(20)
 
-    # Gera o QR code e insere
+    # Gera e insere QR Code
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
         try:
             pdf.image(caminho_qr, x=85, y=200, w=40)
         except Exception as e:
             print(f"⚠️ Erro ao inserir QR Code: {e}")
-    else:
-        print(f"⚠️ QR Code não encontrado em {caminho_qr}")
 
+    # Espaço para assinatura
     pdf.ln(50)
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
