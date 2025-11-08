@@ -113,21 +113,85 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo, codigo):
     conn.commit()
     conn.close()
 
-def gerar_qrcode(codigo):
-    os.makedirs("relatorios/qrcodes", exist_ok=True)
-    caminho_qr = os.path.abspath(f"relatorios/qrcodes/{codigo}.png")
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=8,
-        border=2,
-    )
-    qr.add_data(f"Código de verificação: {codigo}")
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    img.save(caminho_qr)
-    return caminho_qr
+def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
+    pdf = FPDF()
+    pdf.add_page()
 
+    # Cores
+    verde_escuro = (14, 45, 38)
+    dourado = (255, 215, 0)
+    branco = (255, 255, 255)
+
+    # Fundo
+    pdf.set_fill_color(*verde_escuro)
+    pdf.rect(0, 0, 210, 297, "F")
+
+    # Título
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.cell(0, 20, "Relatório de Exame de Faixa", ln=True, align="C")
+    pdf.line(10, 30, 200, 30)
+
+    # Logo central
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=85, y=35, w=40)
+
+    # Informações principais
+    pdf.ln(60)
+    pdf.set_text_color(*branco)
+    pdf.set_font("Helvetica", "", 14)
+    pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
+    pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
+    pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
+    pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+    pdf.ln(15)
+
+    # Resultado
+    pdf.set_font("Helvetica", "B", 16)
+    resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
+    pdf.set_text_color(*dourado)
+    pdf.cell(0, 15, resultado, ln=True, align="C")
+    pdf.ln(20)
+
+    # Assinatura do professor (centralizada)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.set_text_color(*branco)
+    pdf.cell(0, 10, "Assinatura do Professor:", ln=True, align="C")
+    pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
+
+    if professor:
+        nome_normalizado = normalizar_nome(professor)
+        assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
+        if os.path.exists(assinatura_path):
+            pdf.image(assinatura_path, x=75, y=pdf.get_y() - 15, w=60)
+        else:
+            pdf.ln(8)
+            pdf.cell(0, 10, "(Assinatura digital não encontrada)", ln=True, align="C")
+
+    # QR Code no canto inferior direito
+    caminho_qr = gerar_qrcode(codigo)
+    if os.path.exists(caminho_qr):
+        # Posição: canto inferior direito
+        pdf.image(caminho_qr, x=160, y=240, w=35)
+
+        # Código de verificação abaixo do QR
+        pdf.set_xy(160, 277)
+        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_text_color(*dourado)
+        pdf.cell(40, 5, f"Código: {codigo}", align="C")
+
+    # Rodapé
+    pdf.set_y(-20)
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.set_text_color(*dourado)
+    pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", ln=True, align="C")
+
+    # Exportar PDF
+    os.makedirs("relatorios", exist_ok=True)
+    caminho_pdf = os.path.abspath(f"relatorios/Relatorio_{usuario}_{faixa}.pdf")
+    pdf.output(caminho_pdf)
+    return caminho_pdf
 def normalizar_nome(nome):
     nfkd = unicodedata.normalize("NFKD", nome)
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
