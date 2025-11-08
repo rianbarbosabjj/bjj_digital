@@ -7,6 +7,7 @@ import random
 import os
 import qrcode
 import unicodedata
+import pandas as pd
 from datetime import datetime
 
 # =========================================
@@ -57,6 +58,7 @@ def criar_banco():
     os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
     cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario TEXT,
@@ -68,6 +70,7 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP,
         codigo_verificacao TEXT
     )''')
+
     cursor.execute('''CREATE TABLE IF NOT EXISTS config_exame (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         faixa TEXT,
@@ -75,6 +78,7 @@ def criar_banco():
         professor TEXT,
         data_config DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
+
     conn.commit()
     conn.close()
 
@@ -138,7 +142,6 @@ def exportar_certificados_json():
 def gerar_qrcode(codigo):
     os.makedirs("certificados/qrcodes", exist_ok=True)
     caminho_qr = os.path.abspath(f"certificados/qrcodes/{codigo}.png")
-
     url_verificacao = f"https://bjjdigital.netlify.app/verificar?codigo={codigo}"
 
     qr = qrcode.QRCode(
@@ -156,6 +159,20 @@ def gerar_qrcode(codigo):
 def normalizar_nome(nome):
     nfkd = unicodedata.normalize("NFKD", nome)
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
+
+def obter_questoes_configuradas(faixa):
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT questoes_json FROM config_exame
+        WHERE faixa = ?
+        ORDER BY data_config DESC LIMIT 1
+    """, (faixa,))
+    registro = cursor.fetchone()
+    conn.close()
+    if registro:
+        return json.loads(registro[0])
+    return None
 
 # =========================================
 # GERAR CERTIFICADO
@@ -177,18 +194,16 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.cell(297, 10, "CERTIFICADO DE EXAME DE FAIXA", align="C")
 
     pdf.set_draw_color(*dourado)
-    pdf.set_line_width(0.8)
     pdf.line(40, 33, 257, 33)
 
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        pdf.image(logo_path, x=130, y=38, w=35)
+    if os.path.exists("assets/logo.png"):
+        pdf.image("assets/logo.png", x=130, y=38, w=35)
 
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*branco)
+    pdf.set_font("Helvetica", "", 14)
     pdf.set_xy(25, 78)
     pdf.cell(247, 8, "Certificamos que o(a) aluno(a)", align="C")
 
@@ -200,16 +215,13 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
     pdf.set_xy(25, 98)
-    pdf.multi_cell(
-        247,
-        8,
+    pdf.multi_cell(247, 8,
         f"concluiu o exame teórico para a faixa {faixa}, obtendo {percentual}% de aproveitamento, "
         f"realizado em {data_hora}.",
-        align="C",
-    )
+        align="C")
 
-    pdf.set_font("Helvetica", "B", 18)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
+    pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(*dourado)
     pdf.set_xy(0, 122)
     pdf.cell(297, 10, resultado, align="C")
@@ -219,7 +231,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0, 138)
     pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
 
-    pdf.set_draw_color(*dourado)
     pdf.line(108, 146, 189, 146)
 
     if professor:
@@ -227,15 +238,10 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path, x=118, y=128, w=60)
-        else:
-            pdf.set_xy(0, 148)
-            pdf.cell(297, 8, "(Assinatura digital não encontrada)", align="C")
 
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        qr_w = 24
-        qr_x = 297 - qr_w - 18
-        qr_y = 145
+        qr_w, qr_x, qr_y = 24, 297 - 24 - 18, 145
         pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
         pdf.set_xy(qr_x - 3, qr_y + qr_w - 1)
         pdf.set_font("Helvetica", "I", 8)
