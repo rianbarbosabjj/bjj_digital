@@ -136,88 +136,89 @@ def normalizar_nome(nome):
 # GERAR PDF (layout fixo e ajustado)
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    pdf = FPDF("P", "mm", "A4")
+    pdf = FPDF("L", "mm", "A4")  # <-- Modo paisagem
     pdf.add_page()
 
-    # Fundo
+    # --- Cores e fundo ---
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
     pdf.set_fill_color(*verde_escuro)
-    pdf.rect(0, 0, 210, 297, "F")
+    pdf.rect(0, 0, 297, 210, "F")
 
-    # Cabeçalho
+    # --- Título ---
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_font("Helvetica", "B", 28)
     pdf.set_xy(10, 20)
-    pdf.cell(190, 10, "Relatório de Exame de Faixa", ln=False, align="C")
-    pdf.line(40, 28, 170, 28)
+    pdf.cell(277, 15, "Certificado de Exame de Faixa", ln=False, align="C")
 
-    # Logo
+    # --- Linha e logo ---
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(1)
+    pdf.line(30, 35, 267, 35)
+
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=85, y=32, w=40)
+        pdf.image(logo_path, x=130, y=40, w=35)
 
-    # Dados principais
+    # --- Texto principal ---
+    pdf.set_text_color(*branco)
+    pdf.set_font("Helvetica", "", 16)
+    pdf.set_xy(10, 85)
+    pdf.multi_cell(277, 10,
+        f"Certificamos que o aluno(a) {usuario} concluiu o exame para a faixa {faixa}, "
+        f"obtendo pontuação de {pontuacao}/{total} pontos, realizado em "
+        f"{datetime.now().strftime('%d/%m/%Y %H:%M')}.",
+        align="C"
+    )
+
+    # --- Resultado ---
+    pdf.set_font("Helvetica", "B", 20)
+    resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
+    pdf.set_text_color(*dourado)
+    pdf.set_xy(10, 125)
+    pdf.cell(277, 10, resultado, align="C")
+
+    # --- Assinatura ---
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 13)
-    y_dados = 85
-    pdf.set_xy(10, y_dados)
-    pdf.cell(190, 8, f"Aluno: {usuario}", align="C")
-    pdf.set_xy(10, y_dados + 8)
-    pdf.cell(190, 8, f"Faixa Avaliada: {faixa}", align="C")
-    pdf.set_xy(10, y_dados + 16)
-    pdf.cell(190, 8, f"Pontuação: {pontuacao}/{total}", align="C")
-    pdf.set_xy(10, y_dados + 24)
-    pdf.cell(190, 8, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", align="C")
-
-    # Resultado
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 15)
-    pdf.set_xy(10, y_dados + 38)
-    resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
-    pdf.cell(190, 10, resultado, align="C")
-
-    # Assinatura
-    pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 12)
-    y_assinatura = y_dados + 60
-    pdf.set_xy(10, y_assinatura)
-    pdf.cell(190, 8, "Assinatura do Professor:", align="C")
-    pdf.line(70, y_assinatura + 10, 140, y_assinatura + 10)
+    pdf.set_xy(10, 155)
+    pdf.cell(277, 8, "Assinatura do Professor Responsável", align="C")
+    pdf.line(100, 163, 197, 163)
 
     if professor:
         nome_normalizado = normalizar_nome(professor)
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=75, y=y_assinatura - 5, w=60)
+            pdf.image(assinatura_path, x=118, y=145, w=60)
         else:
-            pdf.set_xy(10, y_assinatura + 12)
-            pdf.cell(190, 6, "(Assinatura digital não encontrada)", align="C")
+            pdf.set_xy(10, 166)
+            pdf.cell(277, 8, "(Assinatura digital não encontrada)", align="C")
 
-    # QR code no canto inferior direito
+    # --- QR code canto inferior direito ---
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        qr_w = 28
-        qr_x = 210 - qr_w - 15
-        qr_y = 245
+        qr_w = 30
+        qr_x = 297 - qr_w - 15
+        qr_y = 160
         pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
-        pdf.set_xy(qr_x - 3, qr_y + qr_w + 2)
-        pdf.set_font("Helvetica", "I", 8)
+        pdf.set_xy(qr_x - 5, qr_y + qr_w + 2)
+        pdf.set_font("Helvetica", "I", 9)
         pdf.set_text_color(*dourado)
         pdf.cell(40, 5, f"Código: {codigo}", align="C")
 
-    # Rodapé
-    pdf.set_font("Helvetica", "I", 9)
+    # --- Rodapé ---
+    pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(10, 285)
-    pdf.cell(190, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
+    pdf.set_xy(10, 195)
+    pdf.cell(277, 8, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
-    # Salvar
+    # --- Salvar arquivo ---
     os.makedirs("relatorios", exist_ok=True)
-    caminho_pdf = os.path.abspath(f"relatorios/Relatorio_{usuario}_{faixa}.pdf")
+    caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
+
 
 # =========================================
 # INTERFACE
