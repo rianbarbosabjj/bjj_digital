@@ -67,7 +67,8 @@ def criar_banco():
         faixa TEXT,
         pontuacao INTEGER,
         tempo TEXT,
-        data DATETIME DEFAULT CURRENT_TIMESTAMP
+        data DATETIME DEFAULT CURRENT_TIMESTAMP,
+        codigo_verificacao TEXT
     )''')
     conn.commit()
     conn.close()
@@ -77,16 +78,12 @@ def atualizar_banco():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Verifica se a coluna já existe
     cursor.execute("PRAGMA table_info(resultados)")
     colunas = [col[1] for col in cursor.fetchall()]
 
     if "codigo_verificacao" not in colunas:
         cursor.execute("ALTER TABLE resultados ADD COLUMN codigo_verificacao TEXT")
         conn.commit()
-        print("✅ Coluna 'codigo_verificacao' adicionada com sucesso.")
-    else:
-        print("✅ Coluna 'codigo_verificacao' já existe.")
 
     conn.close()
 
@@ -103,17 +100,27 @@ def carregar_questoes(tema):
             return json.load(f)
     return []
 
-def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo):
+def gerar_codigo_unico():
+    """Gera código no formato BJJDIGITAL-YYYY-00001"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM resultados")
+    total = cursor.fetchone()[0] + 1
+    conn.close()
+    ano = datetime.now().year
+    return f"BJJDIGITAL-{ano}-{total:05d}"
+
+def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo, codigo):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
-        INSERT INTO resultados (usuario, modo, tema, faixa, pontuacao, tempo)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (usuario, modo, tema, faixa, pontuacao, tempo))
+        INSERT INTO resultados (usuario, modo, tema, faixa, pontuacao, tempo, codigo_verificacao)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, (usuario, modo, tema, faixa, pontuacao, tempo, codigo))
     conn.commit()
     conn.close()
 
-def gerar_pdf(usuario, faixa, pontuacao, total):
+def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf = FPDF()
     pdf.add_page()
 
@@ -143,6 +150,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total):
     pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
     pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
     pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
+    pdf.cell(0, 10, f"Código de Verificação: {codigo}", ln=True, align="C")
     pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
     pdf.ln(15)
 
@@ -202,8 +210,9 @@ def modo_exame():
                 pontuacao += 1
 
         if st.button("Finalizar Exame"):
-            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00")
-            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total)
+            codigo = gerar_codigo_unico()
+            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo)
             with open(caminho_pdf, "rb") as file:
                 st.download_button(
                     label="📄 Baixar Relatório PDF",
@@ -212,79 +221,7 @@ def modo_exame():
                     mime="application/pdf"
                 )
             st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
-            st.info(f"Resultado salvo para a faixa {faixa}.")
-
-# =========================================
-# MODO ESTUDO
-# =========================================
-def modo_estudo():
-    mostrar_cabecalho("📘 Estudo Interativo")
-
-    temas = ["regras", "graduacoes", "historia"]
-    tema = st.selectbox("Escolha um tema:", temas)
-
-    questoes = carregar_questoes(tema)
-    if not questoes:
-        st.warning("Nenhuma questão encontrada.")
-        return
-
-    q = random.choice(questoes)
-    if "video" in q and q["video"]:
-        st.video(q["video"])
-    if "imagem" in q and q["imagem"]:
-        st.image(q["imagem"], use_container_width=True)
-
-    st.subheader(q["pergunta"])
-    resposta = st.radio("Escolha a alternativa:", q["opcoes"], index=None)
-    if st.button("Verificar"):
-        if resposta and resposta.startswith(q["resposta"]):
-            st.success("✅ Correto!")
-        else:
-            st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
-
-# =========================================
-# MODO TREINO (ROLA)
-# =========================================
-def modo_rola():
-    mostrar_cabecalho("🤼‍♂️ Rola (Modo Treino)")
-
-    usuario = st.text_input("Digite seu nome:")
-    tema = st.selectbox("Selecione o tema:", ["regras", "graduacoes", "historia"])
-
-    if st.button("Iniciar Rola"):
-        questoes = carregar_questoes(tema)
-        random.shuffle(questoes)
-        pontos = 0
-        total = len(questoes[:5])
-
-        for i, q in enumerate(questoes[:5], 1):
-            if "video" in q and q["video"]:
-                st.video(q["video"])
-            if "imagem" in q and q["imagem"]:
-                st.image(q["imagem"], use_container_width=True)
-            st.write(f"**{i}. {q['pergunta']}**")
-            resposta = st.radio("", q["opcoes"], key=f"rola{i}", index=None)
-            if resposta and resposta.startswith(q["resposta"]):
-                pontos += 1
-
-        if st.button("Finalizar Rola"):
-            salvar_resultado(usuario, "Rola", tema, None, pontos, "00:04:00")
-            st.success(f"🎯 Resultado: {pontos}/{total} acertos")
-
-# =========================================
-# RANKING
-# =========================================
-def ranking():
-    mostrar_cabecalho("🏆 Ranking Geral")
-
-    conn = sqlite3.connect(DB_PATH)
-    dados = conn.execute("SELECT usuario, modo, tema, faixa, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall()
-    conn.close()
-
-    if dados:
-        st.dataframe(dados)
-    else:
-        st.info("Nenhum resultado registrado ainda.")
+            st.info(f"Resultado salvo para a faixa {faixa}. Código: {codigo}")
 
 # =========================================
 # MENU PRINCIPAL
