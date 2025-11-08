@@ -6,7 +6,6 @@ import json
 import random
 import os
 from datetime import datetime
-import qrcode
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -73,7 +72,26 @@ def criar_banco():
     conn.commit()
     conn.close()
 
+def atualizar_banco():
+    """Adiciona a coluna codigo_verificacao se ainda não existir."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Verifica se a coluna já existe
+    cursor.execute("PRAGMA table_info(resultados)")
+    colunas = [col[1] for col in cursor.fetchall()]
+
+    if "codigo_verificacao" not in colunas:
+        cursor.execute("ALTER TABLE resultados ADD COLUMN codigo_verificacao TEXT")
+        conn.commit()
+        print("✅ Coluna 'codigo_verificacao' adicionada com sucesso.")
+    else:
+        print("✅ Coluna 'codigo_verificacao' já existe.")
+
+    conn.close()
+
 criar_banco()
+atualizar_banco()
 
 # =========================================
 # FUNÇÕES AUXILIARES
@@ -95,9 +113,6 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo):
     conn.commit()
     conn.close()
 
-# =========================================
-# GERAR PDF COM QR E ASSINATURA
-# =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total):
     pdf = FPDF()
     pdf.add_page()
@@ -124,11 +139,11 @@ def gerar_pdf(usuario, faixa, pontuacao, total):
     pdf.ln(60)
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
+
     pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
     pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
     pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
-    data_hoje = datetime.now().strftime('%d/%m/%Y %H:%M')
-    pdf.cell(0, 10, f"Data: {data_hoje}", ln=True, align="C")
+    pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
     pdf.ln(15)
 
     pdf.set_font("Helvetica", "B", 16)
@@ -136,31 +151,18 @@ def gerar_pdf(usuario, faixa, pontuacao, total):
     pdf.set_text_color(*dourado)
     pdf.cell(0, 15, resultado, ln=True, align="C")
 
-    # === QR CODE ===
-    qr_data = f"BJJ Digital | Aluno: {usuario} | Faixa: {faixa} | Pontuação: {pontuacao}/{total} | Data: {data_hoje}"
-    qr_img = qrcode.make(qr_data)
-    os.makedirs("relatorios", exist_ok=True)
-    qr_path = f"relatorios/qr_{usuario}_{faixa}.png"
-    qr_img.save(qr_path)
-    pdf.image(qr_path, x=90, y=210, w=30)
-
-    # === ASSINATURA ===
-    pdf.ln(20)
+    pdf.ln(30)
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 10, "Assinatura do Professor:", ln=True, align="C")
-
-    assinatura_path = "assets/assinatura_professor.png"
-    if os.path.exists(assinatura_path):
-        pdf.image(assinatura_path, x=70, y=260, w=70)
-    else:
-        pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
+    pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
 
     pdf.set_y(-30)
     pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(*dourado)
     pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", ln=True, align="C")
 
+    os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = f"relatorios/Relatorio_{usuario}_{faixa}.pdf"
     pdf.output(caminho_pdf)
     return caminho_pdf
@@ -276,9 +278,7 @@ def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
 
     conn = sqlite3.connect(DB_PATH)
-    dados = conn.execute(
-        "SELECT usuario, modo, tema, faixa, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20"
-    ).fetchall()
+    dados = conn.execute("SELECT usuario, modo, tema, faixa, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall()
     conn.close()
 
     if dados:
@@ -292,10 +292,7 @@ def ranking():
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio(
-        "Navegar:",
-        ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"]
-    )
+    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"])
 
     if menu == "🏁 Exame de Faixa":
         modo_exame()
