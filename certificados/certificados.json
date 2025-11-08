@@ -1,0 +1,25 @@
+def exportar_certificados_json():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT usuario, faixa, pontuacao, modo, tema, data, codigo_verificacao
+        FROM resultados
+    """)
+    registros = cursor.fetchall()
+    conn.close()
+
+    certificados = []
+    for usuario, faixa, pontuacao, modo, tema, data, codigo in registros:
+        certificados.append({
+            "codigo": codigo,
+            "usuario": usuario,
+            "faixa": faixa,
+            "pontuacao": pontuacao,
+            "modo": modo,
+            "tema": tema,
+            "data": data,
+        })
+
+    os.makedirs("certificados", exist_ok=True)
+    with open("certificados/certificados.json", "w", encoding="utf-8") as f:
+        json.dump(certificados, f, ensure_ascii=False, indent=2)
