@@ -133,95 +133,93 @@ def normalizar_nome(nome):
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
 # =========================================
-# GERAR PDF (layout fixo e ajustado)
+# GERAR CERTIFICADO (Paisagem, 1 página)
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    pdf = FPDF("L", "mm", "A4")  # <-- Modo paisagem
+    pdf = FPDF("L", "mm", "A4")  # Paisagem
     pdf.add_page()
 
-    # --- Cores e fundo ---
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 297, 210, "F")
 
-    # --- Título ---
+    # Título
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 28)
+    pdf.set_font("Helvetica", "B", 26)
     pdf.set_xy(10, 20)
-    pdf.cell(277, 15, "Certificado de Exame de Faixa", ln=False, align="C")
+    pdf.cell(277, 10, "Certificado de Exame de Faixa", ln=False, align="C")
 
-    # --- Linha e logo ---
+    # Linha decorativa
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(1)
-    pdf.line(30, 35, 267, 35)
+    pdf.line(30, 33, 267, 33)
 
+    # Logo
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=130, y=40, w=35)
+        pdf.image(logo_path, x=130, y=38, w=35)
 
-    # --- Texto principal ---
+    # Texto central (sem quebra automática)
     pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 16)
-    pdf.set_xy(10, 85)
-    pdf.multi_cell(277, 10,
-        f"Certificamos que o aluno(a) {usuario} concluiu o exame para a faixa {faixa}, "
-        f"obtendo pontuação de {pontuacao}/{total} pontos, realizado em "
-        f"{datetime.now().strftime('%d/%m/%Y %H:%M')}.",
-        align="C"
-    )
+    pdf.set_font("Helvetica", "", 15)
+    pdf.set_xy(25, 90)
+    percentual = int((pontuacao / total) * 100)
+    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    texto = (f"Certificamos que o(a) aluno(a) {usuario} concluiu o exame teórico para a faixa {faixa}, "
+             f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}.")
+    pdf.multi_cell(247, 10, texto, align="C")
 
-    # --- Resultado ---
+    # Resultado
     pdf.set_font("Helvetica", "B", 20)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
     pdf.set_xy(10, 125)
     pdf.cell(277, 10, resultado, align="C")
 
-    # --- Assinatura ---
+    # Assinatura
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 13)
-    pdf.set_xy(10, 155)
+    pdf.set_xy(10, 150)
     pdf.cell(277, 8, "Assinatura do Professor Responsável", align="C")
-    pdf.line(100, 163, 197, 163)
+    pdf.line(100, 158, 197, 158)
 
     if professor:
         nome_normalizado = normalizar_nome(professor)
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=118, y=145, w=60)
+            pdf.image(assinatura_path, x=118, y=140, w=60)
         else:
-            pdf.set_xy(10, 166)
+            pdf.set_xy(10, 160)
             pdf.cell(277, 8, "(Assinatura digital não encontrada)", align="C")
 
-    # --- QR code canto inferior direito ---
+    # QR code canto inferior direito
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        qr_w = 30
-        qr_x = 297 - qr_w - 15
-        qr_y = 160
+        qr_w = 28
+        qr_x = 297 - qr_w - 20
+        qr_y = 155
         pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
         pdf.set_xy(qr_x - 5, qr_y + qr_w + 2)
-        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(*dourado)
         pdf.cell(40, 5, f"Código: {codigo}", align="C")
 
-    # --- Rodapé ---
+    # Rodapé
     pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(*dourado)
     pdf.set_xy(10, 195)
     pdf.cell(277, 8, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
-    # --- Salvar arquivo ---
+    # Salvar PDF
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
 
-
 # =========================================
-# INTERFACE
+# INTERFACE PRINCIPAL
 # =========================================
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
@@ -229,31 +227,6 @@ def mostrar_cabecalho(titulo):
     if os.path.exists(topo_path):
         topo_img = Image.open(topo_path)
         st.image(topo_img, use_container_width=True)
-
-def modo_estudo():
-    mostrar_cabecalho("📘 Modo Estudo")
-    st.info("Aqui você poderá estudar as regras e fundamentos do Jiu-Jitsu.")
-    temas = ["regras", "historia", "posicoes"]
-    tema = st.selectbox("Selecione o tema:", temas)
-    questoes = carregar_questoes(tema)
-    for i, q in enumerate(questoes, 1):
-        st.markdown(f"**{i}. {q['pergunta']}**")
-        st.write("👉", q["resposta"])
-        st.markdown("---")
-
-def modo_treino():
-    mostrar_cabecalho("🥋 Modo Treino")
-    st.info("Pratique sem limite de tempo e veja as respostas após responder.")
-    tema = st.selectbox("Selecione o tema:", ["regras", "historia"])
-    questoes = carregar_questoes(tema)
-    random.shuffle(questoes)
-    for i, q in enumerate(questoes[:5], 1):
-        resposta = st.radio(q["pergunta"], q["opcoes"], key=f"treino_{i}")
-        if resposta:
-            if resposta.startswith(q["resposta"]):
-                st.success("Correto!")
-            else:
-                st.error(f"Resposta certa: {q['resposta']}")
 
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
@@ -313,7 +286,7 @@ def modo_exame():
 
                 with open(caminho_pdf, "rb") as file:
                     st.download_button(
-                        label="📄 Baixar Relatório PDF",
+                        label="📄 Baixar Certificado PDF",
                         data=file,
                         file_name=os.path.basename(caminho_pdf),
                         mime="application/pdf"
@@ -327,18 +300,7 @@ def modo_exame():
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-
-    menu = st.sidebar.radio(
-        "Navegar:",
-        ["🏁 Exame de Faixa", "🥋 Modo Treino", "📘 Modo Estudo"]
-    )
-
-    if menu == "🏁 Exame de Faixa":
-        modo_exame()
-    elif menu == "🥋 Modo Treino":
-        modo_treino()
-    elif menu == "📘 Modo Estudo":
-        modo_estudo()
+    modo_exame()
 
 if __name__ == "__main__":
     main()
