@@ -6,11 +6,16 @@ import json
 import random
 import os
 from datetime import datetime
+import qrcode
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
 # =========================================
-st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
+st.set_page_config(
+    page_title="BJJ Digital",
+    page_icon="🥋",
+    layout="wide",
+)
 
 COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
@@ -50,9 +55,9 @@ st.markdown(f"""
 # BANCO DE DADOS
 # =========================================
 DB_PATH = "database/bjj_digital.db"
-os.makedirs("database", exist_ok=True)
 
 def criar_banco():
+    os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
@@ -90,13 +95,9 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo):
     conn.commit()
     conn.close()
 
-def mostrar_cabecalho(titulo):
-    st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-    topo_path = "assets/topo.webp"
-    if os.path.exists(topo_path):
-        topo_img = Image.open(topo_path)
-        st.image(topo_img, use_container_width=True)
-
+# =========================================
+# GERAR PDF COM QR E ASSINATURA
+# =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total):
     pdf = FPDF()
     pdf.add_page()
@@ -126,32 +127,53 @@ def gerar_pdf(usuario, faixa, pontuacao, total):
     pdf.cell(0, 10, f"Aluno: {usuario}", ln=True, align="C")
     pdf.cell(0, 10, f"Faixa Avaliada: {faixa}", ln=True, align="C")
     pdf.cell(0, 10, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
-    pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+    data_hoje = datetime.now().strftime('%d/%m/%Y %H:%M')
+    pdf.cell(0, 10, f"Data: {data_hoje}", ln=True, align="C")
     pdf.ln(15)
 
     pdf.set_font("Helvetica", "B", 16)
-    resultado = "APROVADO" if pontuacao >= (total * 0.6) else "NÃO APROVADO"
+    resultado = "✅ APROVADO" if pontuacao >= (total * 0.6) else "❌ NÃO APROVADO"
     pdf.set_text_color(*dourado)
     pdf.cell(0, 15, resultado, ln=True, align="C")
 
-    pdf.ln(30)
+    # === QR CODE ===
+    qr_data = f"BJJ Digital | Aluno: {usuario} | Faixa: {faixa} | Pontuação: {pontuacao}/{total} | Data: {data_hoje}"
+    qr_img = qrcode.make(qr_data)
+    os.makedirs("relatorios", exist_ok=True)
+    qr_path = f"relatorios/qr_{usuario}_{faixa}.png"
+    qr_img.save(qr_path)
+    pdf.image(qr_path, x=90, y=210, w=30)
+
+    # === ASSINATURA ===
+    pdf.ln(20)
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
     pdf.cell(0, 10, "Assinatura do Professor:", ln=True, align="C")
-    pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
+
+    assinatura_path = "assets/assinatura_professor.png"
+    if os.path.exists(assinatura_path):
+        pdf.image(assinatura_path, x=70, y=260, w=70)
+    else:
+        pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
 
     pdf.set_y(-30)
     pdf.set_font("Helvetica", "I", 10)
     pdf.set_text_color(*dourado)
     pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", ln=True, align="C")
 
-    os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = f"relatorios/Relatorio_{usuario}_{faixa}.pdf"
     pdf.output(caminho_pdf)
     return caminho_pdf
 
+def mostrar_cabecalho(titulo):
+    st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
+    topo_path = "assets/topo.webp"
+    if os.path.exists(topo_path):
+        topo_img = Image.open(topo_path)
+        st.image(topo_img, use_container_width=True)
+
 # =========================================
-# MODO EXAME DE FAIXA (fixado)
+# MODO EXAME DE FAIXA
 # =========================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
@@ -161,54 +183,23 @@ def modo_exame():
     usuario = st.text_input("Nome do aluno:")
     tema = "regras"
 
-    # Inicializa estados
-    if "questoes" not in st.session_state:
-        st.session_state.questoes = []
-        st.session_state.respostas = {}
-        st.session_state.exame_iniciado = False
-        st.session_state.exame_finalizado = False
-
-    # Botão para iniciar exame
     if st.button("Iniciar Exame"):
-        st.session_state.questoes = carregar_questoes(tema)
-        random.shuffle(st.session_state.questoes)
-        st.session_state.respostas = {i: None for i in range(len(st.session_state.questoes[:5]))}
-        st.session_state.exame_iniciado = True
-        st.session_state.exame_finalizado = False
+        questoes = carregar_questoes(tema)
+        random.shuffle(questoes)
+        pontuacao = 0
+        total = len(questoes[:5])
 
-    # Exibir questões
-    if st.session_state.exame_iniciado and not st.session_state.exame_finalizado:
-        questoes = st.session_state.questoes[:5]
-        st.markdown("### 📋 Responda às questões abaixo:")
-
-        for i, q in enumerate(questoes):
-            st.markdown(f"**{i + 1}. {q['pergunta']}**")
+        for i, q in enumerate(questoes[:5], 1):
             if "video" in q and q["video"]:
                 st.video(q["video"])
             if "imagem" in q and q["imagem"]:
                 st.image(q["imagem"], use_container_width=True)
+            st.subheader(f"{i}. {q['pergunta']}")
+            resposta = st.radio("Escolha uma opção:", q["opcoes"], key=f"q{i}", index=None)
+            if resposta and resposta.startswith(q["resposta"]):
+                pontuacao += 1
 
-            # radio controlado manualmente
-            resposta = st.radio(
-                f"Escolha a opção para a questão {i + 1}:",
-                q["opcoes"],
-                index=q["opcoes"].index(st.session_state.respostas[i]) if st.session_state.respostas[i] else None,
-                key=f"radio_q{i}"
-            )
-
-            st.session_state.respostas[i] = resposta
-
-            st.divider()
-
-        # Botão de finalização
         if st.button("Finalizar Exame"):
-            pontuacao = 0
-            total = len(questoes)
-
-            for i, q in enumerate(questoes):
-                if st.session_state.respostas[i] and st.session_state.respostas[i].startswith(q["resposta"]):
-                    pontuacao += 1
-
             salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00")
             caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total)
             with open(caminho_pdf, "rb") as file:
@@ -220,16 +211,13 @@ def modo_exame():
                 )
             st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
             st.info(f"Resultado salvo para a faixa {faixa}.")
-            st.session_state.exame_finalizado = True
-
-    elif st.session_state.exame_finalizado:
-        st.info("Exame finalizado. Clique em *Iniciar Exame* para começar outro.")
 
 # =========================================
-# RESTANTE DOS MODOS
+# MODO ESTUDO
 # =========================================
 def modo_estudo():
     mostrar_cabecalho("📘 Estudo Interativo")
+
     temas = ["regras", "graduacoes", "historia"]
     tema = st.selectbox("Escolha um tema:", temas)
 
@@ -252,8 +240,12 @@ def modo_estudo():
         else:
             st.error(f"❌ Errado! A resposta certa era: {q['resposta']}")
 
+# =========================================
+# MODO TREINO (ROLA)
+# =========================================
 def modo_rola():
     mostrar_cabecalho("🤼‍♂️ Rola (Modo Treino)")
+
     usuario = st.text_input("Digite seu nome:")
     tema = st.selectbox("Selecione o tema:", ["regras", "graduacoes", "historia"])
 
@@ -277,11 +269,18 @@ def modo_rola():
             salvar_resultado(usuario, "Rola", tema, None, pontos, "00:04:00")
             st.success(f"🎯 Resultado: {pontos}/{total} acertos")
 
+# =========================================
+# RANKING
+# =========================================
 def ranking():
     mostrar_cabecalho("🏆 Ranking Geral")
+
     conn = sqlite3.connect(DB_PATH)
-    dados = conn.execute("SELECT usuario, modo, tema, faixa, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20").fetchall()
+    dados = conn.execute(
+        "SELECT usuario, modo, tema, faixa, pontuacao, data FROM resultados ORDER BY pontuacao DESC LIMIT 20"
+    ).fetchall()
     conn.close()
+
     if dados:
         st.dataframe(dados)
     else:
@@ -293,7 +292,10 @@ def ranking():
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"])
+    menu = st.sidebar.radio(
+        "Navegar:",
+        ["🏁 Exame de Faixa", "📘 Estudo", "🤼‍♂️ Rola (Modo Treino)", "🏆 Ranking"]
+    )
 
     if menu == "🏁 Exame de Faixa":
         modo_exame()
