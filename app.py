@@ -133,52 +133,51 @@ def normalizar_nome(nome):
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
 # =========================================
-# GERAR PDF COM AJUSTE DE ESPAÇAMENTO
+# GERAR PDF (ajustado e centralizado)
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF()
     pdf.add_page()
 
+    # --- Cores e fundo ---
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
-
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 210, 297, "F")
 
-    # Título
+    # --- Cabeçalho e título ---
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 20)
-    pdf.cell(0, 12, "Relatório de Exame de Faixa", ln=True, align="C")
-    pdf.line(20, 25, 190, 25)
+    pdf.cell(0, 10, "Relatório de Exame de Faixa", ln=True, align="C")
+    pdf.line(30, 22, 180, 22)
 
-    # Logo
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=85, y=28, w=40)
+        pdf.image(logo_path, x=85, y=25, w=40)
 
-    # Dados principais
-    pdf.set_y(80)
+    # --- Dados principais compactados ---
+    pdf.set_y(70)
     pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 13)
-    pdf.cell(0, 8, f"Aluno: {usuario}", ln=True, align="C")
-    pdf.cell(0, 8, f"Faixa Avaliada: {faixa}", ln=True, align="C")
-    pdf.cell(0, 8, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
-    pdf.cell(0, 8, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 7, f"Aluno: {usuario}", ln=True, align="C")
+    pdf.cell(0, 7, f"Faixa Avaliada: {faixa}", ln=True, align="C")
+    pdf.cell(0, 7, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
+    pdf.cell(0, 7, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
 
-    # Resultado
-    pdf.ln(5)
-    pdf.set_font("Helvetica", "B", 15)
+    # --- Resultado ---
+    pdf.ln(3)
+    pdf.set_font("Helvetica", "B", 14)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
     pdf.cell(0, 10, resultado, ln=True, align="C")
 
-    # Assinatura
-    pdf.ln(12)
+    # --- Assinatura centralizada ---
+    pdf.ln(10)
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(*branco)
-    pdf.cell(0, 8, "Assinatura do Professor:", ln=True, align="C")
-    pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
+    pdf.cell(0, 7, "Assinatura do Professor:", ln=True, align="C")
+    pdf.line(70, pdf.get_y() + 4, 140, pdf.get_y() + 4)
 
     if professor:
         nome_normalizado = normalizar_nome(professor)
@@ -186,31 +185,33 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path, x=75, y=pdf.get_y() - 10, w=60)
         else:
-            pdf.ln(8)
-            pdf.cell(0, 8, "(Assinatura digital não encontrada)", ln=True, align="C")
+            pdf.ln(6)
+            pdf.cell(0, 7, "(Assinatura digital não encontrada)", ln=True, align="C")
 
-    # QR Code
+    # --- QR code e código centralizados na base ---
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        pdf.image(caminho_qr, x=160, y=240, w=30)
-        pdf.set_xy(160, 272)
+        qr_x = (210 - 30) / 2
+        pdf.image(caminho_qr, x=qr_x, y=232, w=30)
+        pdf.set_xy(0, 265)
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(*dourado)
-        pdf.cell(40, 4, f"Código: {codigo}", align="C")
+        pdf.cell(0, 5, f"Código: {codigo}", align="C")
 
-    # Rodapé
-    pdf.set_y(-15)
+    # --- Rodapé ---
+    pdf.set_y(-12)
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
-    pdf.cell(0, 8, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", ln=True, align="C")
+    pdf.cell(0, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", ln=True, align="C")
 
+    # --- Salvar PDF ---
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Relatorio_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
 
 # =========================================
-# INTERFACE PRINCIPAL
+# INTERFACE
 # =========================================
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
