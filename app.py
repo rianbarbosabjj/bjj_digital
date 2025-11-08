@@ -133,20 +133,20 @@ def normalizar_nome(nome):
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
 # =========================================
-# GERAR PDF (ajustado e centralizado)
+# GERAR PDF (versão final ajustada)
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF()
     pdf.add_page()
 
-    # --- Cores e fundo ---
+    # Cores e fundo
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 210, 297, "F")
 
-    # --- Cabeçalho e título ---
+    # Título e logo
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 20)
     pdf.cell(0, 10, "Relatório de Exame de Faixa", ln=True, align="C")
@@ -156,23 +156,23 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=85, y=25, w=40)
 
-    # --- Dados principais compactados ---
+    # Dados principais
     pdf.set_y(70)
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 7, f"Aluno: {usuario}", ln=True, align="C")
-    pdf.cell(0, 7, f"Faixa Avaliada: {faixa}", ln=True, align="C")
-    pdf.cell(0, 7, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
-    pdf.cell(0, 7, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
+    pdf.cell(0, 6, f"Aluno: {usuario}", ln=True, align="C")
+    pdf.cell(0, 6, f"Faixa Avaliada: {faixa}", ln=True, align="C")
+    pdf.cell(0, 6, f"Pontuação: {pontuacao}/{total}", ln=True, align="C")
+    pdf.cell(0, 6, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
 
-    # --- Resultado ---
+    # Resultado
     pdf.ln(3)
     pdf.set_font("Helvetica", "B", 14)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
     pdf.cell(0, 10, resultado, ln=True, align="C")
 
-    # --- Assinatura centralizada ---
+    # Assinatura centralizada
     pdf.ln(10)
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(*branco)
@@ -188,23 +188,25 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
             pdf.ln(6)
             pdf.cell(0, 7, "(Assinatura digital não encontrada)", ln=True, align="C")
 
-    # --- QR code e código centralizados na base ---
+    # QR code no canto inferior direito
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        qr_x = (210 - 30) / 2
-        pdf.image(caminho_qr, x=qr_x, y=232, w=30)
-        pdf.set_xy(0, 265)
+        qr_width = 30
+        qr_x = 210 - qr_width - 15  # margem direita
+        qr_y = 250  # posição inferior
+        pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_width)
+        # Código logo abaixo do QR
+        pdf.set_xy(qr_x - 5, qr_y + qr_width + 2)
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(*dourado)
-        pdf.cell(0, 5, f"Código: {codigo}", align="C")
+        pdf.cell(40, 5, f"Código: {codigo}", align="C")
 
-    # --- Rodapé ---
+    # Rodapé
     pdf.set_y(-12)
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
     pdf.cell(0, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", ln=True, align="C")
 
-    # --- Salvar PDF ---
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Relatorio_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
