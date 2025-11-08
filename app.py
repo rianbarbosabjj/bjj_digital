@@ -175,17 +175,11 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.cell(0, 15, resultado, ln=True, align="C")
     pdf.ln(20)
 
-    # QR Code
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        try:
-            pdf.image(caminho_qr, x=85, y=200, w=40)
-        except Exception as e:
-            print(f"⚠️ Erro ao inserir QR Code: {e}")
+        pdf.image(caminho_qr, x=85, y=200, w=40)
 
     pdf.ln(45)
-
-    # Assinatura Digital
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
     if professor:
@@ -217,7 +211,7 @@ def mostrar_cabecalho(titulo):
         st.image(topo_img, use_container_width=True)
 
 # =========================================
-# MODO EXAME DE FAIXA
+# MODO EXAME DE FAIXA (CORRIGIDO)
 # =========================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
@@ -228,29 +222,23 @@ def modo_exame():
     professor = st.text_input("Nome do professor responsável:")
     tema = "regras"
 
-    # Inicializa variáveis persistentes
     if "exame_iniciado" not in st.session_state:
         st.session_state.exame_iniciado = False
         st.session_state.questoes_exame = []
         st.session_state.respostas_exame = {}
         st.session_state.pontuacao_exame = 0
 
-    # Inicia o exame
     if not st.session_state.exame_iniciado:
         if st.button("Iniciar Exame"):
             questoes = carregar_questoes(tema)
             random.shuffle(questoes)
             st.session_state.questoes_exame = questoes[:5]
             st.session_state.exame_iniciado = True
-            st.session_state.respostas_exame = {}
-            st.session_state.pontuacao_exame = 0
             st.experimental_rerun()
 
-    # Mostra as questões (sem recarregar)
     if st.session_state.exame_iniciado:
         questoes = st.session_state.questoes_exame
         total = len(questoes)
-
         st.markdown("### Responda todas as questões abaixo:")
 
         for i, q in enumerate(questoes, 1):
@@ -272,17 +260,13 @@ def modo_exame():
             if resposta:
                 st.session_state.respostas_exame[key_resp] = resposta
 
-        # Contabiliza pontuação
-        pontuacao = 0
-        for i, q in enumerate(questoes, 1):
-            key_resp = f"resposta_{i}"
-            if key_resp in st.session_state.respostas_exame:
-                resposta = st.session_state.respostas_exame[key_resp]
-                if resposta.startswith(q["resposta"]):
-                    pontuacao += 1
+        pontuacao = sum(
+            1 for i, q in enumerate(questoes, 1)
+            if f"resposta_{i}" in st.session_state.respostas_exame and
+               st.session_state.respostas_exame[f"resposta_{i}"].startswith(q["resposta"])
+        )
         st.session_state.pontuacao_exame = pontuacao
 
-        # Exibe botão de finalização apenas após todas as respostas
         if len(st.session_state.respostas_exame) == total:
             st.success("✅ Todas as questões foram respondidas.")
             if st.button("Finalizar Exame"):
@@ -301,7 +285,6 @@ def modo_exame():
                 st.success(f"✅ {usuario}, você fez {pontuacao}/{total} pontos.")
                 st.info(f"Código de verificação: {codigo}")
 
-                # Reset
                 for key in ["exame_iniciado", "questoes_exame", "respostas_exame", "pontuacao_exame"]:
                     if key in st.session_state:
                         del st.session_state[key]
