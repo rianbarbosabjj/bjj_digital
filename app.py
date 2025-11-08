@@ -139,79 +139,83 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")  # Paisagem
     pdf.add_page()
 
-    # Cores e fundo
+    # --- Cores e fundo ---
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 297, 210, "F")
 
-    # Título
+    # --- Título ---
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 26)
-    pdf.set_xy(0, 18)
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_xy(0, 10)  # margem superior reduzida
     pdf.cell(297, 12, "Certificado de Exame de Faixa", align="C")
 
-    # Linha decorativa e logo
+    # --- Linha e logo ---
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.8)
-    pdf.line(25, 32, 272, 32)
+    pdf.line(25, 22, 272, 22)
 
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=128, y=36, w=40)
+        pdf.image(logo_path, x=128, y=25, w=40)
 
-    # Texto central - margens reduzidas
+    # --- Texto central (sem multi_cell para evitar quebra de página) ---
     pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 15)
+    pdf.set_font("Helvetica", "", 14)
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
-    texto = (f"Certificamos que o(a) aluno(a) {usuario} concluiu o exame teórico para a faixa {faixa}, "
-             f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}.")
-    pdf.set_xy(15, 85)
-    pdf.multi_cell(267, 9, texto, align="C")
+    texto = (f"Certificamos que o(a) aluno(a) {usuario} concluiu o exame teórico "
+             f"para a faixa {faixa}, obtendo {percentual}% de aproveitamento, "
+             f"realizado em {data_hora}.")
 
-    # Resultado
-    pdf.set_font("Helvetica", "B", 20)
+    # Reduzir margens verticais e centralizar texto em uma linha controlada
+    pdf.set_xy(15, 70)
+    pdf.multi_cell(267, 7, texto, align="C")
+
+    # --- Resultado ---
+    pdf.set_font("Helvetica", "B", 18)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 120)
+    pdf.set_xy(0, 110)
     pdf.cell(297, 10, resultado, align="C")
 
-    # Assinatura
+    # --- Assinatura ---
     pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 13)
-    pdf.set_xy(0, 150)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.set_xy(0, 135)
     pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
-    pdf.line(105, 158, 192, 158)
+    pdf.line(105, 143, 192, 143)
 
     if professor:
         nome_normalizado = normalizar_nome(professor)
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=118, y=138, w=60)
+            pdf.image(assinatura_path, x=118, y=125, w=60)
         else:
-            pdf.set_xy(0, 160)
+            pdf.set_xy(0, 145)
             pdf.cell(297, 8, "(Assinatura digital não encontrada)", align="C")
 
-    # QR Code canto inferior direito
+    # --- QR code canto inferior direito ---
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        qr_w = 27
-        qr_x = 297 - qr_w - 18
-        qr_y = 158
+        qr_w = 25
+        qr_x = 297 - qr_w - 15
+        qr_y = 145  # margem inferior reduzida
         pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
-        pdf.set_xy(qr_x - 2, qr_y + qr_w + 2)
+        pdf.set_xy(qr_x - 2, qr_y + qr_w + 1)
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(*dourado)
         pdf.cell(35, 5, f"Código: {codigo}", align="C")
 
-    # Rodapé
+    # --- Rodapé ---
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 195)
+    pdf.set_xy(0, 190)  # margem inferior ajustada
     pdf.cell(297, 8, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
+    # --- Salvar ---
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
