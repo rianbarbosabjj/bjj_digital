@@ -113,12 +113,38 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo, codigo):
     conn.commit()
     conn.close()
 
-def gerar_qrcode(codigo):
-    os.makedirs("relatorios/qrcodes", exist_ok=True)
-    caminho_qr = os.path.abspath(f"relatorios/qrcodes/{codigo}.png")
+def exportar_certificados_json():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT usuario, faixa, pontuacao, modo, tema, data, codigo_verificacao
+        FROM resultados
+    """)
+    registros = cursor.fetchall()
+    conn.close()
 
-    # URL de verificação (ajuste conforme o domínio real)
-    url_verificacao = f"https://bjjdigital.vercel.app/verificar?codigo={codigo}"
+    certificados = []
+    for usuario, faixa, pontuacao, modo, tema, data, codigo in registros:
+        certificados.append({
+            "codigo": codigo,
+            "usuario": usuario,
+            "faixa": faixa,
+            "pontuacao": pontuacao,
+            "modo": modo,
+            "tema": tema,
+            "data": data,
+        })
+
+    os.makedirs("certificados", exist_ok=True)
+    with open("certificados/certificados.json", "w", encoding="utf-8") as f:
+        json.dump(certificados, f, ensure_ascii=False, indent=2)
+
+def gerar_qrcode(codigo):
+    os.makedirs("certificados/qrcodes", exist_ok=True)
+    caminho_qr = os.path.abspath(f"certificados/qrcodes/{codigo}.png")
+
+    # URL de verificação hospedada no Netlify
+    url_verificacao = f"https://bjjdigital.netlify.app/verificar?codigo={codigo}"
 
     qr = qrcode.QRCode(
         version=1,
@@ -137,51 +163,47 @@ def normalizar_nome(nome):
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
 # =========================================
-# GERAR CERTIFICADO (Paisagem, 1 página)
+# GERAR CERTIFICADO
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    pdf = FPDF("L", "mm", "A4")  # Paisagem
+    pdf = FPDF("L", "mm", "A4")
     pdf.add_page()
 
-    # --- Cores e fundo ---
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
+
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 297, 210, "F")
 
-    # --- Título principal ---
+    # Título
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 26)
     pdf.set_xy(0, 20)
     pdf.cell(297, 10, "CERTIFICADO DE EXAME DE FAIXA", align="C")
 
-    # Linha dourada abaixo do título
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.8)
     pdf.line(40, 33, 257, 33)
 
-    # --- Logo central ---
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=130, y=38, w=35)
 
-    # --- Texto e nome do aluno (bloco coeso) ---
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
+    # Texto e nome
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*branco)
     pdf.set_xy(25, 78)
     pdf.cell(247, 8, "Certificamos que o(a) aluno(a)", align="C")
 
-    # Nome em destaque dourado
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_xy(25, 88)
     pdf.cell(247, 8, usuario.upper(), align="C")
 
-    # Continuação do texto
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
     pdf.set_xy(25, 98)
@@ -193,20 +215,18 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         align="C",
     )
 
-    # --- Resultado ---
     pdf.set_font("Helvetica", "B", 18)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
     pdf.set_xy(0, 122)
     pdf.cell(297, 10, resultado, align="C")
 
-    # --- Assinatura ---
+    # Assinatura
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_xy(0, 138)
     pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
 
-    # Linha dourada de assinatura
     pdf.set_draw_color(*dourado)
     pdf.line(108, 146, 189, 146)
 
@@ -219,7 +239,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
             pdf.set_xy(0, 148)
             pdf.cell(297, 8, "(Assinatura digital não encontrada)", align="C")
 
-    # --- QR Code e código ---
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
         qr_w = 24
@@ -231,15 +250,13 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_text_color(*dourado)
         pdf.cell(35, 5, f"Código: {codigo}", align="C")
 
-    # --- Rodapé (mantém dourado) ---
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
     pdf.set_xy(0, 178)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
-    # --- Salvar ---
-    os.makedirs("relatorios", exist_ok=True)
-    caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
+    os.makedirs("certificados", exist_ok=True)
+    caminho_pdf = os.path.abspath(f"certificados/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
 
@@ -304,6 +321,7 @@ def modo_exame():
             if st.button("Finalizar Exame"):
                 codigo = gerar_codigo_unico()
                 salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+                exportar_certificados_json()
                 caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
 
                 st.success(f"{usuario}, você fez {pontuacao}/{total} pontos.")
