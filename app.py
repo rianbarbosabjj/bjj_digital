@@ -154,8 +154,6 @@ def gerar_qrcode(codigo):
     )
     qr.add_data(url_verificacao)
     qr.make(fit=True)
-    
-    # 🔧 Converter para RGB antes de salvar (evita imagem corrompida)
     img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     img.save(caminho_qr)
     return caminho_qr
@@ -340,12 +338,82 @@ def modo_exame():
                 st.session_state.exame_iniciado = False
 
 # =========================================
+# HISTÓRICO DE CERTIFICADOS (Painel Restrito)
+# =========================================
+def painel_certificados():
+    mostrar_cabecalho("📜 Histórico de Certificados")
+
+    nome = st.text_input("Digite seu nome completo:")
+    tipo_acesso = st.radio("Você é:", ["Aluno", "Professor"], horizontal=True)
+
+    if st.button("🔍 Buscar Certificados"):
+        if not nome.strip():
+            st.warning("Por favor, digite o nome completo para buscar os certificados.")
+            return
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+
+        if tipo_acesso == "Aluno":
+            cursor.execute("""
+                SELECT usuario, faixa, pontuacao, data, codigo_verificacao
+                FROM resultados
+                WHERE LOWER(usuario) = LOWER(?)
+                ORDER BY data DESC
+            """, (nome,))
+        else:
+            cursor.execute("""
+                SELECT usuario, faixa, pontuacao, data, codigo_verificacao
+                FROM resultados
+                WHERE LOWER(tema) = 'regras'
+                ORDER BY data DESC
+            """)
+
+        resultados = cursor.fetchall()
+        conn.close()
+
+        if not resultados:
+            st.info("Nenhum certificado encontrado para este nome.")
+            return
+
+        st.success(f"Foram encontrados {len(resultados)} certificado(s).")
+        st.markdown("---")
+
+        for usuario, faixa, pontuacao, data, codigo in resultados:
+            st.markdown(f"""
+            <div style='background-color:#113830; padding:15px; border-radius:10px; margin-bottom:10px;'>
+                <b>Aluno:</b> {usuario}  |  <b>Faixa:</b> {faixa}  |  
+                <b>Pontuação:</b> {pontuacao}  |  <b>Data:</b> {datetime.strptime(data, "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")}  |
+                <b>Código:</b> {codigo}
+            </div>
+            """, unsafe_allow_html=True)
+
+            caminho_pdf = f"certificados/Certificado_{usuario}_{faixa}.pdf"
+            if os.path.exists(caminho_pdf):
+                with open(caminho_pdf, "rb") as file:
+                    st.download_button(
+                        label="📄 Baixar Certificado",
+                        data=file,
+                        file_name=os.path.basename(caminho_pdf),
+                        mime="application/pdf",
+                        key=f"download_{codigo}"
+                    )
+            else:
+                st.error("Arquivo PDF não encontrado para este certificado.")
+
+# =========================================
 # MENU PRINCIPAL
 # =========================================
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    modo_exame()
+
+    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📜 Histórico de Certificados"])
+
+    if menu == "🏁 Exame de Faixa":
+        modo_exame()
+    elif menu == "📜 Histórico de Certificados":
+        painel_certificados()
 
 if __name__ == "__main__":
     main()
