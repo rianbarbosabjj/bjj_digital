@@ -119,12 +119,21 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo, codigo):
     conn.close()
 
 def gerar_qrcode(codigo):
-    """Gera o QR Code com o código de verificação."""
+    """Gera e retorna o caminho ABSOLUTO do QR Code."""
     os.makedirs("relatorios/qrcodes", exist_ok=True)
-    img = qrcode.make(f"Código de verificação: {codigo}")
-    caminho_qr = f"relatorios/qrcodes/{codigo}.png"
+    caminho_qr = os.path.abspath(f"relatorios/qrcodes/{codigo}.png")
+    qr = qrcode.QRCode(
+        version=1,
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=8,
+        border=2,
+    )
+    qr.add_data(f"Código de verificação: {codigo}")
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
     img.save(caminho_qr)
     return caminho_qr
+
 
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf = FPDF()
@@ -159,7 +168,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf.cell(0, 10, f"Data: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align="C")
     pdf.ln(15)
 
-    # Resultado
     pdf.set_font("Helvetica", "B", 16)
     resultado = "✅ APROVADO" if pontuacao >= (total * 0.6) else "❌ NÃO APROVADO"
     pdf.set_text_color(*dourado)
@@ -167,10 +175,15 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
 
     pdf.ln(20)
 
-    # Gera e insere o QR Code
+    # Gera o QR code e insere
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        pdf.image(caminho_qr, x=85, y=200, w=40)
+        try:
+            pdf.image(caminho_qr, x=85, y=200, w=40)
+        except Exception as e:
+            print(f"⚠️ Erro ao inserir QR Code: {e}")
+    else:
+        print(f"⚠️ QR Code não encontrado em {caminho_qr}")
 
     pdf.ln(50)
     pdf.set_text_color(*branco)
@@ -184,7 +197,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     pdf.cell(0, 10, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", ln=True, align="C")
 
     os.makedirs("relatorios", exist_ok=True)
-    caminho_pdf = f"relatorios/Relatorio_{usuario}_{faixa}.pdf"
+    caminho_pdf = os.path.abspath(f"relatorios/Relatorio_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
 
