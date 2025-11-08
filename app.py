@@ -149,8 +149,12 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # --- Título principal ---
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 26)
-    pdf.set_xy(0, 20)  # deu mais respiro no topo
+    pdf.set_xy(0, 20)
     pdf.cell(297, 10, "CERTIFICADO DE EXAME DE FAIXA", align="C")
+
+    # Linha dourada abaixo do título
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(0.8)
     pdf.line(40, 33, 257, 33)
 
     # --- Logo central ---
@@ -158,7 +162,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=130, y=38, w=35)
 
-    # --- Texto e nome do aluno (agora em bloco coeso) ---
+    # --- Texto e nome do aluno (bloco coeso) ---
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
@@ -167,13 +171,13 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(25, 78)
     pdf.cell(247, 8, "Certificamos que o(a) aluno(a)", align="C")
 
-    # Nome em destaque
+    # Nome em destaque dourado
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_xy(25, 88)
     pdf.cell(247, 8, usuario.upper(), align="C")
 
-    # Continuação do texto (colado ao nome)
+    # Continuação do texto
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
     pdf.set_xy(25, 98)
@@ -197,6 +201,9 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_font("Helvetica", "", 12)
     pdf.set_xy(0, 138)
     pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
+
+    # Linha dourada de assinatura
+    pdf.set_draw_color(*dourado)
     pdf.line(108, 146, 189, 146)
 
     if professor:
@@ -220,13 +227,13 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_text_color(*dourado)
         pdf.cell(35, 5, f"Código: {codigo}", align="C")
 
-    # --- Rodapé (subiu para harmonizar) ---
+    # --- Rodapé (mantém dourado) ---
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
     pdf.set_xy(0, 178)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
-    # --- Salvar arquivo ---
+    # --- Salvar ---
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
