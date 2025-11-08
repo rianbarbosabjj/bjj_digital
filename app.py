@@ -148,69 +148,72 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     # --- Título ---
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 20)  # Reduzido de 24 para 20
-    pdf.set_xy(0, 8)  # Ajustado para 8mm (era 10)
-    pdf.cell(297, 10, "Certificado de Exame de Faixa", align="C")  # Reduzido height
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_xy(0, 10)
+    pdf.cell(297, 12, "Certificado de Exame de Faixa", align="C")
 
     # --- Linha e logo ---
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.8)
-    pdf.line(25, 20, 272, 20)  # Ajustada posição (era 22)
+    pdf.line(30, 22, 267, 22)
 
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=128, y=23, w=35)  # Logo menor (35 em vez de 40)
+        pdf.image(logo_path, x=130, y=25, w=35)
 
-    # --- Texto principal ---
+    # --- Texto principal (duas linhas controladas manualmente) ---
     pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 12)  # Fonte reduzida (era 14)
+    pdf.set_font("Helvetica", "", 14)
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
-    texto = (f"Certificamos que o(a) aluno(a) {usuario} concluiu o exame teórico "
-             f"para a faixa {faixa}, obtendo {percentual}% de aproveitamento, "
-             f"realizado em {data_hora}.")
-    pdf.set_xy(20, 55)  # Posição mais alta (era 68)
-    pdf.multi_cell(257, 6, texto, align="C")  # Cell mais estreita e altura reduzida
+
+    linha1 = f"Certificamos que o(a) aluno(a) {usuario} concluiu o exame teórico para a faixa {faixa},"
+    linha2 = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
+
+    pdf.set_xy(10, 72)
+    pdf.cell(277, 8, linha1, align="C")
+    pdf.set_xy(10, 82)
+    pdf.cell(277, 8, linha2, align="C")
 
     # --- Resultado ---
-    pdf.set_font("Helvetica", "B", 16)  # Reduzido de 18 para 16
+    pdf.set_font("Helvetica", "B", 18)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 85)  # Posição mais alta (era 107)
-    pdf.cell(297, 8, resultado, align="C")  # Height reduzido
+    pdf.set_xy(0, 108)
+    pdf.cell(297, 10, resultado, align="C")
 
     # --- Assinatura ---
     pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 11)  # Fonte reduzida
-    pdf.set_xy(0, 105)  # Posição mais alta (era 132)
-    pdf.cell(297, 6, "Assinatura do Professor Responsável", align="C")  # Height reduzido
-    pdf.line(110, 112, 187, 112)  # Linha reposicionada
+    pdf.set_font("Helvetica", "", 12)
+    pdf.set_xy(0, 130)
+    pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
+    pdf.line(108, 138, 189, 138)
 
     if professor:
         nome_normalizado = normalizar_nome(professor)
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=123, y=95, w=50)  # Assinatura menor e mais alta
+            pdf.image(assinatura_path, x=118, y=122, w=60)
         else:
-            pdf.set_xy(0, 115)  # Ajustado
-            pdf.cell(297, 6, "(Assinatura digital não encontrada)", align="C")
+            pdf.set_xy(0, 142)
+            pdf.cell(297, 8, "(Assinatura digital não encontrada)", align="C")
 
-    # --- QR code ---
+    # --- QR code canto inferior direito ---
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        qr_w = 22  # QR code menor
-        qr_x = 297 - qr_w - 10  # Margem direita menor
-        qr_y = 125  # Posicionado mais alto (era 142)
+        qr_w = 24
+        qr_x = 297 - qr_w - 18
+        qr_y = 143
         pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
-        pdf.set_xy(qr_x - 5, qr_y + qr_w)  # Ajuste de posição do texto
-        pdf.set_font("Helvetica", "I", 7)  # Fonte menor
+        pdf.set_xy(qr_x - 3, qr_y + qr_w - 1)
+        pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(*dourado)
-        pdf.cell(32, 4, f"Código: {codigo}", align="C")  # Cell menor
+        pdf.cell(35, 5, f"Código: {codigo}", align="C")
 
-    # --- Rodapé ---
-    pdf.set_font("Helvetica", "I", 8)  # Fonte reduzida
+    # --- Rodapé (muito próximo, sem quebra) ---
+    pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 165)  # Posicionado mais alto (era 184)
+    pdf.set_xy(0, 182)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
     # --- Salvar ---
