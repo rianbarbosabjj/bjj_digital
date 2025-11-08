@@ -58,7 +58,6 @@ def criar_banco():
     os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
     cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario TEXT,
@@ -70,7 +69,6 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP,
         codigo_verificacao TEXT
     )''')
-
     cursor.execute('''CREATE TABLE IF NOT EXISTS config_exame (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         faixa TEXT,
@@ -78,7 +76,6 @@ def criar_banco():
         professor TEXT,
         data_config DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
-
     conn.commit()
     conn.close()
 
@@ -143,7 +140,6 @@ def gerar_qrcode(codigo):
     os.makedirs("certificados/qrcodes", exist_ok=True)
     caminho_qr = os.path.abspath(f"certificados/qrcodes/{codigo}.png")
     url_verificacao = f"https://bjjdigital.netlify.app/verificar?codigo={codigo}"
-
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -175,7 +171,7 @@ def obter_questoes_configuradas(faixa):
     return None
 
 # =========================================
-# GERAR CERTIFICADO
+# GERAR CERTIFICADO PDF
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")
@@ -190,308 +186,186 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 26)
-    pdf.set_xy(0, 20)
-    pdf.cell(297, 10, "CERTIFICADO DE EXAME DE FAIXA", align="C")
+    pdf.cell(0, 10, "CERTIFICADO DE EXAME DE FAIXA", align="C", ln=True)
 
     pdf.set_draw_color(*dourado)
-    pdf.line(40, 33, 257, 33)
+    pdf.line(40, 30, 257, 30)
 
     if os.path.exists("assets/logo.png"):
-        pdf.image("assets/logo.png", x=130, y=38, w=35)
+        pdf.image("assets/logo.png", x=130, y=40, w=35)
 
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
-    pdf.set_xy(25, 78)
-    pdf.cell(247, 8, "Certificamos que o(a) aluno(a)", align="C")
+    pdf.set_y(85)
+    pdf.cell(0, 8, f"Certificamos que o(a) aluno(a)", align="C", ln=True)
 
-    pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 18)
-    pdf.set_xy(25, 88)
-    pdf.cell(247, 8, usuario.upper(), align="C")
+    pdf.set_text_color(*dourado)
+    pdf.cell(0, 10, usuario.upper(), align="C", ln=True)
 
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
-    pdf.set_xy(25, 98)
-    pdf.multi_cell(247, 8,
+    pdf.multi_cell(0, 8,
         f"concluiu o exame teórico para a faixa {faixa}, obtendo {percentual}% de aproveitamento, "
-        f"realizado em {data_hora}.",
-        align="C")
+        f"realizado em {data_hora}.", align="C")
 
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 122)
-    pdf.cell(297, 10, resultado, align="C")
-
-    pdf.set_text_color(*branco)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.set_xy(0, 138)
-    pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
-
-    pdf.line(108, 146, 189, 146)
+    pdf.cell(0, 15, resultado, align="C", ln=True)
 
     if professor:
-        nome_normalizado = normalizar_nome(professor)
-        assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
+        nome_norm = normalizar_nome(professor)
+        assinatura_path = f"assets/assinaturas/{nome_norm}.png"
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=118, y=128, w=60)
+            pdf.image(assinatura_path, x=120, y=135, w=60)
+    pdf.line(108, 146, 189, 146)
+
+    pdf.set_font("Helvetica", "I", 12)
+    pdf.set_text_color(*branco)
+    pdf.cell(0, 10, "Assinatura do Professor Responsável", align="C", ln=True)
 
     caminho_qr = gerar_qrcode(codigo)
-    if os.path.exists(caminho_qr):
-        qr_w, qr_x, qr_y = 24, 297 - 24 - 18, 145
-        pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
-        pdf.set_xy(qr_x - 3, qr_y + qr_w - 1)
-        pdf.set_font("Helvetica", "I", 8)
-        pdf.set_text_color(*dourado)
-        pdf.cell(35, 5, f"Código: {codigo}", align="C")
-
-    pdf.set_font("Helvetica", "I", 9)
+    pdf.image(caminho_qr, x=260, y=150, w=25)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 178)
-    pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_xy(255, 175)
+    pdf.cell(35, 5, f"Código: {codigo}", align="C")
+
+    pdf.set_y(190)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.cell(0, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
     os.makedirs("certificados", exist_ok=True)
-    caminho_pdf = os.path.abspath(f"certificados/Certificado_{usuario}_{faixa}.pdf")
+    caminho_pdf = f"certificados/Certificado_{usuario}_{faixa}.pdf"
     pdf.output(caminho_pdf)
     return caminho_pdf
 
 # =========================================
-# INTERFACE PRINCIPAL
+# FUNÇÕES DE INTERFACE
 # =========================================
 def mostrar_cabecalho(titulo):
     st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-    topo_path = "assets/topo.webp"
-    if os.path.exists(topo_path):
-        topo_img = Image.open(topo_path)
-        st.image(topo_img, use_container_width=True)
 
-def obter_questoes_configuradas(faixa):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT questoes_json FROM config_exame
-        WHERE faixa = ?
-        ORDER BY data_config DESC LIMIT 1
-    """, (faixa,))
-    registro = cursor.fetchone()
-    conn.close()
-    if registro:
-        return json.loads(registro[0])
-    return None
-
+# =========================================
+# MODO EXAME
+# =========================================
 def modo_exame():
     mostrar_cabecalho("🏁 Exame de Faixa")
-
     faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-    faixa = st.selectbox("Selecione a faixa para o exame:", faixas)
+    faixa = st.selectbox("Selecione a faixa:", faixas)
     usuario = st.text_input("Nome do aluno:")
     professor = st.text_input("Nome do professor responsável:")
     tema = "regras"
 
-    if "exame_iniciado" not in st.session_state:
-        st.session_state.exame_iniciado = False
-        st.session_state.respostas_exame = {}
+    if st.button("Iniciar Exame"):
+        questoes = carregar_questoes(tema)
+        configuradas = obter_questoes_configuradas(faixa)
+        if configuradas:
+            questoes = [questoes[int(i)-1] for i in configuradas if int(i)-1 < len(questoes)]
+        random.shuffle(questoes)
+        st.session_state.questoes = questoes[:5]
+        st.session_state.respostas = {}
 
-    if not st.session_state.exame_iniciado:
-        if st.button("Iniciar Exame"):
-            questoes = carregar_questoes(tema)
-            configuradas = obter_questoes_configuradas(faixa)
-            if configuradas:
-                questoes = [questoes[int(i)-1] for i in configuradas if int(i)-1 < len(questoes)]
-            random.shuffle(questoes)
-            st.session_state.questoes_exame = questoes[:5]
-            st.session_state.exame_iniciado = True
-            st.rerun()
-
-    if st.session_state.exame_iniciado:
-        questoes = st.session_state.questoes_exame
-        total = len(questoes)
-
+    if "questoes" in st.session_state:
+        questoes = st.session_state.questoes
         for i, q in enumerate(questoes, 1):
             st.markdown(f"### {i}. {q['pergunta']}")
-            if "video" in q and q["video"]:
-                st.video(q["video"])
-            if "imagem" in q and q["imagem"]:
-                st.image(q["imagem"], use_container_width=True)
+            resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}")
+            st.session_state.respostas[f"resp_{i}"] = resp
 
-            key_resp = f"resposta_{i}"
-            resposta = st.radio(
-                "Escolha uma opção:",
-                q["opcoes"],
-                key=key_resp,
-                index=None
+        if st.button("Finalizar Exame"):
+            total = len(questoes)
+            pontuacao = sum(
+                1 for i, q in enumerate(questoes, 1)
+                if st.session_state.respostas[f"resp_{i}"].startswith(q["resposta"])
             )
-            if resposta:
-                st.session_state.respostas_exame[key_resp] = resposta
-
-        pontuacao = sum(
-            1 for i, q in enumerate(questoes, 1)
-            if st.session_state.respostas_exame.get(f"resposta_{i}", "").startswith(q["resposta"])
-        )
-
-        if len(st.session_state.respostas_exame) == total:
-            if st.button("Finalizar Exame"):
-                codigo = gerar_codigo_unico()
-                salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
-                exportar_certificados_json()
-                caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
-
-                st.success(f"{usuario}, você fez {pontuacao}/{total} pontos.")
-                st.info(f"Código de verificação: {codigo}")
-
-                with open(caminho_pdf, "rb") as file:
-                    st.download_button(
-                        label="📄 Baixar Certificado PDF",
-                        data=file,
-                        file_name=os.path.basename(caminho_pdf),
-                        mime="application/pdf"
-                    )
-
-                st.session_state.exame_iniciado = False
+            codigo = gerar_codigo_unico()
+            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+            exportar_certificados_json()
+            caminho = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+            st.success(f"{usuario}, você fez {pontuacao}/{total} pontos.")
+            with open(caminho, "rb") as f:
+                st.download_button("📄 Baixar Certificado", f, file_name=os.path.basename(caminho))
 
 # =========================================
-# HISTÓRICO DE CERTIFICADOS
+# HISTÓRICO
 # =========================================
 def painel_certificados():
     mostrar_cabecalho("📜 Histórico de Certificados")
-
-    nome = st.text_input("Digite seu nome completo:")
-    tipo_acesso = st.radio("Você é:", ["Aluno", "Professor"], horizontal=True)
-
-    if st.button("🔍 Buscar Certificados"):
-        if not nome.strip():
-            st.warning("Por favor, digite o nome completo para buscar os certificados.")
-            return
-
+    nome = st.text_input("Digite seu nome:")
+    if st.button("🔍 Buscar"):
         conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-
-        if tipo_acesso == "Aluno":
-            cursor.execute("""
-                SELECT usuario, faixa, pontuacao, data, codigo_verificacao
-                FROM resultados
-                WHERE LOWER(usuario) = LOWER(?)
-                ORDER BY data DESC
-            """, (nome,))
-        else:
-            cursor.execute("""
-                SELECT usuario, faixa, pontuacao, data, codigo_verificacao
-                FROM resultados
-                WHERE LOWER(tema) = 'regras'
-                ORDER BY data DESC
-            """)
-        resultados = cursor.fetchall()
+        df = pd.read_sql_query("SELECT * FROM resultados ORDER BY data DESC", conn)
         conn.close()
-
-        if not resultados:
-            st.info("Nenhum certificado encontrado para este nome.")
-            return
-
-        st.success(f"Foram encontrados {len(resultados)} certificado(s).")
-        st.markdown("---")
-
-        for usuario, faixa, pontuacao, data, codigo in resultados:
-            st.markdown(f"""
-            <div style='background-color:#113830; padding:15px; border-radius:10px; margin-bottom:10px;'>
-                <b>Aluno:</b> {usuario}  |  <b>Faixa:</b> {faixa}  |  
-                <b>Pontuação:</b> {pontuacao}  |  <b>Data:</b> {datetime.strptime(data, "%Y-%m-%d %H:%M:%S").strftime("%d/%m/%Y %H:%M")}  |
-                <b>Código:</b> {codigo}
-            </div>
-            """, unsafe_allow_html=True)
-
-            caminho_pdf = f"certificados/Certificado_{usuario}_{faixa}.pdf"
-            if os.path.exists(caminho_pdf):
-                with open(caminho_pdf, "rb") as file:
-                    st.download_button(
-                        label="📄 Baixar Certificado",
-                        data=file,
-                        file_name=os.path.basename(caminho_pdf),
-                        mime="application/pdf",
-                        key=f"download_{codigo}"
-                    )
+        df = df[df["usuario"].str.contains(nome, case=False, na=False)]
+        if df.empty:
+            st.info("Nenhum certificado encontrado.")
+        else:
+            st.dataframe(df[["usuario","faixa","pontuacao","data","codigo_verificacao"]])
 
 # =========================================
 # DASHBOARD DO PROFESSOR
 # =========================================
 def dashboard_professor():
     mostrar_cabecalho("📈 Dashboard do Professor")
-    aba = st.tabs(["📊 Desempenho das Turmas", "⚙️ Gerenciar Questões"])
+    abas = st.tabs(["📊 Indicadores", "📋 Histórico", "⚙️ Gerenciar Questões"])
 
-    with aba[0]:
-        professor = st.text_input("Digite seu nome completo (professor):")
-        if st.button("🔍 Carregar Dados de Desempenho"):
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("""
-                SELECT usuario, faixa, pontuacao, data, codigo_verificacao
-                FROM resultados
-                WHERE LOWER(tema) = 'regras'
-                ORDER BY data DESC
-            """)
-            resultados = cursor.fetchall()
-            conn.close()
+    with abas[0]:
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query("SELECT * FROM resultados", conn)
+        conn.close()
+        if df.empty:
+            st.info("Sem dados ainda.")
+            return
+        total, media = len(df), df["pontuacao"].mean()
+        taxa = (df[df["pontuacao"] >= 3].shape[0]/total)*100
+        col1,col2,col3 = st.columns(3)
+        col1.metric("Exames", total)
+        col2.metric("Média", f"{media:.2f}")
+        col3.metric("Aprovação", f"{taxa:.1f}%")
+        st.bar_chart(df["faixa"].value_counts())
 
-            if not resultados:
-                st.info("Nenhum resultado encontrado.")
-                return
+    with abas[1]:
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query("SELECT usuario,faixa,pontuacao,data,codigo_verificacao FROM resultados", conn)
+        conn.close()
+        st.dataframe(df)
+        st.download_button("📤 Exportar CSV", df.to_csv(index=False).encode("utf-8"), "relatorio_exames.csv")
 
-            total = len(resultados)
-            media = sum([r[2] for r in resultados]) / total
-            aprovados = sum(1 for r in resultados if r[2] >= 3)
-            taxa = (aprovados / total) * 100
-
-            st.metric("Total de Exames", total)
-            st.metric("Média de Pontuação", f"{media:.2f}")
-            st.metric("Taxa de Aprovação", f"{taxa:.1f}%")
-
-            faixas = [r[1] for r in resultados]
-            freq = {f: faixas.count(f) for f in set(faixas)}
-            st.bar_chart(freq)
-
-    with aba[1]:
-        st.markdown("### ⚙️ Configurar Questões por Faixa")
-
-        professor = st.text_input("Professor responsável pela configuração:")
-        faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-        faixa = st.selectbox("Selecione a faixa para configurar:", faixas)
-
+    with abas[2]:
+        st.markdown("### ⚙️ Gerenciar Questões")
+        professor = st.text_input("Professor responsável:")
+        faixas = ["Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"]
+        faixa = st.selectbox("Selecione a faixa:", faixas)
         if faixa and professor:
             questoes = carregar_questoes("regras")
-            if not questoes:
-                st.error("Nenhum arquivo de questões encontrado.")
-                return
-
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT questoes_json FROM config_exame
-                WHERE faixa = ? AND professor = ?
-                ORDER BY data_config DESC LIMIT 1
-            """, (faixa, professor))
+            cursor.execute("SELECT id,questoes_json FROM config_exame WHERE faixa=? AND professor=? ORDER BY data_config DESC LIMIT 1", (faixa,professor))
             registro = cursor.fetchone()
             conn.close()
-
-            selecionadas = set(json.loads(registro[0])) if registro else set()
-
-            novas_selecionadas = []
-            for i, q in enumerate(questoes, 1):
+            selecionadas = set(json.loads(registro[1])) if registro else set()
+            novas = []
+            for i,q in enumerate(questoes,1):
                 checked = st.checkbox(f"{i}. {q['pergunta']}", value=(str(i) in selecionadas))
-                if checked:
-                    novas_selecionadas.append(str(i))
-
-            if st.button("💾 Salvar Configuração"):
+                if checked: novas.append(str(i))
+            c1,c2 = st.columns(2)
+            if c1.button("💾 Salvar"):
                 conn = sqlite3.connect(DB_PATH)
                 cursor = conn.cursor()
-                cursor.execute("""
-                    INSERT INTO config_exame (faixa, questoes_json, professor)
-                    VALUES (?, ?, ?)
-                """, (faixa, json.dumps(novas_selecionadas), professor))
-                conn.commit()
-                conn.close()
-                st.success(f"Configuração salva com sucesso para a faixa {faixa}.")
+                cursor.execute("INSERT INTO config_exame (faixa,questoes_json,professor) VALUES (?,?,?)",(faixa,json.dumps(novas),professor))
+                conn.commit(); conn.close()
+                st.success("Configuração salva!")
+            if registro and c2.button("🗑️ Excluir"):
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM config_exame WHERE id=?",(registro[0],))
+                conn.commit(); conn.close()
+                st.warning("Configuração excluída!")
 
 # =========================================
 # MENU PRINCIPAL
@@ -499,19 +373,10 @@ def dashboard_professor():
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-
-    menu = st.sidebar.radio("Navegar:", [
-        "🏁 Exame de Faixa",
-        "📜 Histórico de Certificados",
-        "📈 Dashboard do Professor"
-    ])
-
-    if menu == "🏁 Exame de Faixa":
-        modo_exame()
-    elif menu == "📜 Histórico de Certificados":
-        painel_certificados()
-    elif menu == "📈 Dashboard do Professor":
-        dashboard_professor()
+    menu = st.sidebar.radio("Navegar:", ["🏁 Exame de Faixa", "📜 Histórico", "📈 Dashboard do Professor"])
+    if menu == "🏁 Exame de Faixa": modo_exame()
+    elif menu == "📜 Histórico": painel_certificados()
+    elif menu == "📈 Dashboard do Professor": dashboard_professor()
 
 if __name__ == "__main__":
     main()
