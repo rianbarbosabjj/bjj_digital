@@ -139,6 +139,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")  # Paisagem
     pdf.add_page()
 
+    # Cores e fundo
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
@@ -148,76 +149,73 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # Título
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 26)
-    pdf.set_xy(10, 20)
-    pdf.cell(277, 10, "Certificado de Exame de Faixa", ln=False, align="C")
+    pdf.set_xy(0, 18)
+    pdf.cell(297, 12, "Certificado de Exame de Faixa", align="C")
 
-    # Linha decorativa
+    # Linha decorativa e logo
     pdf.set_draw_color(*dourado)
-    pdf.set_line_width(1)
-    pdf.line(30, 33, 267, 33)
+    pdf.set_line_width(0.8)
+    pdf.line(25, 32, 272, 32)
 
-    # Logo
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=130, y=38, w=35)
+        pdf.image(logo_path, x=128, y=36, w=40)
 
-    # Texto central (sem quebra automática)
+    # Texto central - margens reduzidas
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 15)
-    pdf.set_xy(25, 90)
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
     texto = (f"Certificamos que o(a) aluno(a) {usuario} concluiu o exame teórico para a faixa {faixa}, "
              f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}.")
-    pdf.multi_cell(247, 10, texto, align="C")
+    pdf.set_xy(15, 85)
+    pdf.multi_cell(267, 9, texto, align="C")
 
     # Resultado
     pdf.set_font("Helvetica", "B", 20)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
-    pdf.set_xy(10, 125)
-    pdf.cell(277, 10, resultado, align="C")
+    pdf.set_xy(0, 120)
+    pdf.cell(297, 10, resultado, align="C")
 
     # Assinatura
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 13)
-    pdf.set_xy(10, 150)
-    pdf.cell(277, 8, "Assinatura do Professor Responsável", align="C")
-    pdf.line(100, 158, 197, 158)
+    pdf.set_xy(0, 150)
+    pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
+    pdf.line(105, 158, 192, 158)
 
     if professor:
         nome_normalizado = normalizar_nome(professor)
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=118, y=140, w=60)
+            pdf.image(assinatura_path, x=118, y=138, w=60)
         else:
-            pdf.set_xy(10, 160)
-            pdf.cell(277, 8, "(Assinatura digital não encontrada)", align="C")
+            pdf.set_xy(0, 160)
+            pdf.cell(297, 8, "(Assinatura digital não encontrada)", align="C")
 
-    # QR code canto inferior direito
+    # QR Code canto inferior direito
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        qr_w = 28
-        qr_x = 297 - qr_w - 20
-        qr_y = 155
+        qr_w = 27
+        qr_x = 297 - qr_w - 18
+        qr_y = 158
         pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
-        pdf.set_xy(qr_x - 5, qr_y + qr_w + 2)
+        pdf.set_xy(qr_x - 2, qr_y + qr_w + 2)
         pdf.set_font("Helvetica", "I", 8)
         pdf.set_text_color(*dourado)
-        pdf.cell(40, 5, f"Código: {codigo}", align="C")
+        pdf.cell(35, 5, f"Código: {codigo}", align="C")
 
     # Rodapé
-    pdf.set_font("Helvetica", "I", 10)
+    pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(10, 195)
-    pdf.cell(277, 8, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
+    pdf.set_xy(0, 195)
+    pdf.cell(297, 8, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
-    # Salvar PDF
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
-
 # =========================================
 # INTERFACE PRINCIPAL
 # =========================================
