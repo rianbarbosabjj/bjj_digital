@@ -6,6 +6,7 @@ import json
 import random
 import os
 import qrcode
+import unicodedata
 from datetime import datetime
 
 # =========================================
@@ -98,7 +99,6 @@ def carregar_questoes(tema):
     return []
 
 def gerar_codigo_unico():
-    """Gera código no formato BJJDIGITAL-YYYY-00001"""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM resultados")
@@ -118,7 +118,6 @@ def salvar_resultado(usuario, modo, tema, faixa, pontuacao, tempo, codigo):
     conn.close()
 
 def gerar_qrcode(codigo):
-    """Gera QR Code com caminho absoluto"""
     os.makedirs("relatorios/qrcodes", exist_ok=True)
     caminho_qr = os.path.abspath(f"relatorios/qrcodes/{codigo}.png")
 
@@ -134,7 +133,11 @@ def gerar_qrcode(codigo):
     img.save(caminho_qr)
     return caminho_qr
 
-def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
+def normalizar_nome(nome):
+    nfkd = unicodedata.normalize("NFKD", nome)
+    return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
+
+def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF()
     pdf.add_page()
 
@@ -171,10 +174,9 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
     resultado = "✅ APROVADO" if pontuacao >= (total * 0.6) else "❌ NÃO APROVADO"
     pdf.set_text_color(*dourado)
     pdf.cell(0, 15, resultado, ln=True, align="C")
-
     pdf.ln(20)
 
-    # Gera e insere QR Code
+    # QR Code
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
         try:
@@ -182,11 +184,20 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo):
         except Exception as e:
             print(f"⚠️ Erro ao inserir QR Code: {e}")
 
-    # Espaço para assinatura
-    pdf.ln(50)
+    pdf.ln(45)
+
+    # Assinatura Digital
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
-    pdf.cell(0, 10, "Assinatura do Professor:", ln=True, align="C")
+    if professor:
+        nome_normalizado = normalizar_nome(professor)
+        assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
+        if os.path.exists(assinatura_path):
+            pdf.image(assinatura_path, x=75, y=pdf.get_y() - 5, w=60)
+        else:
+            pdf.cell(0, 10, "(Assinatura digital não encontrada)", ln=True, align="C")
+
+    pdf.cell(0, 15, "Assinatura do Professor:", ln=True, align="C")
     pdf.line(70, pdf.get_y() + 5, 140, pdf.get_y() + 5)
 
     pdf.set_y(-30)
@@ -215,6 +226,7 @@ def modo_exame():
     faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
     faixa = st.selectbox("Selecione a faixa para o exame:", faixas)
     usuario = st.text_input("Nome do aluno:")
+    professor = st.text_input("Nome do professor responsável:")
     tema = "regras"
 
     if st.button("Iniciar Exame"):
@@ -236,7 +248,7 @@ def modo_exame():
         if st.button("Finalizar Exame"):
             codigo = gerar_codigo_unico()
             salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
-            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo)
+            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
             with open(caminho_pdf, "rb") as file:
                 st.download_button(
                     label="📄 Baixar Relatório PDF",
