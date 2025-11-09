@@ -51,7 +51,7 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # =========================================
-# BANCO DE DADOS (COM VERIFICAÇÃO SEGURA)
+# BANCO DE DADOS
 # =========================================
 DB_PATH = os.path.join("database", "bjj_digital.db")
 
@@ -167,23 +167,20 @@ def normalizar_nome(nome):
 # GERAÇÃO DE PDF (NOME CENTRALIZADO E DOURADO)
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    pdf = FPDF("L", "mm", "A4")  # Paisagem
+    pdf = FPDF("L", "mm", "A4")
     pdf.add_page()
 
-    # --- Cores e fundo ---
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 297, 210, "F")
 
-    # --- Título ---
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_xy(0, 10)
     pdf.cell(297, 12, "Certificado de Exame de Faixa", align="C")
 
-    # --- Linha e logo ---
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.8)
     pdf.line(30, 22, 267, 22)
@@ -192,7 +189,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=130, y=25, w=35)
 
-    # --- Texto principal ---
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
     percentual = int((pontuacao / total) * 100)
@@ -201,27 +197,23 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(10, 70)
     pdf.cell(277, 8, "Certificamos que o(a) aluno(a)", align="C")
 
-    # --- Nome do aluno em maiúsculo e dourado ---
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_xy(10, 80)
     pdf.cell(277, 10, usuario.upper(), align="C")
 
-    # --- Continuação do texto ---
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
     linha2 = f"concluiu o exame teórico para a faixa {faixa}, obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
     pdf.set_xy(10, 95)
     pdf.multi_cell(277, 8, linha2, align="C")
 
-    # --- Resultado ---
-    pdf.set_font("Helvetica", "B", 18)
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
+    pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(*dourado)
     pdf.set_xy(0, 112)
     pdf.cell(297, 10, resultado, align="C")
 
-    # --- Assinatura ---
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_xy(0, 132)
@@ -234,7 +226,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path, x=118, y=124, w=60)
 
-    # --- QR code ---
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
         qr_w = 24
@@ -246,7 +237,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_text_color(*dourado)
         pdf.cell(35, 5, f"Código: {codigo}", align="C")
 
-    # --- Rodapé ---
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
     pdf.set_xy(0, 184)
@@ -258,7 +248,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     return caminho_pdf
 
 # =========================================
-# MODO EXAME DE FAIXA
+# MODO EXAME DE FAIXA (MENSAGEM PERSONALIZADA)
 # =========================================
 def modo_exame():
     st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
@@ -289,24 +279,24 @@ def modo_exame():
             resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
             st.session_state.respostas[f"resp_{i}"] = resp
 
-if st.button("Finalizar Exame"):
-    pontuacao = sum(
-        1 for i, q in enumerate(questoes, 1)
-        if st.session_state.respostas[f"resp_{i}"].startswith(q["resposta"])
-    )
-    codigo = gerar_codigo_unico()
-    salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
-    exportar_certificados_json()
-    caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+        if st.button("Finalizar Exame"):
+            pontuacao = sum(
+                1 for i, q in enumerate(questoes, 1)
+                if st.session_state.respostas[f"resp_{i}"].startswith(q["resposta"])
+            )
+            codigo = gerar_codigo_unico()
+            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+            exportar_certificados_json()
+            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
 
-    percentual = int((pontuacao / total) * 100)
-    if pontuacao >= (total * 0.6):
-        st.success(f"🎉 Parabéns, {usuario}! Você foi **APROVADO**, acertando {pontuacao}/{total} questões e obtendo {percentual}% de aproveitamento!")
-    else:
-        st.error(f"{usuario}, você acertou {pontuacao}/{total} questões ({percentual}%). Continue se preparando para alcançar a próxima faixa!")
+            percentual = int((pontuacao / total) * 100)
+            if pontuacao >= (total * 0.6):
+                st.success(f"🎉 Parabéns, {usuario}! Você foi **APROVADO**, acertando {pontuacao}/{total} questões e obtendo {percentual}% de aproveitamento!")
+            else:
+                st.error(f"{usuario}, você acertou {pontuacao}/{total} questões ({percentual}%). Continue se preparando para alcançar a próxima faixa!")
 
-    with open(caminho_pdf, "rb") as f:
-        st.download_button("📄 Baixar Certificado", f, file_name=os.path.basename(caminho_pdf))
+            with open(caminho_pdf, "rb") as f:
+                st.download_button("📄 Baixar Certificado", f, file_name=os.path.basename(caminho_pdf))
 
 # =========================================
 # HISTÓRICO DE CERTIFICADOS
