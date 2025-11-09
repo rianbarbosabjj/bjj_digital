@@ -190,7 +190,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         (250, 210, 120),
         (255, 225, 150)
     ]
-    margem = 7  # aumentada levemente para afastar o conteúdo
+    margem = 9  # margem aumentada para afastar o conteúdo
     for i, cor in enumerate(degradado):
         offset = margem - (i * 0.8)
         pdf.set_draw_color(*cor)
@@ -205,23 +205,23 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # Marca d’água (opcional)
     logo_transp = "assets/logo_transparente.png"
     if os.path.exists(logo_transp):
-        pdf.image(logo_transp, x=105, y=60, w=85, h=85)
+        pdf.image(logo_transp, x=106, y=58, w=85, h=85)
 
     # ==============================
     # CABEÇALHO
     # ==============================
     pdf.set_text_color(*dourado_base)
     pdf.set_font("Helvetica", "B", 22)
-    pdf.set_xy(0, 20)
+    pdf.set_xy(0, 25)  # título rebaixado
     pdf.cell(297, 12, "CERTIFICADO DE EXAME DE FAIXA", align="C")
 
     pdf.set_draw_color(*dourado_base)
     pdf.set_line_width(0.6)
-    pdf.line(60, 33, 237, 33)
+    pdf.line(65, 38, 232, 38)
 
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
-        pdf.image(logo_path, x=131, y=35, w=35)
+        pdf.image(logo_path, x=131, y=40, w=35)
 
     # ==============================
     # CORPO DO TEXTO
@@ -231,13 +231,13 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 14)
-    pdf.set_xy(15, 75)
-    pdf.cell(267, 8, "Certificamos que o(a) aluno(a)", align="C")
+    pdf.set_xy(20, 80)
+    pdf.cell(257, 8, "Certificamos que o(a) aluno(a)", align="C")
 
     pdf.set_text_color(*dourado_base)
     pdf.set_font("Helvetica", "B", 22)
-    pdf.set_xy(15, 87)
-    pdf.cell(267, 10, usuario.upper(), align="C")
+    pdf.set_xy(20, 93)
+    pdf.cell(257, 10, usuario.upper(), align="C")
 
     # Texto com cor da faixa
     cores_faixa = {
@@ -252,7 +252,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     }
     cor_faixa = cores_faixa.get(faixa, (0, 0, 0))
 
-    pdf.set_xy(15, 104)
+    pdf.set_xy(20, 111)
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*preto)
     pdf.cell(100, 8, "concluiu o exame teórico para a faixa ", align="R")
@@ -274,7 +274,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_text_color(*dourado_base)
-    pdf.set_xy(0, 124)
+    pdf.set_xy(0, 131)
     pdf.cell(297, 10, resultado, align="C")
 
     # ==============================
@@ -282,15 +282,15 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # ==============================
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 12)
-    pdf.set_xy(0, 142)
+    pdf.set_xy(0, 148)
     pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
-    pdf.line(108, 150, 189, 150)
+    pdf.line(108, 156, 189, 156)
 
     if professor:
         nome_normalizado = normalizar_nome(professor)
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=118, y=136, w=60)
+            pdf.image(assinatura_path, x=118, y=142, w=60)
 
     # ==============================
     # QR CODE CENTRALIZADO
@@ -299,7 +299,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(caminho_qr):
         qr_w = 24
         x_center = (pdf.w - qr_w) / 2
-        y_qr = 152
+        y_qr = 160
         pdf.image(caminho_qr, x=x_center, y=y_qr, w=qr_w)
 
         pdf.set_font("Helvetica", "I", 9)
@@ -312,16 +312,16 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # ==============================
     selo_path = "assets/selo_dourado.png"
     if os.path.exists(selo_path):
-        pdf.image(selo_path, x=245, y=152, w=33)
+        pdf.image(selo_path, x=245, y=160, w=33)
 
     # ==============================
     # LINHA E RODAPÉ FIXO
     # ==============================
     pdf.set_draw_color(*dourado_base)
     pdf.set_line_width(0.4)
-    pdf.line(40, 192, 257, 192)
+    pdf.line(40, 194, 257, 194)
 
-    pdf.set_y(196)
+    pdf.set_y(198)
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado_base)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
