@@ -170,25 +170,30 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")
     pdf.add_page()
 
+    # Cores base
     verde_escuro = (14, 45, 38)
     dourado = (255, 215, 0)
     branco = (255, 255, 255)
+
+    # Fundo
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 297, 210, "F")
 
+    # Título
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_xy(0, 10)
     pdf.cell(297, 12, "Certificado de Exame de Faixa", align="C")
-
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.8)
     pdf.line(30, 22, 267, 22)
 
+    # Logo
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=130, y=25, w=35)
 
+    # Corpo principal
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 14)
     percentual = int((pontuacao / total) * 100)
@@ -208,12 +213,14 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(10, 95)
     pdf.multi_cell(277, 8, linha2, align="C")
 
+    # Resultado
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(*dourado)
     pdf.set_xy(0, 112)
     pdf.cell(297, 10, resultado, align="C")
 
+    # Assinatura
     pdf.set_text_color(*branco)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_xy(0, 132)
@@ -226,27 +233,35 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path, x=118, y=124, w=60)
 
+    # ==========================
+    # QR Code centralizado
+    # ==========================
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
-        qr_w = 24
-        qr_x = 297 - qr_w - 18
-        qr_y = 145
-        pdf.image(caminho_qr, x=qr_x, y=qr_y, w=qr_w)
-        pdf.set_xy(qr_x - 3, qr_y + qr_w - 1)
-        pdf.set_font("Helvetica", "I", 8)
-        pdf.set_text_color(*dourado)
-        pdf.cell(35, 5, f"Código: {codigo}", align="C")
+        qr_w = 26  # largura do QR Code
+        page_width = pdf.w
+        x_center = (page_width - qr_w) / 2
+        y_qr = 145  # mesma altura base
 
+        pdf.image(caminho_qr, x=x_center, y=y_qr, w=qr_w)
+
+        # Código abaixo do QR Code
+        pdf.set_font("Helvetica", "I", 9)
+        pdf.set_text_color(*dourado)
+        pdf.set_xy(0, y_qr + qr_w + 3)
+        pdf.cell(page_width, 6, f"Código: {codigo}", align="C")
+
+    # Rodapé
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
     pdf.set_xy(0, 184)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
+    # Salvar PDF
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
-
 # =========================================
 # MODO EXAME DE FAIXA (MENSAGEM PERSONALIZADA)
 # =========================================
