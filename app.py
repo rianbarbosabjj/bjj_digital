@@ -289,18 +289,24 @@ def modo_exame():
             resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
             st.session_state.respostas[f"resp_{i}"] = resp
 
-        if st.button("Finalizar Exame"):
-            pontuacao = sum(
-                1 for i, q in enumerate(questoes, 1)
-                if st.session_state.respostas[f"resp_{i}"].startswith(q["resposta"])
-            )
-            codigo = gerar_codigo_unico()
-            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
-            exportar_certificados_json()
-            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
-            st.success(f"{usuario}, você fez {pontuacao}/{total} pontos.")
-            with open(caminho_pdf, "rb") as f:
-                st.download_button("📄 Baixar Certificado", f, file_name=os.path.basename(caminho_pdf))
+if st.button("Finalizar Exame"):
+    pontuacao = sum(
+        1 for i, q in enumerate(questoes, 1)
+        if st.session_state.respostas[f"resp_{i}"].startswith(q["resposta"])
+    )
+    codigo = gerar_codigo_unico()
+    salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+    exportar_certificados_json()
+    caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+
+    percentual = int((pontuacao / total) * 100)
+    if pontuacao >= (total * 0.6):
+        st.success(f"🎉 Parabéns, {usuario}! Você foi **APROVADO**, acertando {pontuacao}/{total} questões e obtendo {percentual}% de aproveitamento!")
+    else:
+        st.error(f"{usuario}, você acertou {pontuacao}/{total} questões ({percentual}%). Continue se preparando para alcançar a próxima faixa!")
+
+    with open(caminho_pdf, "rb") as f:
+        st.download_button("📄 Baixar Certificado", f, file_name=os.path.basename(caminho_pdf))
 
 # =========================================
 # HISTÓRICO DE CERTIFICADOS
