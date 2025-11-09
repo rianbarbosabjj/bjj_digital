@@ -168,7 +168,7 @@ def normalizar_nome(nome):
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")
-    pdf.set_auto_page_break(False)  # impede que quebre a página automaticamente
+    pdf.set_auto_page_break(False)
     pdf.add_page()
 
     # Cores
@@ -220,12 +220,41 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(10, 80)
     pdf.cell(277, 10, usuario.upper(), align="C")
 
+    # ==============================
+    # TEXTO COM COR DA FAIXA
+    # ==============================
+    cores_faixa = {
+        "Cinza": (169, 169, 169),
+        "Amarela": (255, 215, 0),
+        "Laranja": (255, 140, 0),
+        "Verde": (0, 128, 0),
+        "Azul": (30, 144, 255),
+        "Roxa": (128, 0, 128),
+        "Marrom": (139, 69, 19),
+        "Preta": (0, 0, 0)
+    }
+
+    cor_faixa = cores_faixa.get(faixa, (0, 0, 0))
+
+    pdf.set_xy(10, 96)
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_text_color(*preto)
+    pdf.cell(110, 8, "concluiu o exame teórico para a faixa ", align="R")
+
+    pdf.set_text_color(*cor_faixa)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.cell(25, 8, faixa.upper(), align="C")
+
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 14)
-    linha2 = f",concluiu o exame teórico para a faixa {faixa}, obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
-    pdf.set_xy(10, 94)
-    pdf.multi_cell(277, 8, linha2, align="C")
+    pdf.cell(
+        0,
+        8,
+        f", obtendo {percentual}% de aproveitamento, realizado em {data_hora}.",
+        align="L"
+    )
 
+    # Resultado
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_text_color(*dourado)
@@ -263,12 +292,12 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(selo_path):
         pdf.image(selo_path, x=244, y=142, w=34)
 
-    # Linha dourada e rodapé fixo (impede quebra)
+    # Linha dourada e rodapé fixo
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.4)
     pdf.line(30, 190, 267, 190)
 
-    pdf.set_y(194)  # posição fixa para evitar quebra
+    pdf.set_y(194)
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
@@ -277,8 +306,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
-    return caminho_pdf
-    # =========================================
+    return caminho_pdf    # =========================================
 # MODO EXAME DE FAIXA
 # =========================================
 def modo_exame():
