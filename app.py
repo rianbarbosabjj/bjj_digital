@@ -164,25 +164,21 @@ def normalizar_nome(nome):
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
 # =========================================
-# GERAÇÃO DE PDF (FUNDO NEUTRO + SELO DOURADO)
+# GERAÇÃO DE PDF (VERSÃO FINAL COM QUEBRA DE LINHA)
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
     pdf.add_page()
 
-    # Cores base
     cinza_claro = (245, 245, 245)
     dourado_base = (218, 165, 32)
     preto = (40, 40, 40)
 
-    # Fundo
+    # Fundo e moldura com degradê dourado
     pdf.set_fill_color(*cinza_claro)
     pdf.rect(0, 0, 297, 210, "F")
 
-    # ==============================
-    # MOLDURA COM DEGRADÊ DOURADO
-    # ==============================
     degradado = [
         (218, 165, 32),
         (230, 180, 60),
@@ -190,31 +186,26 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         (250, 210, 120),
         (255, 225, 150)
     ]
-    margem = 9  # margem aumentada
+    margem = 9
     for i, cor in enumerate(degradado):
         offset = margem - (i * 0.8)
         pdf.set_draw_color(*cor)
         pdf.set_line_width(0.8)
         pdf.rect(offset, offset, 297 - 2 * offset, 210 - 2 * offset)
 
-    # Barras decorativas
     pdf.set_fill_color(*dourado_base)
     pdf.rect(0, 0, 297, 6, "F")
     pdf.rect(0, 204, 297, 6, "F")
 
-    # Marca d’água (opcional)
     logo_transp = "assets/logo_transparente.png"
     if os.path.exists(logo_transp):
         pdf.image(logo_transp, x=106, y=58, w=85, h=85)
 
-    # ==============================
-    # CABEÇALHO
-    # ==============================
+    # Cabeçalho
     pdf.set_text_color(*dourado_base)
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_xy(0, 25)
     pdf.cell(297, 12, "CERTIFICADO DE EXAME DE FAIXA", align="C")
-
     pdf.set_draw_color(*dourado_base)
     pdf.set_line_width(0.6)
     pdf.line(65, 38, 232, 38)
@@ -223,9 +214,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=131, y=40, w=35)
 
-    # ==============================
-    # CORPO DO TEXTO
-    # ==============================
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
@@ -239,9 +227,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(20, 93)
     pdf.cell(257, 10, usuario.upper(), align="C")
 
-    # ==============================
-    # TEXTO COM COR DA FAIXA (COM QUEBRA DE LINHA)
-    # ==============================
+    # Texto com cor da faixa + quebra de linha
     cores_faixa = {
         "Cinza": (169, 169, 169),
         "Amarela": (255, 215, 0),
@@ -263,30 +249,20 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(30, 8, faixa.upper(), align="C")
 
-    # 🔸 Quebra de linha antes de “realizado em”
     pdf.ln(9)
     pdf.set_x(20)
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 14)
-    pdf.cell(
-        0,
-        8,
-        f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}.",
-        align="C"
-    )
+    pdf.cell(0, 8, f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}.", align="C")
 
-    # ==============================
-    # RESULTADO
-    # ==============================
+    # Resultado
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_text_color(*dourado_base)
     pdf.set_xy(0, 131)
     pdf.cell(297, 10, resultado, align="C")
 
-    # ==============================
-    # ASSINATURA
-    # ==============================
+    # Assinatura
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 12)
     pdf.set_xy(0, 148)
@@ -299,31 +275,24 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path, x=118, y=142, w=60)
 
-    # ==============================
-    # QR CODE CENTRALIZADO
-    # ==============================
+    # QR Code
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
         qr_w = 24
         x_center = (pdf.w - qr_w) / 2
         y_qr = 160
         pdf.image(caminho_qr, x=x_center, y=y_qr, w=qr_w)
-
         pdf.set_font("Helvetica", "I", 9)
         pdf.set_text_color(*preto)
         pdf.set_xy(0, y_qr + qr_w + 2)
         pdf.cell(pdf.w, 6, f"Código: {codigo}", align="C")
 
-    # ==============================
-    # SELO DOURADO
-    # ==============================
+    # Selo dourado
     selo_path = "assets/selo_dourado.png"
     if os.path.exists(selo_path):
         pdf.image(selo_path, x=245, y=160, w=33)
 
-    # ==============================
-    # LINHA E RODAPÉ FIXO
-    # ==============================
+    # Linha e rodapé
     pdf.set_draw_color(*dourado_base)
     pdf.set_line_width(0.4)
     pdf.line(40, 194, 257, 194)
@@ -333,13 +302,11 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_text_color(*dourado_base)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
-    # ==============================
-    # SALVAR PDF
-    # ==============================
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
+
 # =========================================
 # MODO EXAME DE FAIXA
 # =========================================
@@ -452,25 +419,4 @@ def dashboard_professor():
         conn.close()
         st.dataframe(df)
         csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📤 Exportar CSV", csv, "relatorio_exames.csv", "text/csv")
-
-# =========================================
-# MENU PRINCIPAL
-# =========================================
-def main():
-    st.sidebar.image("assets/logo.png", use_container_width=True)
-    st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
-    menu = st.sidebar.radio("Navegar:", [
-        "🏁 Exame de Faixa",
-        "📜 Histórico de Certificados",
-        "📈 Dashboard do Professor"
-    ])
-    if menu == "🏁 Exame de Faixa":
-        modo_exame()
-    elif menu == "📜 Histórico de Certificados":
-        painel_certificados()
-    elif menu == "📈 Dashboard do Professor":
-        dashboard_professor()
-
-if __name__ == "__main__":
-    main()
+        st.download_button("📤 Exportar CSV", csv, "relatorio_exames
