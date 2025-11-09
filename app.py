@@ -156,20 +156,6 @@ def normalizar_nome(nome):
     nfkd = unicodedata.normalize("NFKD", nome)
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
-def obter_questoes_configuradas(faixa):
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT questoes_json FROM config_exame
-        WHERE faixa = ?
-        ORDER BY data_config DESC LIMIT 1
-    """, (faixa,))
-    registro = cursor.fetchone()
-    conn.close()
-    if registro:
-        return json.loads(registro[0])
-    return None
-
 # =========================================
 # GERAÇÃO DE PDF
 # =========================================
@@ -234,6 +220,69 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     return caminho_pdf
 
 # =========================================
+# MODO EXAME DE FAIXA
+# =========================================
+def modo_exame():
+    st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
+
+    faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+    faixa = st.selectbox("Selecione a faixa:", faixas)
+    usuario = st.text_input("Nome do aluno:")
+    professor = st.text_input("Nome do professor responsável:")
+    tema = "regras"
+
+    if "exame_iniciado" not in st.session_state:
+        st.session_state.exame_iniciado = False
+        st.session_state.respostas = {}
+
+    if not st.session_state.exame_iniciado:
+        if st.button("Iniciar Exame"):
+            questoes = carregar_questoes(tema)
+            random.shuffle(questoes)
+            st.session_state.questoes = questoes[:5]
+            st.session_state.exame_iniciado = True
+            st.rerun()
+
+    if st.session_state.exame_iniciado:
+        questoes = st.session_state.questoes
+        total = len(questoes)
+
+        for i, q in enumerate(questoes, 1):
+            st.markdown(f"### {i}. {q['pergunta']}")
+            resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}")
+            st.session_state.respostas[f"resp_{i}"] = resp
+
+        if st.button("Finalizar Exame"):
+            pontuacao = sum(
+                1 for i, q in enumerate(questoes, 1)
+                if st.session_state.respostas[f"resp_{i}"].startswith(q["resposta"])
+            )
+            codigo = gerar_codigo_unico()
+            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+            exportar_certificados_json()
+            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+            st.success(f"{usuario}, você fez {pontuacao}/{total} pontos.")
+            with open(caminho_pdf, "rb") as f:
+                st.download_button("📄 Baixar Certificado", f, file_name=os.path.basename(caminho_pdf))
+
+# =========================================
+# HISTÓRICO DE CERTIFICADOS
+# =========================================
+def painel_certificados():
+    st.markdown("<h1 style='color:#FFD700;'>📜 Histórico de Certificados</h1>", unsafe_allow_html=True)
+    nome = st.text_input("Digite seu nome completo:")
+    if st.button("🔍 Buscar"):
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query("SELECT * FROM resultados ORDER BY data DESC", conn)
+        conn.close()
+        df = df[df["usuario"].str.contains(nome, case=False, na=False)]
+        if df.empty:
+            st.info("Nenhum certificado encontrado.")
+        else:
+            st.success(f"Foram encontrados {len(df)} registro(s).")
+            st.dataframe(df[["usuario","faixa","pontuacao","data","codigo_verificacao"]])
+
+# =========================================
 # DASHBOARD DO PROFESSOR (com Plotly)
 # =========================================
 def dashboard_professor():
@@ -284,21 +333,7 @@ def dashboard_professor():
         st.info("Em breve, módulo completo de configuração de questões!")
 
 # =========================================
-# INTERFACE E MENU PRINCIPAL
-# =========================================
-def mostrar_cabecalho(titulo):
-    st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
-
-def modo_exame():
-    mostrar_cabecalho("🏁 Exame de Faixa")
-    st.info("Módulo de exame em desenvolvimento. Em breve disponível!")
-
-def painel_certificados():
-    mostrar_cabecalho("📜 Histórico de Certificados")
-    st.info("Histórico de certificados em desenvolvimento. Em breve disponível!")
-
-# =========================================
-# MAIN
+# MENU PRINCIPAL
 # =========================================
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
