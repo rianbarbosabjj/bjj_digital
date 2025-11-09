@@ -419,4 +419,25 @@ def dashboard_professor():
         conn.close()
         st.dataframe(df)
         csv = df.to_csv(index=False).encode("utf-8")
-        st.download_button("📤 Exportar CSV", csv, "relatorio_exames
+        st.download_button("📤 Exportar CSV", csv, "relatorio_exames.csv", "text/csv")
+
+# =========================================
+# MENU PRINCIPAL
+# =========================================
+def main():
+    st.sidebar.image("assets/logo.png", use_container_width=True)
+    st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
+    menu = st.sidebar.radio("Navegar:", [
+        "🏁 Exame de Faixa",
+        "📜 Histórico de Certificados",
+        "📈 Dashboard do Professor"
+    ])
+    if menu == "🏁 Exame de Faixa":
+        modo_exame()
+    elif menu == "📜 Histórico de Certificados":
+        painel_certificados()
+    elif menu == "📈 Dashboard do Professor":
+        dashboard_professor()
+
+if __name__ == "__main__":
+    main()
