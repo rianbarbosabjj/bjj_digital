@@ -164,7 +164,7 @@ def normalizar_nome(nome):
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
 # =========================================
-# GERAÇÃO DE PDF (VERSÃO FINAL COM QUEBRA DE LINHA)
+# GERAÇÃO DE PDF (FINAL COM QUEBRA DE LINHA)
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")
@@ -275,7 +275,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path, x=118, y=142, w=60)
 
-    # QR Code
+    # QR Code e rodapé
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
         qr_w = 24
@@ -287,16 +287,13 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_xy(0, y_qr + qr_w + 2)
         pdf.cell(pdf.w, 6, f"Código: {codigo}", align="C")
 
-    # Selo dourado
     selo_path = "assets/selo_dourado.png"
     if os.path.exists(selo_path):
         pdf.image(selo_path, x=245, y=160, w=33)
 
-    # Linha e rodapé
     pdf.set_draw_color(*dourado_base)
     pdf.set_line_width(0.4)
     pdf.line(40, 194, 257, 194)
-
     pdf.set_y(198)
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado_base)
@@ -308,7 +305,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     return caminho_pdf
 
 # =========================================
-# MODO EXAME DE FAIXA
+# MODO EXAME DE FAIXA (DOWNLOAD PERSISTENTE)
 # =========================================
 def modo_exame():
     st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
@@ -318,12 +315,11 @@ def modo_exame():
     professor = st.text_input("Nome do professor responsável:")
     tema = "regras"
 
-    # Inicializa o estado do exame
     if "exame_iniciado" not in st.session_state:
         st.session_state.exame_iniciado = False
         st.session_state.respostas = {}
+        st.session_state.certificado_path = None
 
-    # Botão para iniciar o exame
     if not st.session_state.exame_iniciado:
         if st.button("Iniciar Exame"):
             questoes = carregar_questoes(tema)
@@ -335,61 +331,42 @@ def modo_exame():
             st.session_state.exame_iniciado = True
             st.rerun()
 
-    # Exibição do exame
     if st.session_state.exame_iniciado:
         questoes = st.session_state.questoes
         total = len(questoes)
-
         for i, q in enumerate(questoes, 1):
             st.markdown(f"### {i}. {q['pergunta']}")
             resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
             st.session_state.respostas[f"resp_{i}"] = resp
 
-        # Finaliza o exame
         if st.button("Finalizar Exame"):
-            # Cálculo da pontuação
             pontuacao = sum(
                 1 for i, q in enumerate(questoes, 1)
                 if st.session_state.respostas.get(f"resp_{i}", "").startswith(q["resposta"])
             )
-
             codigo = gerar_codigo_unico()
             salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
             exportar_certificados_json()
-
-            # Gera o certificado
             caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+            st.session_state.certificado_path = caminho_pdf
+            st.rerun()
 
-            # Verifica se o arquivo foi criado
-            if not os.path.exists(caminho_pdf):
-                st.error("❌ Ocorreu um problema ao gerar o certificado. Tente novamente.")
-                return
+    if st.session_state.get("certificado_path"):
+        caminho_pdf = st.session_state.certificado_path
+        st.success(f"🎉 Certificado de {usuario.upper() if usuario else 'ALUNO'} ({faixa}) gerado com sucesso!")
+        try:
+            with open(caminho_pdf, "rb") as f:
+                pdf_bytes = f.read()
+            st.download_button(
+                label="📄 Baixar Certificado",
+                data=pdf_bytes,
+                file_name=os.path.basename(caminho_pdf),
+                mime="application/pdf",
+                use_container_width=True
+            )
+        except Exception as e:
+            st.error(f"⚠️ Erro ao preparar o download: {e}")
 
-            percentual = int((pontuacao / total) * 100)
-            if pontuacao >= (total * 0.6):
-                st.success(
-                    f"🎉 Parabéns, {usuario}! Você foi **APROVADO**, "
-                    f"acertando {pontuacao}/{total} questões e obtendo {percentual}% de aproveitamento!"
-                )
-            else:
-                st.error(
-                    f"{usuario}, você acertou {pontuacao}/{total} questões ({percentual}%). "
-                    "Continue se preparando para alcançar a próxima faixa!"
-                )
-
-            # Reabre o PDF com segurança para o botão de download
-            try:
-                with open(caminho_pdf, "rb") as f:
-                    pdf_bytes = f.read()
-                st.download_button(
-                    label="📄 Baixar Certificado",
-                    data=pdf_bytes,
-                    file_name=os.path.basename(caminho_pdf),
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-            except Exception as e:
-                st.error(f"⚠️ Erro ao preparar o download do certificado: {e}")
 # =========================================
 # HISTÓRICO DE CERTIFICADOS
 # =========================================
