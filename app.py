@@ -190,7 +190,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         (250, 210, 120),
         (255, 225, 150)
     ]
-    margem = 9  # margem aumentada para afastar o conteúdo
+    margem = 9  # margem aumentada
     for i, cor in enumerate(degradado):
         offset = margem - (i * 0.8)
         pdf.set_draw_color(*cor)
@@ -212,7 +212,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # ==============================
     pdf.set_text_color(*dourado_base)
     pdf.set_font("Helvetica", "B", 22)
-    pdf.set_xy(0, 25)  # título rebaixado
+    pdf.set_xy(0, 25)
     pdf.cell(297, 12, "CERTIFICADO DE EXAME DE FAIXA", align="C")
 
     pdf.set_draw_color(*dourado_base)
@@ -239,7 +239,9 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(20, 93)
     pdf.cell(257, 10, usuario.upper(), align="C")
 
-    # Texto com cor da faixa
+    # ==============================
+    # TEXTO COM COR DA FAIXA (COM QUEBRA DE LINHA)
+    # ==============================
     cores_faixa = {
         "Cinza": (169, 169, 169),
         "Amarela": (255, 215, 0),
@@ -261,16 +263,21 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_font("Helvetica", "B", 14)
     pdf.cell(30, 8, faixa.upper(), align="C")
 
+    # 🔸 Quebra de linha antes de “realizado em”
+    pdf.ln(9)
+    pdf.set_x(20)
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 14)
     pdf.cell(
         0,
         8,
-        f", obtendo {percentual}% de aproveitamento, realizado em {data_hora}.",
-        align="L"
+        f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}.",
+        align="C"
     )
 
-    # Resultado
+    # ==============================
+    # RESULTADO
+    # ==============================
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_text_color(*dourado_base)
