@@ -168,6 +168,7 @@ def normalizar_nome(nome):
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")
+    pdf.set_auto_page_break(False)  # impede que quebre a página automaticamente
     pdf.add_page()
 
     # Cores
@@ -185,7 +186,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # Barras decorativas
     pdf.set_fill_color(*dourado)
     pdf.rect(0, 0, 297, 6, "F")
-    pdf.rect(0, 203, 297, 6, "F")
+    pdf.rect(0, 204, 297, 6, "F")
 
     # Marca d’água (opcional)
     logo_transp = "assets/logo_transparente.png"
@@ -249,7 +250,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(caminho_qr):
         qr_w = 24
         x_center = (pdf.w - qr_w) / 2
-        y_qr = 142  # levemente acima
+        y_qr = 142
         pdf.image(caminho_qr, x=x_center, y=y_qr, w=qr_w)
 
         pdf.set_font("Helvetica", "I", 9)
@@ -262,10 +263,14 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(selo_path):
         pdf.image(selo_path, x=244, y=142, w=34)
 
-    # Rodapé (ajustado para dentro da margem)
+    # Linha dourada e rodapé fixo (impede quebra)
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(0.4)
+    pdf.line(30, 190, 267, 190)
+
+    pdf.set_y(194)  # posição fixa para evitar quebra
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 195)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
     # Salvar PDF
@@ -273,7 +278,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
-# =========================================
+    # =========================================
 # MODO EXAME DE FAIXA
 # =========================================
 def modo_exame():
