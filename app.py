@@ -171,34 +171,20 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_auto_page_break(False)
     pdf.add_page()
 
-    # Cores base
+    # Cores
     cinza_claro = (245, 245, 245)
-    dourado_base = (218, 165, 32)
+    dourado = (218, 165, 32)
     preto = (40, 40, 40)
 
-    # Fundo
+    # Fundo e moldura
     pdf.set_fill_color(*cinza_claro)
     pdf.rect(0, 0, 297, 210, "F")
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(1)
+    pdf.rect(5, 5, 287, 200)
 
-    # ==============================
-    # DEGRADÊ NAS MARGENS (efeito de brilho dourado)
-    # ==============================
-    degradado = [
-        (218, 165, 32),
-        (230, 180, 60),
-        (240, 195, 90),
-        (250, 210, 120),
-        (255, 225, 150)
-    ]
-    margem = 5
-    for i, cor in enumerate(degradado):
-        offset = margem - (i * 0.8)
-        pdf.set_draw_color(*cor)
-        pdf.set_line_width(0.8)
-        pdf.rect(offset, offset, 297 - 2 * offset, 210 - 2 * offset)
-
-    # Barras decorativas (topo e rodapé)
-    pdf.set_fill_color(*dourado_base)
+    # Barras decorativas
+    pdf.set_fill_color(*dourado)
     pdf.rect(0, 0, 297, 6, "F")
     pdf.rect(0, 204, 297, 6, "F")
 
@@ -208,11 +194,11 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         pdf.image(logo_transp, x=100, y=55, w=95, h=95)
 
     # Cabeçalho
-    pdf.set_text_color(*dourado_base)
+    pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_xy(0, 15)
     pdf.cell(297, 12, "CERTIFICADO DE EXAME DE FAIXA", align="C")
-    pdf.set_draw_color(*dourado_base)
+    pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.6)
     pdf.line(50, 28, 247, 28)
 
@@ -220,7 +206,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=130, y=30, w=35)
 
-    # Corpo
+    # Corpo do texto
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
@@ -229,12 +215,14 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(10, 68)
     pdf.cell(277, 8, "Certificamos que o(a) aluno(a)", align="C")
 
-    pdf.set_text_color(*dourado_base)
+    pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_xy(10, 80)
     pdf.cell(277, 10, usuario.upper(), align="C")
 
-    # Texto com cor da faixa
+    # ==============================
+    # TEXTO COM COR DA FAIXA
+    # ==============================
     cores_faixa = {
         "Cinza": (169, 169, 169),
         "Amarela": (255, 215, 0),
@@ -269,7 +257,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # Resultado
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_font("Helvetica", "B", 20)
-    pdf.set_text_color(*dourado_base)
+    pdf.set_text_color(*dourado)
     pdf.set_xy(0, 114)
     pdf.cell(297, 10, resultado, align="C")
 
@@ -286,7 +274,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path, x=118, y=126, w=60)
 
-    # QR Code
+    # QR Code centralizado
     caminho_qr = gerar_qrcode(codigo)
     if os.path.exists(caminho_qr):
         qr_w = 24
@@ -304,22 +292,21 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(selo_path):
         pdf.image(selo_path, x=244, y=142, w=34)
 
-    # Linha e rodapé
-    pdf.set_draw_color(*dourado_base)
+    # Linha dourada e rodapé fixo
+    pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.4)
     pdf.line(30, 190, 267, 190)
 
     pdf.set_y(194)
     pdf.set_font("Helvetica", "I", 9)
-    pdf.set_text_color(*dourado_base)
+    pdf.set_text_color(*dourado)
     pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
     # Salvar PDF
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
-    return caminho_pdf
-# =========================================
+    return caminho_pdf    # =========================================
 # MODO EXAME DE FAIXA
 # =========================================
 def modo_exame():
