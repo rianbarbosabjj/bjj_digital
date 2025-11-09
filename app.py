@@ -60,7 +60,6 @@ def criar_banco():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Tabela de resultados
     cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario TEXT,
@@ -73,7 +72,6 @@ def criar_banco():
         codigo_verificacao TEXT
     )''')
 
-    # Tabela de configuração de exames
     cursor.execute('''CREATE TABLE IF NOT EXISTS config_exame (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         faixa TEXT,
@@ -128,6 +126,7 @@ def exportar_certificados_json():
     """)
     registros = cursor.fetchall()
     conn.close()
+
     certificados = [
         {
             "codigo": codigo,
@@ -165,7 +164,7 @@ def normalizar_nome(nome):
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
 # =========================================
-# GERAÇÃO DE PDF
+# GERAÇÃO DE PDF (LAYOUT CORRIGIDO)
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf = FPDF("L", "mm", "A4")
@@ -176,9 +175,11 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_fill_color(*verde_escuro)
     pdf.rect(0, 0, 297, 210, "F")
+
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 26)
     pdf.cell(0, 10, "CERTIFICADO DE EXAME DE FAIXA", align="C", ln=True)
+
     pdf.set_draw_color(*dourado)
     pdf.line(40, 30, 257, 30)
 
@@ -211,6 +212,11 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         assinatura = f"assets/assinaturas/{normalizar_nome(professor)}.png"
         if os.path.exists(assinatura):
             pdf.image(assinatura, x=120, y=135, w=60)
+    pdf.set_y(160)
+    pdf.set_text_color(*branco)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.cell(0, 8, "Assinatura do Professor Responsável", align="C", ln=True)
+    pdf.line(108, 168, 189, 168)
 
     caminho_qr = gerar_qrcode(codigo)
     pdf.image(caminho_qr, x=260, y=150, w=25)
@@ -219,7 +225,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(255, 175)
     pdf.cell(35, 5, f"Código: {codigo}", align="C")
 
-    pdf.set_y(190)
+    pdf.set_y(185)
     pdf.set_font("Helvetica", "I", 9)
     pdf.cell(0, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
@@ -228,7 +234,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     return caminho_pdf
 
 # =========================================
-# MODO EXAME DE FAIXA
+# MODO EXAME DE FAIXA (SEM OPÇÃO PRÉ-SELECIONADA)
 # =========================================
 def modo_exame():
     st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
@@ -256,7 +262,7 @@ def modo_exame():
 
         for i, q in enumerate(questoes, 1):
             st.markdown(f"### {i}. {q['pergunta']}")
-            resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}")
+            resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
             st.session_state.respostas[f"resp_{i}"] = resp
 
         if st.button("Finalizar Exame"):
@@ -290,7 +296,7 @@ def painel_certificados():
             st.dataframe(df[["usuario","faixa","pontuacao","data","codigo_verificacao"]])
 
 # =========================================
-# DASHBOARD DO PROFESSOR (com Plotly)
+# DASHBOARD DO PROFESSOR
 # =========================================
 def dashboard_professor():
     st.markdown("<h1 style='color:#FFD700;'>📈 Dashboard do Professor</h1>", unsafe_allow_html=True)
