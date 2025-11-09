@@ -318,18 +318,24 @@ def modo_exame():
     professor = st.text_input("Nome do professor responsável:")
     tema = "regras"
 
+    # Inicializa o estado do exame
     if "exame_iniciado" not in st.session_state:
         st.session_state.exame_iniciado = False
         st.session_state.respostas = {}
 
+    # Botão para iniciar o exame
     if not st.session_state.exame_iniciado:
         if st.button("Iniciar Exame"):
             questoes = carregar_questoes(tema)
+            if not questoes:
+                st.error("Nenhuma questão encontrada para o tema selecionado.")
+                return
             random.shuffle(questoes)
             st.session_state.questoes = questoes[:5]
             st.session_state.exame_iniciado = True
             st.rerun()
 
+    # Exibição do exame
     if st.session_state.exame_iniciado:
         questoes = st.session_state.questoes
         total = len(questoes)
@@ -339,25 +345,51 @@ def modo_exame():
             resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
             st.session_state.respostas[f"resp_{i}"] = resp
 
+        # Finaliza o exame
         if st.button("Finalizar Exame"):
+            # Cálculo da pontuação
             pontuacao = sum(
                 1 for i, q in enumerate(questoes, 1)
-                if st.session_state.respostas[f"resp_{i}"].startswith(q["resposta"])
+                if st.session_state.respostas.get(f"resp_{i}", "").startswith(q["resposta"])
             )
+
             codigo = gerar_codigo_unico()
             salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
             exportar_certificados_json()
+
+            # Gera o certificado
             caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+
+            # Verifica se o arquivo foi criado
+            if not os.path.exists(caminho_pdf):
+                st.error("❌ Ocorreu um problema ao gerar o certificado. Tente novamente.")
+                return
 
             percentual = int((pontuacao / total) * 100)
             if pontuacao >= (total * 0.6):
-                st.success(f"🎉 Parabéns, {usuario}! Você foi **APROVADO**, acertando {pontuacao}/{total} questões e obtendo {percentual}% de aproveitamento!")
+                st.success(
+                    f"🎉 Parabéns, {usuario}! Você foi **APROVADO**, "
+                    f"acertando {pontuacao}/{total} questões e obtendo {percentual}% de aproveitamento!"
+                )
             else:
-                st.error(f"{usuario}, você acertou {pontuacao}/{total} questões ({percentual}%). Continue se preparando para alcançar a próxima faixa!")
+                st.error(
+                    f"{usuario}, você acertou {pontuacao}/{total} questões ({percentual}%). "
+                    "Continue se preparando para alcançar a próxima faixa!"
+                )
 
-            with open(caminho_pdf, "rb") as f:
-                st.download_button("📄 Baixar Certificado", f, file_name=os.path.basename(caminho_pdf))
-
+            # Reabre o PDF com segurança para o botão de download
+            try:
+                with open(caminho_pdf, "rb") as f:
+                    pdf_bytes = f.read()
+                st.download_button(
+                    label="📄 Baixar Certificado",
+                    data=pdf_bytes,
+                    file_name=os.path.basename(caminho_pdf),
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"⚠️ Erro ao preparar o download do certificado: {e}")
 # =========================================
 # HISTÓRICO DE CERTIFICADOS
 # =========================================
