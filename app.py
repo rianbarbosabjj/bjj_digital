@@ -270,6 +270,50 @@ def dashboard_professor():
                           title="Taxa de Aprovação", color_discrete_sequence=["#FFD700", "#0e2d26"])
             st.plotly_chart(fig2, use_container_width=True)
 
-    # As demais abas (Histórico + Questões) permanecem iguais...
-    # (mantendo filtros, exportação CSV e gerenciamento)
-    # ... corte de código aqui para brevidade ...
+    with abas[1]:
+        st.markdown("### 📋 Histórico de Exames")
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query("SELECT usuario, faixa, pontuacao, data, codigo_verificacao FROM resultados", conn)
+        conn.close()
+        st.dataframe(df)
+        csv = df.to_csv(index=False).encode("utf-8")
+        st.download_button("📤 Exportar CSV", csv, "relatorio_exames.csv", "text/csv")
+
+    with abas[2]:
+        st.markdown("### ⚙️ Gerenciar Questões")
+        st.info("Em breve, módulo completo de configuração de questões!")
+
+# =========================================
+# INTERFACE E MENU PRINCIPAL
+# =========================================
+def mostrar_cabecalho(titulo):
+    st.markdown(f"<h1>{titulo}</h1>", unsafe_allow_html=True)
+
+def modo_exame():
+    mostrar_cabecalho("🏁 Exame de Faixa")
+    st.info("Módulo de exame em desenvolvimento. Em breve disponível!")
+
+def painel_certificados():
+    mostrar_cabecalho("📜 Histórico de Certificados")
+    st.info("Histórico de certificados em desenvolvimento. Em breve disponível!")
+
+# =========================================
+# MAIN
+# =========================================
+def main():
+    st.sidebar.image("assets/logo.png", use_container_width=True)
+    st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
+    menu = st.sidebar.radio("Navegar:", [
+        "🏁 Exame de Faixa",
+        "📜 Histórico de Certificados",
+        "📈 Dashboard do Professor"
+    ])
+    if menu == "🏁 Exame de Faixa":
+        modo_exame()
+    elif menu == "📜 Histórico de Certificados":
+        painel_certificados()
+    elif menu == "📈 Dashboard do Professor":
+        dashboard_professor()
+
+if __name__ == "__main__":
+    main()
