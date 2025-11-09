@@ -1,7 +1,6 @@
 streamlit
 pillow
-altair
 pandas
-fpdf2==2.7.9
-qrcode==7.4.2
-Plotly
+fpdf2
+qrcode
+plotly
