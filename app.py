@@ -51,14 +51,16 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # =========================================
-# BANCO DE DADOS
+# BANCO DE DADOS (COM VERIFICAÇÃO SEGURA)
 # =========================================
-DB_PATH = "database/bjj_digital.db"
+DB_PATH = os.path.join("database", "bjj_digital.db")
 
 def criar_banco():
     os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+
+    # Tabela de resultados
     cursor.execute('''CREATE TABLE IF NOT EXISTS resultados (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario TEXT,
@@ -70,6 +72,8 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP,
         codigo_verificacao TEXT
     )''')
+
+    # Tabela de configuração de exames
     cursor.execute('''CREATE TABLE IF NOT EXISTS config_exame (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         faixa TEXT,
@@ -77,10 +81,14 @@ def criar_banco():
         professor TEXT,
         data_config DATETIME DEFAULT CURRENT_TIMESTAMP
     )''')
+
     conn.commit()
     conn.close()
 
-criar_banco()
+try:
+    criar_banco()
+except Exception as e:
+    st.error(f"Erro ao criar o banco de dados: {e}")
 
 # =========================================
 # FUNÇÕES AUXILIARES
@@ -224,7 +232,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 # =========================================
 def modo_exame():
     st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
-
     faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
     faixa = st.selectbox("Selecione a faixa:", faixas)
     usuario = st.text_input("Nome do aluno:")
@@ -287,7 +294,7 @@ def painel_certificados():
 # =========================================
 def dashboard_professor():
     st.markdown("<h1 style='color:#FFD700;'>📈 Dashboard do Professor</h1>", unsafe_allow_html=True)
-    abas = st.tabs(["📊 Indicadores", "📋 Histórico", "⚙️ Gerenciar Questões"])
+    abas = st.tabs(["📊 Indicadores", "📋 Histórico"])
 
     with abas[0]:
         conn = sqlite3.connect(DB_PATH)
@@ -327,10 +334,6 @@ def dashboard_professor():
         st.dataframe(df)
         csv = df.to_csv(index=False).encode("utf-8")
         st.download_button("📤 Exportar CSV", csv, "relatorio_exames.csv", "text/csv")
-
-    with abas[2]:
-        st.markdown("### ⚙️ Gerenciar Questões")
-        st.info("Em breve, módulo completo de configuração de questões!")
 
 # =========================================
 # MENU PRINCIPAL
