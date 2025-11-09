@@ -222,7 +222,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 14)
-    linha2 = f"concluiu o exame teórico para a faixa {faixa}, obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
+    linha2 = f",concluiu o exame teórico para a faixa {faixa}, obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
     pdf.set_xy(10, 94)
     pdf.multi_cell(277, 8, linha2, align="C")
 
