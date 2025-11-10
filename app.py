@@ -219,15 +219,15 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # ========================
     # TEXTO CENTRAL
     # ========================
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 12)
+pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", 20) # <-- Fonte 20
     pdf.set_xy(0, 80)
-    pdf.cell(297, 6, "Certificamos que o(a) aluno(a)", align="C")
+    pdf.cell(297, 10, "Certificamos que o(a) aluno(a)", align="C") # Altura 10
 
     # NOME DO ALUNO
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 20)
-    pdf.set_xy(0, 90)
+    pdf.set_font("Helvetica", "B", 20) # Fonte 20
+    pdf.set_xy(0, 95) # <-- Posição Y ajustada
     pdf.cell(297, 10, usuario.upper(), align="C")
 
     # Texto com a faixa
@@ -244,23 +244,26 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     cor_faixa = cores_faixa.get(faixa, preto)
 
     pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.set_xy(0, 104)
-    pdf.cell(297, 6, "concluiu o exame teórico para a faixa", align="C")
+    pdf.set_font("Helvetica", "", 20) # Fonte 20
+    pdf.set_xy(0, 110) # <-- Posição Y ajustada
+    pdf.cell(297, 10, "concluiu o exame teórico para a faixa", align="C") # Altura 10
 
     # Faixa colorida
     pdf.set_text_color(*cor_faixa)
-    pdf.set_font("Helvetica", "B", 12)
-    pdf.set_xy(0, 112)
-    pdf.cell(297, 6, faixa.upper(), align="C")
+    pdf.set_font("Helvetica", "B", 20) # <-- Fonte 20 e Negrito
+    pdf.set_xy(0, 125) # <-- Posição Y ajustada
+    pdf.cell(297, 10, faixa.upper(), align="C") # Altura 10
 
-    # Continuação do texto
+    # --- Continuação do texto (CORRIGIDO com multi_cell) ---
     pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 12)
-    pdf.set_xy(0, 118)
-    pdf.cell(297, 6, f"obtendo {percentual}% de aproveitamento,", align="C")
-    pdf.set_xy(0, 124)
-    pdf.cell(297, 6, f"realizado em {data_hora}.", align="C")
+    pdf.set_font("Helvetica", "", 20) # <-- Fonte 20
+
+    # Juntamos as duas últimas frases
+    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
+
+    # Usamos multi_cell para centralizar e quebrar a linha SO SE NECESSÁRIO
+    pdf.set_xy(0, 140) # <-- Posição Y ajustada
+    pdf.multi_cell(297, 10, texto_final, align="C") # Altura 10
 
     # ========================
     # RESULTADO
@@ -326,7 +329,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
      # Linha do rodapé
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.6)
-    pdf.line(70, 190, 227, 190)
+    pdf.line(30, 190, 268, 190)
  
     # ========================
     # RODAPÉ
