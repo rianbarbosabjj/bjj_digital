@@ -323,12 +323,12 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_line_width(0.5)
     pdf.line(100, 173, 197, 173)
     
-        # ========================
+    # ========================
     # RODAPÉ
     # ========================
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.6)
-    pdf.line(0, 188)
+    pdf.line(100, 188, 197, 173)
  
     # ========================
     # RODAPÉ
