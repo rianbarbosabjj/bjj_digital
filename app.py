@@ -247,32 +247,26 @@ def modo_exame():
     professor = st.text_input("Nome do professor responsável:")
     tema = "regras"
 
-    # Inicializa sessão
+    # --- Inicialização limpa ---
     if "exame_iniciado" not in st.session_state:
         st.session_state.exame_iniciado = False
+    if "exame_finalizado" not in st.session_state:
         st.session_state.exame_finalizado = False
+    if "respostas" not in st.session_state:
         st.session_state.respostas = {}
+    if "certificado_path" not in st.session_state:
         st.session_state.certificado_path = None
+    if "tempo_inicio" not in st.session_state:
         st.session_state.tempo_inicio = None
+    if "tempo_total" not in st.session_state:
         st.session_state.tempo_total = None
 
-    # Se o exame já terminou, exibe resultado fixo
-    if st.session_state.exame_finalizado:
-        caminho_pdf = st.session_state.certificado_path
-        if caminho_pdf and os.path.exists(caminho_pdf):
-            with open(caminho_pdf, "rb") as f:
-                st.download_button(
-                    label="📄 Baixar Certificado",
-                    data=f,
-                    file_name=os.path.basename(caminho_pdf),
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-        st.info("Você pode navegar para outro módulo no menu lateral.")
-        return
+    # --- Caso já tenha certificado armazenado erroneamente ---
+    if not st.session_state.exame_iniciado and not st.session_state.exame_finalizado:
+        st.session_state.certificado_path = None
 
-    # Instruções antes do exame
-    if not st.session_state.exame_iniciado:
+    # --- Tela inicial (exame não iniciado nem finalizado) ---
+    if not st.session_state.exame_iniciado and not st.session_state.exame_finalizado:
         st.markdown("""
         ### 🧩 Instruções:
         - O exame contém 5 questões aleatórias sobre o tema selecionado.
@@ -291,14 +285,30 @@ def modo_exame():
             st.session_state.exame_finalizado = False
             st.session_state.tempo_inicio = time.time()
             st.session_state.tempo_total = len(st.session_state.questoes) * 180
+            st.session_state.respostas = {}
             st.rerun()
         return
 
-    # Calcula tempo restante
+    # --- Exibição após finalização ---
+    if st.session_state.exame_finalizado:
+        caminho_pdf = st.session_state.certificado_path
+        if caminho_pdf and os.path.exists(caminho_pdf):
+            st.success("🎉 Exame concluído! Seu resultado está abaixo:")
+            with open(caminho_pdf, "rb") as f:
+                st.download_button(
+                    label="📄 Baixar Certificado",
+                    data=f,
+                    file_name=os.path.basename(caminho_pdf),
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+        else:
+            st.info("✅ Exame finalizado. Você pode navegar para outro módulo no menu lateral.")
+        return
+
+    # --- Cronômetro ativo ---
     tempo_decorrido = int(time.time() - st.session_state.tempo_inicio)
     tempo_restante = st.session_state.tempo_total - tempo_decorrido
-
-    # Se o tempo acabar, finaliza automaticamente
     if tempo_restante <= 0:
         st.warning("⏰ O tempo do exame acabou!")
         finalizar_exame(usuario, faixa, professor, tema)
@@ -308,7 +318,7 @@ def modo_exame():
     tempo_display = f"⏰ Tempo restante: {minutos:02d}:{segundos:02d}"
     st.markdown(f"<h3 style='color:#FFD700; text-align:center;'>{tempo_display}</h3>", unsafe_allow_html=True)
 
-    # Exibe questões
+    # --- Questões ---
     questoes = st.session_state.questoes
     total = len(questoes)
     st.markdown(f"#### Questões do Exame ({total})")
@@ -322,17 +332,14 @@ def modo_exame():
         resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
         st.session_state.respostas[f"resp_{i}"] = resp
 
-    # Finalizar manualmente
     if st.button("✅ Finalizar Exame"):
         finalizar_exame(usuario, faixa, professor, tema)
         return
 
-    # Atualiza contagem regressiva enquanto o exame estiver ativo
+    # Atualiza contagem regressiva
     time.sleep(1)
     st.rerun()
-
-
-# =========================================
+    # =========================================
 # FINALIZAR EXAME (VERSÃO FIXA)
 # =========================================
 def finalizar_exame(usuario, faixa, professor, tema):
