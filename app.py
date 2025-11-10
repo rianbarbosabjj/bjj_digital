@@ -219,8 +219,8 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # ========================
     # TEXTO CENTRAL
     # ========================
-pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 20) # Fonte 20
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", 20) # <-- LINHA 223 CORRIGIDA (alinhada)
     pdf.set_xy(0, 80)
     pdf.cell(297, 10, "Certificamos que o(a) aluno(a)", align="C") # Altura 10
 
