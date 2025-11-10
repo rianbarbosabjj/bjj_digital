@@ -235,7 +235,60 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     caminho_pdf=os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
     return caminho_pdf
+# =========================================
+# MODO EXAME
+# =========================================
+def modo_exame():
+    st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
+    faixas=["Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"]
+    faixa=st.selectbox("Selecione a faixa:",faixas)
+    usuario=st.text_input("Nome do aluno:")
+    professor=st.text_input("Nome do professor responsável:")
+    tema="regras"
 
+    if "exame_iniciado" not in st.session_state:
+        st.session_state.exame_iniciado=False
+        st.session_state.respostas={}
+        st.session_state.certificado_path=None
+
+    if not st.session_state.exame_iniciado:
+        if st.button("Iniciar Exame"):
+            questoes=carregar_questoes(tema)
+            if not questoes:
+                st.error("Nenhuma questão encontrada para o tema selecionado.")
+                return
+            random.shuffle(questoes)
+            st.session_state.questoes=questoes[:5]
+            st.session_state.exame_iniciado=True
+            st.rerun()
+
+    if st.session_state.exame_iniciado:
+        questoes=st.session_state.questoes
+        total=len(questoes)
+        for i,q in enumerate(questoes,1):
+            st.markdown(f"### {i}. {q['pergunta']}")
+            if q.get("imagem"):
+                st.image(q["imagem"],use_container_width=True)
+            if q.get("video"):
+                st.video(q["video"])
+            resp=st.radio("Escolha:",q["opcoes"],key=f"resp_{i}",index=None)
+            st.session_state.respostas[f"resp_{i}"]=resp
+
+        if st.button("Finalizar Exame"):
+            pontuacao=sum(1 for i,q in enumerate(questoes,1)
+                          if st.session_state.respostas.get(f"resp_{i}","").startswith(q["resposta"]))
+            codigo=gerar_codigo_unico()
+            salvar_resultado(usuario,"Exame",tema,faixa,pontuacao,"00:05:00",codigo)
+            caminho_pdf=gerar_pdf(usuario,faixa,pontuacao,total,codigo,professor)
+            st.session_state.certificado_path=caminho_pdf
+            st.rerun()
+
+    if st.session_state.get("certificado_path"):
+        caminho_pdf=st.session_state.certificado_path
+        with open(caminho_pdf,"rb") as f:
+            st.download_button("📄 Baixar Certificado",f,
+                               file_name=os.path.basename(caminho_pdf),
+                               mime="application/pdf")
 # =========================================
 # PAINEL DO PROFESSOR
 # =========================================
