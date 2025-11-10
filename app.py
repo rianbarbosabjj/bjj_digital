@@ -299,7 +299,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "I", 8)
-    pdf.set_xy(235, 182)
+    pdf.set_xy(225, 182)
     pdf.cell(60, 6, f"Código: {codigo}", align="R")
 
     # ========================
@@ -325,7 +325,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.6)
-    pdf.line(70, 188, 227, 188)
+    pdf.line(70, 189, 227, 188)
  
     # ========================
     # RODAPÉ
