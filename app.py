@@ -168,7 +168,7 @@ def normalizar_nome(nome):
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """
-    Gera o certificado idêntico ao modelo visual (sem imagem de fundo).
+    Gera o certificado idêntico ao modelo visual (COM textura de segurança).
     """
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
@@ -180,12 +180,30 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     dourado = (218, 165, 32)
     preto = (40, 40, 40)
     branco = (255, 255, 255)
+    cinza_claro = (220, 220, 220) # <-- COR NOVA
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
     # Fundo branco
     pdf.set_fill_color(*branco)
     pdf.rect(0, 0, 297, 210, "F")
+
+    # ========================
+    # TEXTURA DE SEGURANÇA (LINHAS) - (OPÇÃO 2)
+    # ========================
+    pdf.set_draw_color(*cinza_claro) 
+    pdf.set_line_width(0.1) # Linhas bem finas
+
+    # Cria várias linhas horizontais
+    for i in range(1, 42): # 42 linhas (210 / 5)
+        y = i * 5 # A cada 5mm
+        pdf.line(x1=0, y1=y, x2=297, y2=y)
+
+    # Cria várias linhas verticais
+    for i in range(1, 60): # 60 linhas (297 / 5)
+        x = i * 5 # A cada 5mm
+        pdf.line(x1=x, y1=0, x2=x, y2=210)
+    # ========================
 
     # ========================
     # MOLDURA DOURADA DUPLA
@@ -216,7 +234,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=133, y=40, w=32)
 
-# ========================
+    # ========================
     # TEXTO CENTRAL (COM AJUSTE AUTOMÁTICO)
     # ========================
     
@@ -231,7 +249,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.cell(largura_pagina, altura_linha, "Certificamos que o(a) aluno(a)", align="C")
 
     # --- 2. NOME DO ALUNO (COM MULTI_CELL) ---
-    # Esta é a parte importante. multi_cell quebra a linha se o nome for grande.
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", fonte_tamanho)
     
@@ -329,7 +346,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.6)
     pdf.line(30, 190, 268, 190)
- 
+
     # ========================
     # RODAPÉ
     # ========================
