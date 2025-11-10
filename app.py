@@ -167,9 +167,15 @@ def normalizar_nome(nome):
 # =========================================
 # GERAÇÃO DE PDF (FINAL COM QUEBRA DE LINHA)
 # =========================================
+import os
+from fpdf import FPDF
+from datetime import datetime
+import qrcode
+# (Sem import math)
+
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """
-    Gera o certificado idêntico ao modelo visual (COM textura de segurança).
+    Gera o certificado com fundo branco.
     """
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
@@ -181,29 +187,16 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     dourado = (218, 165, 32)
     preto = (40, 40, 40)
     branco = (255, 255, 255)
-    cinza_claro = (220, 220, 220) # <-- COR NOVA
+    cinza_claro = (220, 220, 220) 
+    # (Cores bege removidas)
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # Fundo branco
+    # ========================
+    # Fundo branco (Restaurado)
+    # ========================
     pdf.set_fill_color(*branco)
     pdf.rect(0, 0, 297, 210, "F")
-
-    # ========================
-    # TEXTURA DE SEGURANÇA (LINHAS) - (OPÇÃO 2)
-    # ========================
-    pdf.set_draw_color(*cinza_claro) 
-    pdf.set_line_width(0.1) # Linhas bem finas
-
-    # Cria várias linhas horizontais
-    for i in range(1, 42): # 42 linhas (210 / 5)
-        y = i * 5 # A cada 5mm
-        pdf.line(x1=0, y1=y, x2=297, y2=y)
-
-    # Cria várias linhas verticais
-    for i in range(1, 60): # 60 linhas (297 / 5)
-        x = i * 5 # A cada 5mm
-        pdf.line(x1=x, y1=0, x2=x, y2=210)
     # ========================
 
     # ========================
@@ -253,16 +246,13 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", fonte_tamanho)
     
-    # Pega a posição Y atual (depois de "Certificamos...") e desce um pouco
     pos_y_nome = pdf.get_y() + altura_linha
     pdf.set_xy(0, pos_y_nome)
     pdf.multi_cell(largura_pagina, altura_linha, usuario.upper(), align="C")
 
     # --- 3. "concluiu o exame..." ---
-    # Pega a posição Y ATUAL (que pode ter mudado se o nome quebrou a linha)
     pos_y_concluiu = pdf.get_y() 
     
-    # Define a cor da faixa (como no seu código)
     cores_faixa = {
         "Cinza": (169, 169, 169), "Amarela": (255, 215, 0), "Laranja": (255, 140, 0),
         "Verde": (0, 128, 0), "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
@@ -282,12 +272,19 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0, pos_y_faixa)
     pdf.cell(largura_pagina, altura_linha, faixa.upper(), align="C")
 
-    # --- 5. Continuação do texto (Aproveitamento) ---
+    # --- 5. STATUS (APROVADO) ---
+    pos_y_status = pdf.get_y() + altura_linha
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "B", fonte_tamanho) # Negrito
+    pdf.set_xy(0, pos_y_status)
+    pdf.cell(largura_pagina, altura_linha, "APROVADO", align="C")
+
+    # --- 6. Continuação do texto (Aproveitamento) ---
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", fonte_tamanho)
     texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
     
-    pos_y_final = pdf.get_y() + altura_linha
+    pos_y_final = pdf.get_y() + altura_linha # Pega a pos Y depois do "APROVADO"
     pdf.set_xy(0, pos_y_final)
     pdf.multi_cell(largura_pagina, altura_linha, texto_final, align="C")
 
