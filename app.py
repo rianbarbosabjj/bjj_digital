@@ -10,6 +10,7 @@ import unicodedata
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import math
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -168,7 +169,7 @@ def normalizar_nome(nome):
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """
-    Gera o certificado idêntico ao modelo visual (COM textura de segurança).
+    Gera o certificado idêntico ao modelo visual (COM textura radial).
     """
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
@@ -180,7 +181,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     dourado = (218, 165, 32)
     preto = (40, 40, 40)
     branco = (255, 255, 255)
-    cinza_claro = (220, 220, 220) # <-- COR NOVA
+    cinza_claro = (220, 220, 220) 
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
@@ -189,20 +190,28 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.rect(0, 0, 297, 210, "F")
 
     # ========================
-    # TEXTURA DE SEGURANÇA (LINHAS) - (OPÇÃO 2)
+    # TEXTURA DE SEGURANÇA (RADIAL / SUNBURST) - (NOVA SUGESTÃO)
     # ========================
     pdf.set_draw_color(*cinza_claro) 
-    pdf.set_line_width(0.1) # Linhas bem finas
+    pdf.set_line_width(0.1)
 
-    # Cria várias linhas horizontais
-    for i in range(1, 42): # 42 linhas (210 / 5)
-        y = i * 5 # A cada 5mm
-        pdf.line(x1=0, y1=y, x2=297, y2=y)
+    x_centro = 297 / 2
+    y_centro = 210 / 2
+    raio = 160 # Um raio grande para cobrir a página (A4 é 297x210)
 
-    # Cria várias linhas verticais
-    for i in range(1, 60): # 60 linhas (297 / 5)
-        x = i * 5 # A cada 5mm
-        pdf.line(x1=x, y1=0, x2=x, y2=210)
+    # Você pode mudar este número para mais ou menos linhas
+    num_linhas = 90 
+    
+    for i in range(num_linhas):
+        # Calcula o ângulo para cada linha (em radianos)
+        angulo = math.radians((i / num_linhas) * 360) 
+        
+        # Calcula o ponto final da linha usando seno e cosseno
+        x_fim = x_centro + raio * math.cos(angulo)
+        y_fim = y_centro + raio * math.sin(angulo)
+        
+        # Desenha a linha do centro até a borda
+        pdf.line(x_centro, y_centro, x_fim, y_fim)
     # ========================
 
     # ========================
@@ -361,8 +370,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
-    return caminho_pdf
-    
+    return caminho_pdf    
 # =========================================
 # MODO EXAME DE FAIXA (DOWNLOAD PERSISTENTE)
 # =========================================
