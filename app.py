@@ -323,9 +323,10 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_line_width(0.5)
     pdf.line(100, 173, 197, 173)
     
+     # Linha do rodapé
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.6)
-    pdf.line(70, 190, 227, 188)
+    pdf.line(70, 190, 227, 190)
  
     # ========================
     # RODAPÉ
