@@ -250,10 +250,26 @@ def modo_exame():
     # Inicializa sessão
     if "exame_iniciado" not in st.session_state:
         st.session_state.exame_iniciado = False
+        st.session_state.exame_finalizado = False
         st.session_state.respostas = {}
         st.session_state.certificado_path = None
         st.session_state.tempo_inicio = None
         st.session_state.tempo_total = None
+
+    # Se o exame já terminou, exibe resultado fixo
+    if st.session_state.exame_finalizado:
+        caminho_pdf = st.session_state.certificado_path
+        if caminho_pdf and os.path.exists(caminho_pdf):
+            with open(caminho_pdf, "rb") as f:
+                st.download_button(
+                    label="📄 Baixar Certificado",
+                    data=f,
+                    file_name=os.path.basename(caminho_pdf),
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+        st.info("Você pode navegar para outro módulo no menu lateral.")
+        return
 
     # Instruções antes do exame
     if not st.session_state.exame_iniciado:
@@ -272,26 +288,25 @@ def modo_exame():
             random.shuffle(questoes)
             st.session_state.questoes = questoes[:5]
             st.session_state.exame_iniciado = True
+            st.session_state.exame_finalizado = False
             st.session_state.tempo_inicio = time.time()
-            st.session_state.tempo_total = len(st.session_state.questoes) * 180  # 3 minutos por questão
+            st.session_state.tempo_total = len(st.session_state.questoes) * 180
             st.rerun()
         return
 
-    # Calcula o tempo restante
+    # Calcula tempo restante
     tempo_decorrido = int(time.time() - st.session_state.tempo_inicio)
     tempo_restante = st.session_state.tempo_total - tempo_decorrido
 
-    minutos = tempo_restante // 60
-    segundos = tempo_restante % 60
-
-    # Exibe contagem regressiva visível
-    if tempo_restante > 0:
-        tempo_display = f"⏰ Tempo restante: {minutos:02d}:{segundos:02d}"
-        st.markdown(f"<h3 style='color:#FFD700; text-align:center;'>{tempo_display}</h3>", unsafe_allow_html=True)
-    else:
+    # Se o tempo acabar, finaliza automaticamente
+    if tempo_restante <= 0:
         st.warning("⏰ O tempo do exame acabou!")
         finalizar_exame(usuario, faixa, professor, tema)
         return
+
+    minutos, segundos = divmod(tempo_restante, 60)
+    tempo_display = f"⏰ Tempo restante: {minutos:02d}:{segundos:02d}"
+    st.markdown(f"<h3 style='color:#FFD700; text-align:center;'>{tempo_display}</h3>", unsafe_allow_html=True)
 
     # Exibe questões
     questoes = st.session_state.questoes
@@ -307,17 +322,18 @@ def modo_exame():
         resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
         st.session_state.respostas[f"resp_{i}"] = resp
 
-    # Botão de finalizar manualmente
+    # Finalizar manualmente
     if st.button("✅ Finalizar Exame"):
         finalizar_exame(usuario, faixa, professor, tema)
+        return
 
-    # Atualiza contagem regressiva automaticamente
+    # Atualiza contagem regressiva enquanto o exame estiver ativo
     time.sleep(1)
     st.rerun()
 
 
 # =========================================
-# FUNÇÃO AUXILIAR PARA FINALIZAR EXAME
+# FINALIZAR EXAME (VERSÃO FIXA)
 # =========================================
 def finalizar_exame(usuario, faixa, professor, tema):
     questoes = st.session_state.questoes
@@ -335,10 +351,9 @@ def finalizar_exame(usuario, faixa, professor, tema):
     salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
     caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
     st.session_state.certificado_path = caminho_pdf
-    st.session_state.exame_finalizado = True  # 👈 controla exibição pós-exame
-    st.session_state.exame_iniciado = False   # para travar o cronômetro
+    st.session_state.exame_finalizado = True
+    st.session_state.exame_iniciado = False
 
-    # Exibe resultado sem rerun
     if aprovado:
         st.success(f"🎉 Parabéns, {usuario}! Você foi **{status}** e obteve {percentual}% de acertos!")
         with open(caminho_pdf, "rb") as f:
@@ -352,14 +367,6 @@ def finalizar_exame(usuario, faixa, professor, tema):
     else:
         st.error(f"❌ {usuario}, você **não obteve o percentual mínimo de acerto para aprovação** ({percentual}%). "
                  f"Tente novamente em 3 dias e continue se preparando!")
-
-    # Botão de reinício visível após o resultado
-    if st.button("🔁 Reiniciar Exame"):
-        st.session_state.exame_iniciado = False
-        st.session_state.exame_finalizado = False
-        st.session_state.respostas = {}
-        st.session_state.certificado_path = None
-        st.rerun()
 # =========================================
 # PAINEL DO PROFESSOR
 # =========================================
