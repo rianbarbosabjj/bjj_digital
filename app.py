@@ -216,85 +216,61 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=133, y=40, w=32)
 
-    # ========================
-    # TEXTO CENTRAL (EM UMA ÚNICA LINHA)
+# ========================
+    # TEXTO CENTRAL (COM AJUSTE AUTOMÁTICO)
     # ========================
     
-    # --- 1. Definições ---
     largura_pagina = 297
-    y_posicao = 95 # Posição vertical da sua linha de texto
-    altura_linha = 10 # Altura da célula
-    fonte_tamanho = 16 # Tamanho da fonte padrão
+    altura_linha = 10
+    fonte_tamanho = 16
 
-    # Textos que vamos juntar
-    texto1 = "Certificamos que o(a) aluno(a) "
-    texto2 = usuario.upper()
-    texto3 = " concluiu o exame teórico para a faixa "
+    # --- 1. "Certificamos que..." ---
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", fonte_tamanho)
+    pdf.set_xy(0, 80) # Posição Y inicial
+    pdf.cell(largura_pagina, altura_linha, "Certificamos que o(a) aluno(a)", align="C")
 
-    # Pega a cor da faixa (como no seu código)
+    # --- 2. NOME DO ALUNO (COM MULTI_CELL) ---
+    # Esta é a parte importante. multi_cell quebra a linha se o nome for grande.
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", fonte_tamanho)
+    
+    # Pega a posição Y atual (depois de "Certificamos...") e desce um pouco
+    pos_y_nome = pdf.get_y() + altura_linha
+    pdf.set_xy(0, pos_y_nome)
+    pdf.multi_cell(largura_pagina, altura_linha, usuario.upper(), align="C")
+
+    # --- 3. "concluiu o exame..." ---
+    # Pega a posição Y ATUAL (que pode ter mudado se o nome quebrou a linha)
+    pos_y_concluiu = pdf.get_y() 
+    
+    # Define a cor da faixa (como no seu código)
     cores_faixa = {
-        "Cinza": (169, 169, 169),
-        "Amarela": (255, 215, 0),
-        "Laranja": (255, 140, 0),
-        "Verde": (0, 128, 0),
-        "Azul": (30, 144, 255),
-        "Roxa": (128, 0, 128),
-        "Marrom": (139, 69, 19),
-        "Preta": (0, 0, 0)
+        "Cinza": (169, 169, 169), "Amarela": (255, 215, 0), "Laranja": (255, 140, 0),
+        "Verde": (0, 128, 0), "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
+        "Marrom": (139, 69, 19), "Preta": (0, 0, 0)
     }
     cor_faixa = cores_faixa.get(faixa, preto)
-    texto4 = faixa.upper()
 
-    # --- 2. Calcular a largura total ---
-    pdf.set_font("Helvetica", "", fonte_tamanho)
-    largura1 = pdf.get_string_width(texto1)
-    
-    pdf.set_font("Helvetica", "B", fonte_tamanho)
-    largura2 = pdf.get_string_width(texto2)
-    
-    pdf.set_font("Helvetica", "", fonte_tamanho)
-    largura3 = pdf.get_string_width(texto3)
-    
-    pdf.set_font("Helvetica", "B", fonte_tamanho) 
-    largura4 = pdf.get_string_width(texto4)
-
-    largura_total = largura1 + largura2 + largura3 + largura4
-
-    # --- 3. Encontrar o X inicial para centralizar ---
-    x_inicio = (largura_pagina - largura_total) / 2
-
-    # --- 4. Escrever os textos em sequência ---
-    pdf.set_xy(x_inicio, y_posicao)
-
-    # Parte 1: "Certificamos que..."
-    pdf.set_font("Helvetica", "", fonte_tamanho)
     pdf.set_text_color(*preto)
-    pdf.cell(largura1, altura_linha, texto1)
-
-    # Parte 2: Nome (Dourado, Negrito)
-    pdf.set_font("Helvetica", "B", fonte_tamanho)
-    pdf.set_text_color(*dourado)
-    pdf.cell(largura2, altura_linha, texto2)
-
-    # Parte 3: "concluiu..."
     pdf.set_font("Helvetica", "", fonte_tamanho)
-    pdf.set_text_color(*preto)
-    pdf.cell(largura3, altura_linha, texto3)
+    pdf.set_xy(0, pos_y_concluiu)
+    pdf.cell(largura_pagina, altura_linha, "concluiu o exame teórico para a faixa", align="C")
 
-    # Parte 4: Faixa (Cor, Negrito)
-    pdf.set_font("Helvetica", "B", fonte_tamanho)
+    # --- 4. FAIXA ---
+    pos_y_faixa = pdf.get_y() + altura_linha
     pdf.set_text_color(*cor_faixa)
-    pdf.cell(largura4, altura_linha, texto4)
+    pdf.set_font("Helvetica", "B", fonte_tamanho)
+    pdf.set_xy(0, pos_y_faixa)
+    pdf.cell(largura_pagina, altura_linha, faixa.upper(), align="C")
 
     # --- 5. Continuação do texto (Aproveitamento) ---
     pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", fonte_tamanho) # Mesmo tamanho de fonte
-
-    # Juntamos as duas últimas frases
+    pdf.set_font("Helvetica", "", fonte_tamanho)
     texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
-
-    # Usamos multi_cell para centralizar
-    pdf.set_xy(0, y_posicao + altura_linha + 5) # Posição Y (abaixo da linha anterior)
+    
+    pos_y_final = pdf.get_y() + altura_linha
+    pdf.set_xy(0, pos_y_final)
     pdf.multi_cell(largura_pagina, altura_linha, texto_final, align="C")
 
     # ========================
