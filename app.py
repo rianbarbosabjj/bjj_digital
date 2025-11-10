@@ -299,7 +299,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "I", 8)
-    pdf.set_xy(230, 182)
+    pdf.set_xy(235, 182)
     pdf.cell(60, 6, f"Código: {codigo}", align="R")
 
     # ========================
@@ -328,8 +328,8 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # ========================
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "I", 9)
-    pdf.set_xy(0, 196)
-    pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
+    pdf.set_xy(0, 185)
+    pdf.cell(297, 6, "Plataforma BJJ Digital", align="C")
 
     # ========================
     # SALVAR CERTIFICADO
