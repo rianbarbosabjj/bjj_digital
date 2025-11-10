@@ -274,7 +274,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     # --- 5. STATUS (APROVADO) ---
     pos_y_status = pdf.get_y() + altura_linha
-    pdf.set_text_color(*preto)
+    pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", fonte_tamanho) # Negrito
     pdf.set_xy(0, pos_y_status)
     pdf.cell(largura_pagina, altura_linha, "APROVADO", align="C")
