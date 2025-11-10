@@ -335,9 +335,10 @@ def finalizar_exame(usuario, faixa, professor, tema):
     salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
     caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
     st.session_state.certificado_path = caminho_pdf
-    st.session_state.exame_iniciado = False
+    st.session_state.exame_finalizado = True  # 👈 controla exibição pós-exame
+    st.session_state.exame_iniciado = False   # para travar o cronômetro
 
-    # Mensagem personalizada
+    # Exibe resultado sem rerun
     if aprovado:
         st.success(f"🎉 Parabéns, {usuario}! Você foi **{status}** e obteve {percentual}% de acertos!")
         with open(caminho_pdf, "rb") as f:
@@ -351,6 +352,14 @@ def finalizar_exame(usuario, faixa, professor, tema):
     else:
         st.error(f"❌ {usuario}, você **não obteve o percentual mínimo de acerto para aprovação** ({percentual}%). "
                  f"Tente novamente em 3 dias e continue se preparando!")
+
+    # Botão de reinício visível após o resultado
+    if st.button("🔁 Reiniciar Exame"):
+        st.session_state.exame_iniciado = False
+        st.session_state.exame_finalizado = False
+        st.session_state.respostas = {}
+        st.session_state.certificado_path = None
+        st.rerun()
 # =========================================
 # PAINEL DO PROFESSOR
 # =========================================
