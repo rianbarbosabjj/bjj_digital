@@ -236,59 +236,83 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.output(caminho_pdf)
     return caminho_pdf
 # =========================================
-# MODO EXAME
+# MODO EXAME DE FAIXA (ATUALIZADO)
 # =========================================
 def modo_exame():
     st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
-    faixas=["Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"]
-    faixa=st.selectbox("Selecione a faixa:",faixas)
-    usuario=st.text_input("Nome do aluno:")
-    professor=st.text_input("Nome do professor responsável:")
-    tema="regras"
+    faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+    faixa = st.selectbox("Selecione a faixa:", faixas)
+    usuario = st.text_input("Nome do aluno:")
+    professor = st.text_input("Nome do professor responsável:")
+    tema = "regras"
 
+    # Inicializa sessão
     if "exame_iniciado" not in st.session_state:
-        st.session_state.exame_iniciado=False
-        st.session_state.respostas={}
-        st.session_state.certificado_path=None
+        st.session_state.exame_iniciado = False
+        st.session_state.respostas = {}
+        st.session_state.certificado_path = None
 
+    # Iniciar exame
     if not st.session_state.exame_iniciado:
         if st.button("Iniciar Exame"):
-            questoes=carregar_questoes(tema)
+            questoes = carregar_questoes(tema)
             if not questoes:
                 st.error("Nenhuma questão encontrada para o tema selecionado.")
                 return
             random.shuffle(questoes)
-            st.session_state.questoes=questoes[:5]
-            st.session_state.exame_iniciado=True
+            st.session_state.questoes = questoes[:5]
+            st.session_state.exame_iniciado = True
             st.rerun()
 
+    # Exibir questões
     if st.session_state.exame_iniciado:
-        questoes=st.session_state.questoes
-        total=len(questoes)
-        for i,q in enumerate(questoes,1):
+        questoes = st.session_state.questoes
+        total = len(questoes)
+        for i, q in enumerate(questoes, 1):
             st.markdown(f"### {i}. {q['pergunta']}")
-            if q.get("imagem"):
-                st.image(q["imagem"],use_container_width=True)
-            if q.get("video"):
+
+            # Exibe mídia apenas se existir
+            if "imagem" in q and q["imagem"]:
+                st.image(q["imagem"], use_container_width=True)
+            elif "video" in q and q["video"]:
                 st.video(q["video"])
-            resp=st.radio("Escolha:",q["opcoes"],key=f"resp_{i}",index=None)
-            st.session_state.respostas[f"resp_{i}"]=resp
 
+            resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
+            st.session_state.respostas[f"resp_{i}"] = resp
+
+        # Finalizar exame
         if st.button("Finalizar Exame"):
-            pontuacao=sum(1 for i,q in enumerate(questoes,1)
-                          if st.session_state.respostas.get(f"resp_{i}","").startswith(q["resposta"]))
-            codigo=gerar_codigo_unico()
-            salvar_resultado(usuario,"Exame",tema,faixa,pontuacao,"00:05:00",codigo)
-            caminho_pdf=gerar_pdf(usuario,faixa,pontuacao,total,codigo,professor)
-            st.session_state.certificado_path=caminho_pdf
-            st.rerun()
+            pontuacao = sum(
+                1 for i, q in enumerate(questoes, 1)
+                if st.session_state.respostas.get(f"resp_{i}", "").startswith(q["resposta"])
+            )
+            percentual = int((pontuacao / total) * 100)
+            aprovado = pontuacao >= (total * 0.6)
+            status = "APROVADO" if aprovado else "REPROVADO"
 
-    if st.session_state.get("certificado_path"):
-        caminho_pdf=st.session_state.certificado_path
-        with open(caminho_pdf,"rb") as f:
-            st.download_button("📄 Baixar Certificado",f,
-                               file_name=os.path.basename(caminho_pdf),
-                               mime="application/pdf")
+            codigo = gerar_codigo_unico()
+            salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+            caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+            st.session_state.certificado_path = caminho_pdf
+
+            # Mensagens personalizadas
+            if aprovado:
+                st.success(f"🎉 Parabéns, {usuario}! Você foi **{status}** e obteve {percentual}% de acertos!")
+            else:
+                st.error(f"❌ {usuario}, você **não obteve o percentual mínimo de acerto para aprovação** ({percentual}%). "
+                         f"Tente novamente em 3 dias e continue se preparando!")
+
+            # Botão de download (somente se aprovado)
+            if aprovado:
+                with open(caminho_pdf, "rb") as f:
+                    st.download_button(
+                        label="📄 Baixar Certificado",
+                        data=f,
+                        file_name=os.path.basename(caminho_pdf),
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+
 # =========================================
 # PAINEL DO PROFESSOR
 # =========================================
