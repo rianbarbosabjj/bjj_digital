@@ -241,105 +241,55 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 # =========================================
 def modo_exame():
     st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
-    faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-    faixa = st.selectbox("Selecione a faixa:", faixas)
-    usuario = st.text_input("Nome do aluno:")
-    professor = st.text_input("Nome do professor responsável:")
-    tema = "regras"
+    faixas=["Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"]
+    faixa=st.selectbox("Selecione a faixa:",faixas)
+    usuario=st.text_input("Nome do aluno:")
+    professor=st.text_input("Nome do professor responsável:")
+    tema="regras"
 
-    # --- Inicialização de variáveis de sessão ---
     if "exame_iniciado" not in st.session_state:
-        st.session_state.exame_iniciado = False
-    if "exame_finalizado" not in st.session_state:
-        st.session_state.exame_finalizado = False
-    if "respostas" not in st.session_state:
-        st.session_state.respostas = {}
-    if "certificado_path" not in st.session_state:
-        st.session_state.certificado_path = None
-    if "tempo_inicio" not in st.session_state:
-        st.session_state.tempo_inicio = None
-    if "tempo_total" not in st.session_state:
-        st.session_state.tempo_total = None
+        st.session_state.exame_iniciado=False
+        st.session_state.respostas={}
+        st.session_state.certificado_path=None
 
-    # 🔄 Reset automático caso tenha sobrado estado antigo
-    if st.session_state.exame_finalizado and not st.session_state.certificado_path:
-        st.session_state.exame_finalizado = False
-    if not st.session_state.exame_iniciado and not st.session_state.exame_finalizado:
-        st.session_state.certificado_path = None
-
-    # === TELA INICIAL ===
-    if not st.session_state.exame_iniciado and not st.session_state.exame_finalizado:
-        st.markdown("""
-        ### 🧩 Instruções:
-        - O exame contém **5 questões aleatórias** sobre o tema selecionado.
-        - Cada questão vale **1 ponto**.
-        - Você terá **3 minutos por questão** para concluir o exame.
-        - Ao finalizar, o sistema mostrará seu resultado e, se aprovado(a), gerará automaticamente o certificado.
-        """)
-        if st.button("🎯 Iniciar Exame"):
-            questoes = carregar_questoes(tema)
+    if not st.session_state.exame_iniciado:
+        if st.button("Iniciar Exame"):
+            questoes=carregar_questoes(tema)
             if not questoes:
                 st.error("Nenhuma questão encontrada para o tema selecionado.")
                 return
             random.shuffle(questoes)
-            st.session_state.questoes = questoes[:5]
-            st.session_state.exame_iniciado = True
-            st.session_state.exame_finalizado = False
-            st.session_state.tempo_inicio = time.time()
-            st.session_state.tempo_total = len(st.session_state.questoes) * 180
-            st.session_state.respostas = {}
+            st.session_state.questoes=questoes[:5]
+            st.session_state.exame_iniciado=True
             st.rerun()
-        return
 
-    # === APÓS FINALIZAÇÃO DO EXAME ===
-    if st.session_state.exame_finalizado:
-        caminho_pdf = st.session_state.certificado_path
-        if caminho_pdf and os.path.exists(caminho_pdf):
-            st.success("🎉 Exame concluído! Parabéns pelo empenho!")
-            with open(caminho_pdf, "rb") as f:
-                st.download_button(
-                    label="📄 Baixar Certificado",
-                    data=f,
-                    file_name=os.path.basename(caminho_pdf),
-                    mime="application/pdf",
-                    use_container_width=True
-                )
-        else:
-            st.info("✅ Exame finalizado. Você pode navegar para outro módulo no menu lateral.")
-        return
+    if st.session_state.exame_iniciado:
+        questoes=st.session_state.questoes
+        total=len(questoes)
+        for i,q in enumerate(questoes,1):
+            st.markdown(f"### {i}. {q['pergunta']}")
+            if q.get("imagem"):
+                st.image(q["imagem"],use_container_width=True)
+            if q.get("video"):
+                st.video(q["video"])
+            resp=st.radio("Escolha:",q["opcoes"],key=f"resp_{i}",index=None)
+            st.session_state.respostas[f"resp_{i}"]=resp
 
-    # === EXAME EM ANDAMENTO ===
-    tempo_decorrido = int(time.time() - st.session_state.tempo_inicio)
-    tempo_restante = st.session_state.tempo_total - tempo_decorrido
+        if st.button("Finalizar Exame"):
+            pontuacao=sum(1 for i,q in enumerate(questoes,1)
+                          if st.session_state.respostas.get(f"resp_{i}","").startswith(q["resposta"]))
+            codigo=gerar_codigo_unico()
+            salvar_resultado(usuario,"Exame",tema,faixa,pontuacao,"00:05:00",codigo)
+            caminho_pdf=gerar_pdf(usuario,faixa,pontuacao,total,codigo,professor)
+            st.session_state.certificado_path=caminho_pdf
+            st.rerun()
 
-    if tempo_restante <= 0:
-        st.warning("⏰ O tempo do exame acabou!")
-        finalizar_exame(usuario, faixa, professor, tema)
-        return
-
-    minutos, segundos = divmod(tempo_restante, 60)
-    tempo_display = f"⏰ Tempo restante: {minutos:02d}:{segundos:02d}"
-    st.markdown(f"<h3 style='color:#FFD700; text-align:center;'>{tempo_display}</h3>", unsafe_allow_html=True)
-
-    questoes = st.session_state.questoes
-    total = len(questoes)
-    st.markdown(f"#### Questões do Exame ({total})")
-
-    for i, q in enumerate(questoes, 1):
-        st.markdown(f"### {i}. {q['pergunta']}")
-        if "imagem" in q and q["imagem"]:
-            st.image(q["imagem"], use_container_width=True)
-        elif "video" in q and q["video"]:
-            st.video(q["video"])
-        resp = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}", index=None)
-        st.session_state.respostas[f"resp_{i}"] = resp
-
-    if st.button("✅ Finalizar Exame"):
-        finalizar_exame(usuario, faixa, professor, tema)
-        return
-
-    time.sleep(1)
-    st.rerun()
+    if st.session_state.get("certificado_path"):
+        caminho_pdf=st.session_state.certificado_path
+        with open(caminho_pdf,"rb") as f:
+            st.download_button("📄 Baixar Certificado",f,
+                               file_name=os.path.basename(caminho_pdf),
+                               mime="application/pdf")
 # =========================================
 # FINALIZAR EXAME (VERSÃO FIXA)
 # =========================================
