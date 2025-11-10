@@ -322,13 +322,20 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.5)
     pdf.line(100, 173, 197, 173)
-
+    
+        # ========================
+    # RODAPÉ
+    # ========================
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(0.6)
+    pdf.line(0, 188)
+ 
     # ========================
     # RODAPÉ
     # ========================
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "I", 9)
-    pdf.set_xy(0, 185)
+    pdf.set_xy(0, 190)
     pdf.cell(297, 6, "Plataforma BJJ Digital", align="C")
 
     # ========================
