@@ -169,7 +169,7 @@ def normalizar_nome(nome):
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """
-    Gera o certificado idêntico ao modelo visual (COM textura radial e fundo bege).
+    Gera o certificado idêntico ao modelo visual (COM fundo em gradiente).
     """
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
@@ -182,30 +182,17 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     preto = (40, 40, 40)
     branco = (255, 255, 255)
     cinza_claro = (220, 220, 220) 
-    bege_claro = (250, 245, 230) # <-- COR ADICIONADA
+    bege_claro = (250, 245, 230) 
+    bege_escuro = (235, 225, 205) # <-- COR ADICIONADA
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # Fundo Bege (Papel Antigo)
-    pdf.set_fill_color(*bege_claro) # <-- COR APLICADA
-    pdf.rect(0, 0, 297, 210, "F")
-
     # ========================
-    # TEXTURA DE SEGURANÇA (RADIAL / SUNBURST)
+    # FUNDO EM GRADIENTE (feito em código)
     # ========================
-    pdf.set_draw_color(*cinza_claro) 
-    pdf.set_line_width(0.1)
-
-    x_centro = 297 / 2
-    y_centro = 210 / 2
-    raio = 160 
-    num_linhas = 90 
-    
-    for i in range(num_linhas):
-        angulo = math.radians((i / num_linhas) * 360) 
-        x_fim = x_centro + raio * math.cos(angulo)
-        y_fim = y_centro + raio * math.sin(angulo)
-        pdf.line(x_centro, y_centro, x_fim, y_fim)
+    # 'L' = Linear. Preenche a página inteira (297x210)
+    # Começa com bege_claro e termina com bege_escuro
+    pdf.gradient('L', bege_claro, bege_escuro, 0, 0, 297, 210)
     # ========================
 
     # ========================
@@ -281,14 +268,14 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0, pos_y_faixa)
     pdf.cell(largura_pagina, altura_linha, faixa.upper(), align="C")
 
-    # --- 5. STATUS (APROVADO) --- (NOVO BLOCO)
+    # --- 5. STATUS (APROVADO) ---
     pos_y_status = pdf.get_y() + altura_linha
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "B", fonte_tamanho) # Negrito
     pdf.set_xy(0, pos_y_status)
     pdf.cell(largura_pagina, altura_linha, "APROVADO", align="C")
 
-    # --- 6. Continuação do texto (Aproveitamento) --- (Era a parte 5)
+    # --- 6. Continuação do texto (Aproveitamento) ---
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", fonte_tamanho)
     texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
