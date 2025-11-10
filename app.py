@@ -169,7 +169,7 @@ def normalizar_nome(nome):
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """
-    Gera o certificado idêntico ao modelo visual (COM textura radial).
+    Gera o certificado idêntico ao modelo visual (COM textura radial e fundo bege).
     """
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
@@ -182,35 +182,29 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     preto = (40, 40, 40)
     branco = (255, 255, 255)
     cinza_claro = (220, 220, 220) 
+    bege_claro = (250, 245, 230) # <-- COR ADICIONADA
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # Fundo branco
-    pdf.set_fill_color(*branco)
+    # Fundo Bege (Papel Antigo)
+    pdf.set_fill_color(*bege_claro) # <-- COR APLICADA
     pdf.rect(0, 0, 297, 210, "F")
 
     # ========================
-    # TEXTURA DE SEGURANÇA (RADIAL / SUNBURST) - (NOVA SUGESTÃO)
+    # TEXTURA DE SEGURANÇA (RADIAL / SUNBURST)
     # ========================
     pdf.set_draw_color(*cinza_claro) 
     pdf.set_line_width(0.1)
 
     x_centro = 297 / 2
     y_centro = 210 / 2
-    raio = 160 # Um raio grande para cobrir a página (A4 é 297x210)
-
-    # Você pode mudar este número para mais ou menos linhas
+    raio = 160 
     num_linhas = 90 
     
     for i in range(num_linhas):
-        # Calcula o ângulo para cada linha (em radianos)
         angulo = math.radians((i / num_linhas) * 360) 
-        
-        # Calcula o ponto final da linha usando seno e cosseno
         x_fim = x_centro + raio * math.cos(angulo)
         y_fim = y_centro + raio * math.sin(angulo)
-        
-        # Desenha a linha do centro até a borda
         pdf.line(x_centro, y_centro, x_fim, y_fim)
     # ========================
 
@@ -261,16 +255,13 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", fonte_tamanho)
     
-    # Pega a posição Y atual (depois de "Certificamos...") e desce um pouco
     pos_y_nome = pdf.get_y() + altura_linha
     pdf.set_xy(0, pos_y_nome)
     pdf.multi_cell(largura_pagina, altura_linha, usuario.upper(), align="C")
 
     # --- 3. "concluiu o exame..." ---
-    # Pega a posição Y ATUAL (que pode ter mudado se o nome quebrou a linha)
     pos_y_concluiu = pdf.get_y() 
     
-    # Define a cor da faixa (como no seu código)
     cores_faixa = {
         "Cinza": (169, 169, 169), "Amarela": (255, 215, 0), "Laranja": (255, 140, 0),
         "Verde": (0, 128, 0), "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
@@ -290,12 +281,19 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0, pos_y_faixa)
     pdf.cell(largura_pagina, altura_linha, faixa.upper(), align="C")
 
-    # --- 5. Continuação do texto (Aproveitamento) ---
+    # --- 5. STATUS (APROVADO) --- (NOVO BLOCO)
+    pos_y_status = pdf.get_y() + altura_linha
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "B", fonte_tamanho) # Negrito
+    pdf.set_xy(0, pos_y_status)
+    pdf.cell(largura_pagina, altura_linha, "APROVADO", align="C")
+
+    # --- 6. Continuação do texto (Aproveitamento) --- (Era a parte 5)
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", fonte_tamanho)
     texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
     
-    pos_y_final = pdf.get_y() + altura_linha
+    pos_y_final = pdf.get_y() + altura_linha # Pega a pos Y depois do "APROVADO"
     pdf.set_xy(0, pos_y_final)
     pdf.multi_cell(largura_pagina, altura_linha, texto_final, align="C")
 
@@ -370,7 +368,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
-    return caminho_pdf    
+    return caminho_pdf
 # =========================================
 # MODO EXAME DE FAIXA (DOWNLOAD PERSISTENTE)
 # =========================================
