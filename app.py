@@ -247,7 +247,7 @@ def modo_exame():
     professor = st.text_input("Nome do professor responsável:")
     tema = "regras"
 
-    # --- Inicialização limpa ---
+    # --- Inicialização de variáveis de sessão ---
     if "exame_iniciado" not in st.session_state:
         st.session_state.exame_iniciado = False
     if "exame_finalizado" not in st.session_state:
@@ -261,18 +261,20 @@ def modo_exame():
     if "tempo_total" not in st.session_state:
         st.session_state.tempo_total = None
 
-    # --- Caso já tenha certificado armazenado erroneamente ---
+    # 🔄 Reset automático caso tenha sobrado estado antigo
+    if st.session_state.exame_finalizado and not st.session_state.certificado_path:
+        st.session_state.exame_finalizado = False
     if not st.session_state.exame_iniciado and not st.session_state.exame_finalizado:
         st.session_state.certificado_path = None
 
-    # --- Tela inicial (exame não iniciado nem finalizado) ---
+    # === TELA INICIAL ===
     if not st.session_state.exame_iniciado and not st.session_state.exame_finalizado:
         st.markdown("""
         ### 🧩 Instruções:
-        - O exame contém 5 questões aleatórias sobre o tema selecionado.
+        - O exame contém **5 questões aleatórias** sobre o tema selecionado.
         - Cada questão vale **1 ponto**.
         - Você terá **3 minutos por questão** para concluir o exame.
-        - Após o término, o sistema mostrará o resultado e, se aprovado(a), o certificado será gerado automaticamente.
+        - Ao finalizar, o sistema mostrará seu resultado e, se aprovado(a), gerará automaticamente o certificado.
         """)
         if st.button("🎯 Iniciar Exame"):
             questoes = carregar_questoes(tema)
@@ -289,11 +291,11 @@ def modo_exame():
             st.rerun()
         return
 
-    # --- Exibição após finalização ---
+    # === APÓS FINALIZAÇÃO DO EXAME ===
     if st.session_state.exame_finalizado:
         caminho_pdf = st.session_state.certificado_path
         if caminho_pdf and os.path.exists(caminho_pdf):
-            st.success("🎉 Exame concluído! Seu resultado está abaixo:")
+            st.success("🎉 Exame concluído! Parabéns pelo empenho!")
             with open(caminho_pdf, "rb") as f:
                 st.download_button(
                     label="📄 Baixar Certificado",
@@ -306,9 +308,10 @@ def modo_exame():
             st.info("✅ Exame finalizado. Você pode navegar para outro módulo no menu lateral.")
         return
 
-    # --- Cronômetro ativo ---
+    # === EXAME EM ANDAMENTO ===
     tempo_decorrido = int(time.time() - st.session_state.tempo_inicio)
     tempo_restante = st.session_state.tempo_total - tempo_decorrido
+
     if tempo_restante <= 0:
         st.warning("⏰ O tempo do exame acabou!")
         finalizar_exame(usuario, faixa, professor, tema)
@@ -318,7 +321,6 @@ def modo_exame():
     tempo_display = f"⏰ Tempo restante: {minutos:02d}:{segundos:02d}"
     st.markdown(f"<h3 style='color:#FFD700; text-align:center;'>{tempo_display}</h3>", unsafe_allow_html=True)
 
-    # --- Questões ---
     questoes = st.session_state.questoes
     total = len(questoes)
     st.markdown(f"#### Questões do Exame ({total})")
@@ -336,10 +338,9 @@ def modo_exame():
         finalizar_exame(usuario, faixa, professor, tema)
         return
 
-    # Atualiza contagem regressiva
     time.sleep(1)
     st.rerun()
-    # =========================================
+# =========================================
 # FINALIZAR EXAME (VERSÃO FIXA)
 # =========================================
 def finalizar_exame(usuario, faixa, professor, tema):
