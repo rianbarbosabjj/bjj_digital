@@ -220,14 +220,14 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # TEXTO CENTRAL
     # ========================
 pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 20) # <-- Fonte 20
+    pdf.set_font("Helvetica", "", 20) # Fonte 20
     pdf.set_xy(0, 80)
     pdf.cell(297, 10, "Certificamos que o(a) aluno(a)", align="C") # Altura 10
 
     # NOME DO ALUNO
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "B", 20) # Fonte 20
-    pdf.set_xy(0, 95) # <-- Posição Y ajustada
+    pdf.set_xy(0, 95) # Posição Y ajustada
     pdf.cell(297, 10, usuario.upper(), align="C")
 
     # Texto com a faixa
@@ -245,8 +245,25 @@ pdf.set_text_color(*preto)
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 20) # Fonte 20
-    pdf.set_xy(0, 110) # <-- Posição Y ajustada
+    pdf.set_xy(0, 110) # Posição Y ajustada
     pdf.cell(297, 10, "concluiu o exame teórico para a faixa", align="C") # Altura 10
+
+    # Faixa colorida
+    pdf.set_text_color(*cor_faixa)
+    pdf.set_font("Helvetica", "B", 20) # Fonte 20 e Negrito
+    pdf.set_xy(0, 125) # Posição Y ajustada
+    pdf.cell(297, 10, faixa.upper(), align="C") # Altura 10
+
+    # --- Continuação do texto (CORRIGIDO com multi_cell) ---
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", 20) # Fonte 20
+
+    # Juntamos as duas últimas frases
+    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
+
+    # Usamos multi_cell para centralizar e quebrar a linha SO SE NECESSÁRIO
+    pdf.set_xy(0, 140) # Posição Y ajustada
+    pdf.multi_cell(297, 10, texto_final, align="C") # Altura 10
 
     # Faixa colorida
     pdf.set_text_color(*cor_faixa)
