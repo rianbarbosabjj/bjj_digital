@@ -10,7 +10,6 @@ import unicodedata
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import math
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -79,6 +78,15 @@ def criar_banco():
         questoes_json TEXT,
         professor TEXT,
         data_config DATETIME DEFAULT CURRENT_TIMESTAMP
+    )''')
+
+    cursor.execute('''CREATE TABLE IF NOT EXISTS alunos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        faixa_atual TEXT,
+        turma TEXT,
+        professor TEXT,
+        observacoes TEXT
     )''')
 
     conn.commit()
@@ -165,94 +173,51 @@ def normalizar_nome(nome):
     return "".join([c for c in nfkd if not unicodedata.combining(c)]).lower().replace(" ", "_")
 
 # =========================================
-# GERAÇÃO DE PDF (FINAL COM QUEBRA DE LINHA)
+# GERAÇÃO DE PDF (CERTIFICADO)
 # =========================================
-import os
-from fpdf import FPDF
-from datetime import datetime
-import qrcode
-# (Sem import math)
-
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    """
-    Gera o certificado com fundo branco.
-    """
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
     pdf.add_page()
 
-    # ========================
-    # CORES E VARIÁVEIS
-    # ========================
     dourado = (218, 165, 32)
     preto = (40, 40, 40)
     branco = (255, 255, 255)
-    cinza_claro = (220, 220, 220) 
-    # (Cores bege removidas)
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
-    # ========================
-    # Fundo branco (Restaurado)
-    # ========================
     pdf.set_fill_color(*branco)
     pdf.rect(0, 0, 297, 210, "F")
-    # ========================
 
-    # ========================
-    # MOLDURA DOURADA DUPLA
-    # ========================
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(2)
     pdf.rect(8, 8, 281, 194)
     pdf.set_line_width(0.8)
     pdf.rect(11, 11, 275, 188)
 
-    # ========================
-    # TÍTULO
-    # ========================
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "BI", 30)
     pdf.set_xy(0, 25)
     pdf.cell(297, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C")
 
-    # Linha abaixo do título
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.6)
     pdf.line(30, 35, 268, 35)
 
-    # ========================
-    # LOGO CENTRAL SUPERIOR (opcional)
-    # ========================
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         pdf.image(logo_path, x=133, y=40, w=32)
 
-    # ========================
-    # TEXTO CENTRAL (COM AJUSTE AUTOMÁTICO)
-    # ========================
-    
-    largura_pagina = 297
-    altura_linha = 10
-    fonte_tamanho = 16
-
-    # --- 1. "Certificamos que..." ---
     pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", fonte_tamanho)
-    pdf.set_xy(0, 80) # Posição Y inicial
-    pdf.cell(largura_pagina, altura_linha, "Certificamos que o(a) aluno(a)", align="C")
+    pdf.set_font("Helvetica", "", 16)
+    pdf.set_xy(0, 80)
+    pdf.cell(297, 10, "Certificamos que o(a) aluno(a)", align="C")
 
-    # --- 2. NOME DO ALUNO (COM MULTI_CELL) ---
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", fonte_tamanho)
-    
-    pos_y_nome = pdf.get_y() + altura_linha
-    pdf.set_xy(0, pos_y_nome)
-    pdf.multi_cell(largura_pagina, altura_linha, usuario.upper(), align="C")
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_xy(0, 90)
+    pdf.cell(297, 10, usuario.upper(), align="C")
 
-    # --- 3. "concluiu o exame..." ---
-    pos_y_concluiu = pdf.get_y() 
-    
     cores_faixa = {
         "Cinza": (169, 169, 169), "Amarela": (255, 215, 0), "Laranja": (255, 140, 0),
         "Verde": (0, 128, 0), "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
@@ -261,72 +226,40 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     cor_faixa = cores_faixa.get(faixa, preto)
 
     pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", fonte_tamanho)
-    pdf.set_xy(0, pos_y_concluiu)
-    pdf.cell(largura_pagina, altura_linha, "concluiu o exame teórico para a faixa", align="C")
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_xy(0, 104)
+    pdf.cell(297, 8, "concluiu o exame teórico para a faixa", align="C")
 
-    # --- 4. FAIXA ---
-    pos_y_faixa = pdf.get_y() + altura_linha
     pdf.set_text_color(*cor_faixa)
-    pdf.set_font("Helvetica", "B", fonte_tamanho)
-    pdf.set_xy(0, pos_y_faixa)
-    pdf.cell(largura_pagina, altura_linha, faixa.upper(), align="C")
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_xy(0, 112)
+    pdf.cell(297, 8, faixa.upper(), align="C")
 
-    # --- 5. STATUS (APROVADO) ---
-    pos_y_status = pdf.get_y() + altura_linha
+    resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", fonte_tamanho) # Negrito
-    pdf.set_xy(0, pos_y_status)
-    pdf.cell(largura_pagina, altura_linha, "APROVADO", align="C")
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_xy(0, 130)
+    pdf.cell(297, 8, resultado, align="C")
 
-    # --- 6. Continuação do texto (Aproveitamento) ---
     pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", fonte_tamanho)
+    pdf.set_font("Helvetica", "", 12)
     texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
-    
-    pos_y_final = pdf.get_y() + altura_linha # Pega a pos Y depois do "APROVADO"
-    pdf.set_xy(0, pos_y_final)
-    pdf.multi_cell(largura_pagina, altura_linha, texto_final, align="C")
+    pdf.set_xy(0, 140)
+    pdf.cell(297, 6, texto_final, align="C")
 
-    # ========================
-    # SELO ESQUERDO
-    # ========================
     selo_path = "assets/selo_dourado.png"
     if os.path.exists(selo_path):
         pdf.image(selo_path, x=23, y=155, w=30)
 
-    # ========================
-    # QR CODE E CÓDIGO À DIREITA
-    # ========================
-    os.makedirs("certificados/qrcodes", exist_ok=True)
-    caminho_qr = f"certificados/qrcodes/{codigo}.png"
-    url_verificacao = f"https://bjjdigital.netlify.app/verificar?codigo={codigo}"
-
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=4,
-        border=1,
-    )
-    qr.add_data(url_verificacao)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
-    img.save(caminho_qr)
+    caminho_qr = gerar_qrcode(codigo)
     pdf.image(caminho_qr, x=245, y=155, w=25)
-
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_xy(220, 180)
     pdf.cell(60, 6, f"Código: {codigo}", align="R")
 
-    # ========================
-    # ASSINATURA
-    # ========================
     if professor:
-        nome_normalizado = "".join(
-            c for c in professor.lower() if c.isalnum() or c in "_-"
-        ).replace(" ", "_")
-        assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
+        assinatura_path = f"assets/assinaturas/{normalizar_nome(professor)}.png"
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path, x=118, y=160, w=60)
 
@@ -335,27 +268,16 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0, 175)
     pdf.cell(297, 6, "Assinatura do Professor Responsável", align="C")
 
-    # Linha sob assinatura
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.5)
     pdf.line(100, 173, 197, 173)
-    
-     # Linha do rodapé
-    pdf.set_draw_color(*dourado)
-    pdf.set_line_width(0.6)
     pdf.line(30, 190, 268, 190)
 
-    # ========================
-    # RODAPÉ
-    # ========================
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_xy(0, 190)
     pdf.cell(297, 6, "Plataforma BJJ Digital", align="C")
 
-    # ========================
-    # SALVAR CERTIFICADO
-    # ========================
     os.makedirs("relatorios", exist_ok=True)
     caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
@@ -438,7 +360,7 @@ def painel_certificados():
             st.info("Nenhum certificado encontrado.")
         else:
             st.success(f"Foram encontrados {len(df)} registro(s).")
-            st.dataframe(df[["usuario","faixa","pontuacao","data","codigo_verificacao"]])
+            st.dataframe(df[["usuario", "faixa", "pontuacao", "data", "codigo_verificacao"]])
 
 # =========================================
 # DASHBOARD DO PROFESSOR
@@ -487,6 +409,73 @@ def dashboard_professor():
         st.download_button("📤 Exportar CSV", csv, "relatorio_exames.csv", "text/csv")
 
 # =========================================
+# PAINEL DO PROFESSOR – GESTÃO DE ALUNOS (v1.1 Simplificado)
+# =========================================
+def painel_professor():
+    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+    st.write("Gerencie aqui seus alunos, turmas e histórico de faixas.")
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS alunos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nome TEXT NOT NULL,
+            faixa_atual TEXT,
+            turma TEXT,
+            professor TEXT,
+            observacoes TEXT
+        )
+    ''')
+    conn.commit()
+
+    aba1, aba2 = st.tabs(["➕ Cadastrar Aluno", "📋 Alunos Cadastrados"])
+
+    # --- ABA 1 ---
+    with aba1:
+        with st.form("cadastro_aluno"):
+            nome = st.text_input("Nome completo do aluno:")
+            faixa = st.selectbox("Faixa atual:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+            turma = st.text_input("Turma:")
+            professor = st.text_input("Professor responsável:")
+            observacoes = st.text_area("Observações (opcional):")
+
+            submitted = st.form_submit_button("💾 Salvar Aluno")
+            if submitted:
+                if nome.strip() == "":
+                    st.warning("Por favor, insira o nome do aluno.")
+                else:
+                    cursor.execute("""
+                        INSERT INTO alunos (nome, faixa_atual, turma, professor, observacoes)
+                        VALUES (?, ?, ?, ?, ?)
+                    """, (nome, faixa, turma, professor, observacoes))
+                    conn.commit()
+                    st.success(f"Aluno(a) **{nome}** cadastrado(a) com sucesso!")
+
+    # --- ABA 2 ---
+    with aba2:
+        df = pd.read_sql_query("SELECT * FROM alunos ORDER BY nome ASC", conn)
+
+        if df.empty:
+            st.info("Nenhum aluno cadastrado ainda.")
+        else:
+            st.success(f"{len(df)} aluno(s) cadastrados.")
+            st.dataframe(df[["id", "nome", "faixa_atual", "turma", "professor"]], use_container_width=True)
+
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("📤 Exportar Lista (CSV)", csv, "alunos_cadastrados.csv", "text/csv")
+
+            st.markdown("### ❌ Excluir Aluno")
+            id_excluir = st.number_input("Digite o ID do aluno a excluir:", min_value=1, step=1)
+            if st.button("Excluir"):
+                cursor.execute("DELETE FROM alunos WHERE id = ?", (id_excluir,))
+                conn.commit()
+                st.warning(f"Aluno de ID {id_excluir} foi removido.")
+                st.rerun()
+
+    conn.close()
+
+# =========================================
 # MENU PRINCIPAL
 # =========================================
 def main():
@@ -495,7 +484,8 @@ def main():
     menu = st.sidebar.radio("Navegar:", [
         "🏁 Exame de Faixa",
         "📜 Histórico de Certificados",
-        "📈 Dashboard do Professor"
+        "📈 Dashboard do Professor",
+        "👩‍🏫 Painel do Professor"
     ])
     if menu == "🏁 Exame de Faixa":
         modo_exame()
@@ -503,6 +493,8 @@ def main():
         painel_certificados()
     elif menu == "📈 Dashboard do Professor":
         dashboard_professor()
+    elif menu == "👩‍🏫 Painel do Professor":
+        painel_professor()
 
 if __name__ == "__main__":
     main()
