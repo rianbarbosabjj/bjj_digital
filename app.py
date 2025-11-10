@@ -207,7 +207,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # Linha abaixo do título
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(0.6)
-    pdf.line(70, 35, 227, 35)
+    pdf.line(70, 35, 280, 35)
 
     # ========================
     # LOGO CENTRAL SUPERIOR (opcional)
