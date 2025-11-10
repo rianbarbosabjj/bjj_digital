@@ -168,25 +168,27 @@ def normalizar_nome(nome):
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """
-    Gera o certificado exatamente como no modelo CERTIFICADO.pdf.
+    Gera o certificado exatamente como no modelo CERTIFICADO.jpg.
     """
-    pdf = FPDF("L", "mm", "A4")
+    pdf = FPDF("L", "mm", "A4") # Paisagem (Landscape), milímetros, A4
     pdf.set_auto_page_break(False)
     pdf.add_page()
+    pdf.set_font("Helvetica") # Definir uma fonte padrão
 
-    # Modelo base (fundo visual)
+    # Modelo base (fundo visual - bordas)
     modelo_path = "assets/CERTIFICADO.pdf"
     if not os.path.exists(modelo_path):
         raise FileNotFoundError("O modelo 'assets/CERTIFICADO.pdf' não foi encontrado.")
-
+    
+    # Adiciona a imagem de fundo (provavelmente apenas as bordas)
     pdf.image(modelo_path, x=0, y=0, w=297, h=210)
 
     # ========================
     # CORES E CONFIGURAÇÕES
     # ========================
-    dourado = (218, 165, 32)
+    # AJUSTE: Cor dourada/amarela do modelo
+    dourado = (218, 165, 32) 
     preto = (40, 40, 40)
-    pdf.set_text_color(*preto)
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
 
@@ -194,31 +196,43 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # TÍTULO
     # ========================
     pdf.set_font("Helvetica", "B", 22)
-    pdf.set_xy(0, 40)
-    pdf.cell(297, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C")
+    pdf.set_text_color(*dourado) # AJUSTE: Título é dourado no modelo
+    pdf.set_y(40) # AJUSTE: Posição Y
+    pdf.cell(0, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C")
+
+    # ========================
+    # LOGO BJJ DIGITAL (TOP)
+    # ========================
+    # NOVO: Este logo aparece na imagem mas não estava no código.
+    # Você precisa ter este arquivo de imagem.
+    logo_top_path = "assets/logo_bjjdigital_top.png" 
+    if os.path.exists(logo_top_path):
+        # Centraliza o logo (assumindo 30mm de largura)
+        pdf.image(logo_top_path, x=(297-30)/2, y=58, w=30) 
 
     # ========================
     # TEXTO: "Certificamos que o(a) aluno(a)"
     # ========================
     pdf.set_font("Helvetica", "", 14)
-    pdf.set_xy(0, 65)
-    pdf.cell(297, 8, "Certificamos que o(a) aluno(a)", align="C")
+    pdf.set_text_color(*preto)
+    pdf.set_y(85) # AJUSTE: Posição Y (abaixo do logo)
+    pdf.cell(0, 8, "Certificamos que o(a) aluno(a)", align="C")
 
     # ========================
     # NOME DO ALUNO
     # ========================
     pdf.set_font("Helvetica", "B", 28)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 77)
-    pdf.cell(297, 12, usuario.upper(), align="C")
+    pdf.set_y(97) # AJUSTE: Posição Y
+    pdf.cell(0, 12, usuario.upper(), align="C")
 
     # ========================
     # TEXTO: "concluiu o exame teórico..."
     # ========================
-    pdf.set_font("Helvetica", "", 14)
-    pdf.set_text_color(*preto)
-    pdf.set_xy(0, 94)
-
+    # LÓGICA CORRIGIDA: Esta é a parte mais complexa.
+    # O modelo tem 3 partes na mesma linha (texto1, faixa, texto2)
+    # e uma segunda linha separada para a data.
+    
     cores_faixa = {
         "Cinza": (169, 169, 169),
         "Amarela": (255, 215, 0),
@@ -231,21 +245,52 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     }
     cor_faixa = cores_faixa.get(faixa, (0, 0, 0))
 
-    texto_inicial = "concluiu o exame teórico para a faixa "
-    pdf.cell(0, 8, texto_inicial, align="C")
-
-    # Faixa colorida
-    x_atual = pdf.get_x()
-    y_atual = pdf.get_y()
-    pdf.set_text_color(*cor_faixa)
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.text(x_atual + 120, y_atual + 8, faixa.upper())
-
-    # Retoma texto
-    pdf.set_text_color(*preto)
+    # --- LINHA 1 (Texto + Faixa + Texto) ---
     pdf.set_font("Helvetica", "", 14)
-    pdf.set_xy(0, 102)
-    pdf.cell(297, 8, f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}.", align="C")
+    pdf.set_text_color(*preto)
+
+    # Definir os 3 pedaços de texto
+    texto_inicial = "concluiu o exame teórico para a faixa "
+    texto_faixa = faixa.upper()
+    texto_final = f" obtendo {percentual}% de aproveitamento,"
+
+    # Calcular a largura de cada pedaço
+    pdf.set_font("Helvetica", "", 14)
+    largura_inicial = pdf.get_string_width(texto_inicial)
+    pdf.set_font("Helvetica", "B", 14) # Faixa é Bold
+    largura_faixa = pdf.get_string_width(texto_faixa)
+    pdf.set_font("Helvetica", "", 14)
+    largura_final = pdf.get_string_width(texto_final)
+    
+    largura_total_linha1 = largura_inicial + largura_faixa + largura_final
+    
+    # Calcular o X inicial para centralizar o bloco todo
+    x_inicial_linha1 = (297 - largura_total_linha1) / 2
+    
+    # Posicionar e escrever a Linha 1
+    pdf.set_y(115) # AJUSTE: Posição Y
+    pdf.set_x(x_inicial_linha1)
+    
+    # Parte 1 (Preto, Normal)
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_text_color(*preto)
+    pdf.cell(largura_inicial, 8, texto_inicial)
+    
+    # Parte 2 (Cor, Bold)
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(*cor_faixa)
+    pdf.cell(largura_faixa, 8, texto_faixa)
+    
+    # Parte 3 (Preto, Normal)
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_text_color(*preto)
+    pdf.cell(largura_final, 8, texto_final)
+
+    # --- LINHA 2 (Data) ---
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_text_color(*preto)
+    pdf.set_y(122) # AJUSTE: Nova linha, um pouco abaixo
+    pdf.cell(0, 8, f"realizado em {data_hora}.", align="C")
 
     # ========================
     # RESULTADO
@@ -253,28 +298,48 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     resultado = "APROVADO" if pontuacao >= (total * 0.6) else "REPROVADO"
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 120)
-    pdf.cell(297, 10, resultado, align="C")
+    pdf.set_y(135) # AJUSTE: Posição Y
+    pdf.cell(0, 10, resultado, align="C")
 
+    
     # ========================
-    # ASSINATURA
+    # SEÇÃO INFERIOR (Layout de 3 colunas)
     # ========================
+    # AJUSTE: A seção inferior inteira foi reescrita.
+    # O modelo tem Selo (Esquerda), Assinatura (Centro), QR (Direita)
+    # Todos alinhados em uma altura base.
+    
+    y_base_inferior = 160 # Linha de alinhamento principal
+    
+    # --- Coluna Esquerda: SELO ---
+    # NOVO: Este selo dourado não estava no código.
+    seal_path = "assets/logo_seal.png" # Você precisa ter este arquivo
+    if os.path.exists(seal_path):
+        pdf.image(seal_path, x=25, y=y_base_inferior - 5, w=30, h=30)
+
+    # --- Coluna Central: ASSINATURA ---
     if professor:
         nome_normalizado = "".join(
             c for c in professor.lower() if c.isalnum() or c in "_-"
         ).replace(" ", "_")
         assinatura_path = f"assets/assinaturas/{nome_normalizado}.png"
+        
         if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=118, y=135, w=60)
+            # AJUSTE: Centraliza a assinatura acima da linha
+            pdf.image(assinatura_path, x=(297-60)/2, y=y_base_inferior - 15, w=60)
 
     pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(*preto)
-    pdf.set_xy(0, 150)
-    pdf.cell(297, 8, "Assinatura do Professor Responsável", align="C")
+    pdf.set_y(y_base_inferior) # AJUSTE: Posição Y da linha
+    pdf.cell(0, 8, "Assinatura do Professor Responsável", align="C")
+    
+    # AJUSTE: O texto "Projeto Resgate" é parte da assinatura, não do rodapé
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_text_color(*dourado)
+    pdf.set_y(y_base_inferior + 6) # Logo abaixo da linha
+    pdf.cell(0, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
-    # ========================
-    # QR CODE E CÓDIGO
-    # ========================
+    # --- Coluna Direita: QR CODE ---
     caminho_qr = f"certificados/qrcodes/{codigo}.png"
     os.makedirs("certificados/qrcodes", exist_ok=True)
     url_verificacao = f"https://bjjdigital.netlify.app/verificar?codigo={codigo}"
@@ -290,23 +355,19 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     img = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     img.save(caminho_qr)
 
-    qr_w = 24
-    x_center = (pdf.w - qr_w) / 2
-    y_qr = 158
-    pdf.image(caminho_qr, x=x_center, y=y_qr, w=qr_w)
+    # AJUSTE: Posição (Direita) e Tamanho
+    qr_w = 30 # Tamanho do QR
+    x_qr = 297 - 25 - qr_w # Margem direita de 25mm
+    y_qr = y_base_inferior - 5 # Alinhado com o selo
+    
+    pdf.image(caminho_qr, x=x_qr, y=y_qr, w=qr_w)
 
     pdf.set_font("Helvetica", "I", 9)
     pdf.set_text_color(*preto)
-    pdf.set_xy(0, y_qr + qr_w + 3)
-    pdf.cell(297, 5, f"Código: {codigo}", align="C")
+    # AJUSTE: Centraliza o código *abaixo* do QR
+    pdf.set_xy(x_qr, y_qr + qr_w + 1)
+    pdf.cell(qr_w, 5, f"Código: {codigo}", align="C")
 
-    # ========================
-    # RODAPÉ
-    # ========================
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 195)
-    pdf.cell(297, 6, "Projeto Resgate GFTeam IAPC de Irajá - BJJ Digital", align="C")
 
     # ========================
     # SALVAR PDF FINAL
