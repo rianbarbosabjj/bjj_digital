@@ -299,7 +299,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "I", 8)
-    pdf.set_xy(205, 180)
+    pdf.set_xy(215, 180)
     pdf.cell(60, 6, f"Código: {codigo}", align="R")
 
     # ========================
