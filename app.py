@@ -200,7 +200,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # TÍTULO
     # ========================
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_font("Helvetica", "BI", 30)
     pdf.set_xy(0, 25)
     pdf.cell(297, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C")
 
