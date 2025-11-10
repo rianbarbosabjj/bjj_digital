@@ -15,7 +15,7 @@ import math
 # =========================================
 # CONFIGURAÇÕES GERAIS
 # =========================================
-st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
+st.set_page_config(page_title="BJJ Digital", page_icon="🥋", layout="wide")
 
 COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
@@ -171,7 +171,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0,25)
     pdf.cell(297,10,"CERTIFICADO DE EXAME TEÓRICO DE FAIXA",align="C")
     pdf.set_draw_color(*dourado)
-    pdf.set_line_width(0.6)
     pdf.line(30,35,268,35)
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
@@ -238,76 +237,53 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     return caminho_pdf
 
 # =========================================
-# MODO EXAME
+# PAINEL DO PROFESSOR
 # =========================================
-def modo_exame():
-    st.markdown("<h1 style='color:#FFD700;'>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
-    faixas=["Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"]
-    faixa=st.selectbox("Selecione a faixa:",faixas)
-    usuario=st.text_input("Nome do aluno:")
-    professor=st.text_input("Nome do professor responsável:")
-    tema="regras"
+def painel_professor():
+    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    aba1, aba2 = st.tabs(["➕ Cadastrar Aluno", "📋 Alunos Cadastrados"])
 
-    if "exame_iniciado" not in st.session_state:
-        st.session_state.exame_iniciado=False
-        st.session_state.respostas={}
-        st.session_state.certificado_path=None
+    with aba1:
+        with st.form("cadastro_aluno"):
+            nome = st.text_input("Nome completo do aluno:")
+            faixa = st.selectbox("Faixa atual:", ["Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"])
+            turma = st.text_input("Turma:")
+            professor = st.text_input("Professor responsável:")
+            observacoes = st.text_area("Observações (opcional):")
+            submitted = st.form_submit_button("💾 Salvar Aluno")
+            if submitted and nome.strip():
+                cursor.execute("""
+                    INSERT INTO alunos (nome, faixa_atual, turma, professor, observacoes)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (nome, faixa, turma, professor, observacoes))
+                conn.commit()
+                st.success(f"Aluno(a) **{nome}** cadastrado(a) com sucesso!")
 
-    if not st.session_state.exame_iniciado:
-        if st.button("Iniciar Exame"):
-            questoes=carregar_questoes(tema)
-            if not questoes:
-                st.error("Nenhuma questão encontrada para o tema selecionado.")
-                return
-            random.shuffle(questoes)
-            st.session_state.questoes=questoes[:5]
-            st.session_state.exame_iniciado=True
-            st.rerun()
-
-    if st.session_state.exame_iniciado:
-        questoes=st.session_state.questoes
-        total=len(questoes)
-        for i,q in enumerate(questoes,1):
-            st.markdown(f"### {i}. {q['pergunta']}")
-            if q.get("imagem"):
-                st.image(q["imagem"],use_container_width=True)
-            if q.get("video"):
-                st.video(q["video"])
-            resp=st.radio("Escolha:",q["opcoes"],key=f"resp_{i}",index=None)
-            st.session_state.respostas[f"resp_{i}"]=resp
-
-        if st.button("Finalizar Exame"):
-            pontuacao=sum(1 for i,q in enumerate(questoes,1)
-                          if st.session_state.respostas.get(f"resp_{i}","").startswith(q["resposta"]))
-            codigo=gerar_codigo_unico()
-            salvar_resultado(usuario,"Exame",tema,faixa,pontuacao,"00:05:00",codigo)
-            caminho_pdf=gerar_pdf(usuario,faixa,pontuacao,total,codigo,professor)
-            st.session_state.certificado_path=caminho_pdf
-            st.rerun()
-
-    if st.session_state.get("certificado_path"):
-        caminho_pdf=st.session_state.certificado_path
-        with open(caminho_pdf,"rb") as f:
-            st.download_button("📄 Baixar Certificado",f,
-                               file_name=os.path.basename(caminho_pdf),
-                               mime="application/pdf")
+    with aba2:
+        df = pd.read_sql_query("SELECT * FROM alunos ORDER BY nome ASC", conn)
+        if df.empty: st.info("Nenhum aluno cadastrado.")
+        else:
+            st.dataframe(df,use_container_width=True)
+            csv = df.to_csv(index=False).encode("utf-8")
+            st.download_button("📤 Exportar CSV", csv, "alunos.csv", "text/csv")
+    conn.close()
 
 # =========================================
-# BANCO DE QUESTÕES (Professor)
+# BANCO DE QUESTÕES
 # =========================================
 def banco_questoes_professor():
     st.markdown("<h1 style='color:#FFD700;'>🧩 Banco de Questões (Professor)</h1>", unsafe_allow_html=True)
     conn=sqlite3.connect(DB_PATH)
     cursor=conn.cursor()
     aba1,aba2=st.tabs(["➕ Criar Nova Questão","📚 Minhas Questões"])
-
     with aba1:
         with st.form("nova_questao"):
             faixa=st.selectbox("Faixa:",["Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"])
             tema=st.text_input("Tema:")
             pergunta=st.text_area("Pergunta:")
             autor=st.text_input("Professor (autor):")
-
             midia_tipo=st.radio("Deseja adicionar mídia?",["Nenhum","Imagem","Vídeo"])
             midia_caminho=None
             if midia_tipo=="Imagem":
@@ -316,16 +292,13 @@ def banco_questoes_professor():
                     os.makedirs("questions/assets",exist_ok=True)
                     nome_arquivo=f"q_{datetime.now().strftime('%Y%m%d%H%M%S')}.png"
                     caminho_final=os.path.join("questions/assets",nome_arquivo)
-                    with open(caminho_final,"wb") as f:
-                        f.write(imagem.read())
+                    with open(caminho_final,"wb") as f: f.write(imagem.read())
                     midia_caminho=caminho_final
                     st.image(caminho_final,use_container_width=True)
                     midia_tipo="imagem"
             elif midia_tipo=="Vídeo":
                 midia_caminho=st.text_input("Cole o link do vídeo:")
                 if midia_caminho: st.video(midia_caminho)
-
-            st.markdown("### Opções")
             opcoes=[st.text_input(f"Opção {i+1}:") for i in range(4)]
             resposta=st.selectbox("Resposta correta:",[o for o in opcoes if o])
             enviar=st.form_submit_button("💾 Enviar Questão")
@@ -336,7 +309,6 @@ def banco_questoes_professor():
                 """,(faixa,tema,pergunta,json.dumps(opcoes),resposta,autor,midia_tipo.lower(),midia_caminho))
                 conn.commit()
                 st.success("Questão enviada para aprovação!")
-
     with aba2:
         df=pd.read_sql_query("SELECT id,faixa,tema,pergunta,status FROM questoes ORDER BY data_criacao DESC",conn)
         if df.empty: st.info("Nenhuma questão criada ainda.")
@@ -344,15 +316,14 @@ def banco_questoes_professor():
     conn.close()
 
 # =========================================
-# PAINEL ADMIN (Aprovação de Questões)
+# PAINEL ADMIN
 # =========================================
 def painel_admin_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🏛️ Aprovação de Questões</h1>", unsafe_allow_html=True)
     conn=sqlite3.connect(DB_PATH)
     cursor=conn.cursor()
     df=pd.read_sql_query("SELECT * FROM questoes WHERE status='pendente' ORDER BY data_criacao DESC",conn)
-    if df.empty:
-        st.info("Nenhuma questão pendente.")
+    if df.empty: st.info("Nenhuma questão pendente.")
     else:
         for _,row in df.iterrows():
             st.markdown(f"### 🧠 Questão #{row['id']} – {row['faixa']} | {row['tema']}")
@@ -380,10 +351,12 @@ def main():
     st.sidebar.markdown("<h3 style='color:#FFD700;'>Plataforma BJJ Digital</h3>", unsafe_allow_html=True)
     menu=st.sidebar.radio("Navegar:",[
         "🏁 Exame de Faixa",
+        "👩‍🏫 Painel do Professor",
         "🧩 Banco de Questões (Professor)",
         "🏛️ Aprovação de Questões (Admin)"
     ])
     if menu=="🏁 Exame de Faixa": modo_exame()
+    elif menu=="👩‍🏫 Painel do Professor": painel_professor()
     elif menu=="🧩 Banco de Questões (Professor)": banco_questoes_professor()
     elif menu=="🏛️ Aprovação de Questões (Admin)": painel_admin_questoes()
 
