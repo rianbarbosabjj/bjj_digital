@@ -798,7 +798,6 @@ def main():
             "🥋 Gestão de Exame de Faixa"
         ]
     else:  # aluno
-else:  # aluno
     opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "📜 Meus Certificados"]
     # Checa se exame está habilitado pelo professor
     conn = sqlite3.connect(DB_PATH)
