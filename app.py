@@ -153,7 +153,7 @@ def normalizar_nome(nome):
 # CERTIFICADO
 # =========================================
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    pdf = FPDF("L", "mm", "A4")
+    pdf = FPDF("L", "mm", "A4") # Layout Paisagem (297x210)
     pdf.set_auto_page_break(False)
     pdf.add_page()
     dourado, preto, branco = (218,165,32), (40,40,40), (255,255,255)
@@ -169,74 +169,103 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.rect(11,11,275,188)
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica","BI",30)
-    pdf.set_xy(0,25)
-    pdf.cell(297,10,"CERTIFICADO DE EXAME TEÓRICO DE FAIXA",align="C")
+    pdf.set_y(25) # Usando set_y em vez de set_xy(0, 25)
+    pdf.cell(0, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C") # Usando cell(0, ...)
     pdf.set_draw_color(*dourado)
     pdf.line(30,35,268,35)
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         pdf.image(logo_path,x=133,y=40,w=32)
+
+    # ===================================================================
+    # --- INÍCIO DA SEÇÃO ATUALIZADA (Hierarquia e Espaçamento) ---
+    # ===================================================================
+
+    # Bloco 1: "Certificamos que..."
     pdf.set_text_color(*preto)
-pdf.set_font("Helvetica", "", 16)
-pdf.cell(0, 10, "Certificamos que o(a) aluno(a)", align="C")
-pdf.ln(15) # Adiciona 15mm de espaço vertical
+    pdf.set_font("Helvetica", "", 16) # Tamanho OK
+    pdf.set_y(80) # Posição Y inicial do bloco
+    pdf.cell(0, 10, "Certificamos que o(a) aluno(a)", align="C")
 
-# --- Bloco 2: Nome do Aluno (Destaque Principal) ---
-pdf.set_text_color(*dourado)
-pdf.set_font("Helvetica", "B", 24) # Fonte maior para o nome
-pdf.cell(0, 10, usuario.upper(), align="C")
-pdf.ln(20) # Mais espaço após o nome
+    # Bloco 2: Nome do Aluno (Destaque Principal)
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", 24) # AUMENTADO de 18 para 24
+    pdf.set_y(92) # Ajustado de 90 (mais espaço)
+    pdf.cell(0, 10, usuario.upper(), align="C")
 
-# --- Bloco 3: "Concluiu o exame..." ---
-pdf.set_text_color(*preto)
-pdf.set_font("Helvetica", "", 16) # Fonte menor que o nome (era 20)
-pdf.cell(0, 8, "concluiu o exame teórico para a faixa", align="C")
-pdf.ln(12) # Espaço
+    cores_faixa = {
+        "Cinza":(169,169,169),"Amarela":(255,215,0),"Laranja":(255,140,0),
+        "Verde":(0,128,0),"Azul":(30,144,255),"Roxa":(128,0,128),
+        "Marrom":(139,69,19),"Preta":(0,0,0)
+    }
+    cor_faixa = cores_faixa.get(faixa,preto)
+    
+    # Bloco 3: "Concluiu o exame..."
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", 16) # REDUZIDO de 20 para 16
+    pdf.set_y(108) # Ajustado de 104
+    pdf.cell(0, 8, "concluiu o exame teórico para a faixa", align="C")
 
-# --- Bloco 4: Faixa (com cor) ---
-cores_faixa = {
-    "Cinza": (169, 169, 169), "Amarela": (255, 215, 0), "Laranja": (255, 140, 0),
-    "Verde": (0, 128, 0), "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
-    "Marrom": (139, 69, 19), "Preta": (0, 0, 0)
-}
-cor_faixa = cores_faixa.get(faixa, preto)
-pdf.set_text_color(*cor_faixa)
-pdf.set_font("Helvetica", "B", 20) # Fonte maior para a faixa (era 16)
-pdf.cell(0, 8, faixa.upper(), align="C")
-pdf.ln(25) # Espaço maior antes do status
+    # Bloco 4: Faixa (com cor)
+    pdf.set_text_color(*cor_faixa)
+    pdf.set_font("Helvetica", "B", 20) # AUMENTADO de 16 para 20
+    pdf.set_y(118) # Ajustado de 112
+    pdf.cell(0, 8, faixa.upper(), align="C")
 
-# --- Bloco 5: Status "APROVADO" (Destaque Secundário) ---
-pdf.set_text_color(*dourado)
-pdf.set_font("Helvetica", "B", 22) # Fonte grande para o status (era 16)
-pdf.cell(0, 8, "APROVADO", align="C")
+    # Bloco 5: Status "APROVADO" (Destaque Secundário)
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", 22) # AUMENTADO de 16 para 22
+    pdf.set_y(132) # Ajustado de 130
+    pdf.cell(0, 8, "APROVADO", align="C")
+
+    # Bloco 6: Texto Final
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", 14) # REDUZIDO de 16 para 14
+    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
+    pdf.set_y(142) # Ajustado de 140
+    pdf.cell(0, 6, texto_final, align="C")
+
+    # ===================================================================
+    # --- FIM DA SEÇÃO ATUALIZADA ---
+    # ===================================================================
+
     selo_path="assets/selo_dourado.png"
     if os.path.exists(selo_path):
         pdf.image(selo_path,x=23,y=155,w=30)
+    
     caminho_qr=gerar_qrcode(codigo)
     pdf.image(caminho_qr,x=245,y=155,w=25)
+    
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica","I",8)
-    pdf.set_xy(220,180)
+    pdf.set_xy(220,180) # set_xy() OK aqui por ser alinhado à direita
     pdf.cell(60,6,f"Código: {codigo}",align="R")
+    
     if professor:
         assinatura_path=f"assets/assinaturas/{normalizar_nome(professor)}.png"
         if os.path.exists(assinatura_path):
             pdf.image(assinatura_path,x=118,y=160,w=60)
+            
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica","",10)
-    pdf.set_xy(0,175)
-    pdf.cell(297,6,"Assinatura do Professor Responsável",align="C")
+    pdf.set_y(175)
+    pdf.cell(0, 6, "Assinatura do Professor Responsável", align="C")
+    
     pdf.set_draw_color(*dourado)
     pdf.line(100,173,197,173)
     pdf.line(30,190,268,190)
+    
     pdf.set_text_color(*dourado)
     pdf.set_font("Helvetica","I",9)
-    pdf.set_xy(0,190)
-    pdf.cell(297,6,"Plataforma BJJ Digital",align="C")
+    pdf.set_y(190)
+    pdf.cell(0, 6, "Plataforma BJJ Digital", align="C")
+    
     os.makedirs("relatorios",exist_ok=True)
     caminho_pdf=os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
     pdf.output(caminho_pdf)
+    
     return caminho_pdf
+
 # =========================================
 # MODO EXAME DE FAIXA (ATUALIZADO)
 # =========================================
