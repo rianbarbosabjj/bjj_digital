@@ -798,15 +798,17 @@ def main():
             "🥋 Gestão de Exame de Faixa"
         ]
     else:  # aluno
-    opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "📜 Meus Certificados"]
-    # Checa se exame está habilitado pelo professor
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
-    dado = cursor.fetchone()
-    conn.close()
-    if dado and dado[0] == 1:
-        opcoes.insert(2, "🥋 Exame de Faixa")
+        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "📜 Meus Certificados"]
+
+        # Checa se exame está habilitado pelo professor
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+        dado = cursor.fetchone()
+        conn.close()
+        if dado and dado[0] == 1:
+            opcoes.insert(2, "🥋 Exame de Faixa")
+
     # =========================================
     # Navegação entre módulos
     # =========================================
@@ -828,6 +830,10 @@ def main():
         gestao_exame_de_faixa()
     elif menu == "📜 Meus Certificados":
         meus_certificados(usuario_logado)
+
+    # =========================================
+    # Botão de logout
+    # =========================================
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair"):
         st.session_state.usuario = None
