@@ -626,20 +626,24 @@ def carregar_todas_questoes():
     """Carrega todas as questões de todos os temas, adicionando o campo 'tema'."""
     todas = []
     os.makedirs("questions", exist_ok=True)
+
     for arquivo in os.listdir("questions"):
         if arquivo.endswith(".json"):
             tema = arquivo.replace(".json", "")
-            with open(f"questions/{arquivo}", "r", encoding="utf-8") as f:
-                try:
-    questoes = json.load(f)
-except json.JSONDecodeError as e:
-    st.error(f"Erro ao carregar o arquivo: {arquivo}. Verifique o formato JSON.")
-    st.code(str(e))
-    continue
-                questoes = json.load(f)
-                for q in questoes:
-                    q["tema"] = tema
-                    todas.append(q)
+            caminho = f"questions/{arquivo}"
+
+            try:
+                with open(caminho, "r", encoding="utf-8") as f:
+                    questoes = json.load(f)
+            except json.JSONDecodeError as e:
+                st.error(f"⚠️ Erro ao carregar o arquivo '{arquivo}'. Verifique o formato JSON.")
+                st.code(str(e))
+                continue  # ignora o arquivo problemático
+
+            for q in questoes:
+                q["tema"] = tema
+                todas.append(q)
+
     return todas
 
 
