@@ -407,4 +407,57 @@ def autenticar_usuario(email,senha):
     conn=sqlite3.connect(DB_PATH)
     c=conn.cursor()
     c.execute("SELECT nome,senha,perfil FROM usuarios WHERE email=? AND ativo=1",(email,))
-    user=c.fetchone
+    user=c.fetchone()
+    conn.close()
+    if user and bcrypt.checkpw(senha.encode('utf-8'),user[1].encode('utf-8')):
+        return {"nome":user[0],"perfil":user[2],"email":email}
+    return None
+
+def login_page():
+    st.markdown("<h1 style='color:#FFD700;'>🔐 Login - BJJ Digital</h1>", unsafe_allow_html=True)
+    email=st.text_input("Email:")
+    senha=st.text_input("Senha:",type="password")
+    if st.button("Entrar"):
+        user=autenticar_usuario(email,senha)
+        if user:
+            st.session_state["usuario_logado"]=user
+            st.rerun()
+        else:
+            st.error("Email ou senha incorretos.")
+    st.markdown("<small>Admin padrão: admin@bjjdigital.com / admin123</small>", unsafe_allow_html=True)
+
+def logout_button():
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Sair"):
+        for k in list(st.session_state.keys()):
+            del st.session_state[k]
+        st.rerun()
+
+# =========================================
+# MENU PRINCIPAL
+# =========================================
+def main():
+    user=st.session_state.get("usuario_logado")
+    if not user:
+        login_page()
+        return
+    st.sidebar.image("assets/logo.png",use_container_width=True)
+    st.sidebar.markdown(f"👋 {user['nome']} ({user['perfil'].capitalize()})")
+    logout_button()
+    menu=[]
+    if user["perfil"]=="admin":
+        menu=["🏁 Exame de Faixa","👩‍🏫 Painel do Professor","🏛️ Aprovação de Questões"]
+    elif user["perfil"]=="professor":
+        menu=["🏁 Exame de Faixa","👩‍🏫 Painel do Professor"]
+    elif user["perfil"]=="aluno":
+        menu=["🏁 Exame de Faixa"]
+    escolha=st.sidebar.radio("Navegar:",menu)
+    if escolha=="🏁 Exame de Faixa": modo_exame()
+    elif escolha=="👩‍🏫 Painel do Professor": painel_professor()
+    elif escolha=="🏛️ Aprovação de Questões": painel_admin_questoes()
+
+# =========================================
+# EXECUÇÃO
+# =========================================
+if __name__=="__main__":
+    main()
