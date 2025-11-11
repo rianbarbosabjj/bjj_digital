@@ -83,6 +83,7 @@ def criar_banco():
         usuario_id INTEGER,
         equipe_id INTEGER,
         pode_aprovar BOOLEAN DEFAULT 0,
+        eh_responsavel BOOLEAN DEFAULT 0, -- 🔹 novo campo
         status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
         data_vinculo DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -122,6 +123,13 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
+
+    # 🔹 Garante compatibilidade com bancos antigos
+    try:
+        cursor.execute("ALTER TABLE professores ADD COLUMN eh_responsavel BOOLEAN DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass  # coluna já existe
+
     conn.commit()
     conn.close()
 
@@ -644,22 +652,70 @@ def ranking():
 # =========================================
 def painel_professor():
     st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    usuario_id = st.session_state.usuario["id"]
 
-    aba1, aba2 = st.tabs(["📋 Gerenciar Alunos", "⚙️ Gestão da Equipe"])
+    # 🔹 Identifica as equipes sob responsabilidade
+    cursor.execute("""
+        SELECT e.id, e.nome
+        FROM equipes e
+        JOIN professores p ON e.id = p.equipe_id
+        WHERE p.usuario_id = ? AND p.eh_responsavel = 1
+    """, (usuario_id,))
+    equipes_responsavel = cursor.fetchall()
 
-    # --- Aba 1: Gerenciar alunos e habilitar exame ---
+    if equipes_responsavel:
+        st.markdown("### 🥋 Equipes sob sua responsabilidade:")
+        for eid, enome in equipes_responsavel:
+            st.markdown(f"- **{enome}**")
+    else:
+        st.info("Você ainda não é responsável por nenhuma equipe.")
+    
+    st.markdown("---")
+
+    # 🔹 Abas do painel
+    aba1, aba2, aba3 = st.tabs(["👥 Alunos", "⚙️ Professores Vinculados", "📊 Desempenho dos Alunos"])
+
+    # ============================================================
+    # 🧩 ABA 1 - ALUNOS
+    # ============================================================
     with aba1:
-        st.markdown("### 👥 Alunos cadastrados")
-        df = pd.read_sql_query("SELECT * FROM alunos", conn)
-        if df.empty:
-            st.info("Nenhum aluno cadastrado ainda.")
-        else:
-            df["Exame Habilitado"] = df["exame_habilitado"].apply(lambda x: "Sim" if x else "Não")
-            st.dataframe(df[["id", "faixa_atual", "turma", "status_vinculo", "Exame Habilitado"]], use_container_width=True)
+        st.markdown("### 📋 Meus alunos")
 
-            aluno_id = st.number_input("ID do aluno:", min_value=1, step=1)
+        if equipes_responsavel:
+            equipe_ids = tuple([e[0] for e in equipes_responsavel])
+            query = f"""
+                SELECT a.id, u.nome AS aluno, e.nome AS equipe, a.faixa_atual, a.turma,
+                       a.status_vinculo, a.exame_habilitado
+                FROM alunos a
+                JOIN usuarios u ON a.usuario_id = u.id
+                JOIN equipes e ON a.equipe_id = e.id
+                WHERE a.equipe_id IN {equipe_ids}
+            """
+        else:
+            query = f"""
+                SELECT a.id, u.nome AS aluno, e.nome AS equipe, a.faixa_atual, a.turma,
+                       a.status_vinculo, a.exame_habilitado
+                FROM alunos a
+                JOIN usuarios u ON a.usuario_id = u.id
+                JOIN equipes e ON a.equipe_id = e.id
+                WHERE a.professor_id IN (
+                    SELECT id FROM professores WHERE usuario_id = {usuario_id}
+                )
+            """
+
+        df_alunos = pd.read_sql_query(query, conn)
+
+        if df_alunos.empty:
+            st.info("Nenhum aluno vinculado às suas equipes ainda.")
+        else:
+            df_alunos["Exame Habilitado"] = df_alunos["exame_habilitado"].apply(lambda x: "Sim" if x else "Não")
+            st.dataframe(df_alunos, use_container_width=True)
+
+            aluno_id = st.number_input("Informe o ID do aluno:", min_value=1, step=1)
+
             col1, col2 = st.columns(2)
             if col1.button("✅ Habilitar Exame"):
                 cursor.execute("UPDATE alunos SET exame_habilitado=1 WHERE id=?", (aluno_id,))
@@ -672,18 +728,124 @@ def painel_professor():
                 st.warning(f"Exame desabilitado para o aluno ID {aluno_id}.")
                 st.rerun()
 
-    # --- Aba 2: Gestão da equipe (professores) ---
+    # ============================================================
+    # 🧩 ABA 2 - PROFESSORES VINCULADOS
+    # ============================================================
     with aba2:
-        st.markdown("### 👨‍🏫 Professores da equipe")
-        professores = pd.read_sql_query("SELECT * FROM professores", conn)
-        if professores.empty:
-            st.info("Nenhum professor cadastrado.")
+        st.markdown("### 👨‍🏫 Professores vinculados à sua equipe")
+
+        if not equipes_responsavel:
+            st.info("Nenhuma equipe sob sua responsabilidade para exibir professores.")
         else:
-            st.dataframe(professores)
+            equipe_ids = tuple([e[0] for e in equipes_responsavel])
+            query_prof = f"""
+                SELECT p.id, u.nome AS professor, e.nome AS equipe, 
+                       CASE WHEN p.eh_responsavel = 1 THEN 'Responsável' ELSE 'Auxiliar' END AS função,
+                       p.status_vinculo, p.data_vinculo
+                FROM professores p
+                JOIN usuarios u ON p.usuario_id = u.id
+                JOIN equipes e ON p.equipe_id = e.id
+                WHERE p.equipe_id IN {equipe_ids}
+            """
+            df_prof = pd.read_sql_query(query_prof, conn)
+
+            if df_prof.empty:
+                st.info("Nenhum professor auxiliar vinculado às suas equipes.")
+            else:
+                st.dataframe(df_prof, use_container_width=True)
+
+                st.markdown("### 🔄 Gerenciar vínculo")
+                prof_id = st.number_input("Informe o ID do professor auxiliar:", min_value=1, step=1)
+                col1, col2 = st.columns(2)
+                if col1.button("✅ Ativar Vínculo"):
+                    cursor.execute("UPDATE professores SET status_vinculo='ativo' WHERE id=?", (prof_id,))
+                    conn.commit()
+                    st.success("Vínculo ativado com sucesso!")
+                    st.rerun()
+                if col2.button("❌ Rejeitar Vínculo"):
+                    cursor.execute("UPDATE professores SET status_vinculo='rejeitado' WHERE id=?", (prof_id,))
+                    conn.commit()
+                    st.warning("Vínculo rejeitado.")
+                    st.rerun()
+
+    # ============================================================
+    # 🧩 ABA 3 - DESEMPENHO DOS ALUNOS
+    # ============================================================
+    with aba3:
+        st.markdown("### 📊 Desempenho dos Alunos")
+
+        if not equipes_responsavel:
+            st.info("Nenhuma equipe sob sua responsabilidade para gerar análises.")
+        else:
+            equipe_ids = tuple([e[0] for e in equipes_responsavel])
+
+            # 🔹 Consulta desempenho no modo rola e exame de faixa
+            query_resultados = f"""
+                SELECT r.usuario AS aluno, r.modo, r.faixa, r.pontuacao AS percentual, r.data
+                FROM resultados r
+                WHERE r.usuario IN (
+                    SELECT u.nome
+                    FROM alunos a
+                    JOIN usuarios u ON a.usuario_id = u.id
+                    WHERE a.equipe_id IN {equipe_ids}
+                )
+            """
+            query_rola = f"""
+                SELECT rr.usuario AS aluno, rr.faixa, rr.percentual, rr.data
+                FROM rola_resultados rr
+                WHERE rr.usuario IN (
+                    SELECT u.nome
+                    FROM alunos a
+                    JOIN usuarios u ON a.usuario_id = u.id
+                    WHERE a.equipe_id IN {equipe_ids}
+                )
+            """
+
+            df_exame = pd.read_sql_query(query_resultados, conn)
+            df_rola = pd.read_sql_query(query_rola, conn)
+
+            if df_exame.empty and df_rola.empty:
+                st.info("Ainda não há resultados registrados para análise.")
+            else:
+                if not df_exame.empty:
+                    df_exame["tipo"] = "Exame de Faixa"
+                if not df_rola.empty:
+                    df_rola["tipo"] = "Modo Rola"
+                df_total = pd.concat([df_exame, df_rola], ignore_index=True)
+
+                # 🔸 Filtros
+                col1, col2 = st.columns(2)
+                faixas = sorted(df_total["faixa"].dropna().unique().tolist())
+                filtro_faixa = col1.selectbox("Filtrar por faixa:", ["Todas"] + faixas)
+                modos = sorted(df_total["tipo"].dropna().unique().tolist())
+                filtro_modo = col2.selectbox("Filtrar por modo:", ["Todos"] + modos)
+
+                df_filtrado = df_total.copy()
+                if filtro_faixa != "Todas":
+                    df_filtrado = df_filtrado[df_filtrado["faixa"] == filtro_faixa]
+                if filtro_modo != "Todos":
+                    df_filtrado = df_filtrado[df_filtrado["tipo"] == filtro_modo]
+
+                # 🔹 Cálculo de médias
+                df_media = df_filtrado.groupby(["aluno", "tipo"], as_index=False)["percentual"].mean()
+
+                st.markdown("#### 📈 Média de Aproveitamento por Aluno")
+                fig = px.bar(
+                    df_media,
+                    x="aluno",
+                    y="percentual",
+                    color="tipo",
+                    barmode="group",
+                    text_auto=True,
+                    color_discrete_sequence=["#FFD700", "#078B6C"]
+                )
+                fig.update_layout(xaxis_title="Aluno", yaxis_title="Aproveitamento (%)")
+                st.plotly_chart(fig, use_container_width=True)
+
+                st.markdown("#### 📋 Tabela detalhada")
+                st.dataframe(df_media, use_container_width=True)
 
     conn.close()
-
-
 # =========================================
 # 🧩 GESTÃO DE QUESTÕES
 # =========================================
