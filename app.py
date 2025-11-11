@@ -427,10 +427,6 @@ def exame_de_faixa(usuario_logado):
 
         st.success("Certificado gerado com sucesso! 🥋")
 
-        else:
-            st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
-
-
 # =========================================
 # GERAÇÃO DE CERTIFICADO
 # =========================================
