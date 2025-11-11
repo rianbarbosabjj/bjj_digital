@@ -380,11 +380,18 @@ def exame_de_faixa(usuario_logado):
         percentual = int((acertos / total) * 100)
         st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
 
-        # ✅ Aprovação
         if percentual >= 70:
             st.success("🎉 Parabéns! Você foi aprovado(a) no Exame de Faixa! 👏")
 
             codigo = gerar_codigo_verificacao()
+            st.session_state["certificado_pronto"] = True
+            st.session_state["dados_certificado"] = {
+                "usuario": usuario_logado["nome"],
+                "faixa": faixa,
+                "acertos": acertos,
+                "total": total,
+                "codigo": codigo
+            }
 
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
@@ -395,19 +402,30 @@ def exame_de_faixa(usuario_logado):
             conn.commit()
             conn.close()
 
-            st.info("Clique abaixo para gerar seu certificado em PDF:")
+            st.info("Clique abaixo para gerar e baixar seu certificado.")
+        else:
+            st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
 
-            # 🔘 Geração e download do certificado
-            if st.button("📜 Baixar Certificado"):
-                caminho_pdf = gerar_pdf(usuario_logado["nome"], faixa, acertos, total, codigo)
-                with open(caminho_pdf, "rb") as f:
-                    st.download_button(
-                        label="📥 Clique aqui para baixar o certificado",
-                        data=f.read(),
-                        file_name=os.path.basename(caminho_pdf),
-                        mime="application/pdf"
-                    )
-                st.success("Certificado gerado com sucesso! 🥋")
+    # 🔘 Exibição persistente do botão de download
+    if st.session_state.get("certificado_pronto"):
+        dados = st.session_state["dados_certificado"]
+        caminho_pdf = gerar_pdf(
+            dados["usuario"],
+            dados["faixa"],
+            dados["acertos"],
+            dados["total"],
+            dados["codigo"]
+        )
+
+        with open(caminho_pdf, "rb") as f:
+            st.download_button(
+                label="📥 Baixar Certificado de Exame",
+                data=f.read(),
+                file_name=os.path.basename(caminho_pdf),
+                mime="application/pdf"
+            )
+
+        st.success("Certificado gerado com sucesso! 🥋")
 
         else:
             st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
