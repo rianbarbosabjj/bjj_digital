@@ -714,8 +714,8 @@ def gestao_equipes():
         if professores.empty or equipes.empty:
             st.warning("Cadastre pelo menos uma equipe e um professor primeiro.")
         else:
-            prof = st.selectbox("Professor:", professores["nome"], key="professor_select")
-            equipe = st.selectbox("Equipe:", equipes["nome"], key="equipe_select_prof")
+            prof = st.selectbox("👩‍🏫 Professor:", professores["nome"], key="professor_select")
+            equipe = st.selectbox("🏫 Equipe (para vincular professor):", equipes["nome"], key="equipe_select_prof_unique")
 
             prof_id = professores.loc[professores["nome"] == prof, "id"].values[0]
             equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
@@ -749,9 +749,9 @@ def gestao_equipes():
         if alunos.empty or professores.empty or equipes.empty:
             st.warning("Cadastre alunos, professores e equipes antes de vincular.")
         else:
-            aluno = st.selectbox("Aluno:", alunos["nome"], key="aluno_select")
-            professor_id = st.selectbox("Professor (ID da tabela professores):", professores["id"], key="professor_id_select")
-            equipe = st.selectbox("Equipe:", equipes["nome"], key="equipe_select_aluno")
+            aluno = st.selectbox("🥋 Aluno:", alunos["nome"], key="aluno_select")
+            professor_id = st.selectbox("👩‍🏫 Professor (ID da tabela professores):", professores["id"], key="professor_id_select_unique")
+            equipe = st.selectbox("🏫 Equipe (para vincular aluno):", equipes["nome"], key="equipe_select_aluno_unique")
 
             aluno_id = alunos.loc[alunos["nome"] == aluno, "id"].values[0]
             equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
