@@ -563,22 +563,26 @@ def main():
         f"<h3 style='color:{COR_DESTAQUE};'>Usuário: {usuario_logado['nome'].title()}</h3>",
         unsafe_allow_html=True,
     )
-    st.sidebar.markdown(f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>", unsafe_allow_html=True)
+    st.sidebar.markdown(
+        f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>",
+        unsafe_allow_html=True,
+    )
     st.sidebar.markdown("---")
 
     # =========================================
     # Menu dinâmico conforme perfil
     # =========================================
-if tipo_usuario in ["admin", "professor"]:
-    opcoes = [
-        "🏠 Início",
-        "🤼 Modo Rola",
-        "🥋 Exame de Faixa",
-        "🏆 Ranking",
-        "👩‍🏫 Painel do Professor",
-        "🧠 Gestão de Questões",
-        "🥋 Gestão de Exame de Faixa"
-    ]
+    if tipo_usuario in ["admin", "professor"]:
+        # Admin e professores têm acesso total ao exame
+        opcoes = [
+            "🏠 Início",
+            "🤼 Modo Rola",
+            "🥋 Exame de Faixa",
+            "🏆 Ranking",
+            "👩‍🏫 Painel do Professor",
+            "🧠 Gestão de Questões",
+            "🥋 Gestão de Exame de Faixa"
+        ]
     else:  # aluno
         opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking"]
         # Checa se exame está habilitado pelo professor
@@ -607,11 +611,14 @@ if tipo_usuario in ["admin", "professor"]:
         painel_professor()
     elif menu == "🧠 Gestão de Questões":
         gestao_questoes()
+    elif menu == "🥋 Gestão de Exame de Faixa":
+        gestao_exame_de_faixa()
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair"):
         st.session_state.usuario = None
         st.rerun()
+
 # =========================================
 # 🥋 GESTÃO DE EXAME DE FAIXA
 # =========================================
