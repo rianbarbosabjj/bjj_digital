@@ -384,7 +384,9 @@ def exame_de_faixa(usuario_logado):
         st.markdown("---")
 
     # 🔘 Botão para finalizar o exame
-    if st.button("Finalizar Exame 🏁"):
+    finalizar = st.button("Finalizar Exame 🏁")
+
+    if finalizar:
         acertos = sum(
             1 for i, q in enumerate(questoes, 1)
             if respostas.get(i, "") and respostas[i].startswith(q["resposta"])
@@ -393,6 +395,9 @@ def exame_de_faixa(usuario_logado):
         total = len(questoes)
         percentual = int((acertos / total) * 100)
         st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
+
+        # 🔹 Reseta variáveis antes de definir novo estado
+        st.session_state["certificado_pronto"] = False
 
         if percentual >= 70:
             st.success("🎉 Parabéns! Você foi aprovado(a) no Exame de Faixa! 👏")
@@ -416,33 +421,11 @@ def exame_de_faixa(usuario_logado):
             conn.commit()
             conn.close()
 
-            # 🔹 Mostra botão apenas após clicar em "Finalizar" e aprovação
-            st.info("Clique abaixo para gerar e baixar seu certificado.")
-
-            dados = st.session_state["dados_certificado"]
-            caminho_pdf = gerar_pdf(
-                dados["usuario"],
-                dados["faixa"],
-                dados["acertos"],
-                dados["total"],
-                dados["codigo"]
-            )
-
-            with open(caminho_pdf, "rb") as f:
-                st.download_button(
-                    label="📥 Baixar Certificado de Exame",
-                    data=f.read(),
-                    file_name=os.path.basename(caminho_pdf),
-                    mime="application/pdf"
-                )
-
-            st.success("Certificado gerado com sucesso! 🥋")
-
         else:
             st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
 
-    # 🔘 Exibição persistente do botão de download do certificado
-    if st.session_state.get("certificado_pronto"):
+    # 🔘 Exibição do botão de download — somente após clique e aprovação
+    if st.session_state.get("certificado_pronto") and finalizar:
         dados = st.session_state["dados_certificado"]
         caminho_pdf = gerar_pdf(
             dados["usuario"],
@@ -452,6 +435,7 @@ def exame_de_faixa(usuario_logado):
             dados["codigo"]
         )
 
+        st.info("Clique abaixo para gerar e baixar seu certificado.")
         with open(caminho_pdf, "rb") as f:
             st.download_button(
                 label="📥 Baixar Certificado de Exame",
@@ -461,6 +445,7 @@ def exame_de_faixa(usuario_logado):
             )
 
         st.success("Certificado gerado com sucesso! 🥋")
+
 # =========================================
 # GERAÇÃO DE CERTIFICADO
 # =========================================
