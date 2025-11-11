@@ -1,6 +1,8 @@
 streamlit
+streamlit-authenticator
+bcrypt
+fpdf2
 pillow
 pandas
-fpdf2
-qrcode
 plotly
+qrcode
