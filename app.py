@@ -678,15 +678,6 @@ def painel_professor():
                 st.rerun()
 
     # --- ⚙️ ABA 2: Professores da equipe ---
-    with aba2:
-        st.markdown("### 👨‍🏫 Professores da equipe")
-        professores = pd.read_sql_query("SELECT * FROM professores", conn)
-        if professores.empty:
-            st.info("Nenhum professor cadastrado.")
-        else:
-            st.dataframe(professores)
-
-    # --- 🏛️ ABA 3: Gestão de Equipes (com edição e exclusão) ---
     with aba3:
         st.markdown("### 🏛️ Equipes Cadastradas")
 
@@ -695,20 +686,27 @@ def painel_professor():
             st.info("Nenhuma equipe cadastrada ainda.")
         else:
             for i, row in df_eq.iterrows():
-                with st.expander(f"🏋️ {row['nome']}"):
+                unique_key = f"equipe_{row['id']}_{i}"
+                with st.expander(f"🏋️ {row['nome']} (ID {row['id']})", expanded=False):
                     st.markdown(f"**Descrição:** {row['descricao'] or 'Sem descrição.'}")
                     st.markdown(f"**Professor Responsável (ID):** {row['professor_responsavel_id'] or 'Não definido'}")
                     st.markdown(f"**Ativa:** {'✅ Sim' if row['ativo'] else '❌ Não'}")
 
                     col1, col2 = st.columns(2)
-                    if col1.button(f"✏️ Editar Equipe {row['id']}", key=f"editar_{row['id']}"):
-                        with st.form(f"form_editar_{row['id']}"):
-                            novo_nome = st.text_input("Nome da equipe:", value=row['nome'])
-                            nova_descricao = st.text_area("Descrição:", value=row['descricao'] or "")
-                            novo_prof = st.number_input("ID do Professor Responsável:", value=row['professor_responsavel_id'] or 0, min_value=0)
-                            ativo = st.checkbox("Equipe Ativa", value=bool(row['ativo']))
 
-                            salvar = st.form_submit_button("💾 Salvar Alterações")
+                    # --- Botão de edição ---
+                    if col1.button(f"✏️ Editar", key=f"editar_{unique_key}"):
+                        st.session_state[f"editando_{row['id']}"] = True
+
+                    if st.session_state.get(f"editando_{row['id']}", False):
+                        with st.form(f"form_editar_{unique_key}"):
+                            novo_nome = st.text_input("Nome da equipe:", value=row['nome'], key=f"nome_{unique_key}")
+                            nova_descricao = st.text_area("Descrição:", value=row['descricao'] or "", key=f"desc_{unique_key}")
+                            novo_prof = st.number_input("ID do Professor Responsável:", 
+                                                        value=row['professor_responsavel_id'] or 0, min_value=0, key=f"prof_{unique_key}")
+                            ativo = st.checkbox("Equipe Ativa", value=bool(row['ativo']), key=f"ativo_{unique_key}")
+
+                            salvar = st.form_submit_button("💾 Salvar Alterações", key=f"salvar_{unique_key}")
                             if salvar:
                                 cursor.execute("""
                                     UPDATE equipes
@@ -717,24 +715,35 @@ def painel_professor():
                                 """, (novo_nome, nova_descricao, novo_prof, ativo, row['id']))
                                 conn.commit()
                                 st.success(f"Equipe '{novo_nome}' atualizada com sucesso! ✅")
+                                st.session_state[f"editando_{row['id']}"] = False
                                 st.rerun()
 
-                    if col2.button(f"🗑️ Excluir Equipe {row['id']}", key=f"excluir_{row['id']}"):
-                        confirm = st.warning(f"Tem certeza que deseja excluir a equipe '{row['nome']}'?", icon="⚠️")
-                        if st.button(f"Confirmar Exclusão {row['id']}", key=f"confirmar_excluir_{row['id']}"):
+                    # --- Botão de exclusão ---
+                    if col2.button(f"🗑️ Excluir", key=f"excluir_{unique_key}"):
+                        st.session_state[f"confirmar_exclusao_{row['id']}"] = True
+
+                    if st.session_state.get(f"confirmar_exclusao_{row['id']}", False):
+                        st.warning(f"⚠️ Tem certeza que deseja excluir a equipe **{row['nome']}**?", icon="⚠️")
+                        conf1, conf2 = st.columns(2)
+                        if conf1.button(f"✅ Confirmar Exclusão", key=f"confirma_{unique_key}"):
                             cursor.execute("DELETE FROM equipes WHERE id=?", (row['id'],))
                             conn.commit()
                             st.error(f"Equipe '{row['nome']}' foi excluída com sucesso.")
+                            st.session_state[f"confirmar_exclusao_{row['id']}"] = False
+                            st.rerun()
+                        if conf2.button("❌ Cancelar", key=f"cancelar_{unique_key}"):
+                            st.session_state[f"confirmar_exclusao_{row['id']}"] = False
+                            st.info("Exclusão cancelada.")
                             st.rerun()
 
         st.markdown("---")
         st.markdown("### ➕ Cadastrar Nova Equipe")
-        with st.form("nova_equipe"):
-            nome_eq = st.text_input("Nome da Equipe:")
-            descricao_eq = st.text_area("Descrição:")
-            prof_resp = st.number_input("ID do Professor Responsável:", min_value=0)
-            ativo_eq = st.checkbox("Ativa", value=True)
-            salvar_eq = st.form_submit_button("💾 Criar Equipe")
+        with st.form("nova_equipe_form"):
+            nome_eq = st.text_input("Nome da Equipe:", key="novo_nome_eq")
+            descricao_eq = st.text_area("Descrição:", key="nova_desc_eq")
+            prof_resp = st.number_input("ID do Professor Responsável:", min_value=0, key="novo_prof_eq")
+            ativo_eq = st.checkbox("Ativa", value=True, key="novo_ativo_eq")
+            salvar_eq = st.form_submit_button("💾 Criar Equipe", key="criar_eq_btn")
 
             if salvar_eq and nome_eq.strip():
                 cursor.execute("""
@@ -744,7 +753,6 @@ def painel_professor():
                 conn.commit()
                 st.success(f"Equipe '{nome_eq}' criada com sucesso! 🎉")
                 st.rerun()
-
     conn.close()
 # =========================================
 # 🧩 GESTÃO DE QUESTÕES
