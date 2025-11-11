@@ -286,14 +286,18 @@ def exame_de_faixa(usuario_logado):
     dado = cursor.fetchone()
     conn.close()
 
+    # Apenas alunos precisam de liberação
     if usuario_logado["tipo"] not in ["admin", "professor"]:
         if not dado or dado[0] == 0:
             st.warning("🚫 Seu exame de faixa ainda não foi liberado. Aguarde a autorização do professor.")
             return
 
-    faixa = st.selectbox("Selecione sua faixa:", ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
-    exame_path = f"exames/faixa_{faixa.lower()}.json"
+    faixa = st.selectbox(
+        "Selecione sua faixa:",
+        ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+    )
 
+    exame_path = f"exames/faixa_{faixa.lower()}.json"
     if not os.path.exists(exame_path):
         st.error("Nenhum exame cadastrado para esta faixa ainda.")
         return
@@ -317,10 +321,10 @@ def exame_de_faixa(usuario_logado):
         respostas[i] = st.radio("Escolha a alternativa:", q["opcoes"], key=f"exame_{i}")
 
     if st.button("Finalizar Exame 🏁"):
-        acertos = 0
-        for i, q in enumerate(questoes, 1):
-            if respostas.get(i, "").startswith(q["resposta"]):
-                acertos += 1
+        acertos = sum(
+            1 for i, q in enumerate(questoes, 1)
+            if respostas.get(i, "").startswith(q["resposta"])
+        )
 
         total = len(questoes)
         percentual = int((acertos / total) * 100)
@@ -333,9 +337,9 @@ def exame_de_faixa(usuario_logado):
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO resultados (usuario, modo, tema, faixa, pontuacao, data, codigo_verificacao)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """, (usuario_logado["nome"], "Exame de Faixa", tema, faixa, percentual, datetime.now(), codigo))
+                INSERT INTO resultados (usuario, modo, faixa, pontuacao, data, codigo_verificacao)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (usuario_logado["nome"], "Exame de Faixa", faixa, percentual, datetime.now(), codigo))
             conn.commit()
             conn.close()
 
