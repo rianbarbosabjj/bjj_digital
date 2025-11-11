@@ -159,14 +159,15 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = None
 
 if st.session_state.usuario is None:
-    st.markdown("""
-        <div style='display:flex;justify-content:center;align-items:center;'>
-            <img src='assets/logo.png' style='width:25%;max-width:180px;height:auto;'/>
-        </div>
-    """, unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.image("assets/logo.png", width=180)  # Centralizada e ajustável
+
     st.markdown("<h2 style='text-align:center;color:#FFD700;'>Bem-vindo(a) ao BJJ Digital</h2>", unsafe_allow_html=True)
+
     user = st.text_input("Usuário:")
     pwd = st.text_input("Senha:", type="password")
+
     if st.button("Entrar"):
         u = autenticar(user.strip(), pwd.strip())
         if u:
@@ -175,10 +176,8 @@ if st.session_state.usuario is None:
             st.rerun()
         else:
             st.error("Usuário ou senha incorretos. Tente novamente.")
-    st.stop()
 
-usuario_logado = st.session_state.get("usuario", None)
-tipo_usuario = usuario_logado["tipo"] if usuario_logado else "aluno"
+    st.stop()
 
 # =========================================
 # FUNÇÕES AUXILIARES
