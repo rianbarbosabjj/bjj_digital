@@ -556,20 +556,21 @@ def main():
     st.sidebar.markdown("---")
 
     # Menu dinâmico conforme perfil
-    if tipo_usuario == "admin":
-        opcoes = ["🏠 Início", "🤼 Modo Rola", "🥋 Exame de Faixa", "🏆 Ranking", "👩‍🏫 Painel do Professor", "🧠 Gestão de Questões"]
-    elif tipo_usuario == "professor":
-        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "👩‍🏫 Painel do Professor", "🧠 Gestão de Questões"]
-    else:  # aluno
-        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking"]
-        # Checa se exame está habilitado
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
-        dado = cursor.fetchone()
-        conn.close()
-        if dado and dado[0] == 1:
-            opcoes.insert(2, "🥋 Exame de Faixa")
+if tipo_usuario in ["admin", "professor"]:
+    opcoes = ["🏠 Início", "🤼 Modo Rola", "🥋 Exame de Faixa", "🏆 Ranking", "👩‍🏫 Painel do Professor", "🧠 Gestão de Questões"]
+elif tipo_usuario == "professor":
+    opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "👩‍🏫 Painel do Professor", "🧠 Gestão de Questões"]
+else:  # aluno
+    opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking"]
+    # Checa se exame está habilitado
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+    dado = cursor.fetchone()
+    conn.close()
+    if dado and dado[0] == 1:
+        opcoes.insert(2, "🥋 Exame de Faixa")
+
 
     menu = st.sidebar.radio("Navegar:", opcoes)
 
