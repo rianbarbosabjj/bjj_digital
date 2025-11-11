@@ -169,8 +169,9 @@ if st.session_state.usuario is None:
             st.error("Usuário ou senha incorretos.")
     st.stop()
 
-usuario_logado = st.session_state.usuario
-tipo_usuario = usuario_logado["tipo"]
+# ⚙️ Correção para evitar erro de acesso
+usuario_logado = st.session_state.get("usuario", None)
+tipo_usuario = usuario_logado["tipo"] if usuario_logado else "aluno"
 
 # =========================================
 # FUNÇÕES AUXILIARES
