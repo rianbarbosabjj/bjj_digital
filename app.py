@@ -655,12 +655,12 @@ def gestao_equipes():
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
     # ============================================================
-    # 🏫 ABA 1 - EQUIPES (com IDs únicos)
+    # 🏫 ABA 1 - EQUIPES
     # ============================================================
     with aba1:
         st.subheader("Cadastrar nova equipe")
-        nome_equipe = st.text_input("Nome da equipe:", key="nome_equipe_nova")
-        descricao = st.text_area("Descrição:", key="desc_equipe_nova")
+        nome_equipe = st.text_input("Nome da equipe:", key="cadastro_nome_equipe")
+        descricao = st.text_area("Descrição:", key="cadastro_descricao_equipe")
 
         if st.button("➕ Criar Equipe", key="btn_criar_equipe"):
             if nome_equipe.strip():
@@ -678,33 +678,43 @@ def gestao_equipes():
             st.info("Nenhuma equipe cadastrada.")
         else:
             for i, row in equipes_df.iterrows():
-                with st.expander(f"🏋️ {row['nome']} (ID {row['id']})"):
+                with st.expander(f"🏋️ {row['nome']} (ID {row['id']})", expanded=False):
                     st.markdown(f"**Descrição:** {row['descricao'] or 'Sem descrição.'}")
                     st.markdown(f"**Professor Responsável:** {row['professor_responsavel_id'] or 'Não definido'}")
                     st.markdown(f"**Ativa:** {'✅ Sim' if row['ativo'] else '❌ Não'}")
 
                     col1, col2 = st.columns(2)
-                    if col1.button("✏️ Editar", key=f"edit_{row['id']}"):
-                        with st.form(f"form_edit_{row['id']}"):
-                            novo_nome = st.text_input("Novo nome:", value=row['nome'], key=f"nome_edit_{row['id']}")
-                            nova_desc = st.text_area("Nova descrição:", value=row['descricao'] or "", key=f"desc_edit_{row['id']}")
-                            salvar = st.form_submit_button("💾 Salvar", key=f"salvar_edit_{row['id']}")
+
+                    if col1.button("✏️ Editar", key=f"edit_equipe_{row['id']}"):
+                        with st.form(f"form_editar_equipe_{row['id']}"):
+                            novo_nome = st.text_input("Novo nome:", value=row['nome'], key=f"novo_nome_{row['id']}")
+                            nova_desc = st.text_area("Nova descrição:", value=row['descricao'] or "", key=f"nova_desc_{row['id']}")
+                            prof_resp = st.number_input("ID do Professor Responsável:", 
+                                                        value=row['professor_responsavel_id'] or 0, 
+                                                        min_value=0, 
+                                                        key=f"prof_resp_{row['id']}")
+                            ativo = st.checkbox("Equipe Ativa", value=bool(row['ativo']), key=f"ativo_{row['id']}")
+                            salvar = st.form_submit_button("💾 Salvar", key=f"salvar_equipe_{row['id']}")
                             if salvar:
-                                cursor.execute("UPDATE equipes SET nome=?, descricao=? WHERE id=?", (novo_nome, nova_desc, row['id']))
+                                cursor.execute("""
+                                    UPDATE equipes
+                                    SET nome=?, descricao=?, professor_responsavel_id=?, ativo=?
+                                    WHERE id=?
+                                """, (novo_nome, nova_desc, prof_resp, ativo, row['id']))
                                 conn.commit()
                                 st.success(f"Equipe '{novo_nome}' atualizada com sucesso!")
                                 st.rerun()
 
-                    if col2.button("🗑️ Excluir", key=f"del_{row['id']}"):
+                    if col2.button("🗑️ Excluir", key=f"del_equipe_{row['id']}"):
                         st.warning(f"⚠️ Tem certeza que deseja excluir a equipe '{row['nome']}'?")
-                        if st.button("Confirmar Exclusão", key=f"conf_{row['id']}"):
+                        if st.button("Confirmar Exclusão", key=f"confirma_del_{row['id']}"):
                             cursor.execute("DELETE FROM equipes WHERE id=?", (row['id'],))
                             conn.commit()
                             st.error(f"Equipe '{row['nome']}' excluída com sucesso!")
                             st.rerun()
 
     # ============================================================
-    # 👩‍🏫 ABA 2 - PROFESSORES (com keys únicos)
+    # 👩‍🏫 ABA 2 - PROFESSORES
     # ============================================================
     with aba2:
         st.subheader("Vincular professor a uma equipe")
@@ -714,13 +724,13 @@ def gestao_equipes():
         if professores.empty or equipes.empty:
             st.warning("Cadastre pelo menos uma equipe e um professor primeiro.")
         else:
-            prof = st.selectbox("👩‍🏫 Professor:", professores["nome"], key="professor_select")
-            equipe = st.selectbox("🏫 Equipe (para vincular professor):", equipes["nome"], key="equipe_select_prof_unique")
+            prof = st.selectbox("👩‍🏫 Selecione o professor:", professores["nome"], key="professor_selectbox")
+            equipe = st.selectbox("🏫 Selecione a equipe para vincular:", equipes["nome"], key="equipe_selectbox_prof")
 
             prof_id = professores.loc[professores["nome"] == prof, "id"].values[0]
             equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
 
-            if st.button("📎 Vincular Professor", key="btn_vincular_prof"):
+            if st.button("📎 Vincular Professor à Equipe", key="btn_vincular_professor"):
                 cursor.execute(
                     "INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, status_vinculo) VALUES (?, ?, ?, ?)",
                     (prof_id, equipe_id, 1, "ativo")
@@ -738,7 +748,7 @@ def gestao_equipes():
             st.dataframe(profs_df, use_container_width=True)
 
     # ============================================================
-    # 🥋 ABA 3 - ALUNOS (com keys únicos)
+    # 🥋 ABA 3 - ALUNOS
     # ============================================================
     with aba3:
         st.subheader("Vincular aluno a professor e equipe")
@@ -749,9 +759,9 @@ def gestao_equipes():
         if alunos.empty or professores.empty or equipes.empty:
             st.warning("Cadastre alunos, professores e equipes antes de vincular.")
         else:
-            aluno = st.selectbox("🥋 Aluno:", alunos["nome"], key="aluno_select")
-            professor_id = st.selectbox("👩‍🏫 Professor (ID da tabela professores):", professores["id"], key="professor_id_select_unique")
-            equipe = st.selectbox("🏫 Equipe (para vincular aluno):", equipes["nome"], key="equipe_select_aluno_unique")
+            aluno = st.selectbox("🥋 Selecione o aluno:", alunos["nome"], key="aluno_selectbox")
+            professor_id = st.selectbox("👩‍🏫 Selecione o professor (ID):", professores["id"], key="professor_selectbox_aluno")
+            equipe = st.selectbox("🏫 Selecione a equipe:", equipes["nome"], key="equipe_selectbox_aluno")
 
             aluno_id = alunos.loc[alunos["nome"] == aluno, "id"].values[0]
             equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
@@ -774,6 +784,7 @@ def gestao_equipes():
             st.dataframe(alunos_df, use_container_width=True)
 
     conn.close()
+
 # =========================================
 # 🧩 GESTÃO DE QUESTÕES
 # =========================================
