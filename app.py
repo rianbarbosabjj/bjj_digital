@@ -95,7 +95,8 @@ def criar_banco():
         professor_id INTEGER,
         equipe_id INTEGER,
         status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
-        data_pedido DATETIME DEFAULT CURRENT_TIMESTAMP
+        data_pedido DATETIME DEFAULT CURRENT_TIMESTAMP,
+        exame_habilitado BOOLEAN DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS resultados (
@@ -125,7 +126,6 @@ def criar_banco():
     conn.close()
 
 criar_banco()
-
 # =========================================
 # AUTENTICAÇÃO
 # =========================================
@@ -139,7 +139,9 @@ def autenticar(usuario, senha):
         return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
     return None
 
+
 def criar_usuarios_teste():
+    """Cria usuários padrão: admin, professor e aluno."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     usuarios = [("admin", "admin"), ("professor", "professor"), ("aluno", "aluno")]
@@ -147,7 +149,10 @@ def criar_usuarios_teste():
         cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
         if cursor.fetchone() is None:
             senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-            cursor.execute("INSERT INTO usuarios (nome, tipo_usuario, senha) VALUES (?, ?, ?)", (nome, tipo, senha_hash))
+            cursor.execute(
+                "INSERT INTO usuarios (nome, tipo_usuario, senha) VALUES (?, ?, ?)",
+                (nome, tipo, senha_hash),
+            )
     conn.commit()
     conn.close()
 
@@ -160,7 +165,7 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = None
 
 if st.session_state.usuario is None:
-    # Exibe logo
+    # Exibe logo centralizado (igual à tela inicial)
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
@@ -189,25 +194,39 @@ if st.session_state.usuario is None:
             st.error("Usuário ou senha incorretos. Tente novamente.")
     st.stop()
 
+
 # =========================================
 # FUNÇÕES AUXILIARES
 # =========================================
 def carregar_questoes(tema):
+    """Carrega as questões do arquivo JSON correspondente."""
     path = f"questions/{tema}.json"
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     return []
 
+
+def salvar_questoes(tema, questoes):
+    """Salva lista de questões no arquivo JSON."""
+    os.makedirs("questions", exist_ok=True)
+    with open(f"questions/{tema}.json", "w", encoding="utf-8") as f:
+        json.dump(questoes, f, indent=4, ensure_ascii=False)
+
+
+def gerar_codigo_verificacao():
+    """Cria código de verificação único para certificados."""
+    return "".join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=10))
 # =========================================
 # 🤼 MODO ROLA
 # =========================================
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
-    temas = [f.replace(".json","") for f in os.listdir("questions") if f.endswith(".json")]
+    temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
     temas.append("Todos os Temas")
+
     tema = st.selectbox("Selecione o tema:", temas)
-    faixa = st.selectbox("Sua faixa:", ["Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"])
+    faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
 
     if st.button("Iniciar Treino 🤼"):
         if tema == "Todos os Temas":
@@ -228,8 +247,11 @@ def modo_rola(usuario_logado):
 
         for i, q in enumerate(questoes, 1):
             st.markdown(f"### {i}. {q['pergunta']}")
-            if q.get("imagem"): st.image(q["imagem"], use_container_width=True)
-            if q.get("video"): st.video(q["video"])
+            if q.get("imagem"):
+                st.image(q["imagem"], use_container_width=True)
+            if q.get("video"):
+                st.video(q["video"])
+
             resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"rola_{i}")
             if st.button(f"Confirmar resposta {i}", key=f"confirma_{i}"):
                 if resposta.startswith(q["resposta"]):
@@ -251,6 +273,112 @@ def modo_rola(usuario_logado):
         conn.close()
         st.success("Resultado salvo com sucesso! 🏆")
 
+
+# =========================================
+# 🥋 EXAME DE FAIXA
+# =========================================
+def exame_de_faixa(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+    dado = cursor.fetchone()
+    conn.close()
+
+    if not dado or dado[0] == 0:
+        st.warning("🚫 Seu exame de faixa ainda não foi liberado. Aguarde a autorização do professor.")
+        return
+
+    temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
+    tema = st.selectbox("Selecione o tema para o exame:", temas)
+    faixa = st.selectbox("Selecione sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+
+    questoes = carregar_questoes(tema)
+    if not questoes:
+        st.error("Nenhuma questão encontrada para o tema selecionado.")
+        return
+
+    respostas = {}
+    for i, q in enumerate(questoes, 1):
+        st.markdown(f"### {i}. {q['pergunta']}")
+        if q.get("imagem"):
+            st.image(q["imagem"], use_container_width=True)
+        if q.get("video"):
+            st.video(q["video"])
+
+        respostas[i] = st.radio("Escolha a alternativa:", q["opcoes"], key=f"exame_{i}")
+
+    if st.button("Finalizar Exame 🏁"):
+        acertos = 0
+        for i, q in enumerate(questoes, 1):
+            if respostas.get(i, "").startswith(q["resposta"]):
+                acertos += 1
+
+        total = len(questoes)
+        percentual = int((acertos / total) * 100)
+        st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
+
+        if percentual >= 70:
+            st.success("🎉 Parabéns! Você foi aprovado(a) no Exame de Faixa!")
+            codigo = gerar_codigo_verificacao()
+
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO resultados (usuario, modo, tema, faixa, pontuacao, data, codigo_verificacao)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (usuario_logado["nome"], "Exame de Faixa", tema, faixa, percentual, datetime.now(), codigo))
+            conn.commit()
+            conn.close()
+
+            if st.button("📜 Baixar Certificado"):
+                gerar_certificado(usuario_logado["nome"], faixa, percentual, codigo)
+        else:
+            st.error("Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
+
+
+# =========================================
+# GERAÇÃO DE CERTIFICADO
+# =========================================
+def gerar_certificado(nome, faixa, percentual, codigo):
+    os.makedirs("certificados", exist_ok=True)
+    pdf = FPDF("L", "mm", "A4")
+    pdf.add_page()
+    pdf.set_fill_color(255, 255, 255)
+    pdf.rect(5, 5, 287, 200, "D")
+
+    pdf.set_font("Helvetica", "B", 26)
+    pdf.set_text_color(218, 165, 32)
+    pdf.cell(0, 20, "Plataforma BJJ Digital", align="C", ln=1)
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(0, 0, 0)
+    pdf.cell(0, 15, "Certificado de Exame de Faixa", align="C", ln=1)
+
+    pdf.set_font("Helvetica", "", 16)
+    pdf.multi_cell(0, 10, f"Certificamos que {nome.title()} foi aprovado(a) com {percentual}% de aproveitamento no Exame de Faixa {faixa}.", align="C")
+    pdf.ln(10)
+
+    qr = qrcode.make(f"Verificação: {codigo}")
+    qr_path = f"certificados/{nome}_qr.png"
+    qr.save(qr_path)
+    pdf.image(qr_path, x=130, y=120, w=30)
+    os.remove(qr_path)
+
+    pdf.set_font("Helvetica", "I", 10)
+    pdf.cell(0, 10, f"Código de verificação: {codigo}", align="C", ln=1)
+
+    ano = datetime.now().year
+    nome_limpo = "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split())
+    nome_arquivo = f"certificados/{nome_limpo}_{faixa}_Plataforma_BJJ_Digital_{ano}.pdf"
+    pdf.output(nome_arquivo)
+
+    with open(nome_arquivo, "rb") as f:
+        st.download_button("📥 Clique aqui para baixar o certificado", f, file_name=os.path.basename(nome_arquivo))
+    st.success("Certificado gerado com sucesso! 🥇")
+
+
 # =========================================
 # 🏆 RANKING
 # =========================================
@@ -269,32 +397,146 @@ def ranking():
         df = df[df["faixa"] == filtro_faixa]
 
     ranking_df = df.groupby("usuario", as_index=False).agg(
-        media_percentual=("percentual","mean"),
-        total_treinos=("id","count")
+        media_percentual=("percentual", "mean"),
+        total_treinos=("id", "count")
     ).sort_values(by="media_percentual", ascending=False)
 
-    ranking_df["Posição"] = range(1, len(ranking_df)+1)
-    st.dataframe(ranking_df[["Posição","usuario","media_percentual","total_treinos"]], use_container_width=True)
+    ranking_df["Posição"] = range(1, len(ranking_df) + 1)
+    st.dataframe(ranking_df[["Posição", "usuario", "media_percentual", "total_treinos"]], use_container_width=True)
 
-    fig = px.bar(ranking_df.head(10), x="usuario", y="media_percentual",
-                 text_auto=True, title="Top 10 - Modo Rola",
-                 color="media_percentual", color_continuous_scale="YlOrBr")
+    fig = px.bar(
+        ranking_df.head(10),
+        x="usuario",
+        y="media_percentual",
+        text_auto=True,
+        title="Top 10 - Modo Rola",
+        color="media_percentual",
+        color_continuous_scale="YlOrBr",
+    )
     st.plotly_chart(fig, use_container_width=True)
-
 # =========================================
-# PAINEL DO PROFESSOR
+# 👩‍🏫 PAINEL DO PROFESSOR
 # =========================================
 def painel_professor():
     st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    aba1, aba2, aba3, aba4 = st.tabs([
-        "➕ Cadastrar Aluno", "📋 Pedidos Pendentes", "⚙️ Gestão da Equipe", "📊 Desempenho dos Alunos"
-    ])
+
+    aba1, aba2 = st.tabs(["📋 Gerenciar Alunos", "⚙️ Gestão da Equipe"])
+
+    # --- Aba 1: Gerenciar alunos e habilitar exame ---
+    with aba1:
+        st.markdown("### 👥 Alunos cadastrados")
+        df = pd.read_sql_query("SELECT * FROM alunos", conn)
+        if df.empty:
+            st.info("Nenhum aluno cadastrado ainda.")
+        else:
+            df["Exame Habilitado"] = df["exame_habilitado"].apply(lambda x: "Sim" if x else "Não")
+            st.dataframe(df[["id", "faixa_atual", "turma", "status_vinculo", "Exame Habilitado"]], use_container_width=True)
+
+            aluno_id = st.number_input("ID do aluno:", min_value=1, step=1)
+            col1, col2 = st.columns(2)
+            if col1.button("✅ Habilitar Exame"):
+                cursor.execute("UPDATE alunos SET exame_habilitado=1 WHERE id=?", (aluno_id,))
+                conn.commit()
+                st.success(f"Exame habilitado para o aluno ID {aluno_id}.")
+                st.rerun()
+            if col2.button("❌ Desabilitar Exame"):
+                cursor.execute("UPDATE alunos SET exame_habilitado=0 WHERE id=?", (aluno_id,))
+                conn.commit()
+                st.warning(f"Exame desabilitado para o aluno ID {aluno_id}.")
+                st.rerun()
+
+    # --- Aba 2: Gestão da equipe (professores) ---
+    with aba2:
+        st.markdown("### 👨‍🏫 Professores da equipe")
+        professores = pd.read_sql_query("SELECT * FROM professores", conn)
+        if professores.empty:
+            st.info("Nenhum professor cadastrado.")
+        else:
+            st.dataframe(professores)
+
     conn.close()
 
+
 # =========================================
-# MENU PRINCIPAL
+# 🧩 GESTÃO DE QUESTÕES
+# =========================================
+def gestao_questoes():
+    st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
+
+    temas_existentes = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
+    tema_selecionado = st.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
+
+    if tema_selecionado == "Novo Tema":
+        tema = st.text_input("Digite o nome do novo tema:")
+    else:
+        tema = tema_selecionado
+
+    questoes = carregar_questoes(tema) if tema else []
+
+    st.markdown("### ✍️ Adicionar nova questão")
+    pergunta = st.text_area("Pergunta:")
+    opcoes = [st.text_input(f"Alternativa {letra}:", key=f"opt_{letra}") for letra in ["A", "B", "C", "D", "E"]]
+    resposta = st.selectbox("Resposta correta:", ["A", "B", "C", "D", "E"])
+    imagem = st.text_input("Caminho da imagem (opcional):")
+    video = st.text_input("URL do vídeo (opcional):")
+
+    if st.button("💾 Salvar Questão"):
+        if pergunta.strip():
+            nova = {
+                "pergunta": pergunta.strip(),
+                "opcoes": [f"{letra}) {txt}" for letra, txt in zip(["A", "B", "C", "D", "E"], opcoes) if txt.strip()],
+                "resposta": resposta,
+                "imagem": imagem.strip(),
+                "video": video.strip(),
+            }
+            questoes.append(nova)
+            salvar_questoes(tema, questoes)
+            st.success("Questão adicionada com sucesso! ✅")
+            st.rerun()
+        else:
+            st.error("A pergunta não pode estar vazia.")
+
+    st.markdown("### 📚 Questões cadastradas")
+    if not questoes:
+        st.info("Nenhuma questão cadastrada ainda.")
+    else:
+        for i, q in enumerate(questoes, 1):
+            st.markdown(f"**{i}. {q['pergunta']}**")
+            for alt in q["opcoes"]:
+                st.markdown(f"- {alt}")
+            st.markdown(f"**Resposta:** {q['resposta']}")
+            if st.button(f"🗑️ Excluir questão {i}", key=f"del_{i}"):
+                questoes.pop(i - 1)
+                salvar_questoes(tema, questoes)
+                st.warning("Questão removida.")
+                st.rerun()
+
+
+# =========================================
+# 🏠 MENU PRINCIPAL
+# =========================================
+def tela_inicio():
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_base64 = base64.b64encode(f.read()).decode()
+        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>"
+    else:
+        logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
+
+    st.markdown(f"""
+        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:40px;'>
+            {logo_html}
+            <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
+            <p style='color:#FFFFFF;text-align:center;font-size:1.1em;'>Selecione uma opção no menu lateral para começar o treino 💪</p>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+# =========================================
+# 🚀 MAIN
 # =========================================
 def main():
     usuario_logado = st.session_state.usuario
@@ -306,45 +548,53 @@ def main():
     tipo_usuario = usuario_logado["tipo"]
 
     st.sidebar.image("assets/logo.png", use_container_width=True)
-    st.sidebar.markdown(f"<h3 style='color:{COR_DESTAQUE};'>Usuário: {usuario_logado['nome'].title()}</h3>", unsafe_allow_html=True)
+    st.sidebar.markdown(
+        f"<h3 style='color:{COR_DESTAQUE};'>Usuário: {usuario_logado['nome'].title()}</h3>",
+        unsafe_allow_html=True,
+    )
     st.sidebar.markdown(f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>", unsafe_allow_html=True)
     st.sidebar.markdown("---")
 
-    if tipo_usuario in ["admin", "professor"]:
-        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "👩‍🏫 Painel do Professor"]
-    else:
+    # Menu dinâmico conforme perfil
+    if tipo_usuario == "admin":
+        opcoes = ["🏠 Início", "🤼 Modo Rola", "🥋 Exame de Faixa", "🏆 Ranking", "👩‍🏫 Painel do Professor", "🧠 Gestão de Questões"]
+    elif tipo_usuario == "professor":
+        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "👩‍🏫 Painel do Professor", "🧠 Gestão de Questões"]
+    else:  # aluno
         opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking"]
+        # Checa se exame está habilitado
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+        dado = cursor.fetchone()
+        conn.close()
+        if dado and dado[0] == 1:
+            opcoes.insert(2, "🥋 Exame de Faixa")
 
     menu = st.sidebar.radio("Navegar:", opcoes)
 
     if menu == "🏠 Início":
-        logo_path = "assets/logo.png"
-        if os.path.exists(logo_path):
-            with open(logo_path, "rb") as f:
-                logo_base64 = base64.b64encode(f.read()).decode()
-            logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>"
-        else:
-            logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
-
-        st.markdown(f"""
-            <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:40px;'>
-                {logo_html}
-                <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
-                <p style='color:#FFFFFF;text-align:center;font-size:1.1em;'>Selecione uma opção no menu lateral para começar o treino 💪</p>
-            </div>
-        """, unsafe_allow_html=True)
-
+        tela_inicio()
     elif menu == "🤼 Modo Rola":
         modo_rola(usuario_logado)
+    elif menu == "🥋 Exame de Faixa":
+        exame_de_faixa(usuario_logado)
     elif menu == "🏆 Ranking":
         ranking()
     elif menu == "👩‍🏫 Painel do Professor":
         painel_professor()
+    elif menu == "🧠 Gestão de Questões":
+        gestao_questoes()
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair"):
         st.session_state.usuario = None
         st.rerun()
 
+
+# =========================================
+# EXECUÇÃO
+# =========================================
 if __name__ == "__main__":
     main()
+
