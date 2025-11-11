@@ -373,20 +373,21 @@ def exame_de_faixa(usuario_logado):
             except Exception:
                 st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
 
-        # 🔹 Exibe as opções sem nenhuma pré-seleção
-respostas[i] = st.radio(
-    "Escolha a alternativa:",
-    q["opcoes"],
-    key=f"exame_{i}",
-    index=None  # <- ESSENCIAL: impede pré-seleção
-)
+        # 🔹 Corrigido: nenhuma alternativa vem pré-selecionada
+        respostas[i] = st.radio(
+            "Escolha a alternativa:",
+            q["opcoes"],
+            key=f"exame_{i}",
+            index=None
+        )
+
         st.markdown("---")
 
     # 🔘 Botão para finalizar o exame
     if st.button("Finalizar Exame 🏁"):
         acertos = sum(
             1 for i, q in enumerate(questoes, 1)
-            if respostas.get(i, "").startswith(q["resposta"])
+            if respostas.get(i, "") and respostas[i].startswith(q["resposta"])
         )
 
         total = len(questoes)
@@ -419,7 +420,7 @@ respostas[i] = st.radio(
         else:
             st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
 
-    # 🔘 Exibição persistente do botão de download
+    # 🔘 Exibição persistente do botão de download do certificado
     if st.session_state.get("certificado_pronto"):
         dados = st.session_state["dados_certificado"]
         caminho_pdf = gerar_pdf(
@@ -439,7 +440,6 @@ respostas[i] = st.radio(
             )
 
         st.success("Certificado gerado com sucesso! 🥋")
-
 # =========================================
 # GERAÇÃO DE CERTIFICADO
 # =========================================
