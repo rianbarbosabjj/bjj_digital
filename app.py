@@ -416,7 +416,28 @@ def exame_de_faixa(usuario_logado):
             conn.commit()
             conn.close()
 
+            # 🔹 Mostra botão apenas após clicar em "Finalizar" e aprovação
             st.info("Clique abaixo para gerar e baixar seu certificado.")
+
+            dados = st.session_state["dados_certificado"]
+            caminho_pdf = gerar_pdf(
+                dados["usuario"],
+                dados["faixa"],
+                dados["acertos"],
+                dados["total"],
+                dados["codigo"]
+            )
+
+            with open(caminho_pdf, "rb") as f:
+                st.download_button(
+                    label="📥 Baixar Certificado de Exame",
+                    data=f.read(),
+                    file_name=os.path.basename(caminho_pdf),
+                    mime="application/pdf"
+                )
+
+            st.success("Certificado gerado com sucesso! 🥋")
+
         else:
             st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
 
