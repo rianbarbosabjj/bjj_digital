@@ -52,344 +52,235 @@ h1, h2, h3 {{
 """, unsafe_allow_html=True)
 
 # =========================================
-# BANCO DE DADOS
+# BANCO DE DADOS E TABELAS RELACIONADAS
 # =========================================
 DB_PATH = os.path.join("database", "bjj_digital.db")
-os.makedirs("database", exist_ok=True)
 
 def criar_banco():
+    os.makedirs("database", exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            tipo_usuario TEXT CHECK(tipo_usuario IN ('admin','professor','aluno')),
-            senha TEXT NOT NULL
-        )
+    cursor.executescript("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        tipo_usuario TEXT,
+        senha TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS equipes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        descricao TEXT,
+        professor_responsavel_id INTEGER,
+        ativo BOOLEAN DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS professores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER,
+        equipe_id INTEGER,
+        pode_aprovar BOOLEAN DEFAULT 0,
+        status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
+        data_vinculo DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS alunos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER,
+        faixa_atual TEXT,
+        turma TEXT,
+        professor_id INTEGER,
+        equipe_id INTEGER,
+        status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
+        data_pedido DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS resultados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT,
+        modo TEXT,
+        tema TEXT,
+        faixa TEXT,
+        pontuacao INTEGER,
+        tempo TEXT,
+        data DATETIME DEFAULT CURRENT_TIMESTAMP,
+        codigo_verificacao TEXT
+    );
     """)
-
-    def criar_usuario(nome, tipo, senha):
-        cursor.execute("SELECT * FROM usuarios WHERE nome=?", (nome,))
-        if not cursor.fetchone():
-            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-            cursor.execute("INSERT INTO usuarios (nome, tipo_usuario, senha) VALUES (?, ?, ?)", (nome, tipo, hashed))
-
-    criar_usuario("admin", "admin", "1234")
-    criar_usuario("professor", "professor", "1234")
-    criar_usuario("aluno", "aluno", "1234")
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS resultados (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario TEXT,
-            faixa TEXT,
-            pontuacao INTEGER,
-            data DATETIME DEFAULT CURRENT_TIMESTAMP,
-            codigo TEXT
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS alunos (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT,
-            faixa_atual TEXT,
-            turma TEXT,
-            professor TEXT,
-            observacoes TEXT
-        )
-    """)
-
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS questoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            faixa TEXT,
-            tema TEXT,
-            pergunta TEXT,
-            opcoes_json TEXT,
-            resposta TEXT,
-            autor TEXT,
-            midia_tipo TEXT CHECK(midia_tipo IN ('imagem','video','nenhum')) DEFAULT 'nenhum',
-            midia_caminho TEXT,
-            status TEXT CHECK(status IN ('pendente','aprovada','rejeitada')) DEFAULT 'pendente',
-            data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-
     conn.commit()
     conn.close()
 
 criar_banco()
 
 # =========================================
-# LOGIN / LOGOUT
+# AUTENTICAÇÃO SIMPLES LOCAL
 # =========================================
-def autenticar_usuario(nome, senha):
+def autenticar(usuario, senha):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT senha, tipo_usuario FROM usuarios WHERE nome=?", (nome,))
-    row = cursor.fetchone()
+    cursor.execute("SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE nome=?", (usuario,))
+    dados = cursor.fetchone()
     conn.close()
-    if row and bcrypt.checkpw(senha.encode(), row[0].encode()):
-        return row[1]
+    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
+        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
     return None
 
-def tela_login():
-    st.markdown("<h1>🥋 Login – BJJ Digital</h1>", unsafe_allow_html=True)
-    nome = st.text_input("Usuário:")
-    senha = st.text_input("Senha:", type="password")
+def criar_usuarios_teste():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    for nome, tipo in [("admin", "admin"), ("professor", "professor"), ("aluno", "aluno")]:
+        senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+        cursor.execute("INSERT OR IGNORE INTO usuarios (nome, tipo_usuario, senha) VALUES (?, ?, ?)", (nome, tipo, senha_hash))
+    conn.commit()
+    conn.close()
+criar_usuarios_teste()
+
+# =========================================
+# LOGIN
+# =========================================
+if "usuario" not in st.session_state:
+    st.session_state.usuario = None
+
+if st.session_state.usuario is None:
+    st.image("assets/logo.png", use_container_width=True)
+    st.markdown("<h2 style='text-align:center;color:#FFD700;'>Bem-vindo(a) ao BJJ Digital</h2>", unsafe_allow_html=True)
+    user = st.text_input("Usuário:")
+    pwd = st.text_input("Senha:", type="password")
     if st.button("Entrar"):
-        tipo = autenticar_usuario(nome, senha)
-        if tipo:
-            st.session_state["usuario"] = nome
-            st.session_state["tipo_usuario"] = tipo
-            st.success(f"Bem-vindo(a), {nome}! Perfil: {tipo.upper()}")
+        u = autenticar(user, pwd)
+        if u:
+            st.session_state.usuario = u
+            st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
             st.rerun()
         else:
             st.error("Usuário ou senha incorretos.")
+    st.stop()
 
-# =========================================
-# CERTIFICADO PDF
-# =========================================
-def gerar_qrcode(codigo):
-    os.makedirs("certificados/qrcodes", exist_ok=True)
-    caminho = f"certificados/qrcodes/{codigo}.png"
-    qr = qrcode.QRCode(error_correction=qrcode.constants.ERROR_CORRECT_H)
-    qr.add_data(f"https://bjjdigital.netlify.app/verificar?codigo={codigo}")
-    qr.make(fit=True)
-    qr.make_image(fill_color="black", back_color="white").save(caminho)
-    return caminho
-
-def gerar_pdf(usuario, faixa, pontuacao):
-    pdf = FPDF("L", "mm", "A4")
-    pdf.add_page()
-    dourado, preto, branco = (218,165,32), (40,40,40), (255,255,255)
-    pdf.set_fill_color(*branco)
-    pdf.rect(0,0,297,210,"F")
-    pdf.set_draw_color(*dourado)
-    pdf.set_line_width(2)
-    pdf.rect(8,8,281,194)
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica","B",26)
-    pdf.cell(0,15,"CERTIFICADO DE EXAME TEÓRICO DE FAIXA",align="C",ln=1)
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica","",14)
-    pdf.cell(0,10,f"Certificamos que {usuario} obteve {pontuacao}% de aproveitamento na faixa {faixa}.",align="C",ln=1)
-    caminho_pdf = f"relatorios/Certificado_{usuario}_{faixa}.pdf"
-    os.makedirs("relatorios",exist_ok=True)
-    pdf.output(caminho_pdf)
-    return caminho_pdf
-
-# =========================================
-# EXAME DE FAIXA
-# =========================================
-def exame_faixa():
-    st.markdown("<h1>🏁 Exame de Faixa</h1>", unsafe_allow_html=True)
-    faixas = ["Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"]
-    faixa = st.selectbox("Selecione a faixa:", faixas)
-    tema = "regras"
-    usuario = st.session_state["usuario"]
-
-    path = f"questions/{tema}.json"
-    if not os.path.exists(path):
-        st.error("Nenhum arquivo de questões encontrado.")
-        return
-
-    with open(path, "r", encoding="utf-8") as f:
-        questoes = json.load(f)
-
-    random.shuffle(questoes)
-    questoes = questoes[:5]
-    respostas = {}
-    for i, q in enumerate(questoes, 1):
-        st.markdown(f"### {i}. {q['pergunta']}")
-        resposta = st.radio("Escolha:", q["opcoes"], key=f"resp_{i}")
-        respostas[i] = resposta
-
-    if st.button("Finalizar Exame"):
-        corretas = sum(1 for i,q in enumerate(questoes,1) if respostas[i] == q["resposta"])
-        pontuacao = int((corretas / len(questoes)) * 100)
-        codigo = f"BJJD-{random.randint(10000,99999)}"
-
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO resultados (usuario, faixa, pontuacao, codigo) VALUES (?,?,?,?)",
-                       (usuario, faixa, pontuacao, codigo))
-        conn.commit()
-        conn.close()
-
-        st.success(f"🎉 {usuario}, você obteve {pontuacao}% de aproveitamento!")
-        caminho_pdf = gerar_pdf(usuario, faixa, pontuacao)
-        with open(caminho_pdf, "rb") as f:
-            st.download_button("📄 Baixar Certificado", f, file_name=os.path.basename(caminho_pdf))
+usuario_logado = st.session_state.usuario
+tipo_usuario = usuario_logado["tipo"]
 
 # =========================================
 # PAINEL DO PROFESSOR
 # =========================================
 def painel_professor():
-    st.markdown("<h1>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    aba1, aba2 = st.tabs(["➕ Cadastrar Aluno", "📋 Alunos Cadastrados"])
 
+    aba1, aba2, aba3, aba4 = st.tabs([
+        "➕ Cadastrar Aluno", "📋 Pedidos Pendentes", "⚙️ Gestão da Equipe", "📊 Desempenho dos Alunos"
+    ])
+
+    # Aba 1 - Cadastrar aluno
     with aba1:
         with st.form("cadastro_aluno"):
             nome = st.text_input("Nome completo do aluno:")
             faixa = st.selectbox("Faixa atual:", ["Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"])
             turma = st.text_input("Turma:")
-            professor = st.session_state["usuario"]
-            observacoes = st.text_area("Observações (opcional):")
-            submitted = st.form_submit_button("💾 Salvar Aluno")
-            if submitted and nome.strip():
-                cursor.execute("""
-                    INSERT INTO alunos (nome, faixa_atual, turma, professor, observacoes)
-                    VALUES (?,?,?,?,?)
-                """, (nome, faixa, turma, professor, observacoes))
+            equipe = st.text_input("Equipe:")
+            enviar = st.form_submit_button("💾 Salvar Aluno")
+            if enviar and nome.strip():
+                cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, turma, status_vinculo) VALUES (NULL,?,?, 'pendente')",
+                               (faixa, turma))
                 conn.commit()
-                st.success(f"Aluno(a) **{nome}** cadastrado(a) com sucesso!")
+                st.success(f"Aluno(a) **{nome}** cadastrado(a) e aguardando aprovação!")
 
+    # Aba 2 - Pedidos pendentes
     with aba2:
-        df = pd.read_sql_query("SELECT * FROM alunos WHERE professor=? ORDER BY nome ASC", conn, params=(st.session_state["usuario"],))
+        st.markdown("### ⏳ Pedidos de vínculo pendentes")
+        df = pd.read_sql_query("SELECT * FROM alunos WHERE status_vinculo='pendente'", conn)
         if df.empty:
-            st.info("Nenhum aluno cadastrado ainda.")
+            st.info("Nenhum pedido pendente.")
         else:
-            st.dataframe(df,use_container_width=True)
-    conn.close()
-
-# =========================================
-# BANCO DE QUESTÕES (PROFESSOR)
-# =========================================
-def banco_questoes():
-    st.markdown("<h1>🧩 Banco de Questões</h1>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    aba1, aba2 = st.tabs(["➕ Criar Nova Questão", "📚 Minhas Questões"])
-
-    with aba1:
-        with st.form("nova_questao"):
-            faixa = st.selectbox("Faixa:", ["Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"])
-            tema = st.text_input("Tema:")
-            pergunta = st.text_area("Pergunta:")
-            opcoes = [st.text_input(f"Opção {i+1}:") for i in range(4)]
-            resposta = st.selectbox("Resposta correta:", opcoes)
-            midia_tipo = st.radio("Deseja adicionar mídia?", ["nenhum","imagem","video"])
-            midia_caminho = None
-            if midia_tipo == "imagem":
-                imagem = st.file_uploader("Envie uma imagem:", type=["jpg","jpeg","png"])
-                if imagem:
-                    os.makedirs("questions/assets", exist_ok=True)
-                    nome_arquivo = f"img_{datetime.now().strftime('%Y%m%d%H%M%S')}.png"
-                    caminho_final = os.path.join("questions/assets", nome_arquivo)
-                    with open(caminho_final,"wb") as f: f.write(imagem.read())
-                    st.image(caminho_final)
-                    midia_caminho = caminho_final
-            elif midia_tipo == "video":
-                midia_caminho = st.text_input("Cole o link do vídeo:")
-                if midia_caminho: st.video(midia_caminho)
-            enviar = st.form_submit_button("💾 Enviar Questão")
-            if enviar and pergunta.strip():
-                cursor.execute("""INSERT INTO questoes
-                    (faixa,tema,pergunta,opcoes_json,resposta,autor,midia_tipo,midia_caminho,status)
-                    VALUES (?,?,?,?,?,?,?,?,'pendente')
-                """,(faixa,tema,pergunta,json.dumps(opcoes),resposta,st.session_state["usuario"],midia_tipo,midia_caminho))
+            st.dataframe(df)
+            id_sel = st.number_input("ID do aluno:", min_value=1, step=1)
+            if st.button("✅ Aprovar"):
+                cursor.execute("UPDATE alunos SET status_vinculo='ativo' WHERE id=?", (id_sel,))
                 conn.commit()
-                st.success("Questão enviada para aprovação!")
+                st.success("Aluno aprovado!")
+                st.rerun()
+            if st.button("❌ Rejeitar"):
+                cursor.execute("UPDATE alunos SET status_vinculo='rejeitado' WHERE id=?", (id_sel,))
+                conn.commit()
+                st.warning("Aluno rejeitado.")
+                st.rerun()
 
-    with aba2:
-        df = pd.read_sql_query("SELECT id,faixa,tema,pergunta,status FROM questoes WHERE autor=? ORDER BY data_criacao DESC", conn, params=(st.session_state["usuario"],))
-        if df.empty:
-            st.info("Nenhuma questão criada ainda.")
+    # Aba 3 - Gestão da equipe
+    with aba3:
+        st.markdown("### ⚙️ Professores da equipe")
+        professores = pd.read_sql_query("""
+            SELECT p.id, u.nome, p.pode_aprovar, p.status_vinculo
+            FROM professores p JOIN usuarios u ON p.usuario_id=u.id
+        """, conn)
+        if professores.empty:
+            st.info("Nenhum professor cadastrado.")
         else:
-            st.dataframe(df,use_container_width=True)
-    conn.close()
-
-# =========================================
-# APROVAÇÃO DE QUESTÕES (ADMIN)
-# =========================================
-def aprovacao_admin():
-    st.markdown("<h1>🏛️ Aprovação de Questões</h1>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    df = pd.read_sql_query("SELECT * FROM questoes WHERE status='pendente' ORDER BY data_criacao DESC", conn)
-    if df.empty:
-        st.info("Nenhuma questão pendente.")
-    else:
-        for _,row in df.iterrows():
-            st.markdown(f"### {row['id']} – {row['faixa']} | {row['tema']}")
-            st.write(row["pergunta"])
-            for i,opt in enumerate(json.loads(row["opcoes_json"])):
-                st.write(f"{chr(65+i)}) {opt}")
-            if row["midia_tipo"]=="imagem" and row["midia_caminho"]:
-                st.image(row["midia_caminho"])
-            elif row["midia_tipo"]=="video" and row["midia_caminho"]:
-                st.video(row["midia_caminho"])
-            c1,c2=st.columns(2)
-            with c1:
-                if st.button(f"✅ Aprovar {row['id']}"):
-                    cursor.execute("UPDATE questoes SET status='aprovada' WHERE id=?", (row["id"],))
+            for _, row in professores.iterrows():
+                col1, col2 = st.columns([3,1])
+                col1.write(f"👨‍🏫 {row['nome']} ({row['status_vinculo']})")
+                pode = col2.checkbox("Pode Aprovar", value=bool(row["pode_aprovar"]), key=f"prof_{row['id']}")
+                if pode != bool(row["pode_aprovar"]):
+                    cursor.execute("UPDATE professores SET pode_aprovar=? WHERE id=?", (int(pode), row["id"]))
                     conn.commit()
-                    st.success("Aprovada!"); st.rerun()
-            with c2:
-                if st.button(f"❌ Rejeitar {row['id']}"):
-                    cursor.execute("UPDATE questoes SET status='rejeitada' WHERE id=?", (row["id"],))
-                    conn.commit()
-                    st.warning("Rejeitada."); st.rerun()
+                    st.success(f"Permissão atualizada para {row['nome']}.")
+
+    # Aba 4 - Desempenho
+    with aba4:
+        st.markdown("### 📊 Desempenho dos Alunos")
+        df = pd.read_sql_query("SELECT * FROM resultados", conn)
+        if df.empty:
+            st.info("Nenhum exame encontrado.")
+        else:
+            total = len(df)
+            media = df["pontuacao"].mean()
+            taxa = (df[df["pontuacao"] >= 3].shape[0] / total) * 100
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Total de Exames", total)
+            c2.metric("Média de Pontuação", f"{media:.2f}")
+            c3.metric("Taxa de Aprovação", f"{taxa:.1f}%")
+
+            st.markdown("#### Evolução temporal")
+            fig = px.line(df, x="data", y="pontuacao", color="faixa", title="Evolução das Notas")
+            st.plotly_chart(fig, use_container_width=True)
     conn.close()
 
 # =========================================
-# GERENCIAMENTO DE USUÁRIOS (ADMIN)
+# TELA INICIAL
 # =========================================
-def gerenciamento_admin():
-    st.markdown("<h1>👑 Gerenciamento de Usuários</h1>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    df = pd.read_sql_query("SELECT id,nome,tipo_usuario FROM usuarios ORDER BY nome", conn)
-    st.dataframe(df,use_container_width=True)
-    with st.form("novo_usuario"):
-        nome = st.text_input("Nome do novo usuário:")
-        tipo = st.selectbox("Tipo de usuário:", ["admin","professor","aluno"])
-        senha = st.text_input("Senha:", type="password")
-        enviar = st.form_submit_button("💾 Criar Usuário")
-        if enviar and nome.strip():
-            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-            cursor.execute("INSERT INTO usuarios (nome,tipo_usuario,senha) VALUES (?,?,?)",(nome,tipo,hashed))
-            conn.commit()
-            st.success(f"Usuário {nome} criado com sucesso!")
-            st.rerun()
-    conn.close()
+def tela_inicio():
+    st.image("assets/logo.png", use_container_width=True)
+    st.markdown("<h2 style='text-align:center;color:#FFD700;'>Bem-vindo(a) ao Sistema BJJ Digital</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center;'>Selecione uma das opções no menu lateral para começar.</p>", unsafe_allow_html=True)
 
 # =========================================
-# MENU PRINCIPAL
+# MENU DINÂMICO POR PERFIL
 # =========================================
-def menu_principal():
-    tipo = st.session_state["tipo_usuario"]
+def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
-    st.sidebar.markdown(f"<h3 style='color:#FFD700;'>Usuário: {st.session_state['usuario']} ({tipo})</h3>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<h3 style='color:{COR_DESTAQUE};'>Usuário: {usuario_logado['nome'].title()}</h3>", unsafe_allow_html=True)
+    st.sidebar.markdown(f"<small style='color:#ccc;'>Perfil: {usuario_logado['tipo'].capitalize()}</small>", unsafe_allow_html=True)
+    st.sidebar.markdown("---")
 
+    if tipo_usuario == "admin":
+        opcoes = ["🏠 Início", "👩‍🏫 Painel do Professor"]
+    elif tipo_usuario == "professor":
+        opcoes = ["🏠 Início", "👩‍🏫 Painel do Professor"]
+    else:  # aluno
+        opcoes = ["🏠 Início"]
+
+    menu = st.sidebar.radio("Navegar:", opcoes)
+
+    if menu == "🏠 Início":
+        tela_inicio()
+    elif menu == "👩‍🏫 Painel do Professor":
+        painel_professor()
+
+    st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair"):
-        st.session_state.clear(); st.rerun()
+        st.session_state.usuario = None
+        st.rerun()
 
-    if tipo == "admin":
-        opcoes = ["🏁 Exame de Faixa","👩‍🏫 Painel do Professor","🧩 Banco de Questões","🏛️ Aprovação de Questões","👑 Gerenciar Usuários"]
-    elif tipo == "professor":
-        opcoes = ["🏁 Exame de Faixa","👩‍🏫 Painel do Professor","🧩 Banco de Questões"]
-    else:
-        opcoes = ["🏁 Exame de Faixa"]
-
-    escolha = st.sidebar.radio("Navegar:", opcoes)
-
-    if escolha == "🏁 Exame de Faixa": exame_faixa()
-    elif escolha == "👩‍🏫 Painel do Professor": painel_professor()
-    elif escolha == "🧩 Banco de Questões": banco_questoes()
-    elif escolha == "🏛️ Aprovação de Questões": aprovacao_admin()
-    elif escolha == "👑 Gerenciar Usuários": gerenciamento_admin()
-
-# =========================================
-# EXECUÇÃO
-# =========================================
-if "usuario" not in st.session_state:
-    tela_login()
-else:
-    menu_principal()
+if __name__ == "__main__":
+    main()
