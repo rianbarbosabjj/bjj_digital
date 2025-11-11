@@ -659,10 +659,10 @@ def gestao_equipes():
     # ============================================================
     with aba1:
         st.subheader("Cadastrar nova equipe")
-        nome_equipe = st.text_input("Nome da equipe:", key="nome_nova_equipe")
-        descricao = st.text_area("Descrição da equipe:", key="descricao_nova_equipe")
+        nome_equipe = st.text_input("Nome da nova equipe:", key="input_nome_equipe")
+        descricao = st.text_area("Descrição da nova equipe:", key="input_desc_equipe")
 
-        if st.button("➕ Criar Equipe", key="criar_equipe_btn"):
+        if st.button("➕ Criar Equipe", key="btn_criar_equipe_final"):
             if nome_equipe.strip():
                 cursor.execute("INSERT INTO equipes (nome, descricao) VALUES (?, ?)", (nome_equipe, descricao))
                 conn.commit()
@@ -678,28 +678,37 @@ def gestao_equipes():
         if equipes_df.empty:
             st.info("Nenhuma equipe cadastrada.")
         else:
-            for i, row in equipes_df.iterrows():
-                with st.expander(f"🏋️ {row['nome']} (ID {row['id']})"):
-                    st.markdown(f"**Descrição:** {row['descricao'] or 'Sem descrição.'}")
-                    st.markdown(f"**Professor Responsável:** {row['professor_responsavel_id'] or 'Não definido'}")
+            st.dataframe(equipes_df, use_container_width=True)
 
-                    col1, col2 = st.columns(2)
-                    if col1.button("✏️ Editar", key=f"editar_equipe_{row['id']}"):
-                        with st.form(f"form_edit_equipe_{row['id']}"):
-                            novo_nome = st.text_input("Novo nome:", value=row['nome'], key=f"novo_nome_{row['id']}")
-                            nova_desc = st.text_area("Nova descrição:", value=row['descricao'] or "", key=f"nova_desc_{row['id']}")
-                            salvar = st.form_submit_button("💾 Salvar", key=f"salvar_equipe_{row['id']}")
-                            if salvar:
-                                cursor.execute("UPDATE equipes SET nome=?, descricao=? WHERE id=?", (novo_nome, nova_desc, row['id']))
-                                conn.commit()
-                                st.success("Equipe atualizada com sucesso! ✅")
-                                st.rerun()
+            st.markdown("### ✏️ Editar ou Excluir Equipe")
+            equipe_lista = equipes_df["nome"].tolist()
+            equipe_selecionada = st.selectbox(
+                "Selecione a equipe para editar ou excluir:",
+                equipe_lista,
+                key="select_equipe_gestao"
+            )
+            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_selecionada, "id"].values[0])
 
-                    if col2.button("🗑️ Excluir", key=f"excluir_equipe_{row['id']}"):
-                        cursor.execute("DELETE FROM equipes WHERE id=?", (row['id'],))
-                        conn.commit()
-                        st.warning(f"Equipe '{row['nome']}' excluída com sucesso!")
-                        st.rerun()
+            with st.expander(f"Gerenciar {equipe_selecionada}", expanded=True):
+                novo_nome = st.text_input("Novo nome:", value=equipe_selecionada, key=f"edit_nome_{equipe_id}")
+                nova_desc = st.text_area(
+                    "Nova descrição:",
+                    value=equipes_df.loc[equipes_df["id"] == equipe_id, "descricao"].values[0] or "",
+                    key=f"edit_desc_{equipe_id}"
+                )
+
+                col1, col2 = st.columns(2)
+                if col1.button("💾 Salvar Alterações", key=f"btn_salvar_{equipe_id}"):
+                    cursor.execute("UPDATE equipes SET nome=?, descricao=? WHERE id=?", (novo_nome, nova_desc, equipe_id))
+                    conn.commit()
+                    st.success(f"Equipe '{novo_nome}' atualizada com sucesso!")
+                    st.rerun()
+
+                if col2.button("🗑️ Excluir Equipe", key=f"btn_excluir_{equipe_id}"):
+                    cursor.execute("DELETE FROM equipes WHERE id=?", (equipe_id,))
+                    conn.commit()
+                    st.warning(f"Equipe '{equipe_selecionada}' excluída com sucesso.")
+                    st.rerun()
 
     # ============================================================
     # 👩‍🏫 ABA 2 - PROFESSORES
@@ -713,13 +722,13 @@ def gestao_equipes():
         if professores_df.empty or equipes_df.empty:
             st.warning("Cadastre pelo menos uma equipe e um professor primeiro.")
         else:
-            prof = st.selectbox("👩‍🏫 Selecione o professor:", professores_df["nome"], key="professor_select")
-            equipe_prof = st.selectbox("🏫 Selecione a equipe para vincular o professor:", equipes_df["nome"], key="equipe_select_professor")
+            prof = st.selectbox("👩‍🏫 Professor:", professores_df["nome"], key="select_professor_gestao")
+            equipe_prof = st.selectbox("🏫 Equipe para vincular:", equipes_df["nome"], key="select_equipe_professor_gestao")
 
-            prof_id = professores_df.loc[professores_df["nome"] == prof, "id"].values[0]
-            equipe_id = equipes_df.loc[equipes_df["nome"] == equipe_prof, "id"].values[0]
+            prof_id = int(professores_df.loc[professores_df["nome"] == prof, "id"].values[0])
+            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_prof, "id"].values[0])
 
-            if st.button("📎 Vincular Professor à Equipe", key="vincular_prof_btn"):
+            if st.button("📎 Vincular Professor à Equipe", key="btn_vincular_professor_final"):
                 cursor.execute(
                     "INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, status_vinculo) VALUES (?, ?, ?, ?)",
                     (prof_id, equipe_id, 1, "ativo")
@@ -730,7 +739,12 @@ def gestao_equipes():
 
         st.markdown("---")
         st.subheader("Professores vinculados")
-        profs_df = pd.read_sql_query("SELECT * FROM professores", conn)
+        profs_df = pd.read_sql_query("""
+            SELECT p.id, u.nome AS professor, e.nome AS equipe, p.status_vinculo
+            FROM professores p
+            JOIN usuarios u ON p.usuario_id = u.id
+            JOIN equipes e ON p.equipe_id = e.id
+        """, conn)
         if profs_df.empty:
             st.info("Nenhum professor vinculado ainda.")
         else:
@@ -739,7 +753,7 @@ def gestao_equipes():
     # ============================================================
     # 🥋 ABA 3 - ALUNOS
     # ============================================================
-        with aba3:
+    with aba3:
         st.subheader("Vincular aluno a professor e equipe")
 
         alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
@@ -774,7 +788,7 @@ def gestao_equipes():
         st.markdown("---")
         st.subheader("Alunos vinculados")
         alunos_vinc_df = pd.read_sql_query("""
-            SELECT a.id, u.nome AS aluno, e.nome AS equipe, p.id AS id_professor, up.nome AS professor
+            SELECT a.id, u.nome AS aluno, e.nome AS equipe, up.nome AS professor
             FROM alunos a
             JOIN usuarios u ON a.usuario_id = u.id
             JOIN equipes e ON a.equipe_id = e.id
