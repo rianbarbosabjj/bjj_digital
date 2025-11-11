@@ -314,6 +314,40 @@ def modo_exame():
                 st.error("Por favor, preencha o nome do aluno e do professor antes de finalizar.")
             else:
                 finalizar_exame(usuario, faixa, professor, tema)
+
+def finalizar_exame(usuario, faixa, professor, tema):
+    questoes = st.session_state.questoes
+    total = len(questoes)
+
+    pontuacao = sum(
+        1 for i, q in enumerate(questoes, 1)
+        if st.session_state.respostas.get(f"resp_{i}", "").startswith(q["resposta"])
+    )
+    percentual = int((pontuacao / total) * 100)
+    # Nota: 60% de 5 questões significa 3 acertos.
+    aprovado = pontuacao >= (total * 0.6) 
+    status = "APROVADO" if aprovado else "REPROVADO"
+
+    codigo = gerar_codigo_unico()
+    salvar_resultado(usuario, "Exame", tema, faixa, pontuacao, "00:05:00", codigo)
+    caminho_pdf = gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor)
+    st.session_state.certificado_path = caminho_pdf
+    st.session_state.exame_finalizado = True
+    st.session_state.exame_iniciado = False
+
+    if aprovado:
+        st.success(f"🎉 Parabéns, {usuario}! Você foi **{status}** e obteve {percentual}% de acertos!")
+        with open(caminho_pdf, "rb") as f:
+            st.download_button(
+                label="📄 Baixar Certificado",
+                data=f,
+                file_name=os.path.basename(caminho_pdf),
+                mime="application/pdf",
+                use_container_width=True
+            )
+    else:
+        st.error(f"❌ {usuario}, você **não obteve o percentual mínimo de acerto para aprovação** ({percentual}%). "
+                 f"Tente novamente em 3 dias e continue se preparando!")
 # =========================================
 # PAINEL DO PROFESSOR
 # =========================================
