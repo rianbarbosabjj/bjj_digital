@@ -557,12 +557,18 @@ def main():
 
     # Menu dinâmico conforme perfil
 if tipo_usuario in ["admin", "professor"]:
-    opcoes = ["🏠 Início", "🤼 Modo Rola", "🥋 Exame de Faixa", "🏆 Ranking", "👩‍🏫 Painel do Professor", "🧠 Gestão de Questões"]
-elif tipo_usuario == "professor":
-    opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "👩‍🏫 Painel do Professor", "🧠 Gestão de Questões"]
+    # Admin e professores têm acesso total ao exame
+    opcoes = [
+        "🏠 Início",
+        "🤼 Modo Rola",
+        "🥋 Exame de Faixa",
+        "🏆 Ranking",
+        "👩‍🏫 Painel do Professor",
+        "🧠 Gestão de Questões"
+    ]
 else:  # aluno
     opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking"]
-    # Checa se exame está habilitado
+    # Checa se exame está habilitado pelo professor
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
