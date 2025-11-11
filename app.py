@@ -826,7 +826,8 @@ def main():
         gestao_questoes()
     elif menu == "🥋 Gestão de Exame de Faixa":
         gestao_exame_de_faixa()
-
+    elif menu == "📜 Meus Certificados":
+        meus_certificados(usuario_logado)
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair"):
         st.session_state.usuario = None
