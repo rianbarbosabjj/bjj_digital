@@ -787,16 +787,16 @@ def main():
     # Menu dinâmico conforme perfil
     # =========================================
     if tipo_usuario in ["admin", "professor"]:
-        # Admin e professores têm acesso total ao exame
-        opcoes = [
-            "🏠 Início",
-            "🤼 Modo Rola",
-            "🥋 Exame de Faixa",
-            "🏆 Ranking",
-            "👩‍🏫 Painel do Professor",
-            "🧠 Gestão de Questões",
-            "🥋 Gestão de Exame de Faixa"
-        ]
+    opcoes = [
+        "🏠 Início",
+        "🤼 Modo Rola",
+        "🥋 Exame de Faixa",
+        "🏆 Ranking",
+        "👩‍🏫 Painel do Professor",
+        "🧠 Gestão de Questões",
+        "🏛️ Gestão de Equipes",  # 👈 NOVA OPÇÃO
+        "🥋 Gestão de Exame de Faixa"
+    ]
     else:  # aluno
         opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "📜 Meus Certificados"]
 
@@ -824,6 +824,8 @@ def main():
         ranking()
     elif menu == "👩‍🏫 Painel do Professor":
         painel_professor()
+    elif menu == "🏛️ Gestão de Equipes":
+    gestao_equipes()
     elif menu == "🧠 Gestão de Questões":
         gestao_questoes()
     elif menu == "🥋 Gestão de Exame de Faixa":
@@ -990,6 +992,112 @@ def meus_certificados(usuario_logado):
             )
 
         st.markdown("---")
+def gestao_equipes():
+    st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
+
+    # ============================================================
+    # 🏫 ABA 1 - EQUIPES
+    # ============================================================
+    with aba1:
+        st.subheader("Cadastrar nova equipe")
+        nome_equipe = st.text_input("Nome da equipe:")
+        descricao = st.text_area("Descrição:")
+
+        if st.button("➕ Criar Equipe"):
+            if nome_equipe.strip():
+                cursor.execute("INSERT INTO equipes (nome, descricao) VALUES (?, ?)", (nome_equipe, descricao))
+                conn.commit()
+                st.success(f"Equipe '{nome_equipe}' criada com sucesso!")
+                st.rerun()
+            else:
+                st.error("O nome da equipe é obrigatório.")
+
+        st.markdown("---")
+        st.subheader("Equipes existentes")
+        equipes = pd.read_sql_query("SELECT * FROM equipes", conn)
+        if equipes.empty:
+            st.info("Nenhuma equipe cadastrada.")
+        else:
+            st.dataframe(equipes, use_container_width=True)
+
+    # ============================================================
+    # 👩‍🏫 ABA 2 - PROFESSORES
+    # ============================================================
+    with aba2:
+        st.subheader("Vincular professor a uma equipe")
+
+        professores = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
+        equipes = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
+
+        if professores.empty or equipes.empty:
+            st.warning("Cadastre pelo menos uma equipe e um professor primeiro.")
+        else:
+            prof = st.selectbox("Professor:", professores["nome"])
+            equipe = st.selectbox("Equipe:", equipes["nome"])
+
+            prof_id = professores.loc[professores["nome"] == prof, "id"].values[0]
+            equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
+
+            if st.button("📎 Vincular Professor"):
+                cursor.execute(
+                    "INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, status_vinculo) VALUES (?, ?, ?, ?)",
+                    (prof_id, equipe_id, 1, "ativo")
+                )
+                conn.commit()
+                st.success(f"Professor {prof} vinculado à equipe {equipe}!")
+                st.rerun()
+
+        st.markdown("---")
+        st.subheader("Professores vinculados")
+        profs = pd.read_sql_query("SELECT * FROM professores", conn)
+        if profs.empty:
+            st.info("Nenhum professor vinculado.")
+        else:
+            st.dataframe(profs, use_container_width=True)
+
+    # ============================================================
+    # 🥋 ABA 3 - ALUNOS
+    # ============================================================
+    with aba3:
+        st.subheader("Vincular aluno a professor e equipe")
+
+        alunos = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
+        professores = pd.read_sql_query("SELECT id, usuario_id, equipe_id FROM professores WHERE status_vinculo='ativo'", conn)
+        equipes = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
+
+        if alunos.empty or professores.empty or equipes.empty:
+            st.warning("Cadastre alunos, professores e equipes antes de vincular.")
+        else:
+            aluno = st.selectbox("Aluno:", alunos["nome"])
+            professor_id = st.selectbox("Professor (ID da tabela professores):", professores["id"])
+            equipe = st.selectbox("Equipe:", equipes["nome"])
+
+            aluno_id = alunos.loc[alunos["nome"] == aluno, "id"].values[0]
+            equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
+
+            if st.button("✅ Vincular Aluno"):
+                cursor.execute("""
+                    INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
+                    VALUES (?, ?, ?, ?, ?, 'ativo')
+                """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
+                conn.commit()
+                st.success(f"Aluno {aluno} vinculado com sucesso!")
+                st.rerun()
+
+        st.markdown("---")
+        st.subheader("Alunos vinculados")
+        alunos_vinc = pd.read_sql_query("SELECT * FROM alunos", conn)
+        if alunos_vinc.empty:
+            st.info("Nenhum aluno vinculado ainda.")
+        else:
+            st.dataframe(alunos_vinc, use_container_width=True)
+
+    conn.close()
+
 # =========================================
 # EXECUÇÃO
 # =========================================
