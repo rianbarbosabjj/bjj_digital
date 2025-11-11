@@ -215,11 +215,16 @@ def salvar_questoes(tema, questoes):
 
 
 def gerar_codigo_verificacao():
-    """Cria código de verificação único para certificados."""
-    return "".join(random.choices("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", k=10))
-# =========================================
-# 🤼 MODO ROLA
-# =========================================
+    """Gera código de verificação no formato BJJDIGITAL-ANO-NNNN"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM resultados")
+    total = cursor.fetchone()[0] + 1
+    conn.close()
+
+    ano = datetime.now().year
+    codigo = f"BJJDIGITAL-{ano}-{str(total).zfill(4)}"
+    return codigo
 # =========================================
 # 🤼 MODO ROLA (versão aprimorada – layout limpo)
 # =========================================
@@ -441,11 +446,30 @@ def normalizar_nome(nome):
 
 
 def gerar_qrcode(codigo):
-    """Gera QR Code temporário e retorna o caminho da imagem."""
+    """Gera QR Code com link de verificação oficial."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
-    qr = qrcode.make(f"Verificação: {codigo}")
-    qr.save(caminho_qr)
+
+    # 🔗 URL de verificação (ajuste o domínio se mudar futuramente)
+    base_url = "https://bjjdigital.vercel.app/verificar"
+    link_verificacao = f"{base_url}?codigo={codigo}"
+
+    texto_qr = (
+        f"Verifique a autenticidade deste certificado no site oficial:\n\n"
+        f"{link_verificacao}"
+    )
+
+    qr = qrcode.QRCode(
+        version=1,
+        box_size=10,
+        border=4,
+        error_correction=qrcode.constants.ERROR_CORRECT_H
+    )
+    qr.add_data(texto_qr)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    img.save(caminho_qr)
+
     return caminho_qr
 
 
