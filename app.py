@@ -108,6 +108,17 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP,
         codigo_verificacao TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS rola_resultados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT,
+        faixa TEXT,
+        tema TEXT,
+        acertos INTEGER,
+        total INTEGER,
+        percentual REAL,
+        data DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
     """)
     conn.commit()
     conn.close()
@@ -162,6 +173,98 @@ usuario_logado = st.session_state.usuario
 tipo_usuario = usuario_logado["tipo"]
 
 # =========================================
+# FUNÇÕES AUXILIARES
+# =========================================
+def carregar_questoes(tema):
+    path = f"questions/{tema}.json"
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+# =========================================
+# 🤼 MODO ROLA (Treino Livre)
+# =========================================
+def modo_rola():
+    st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
+    temas = [f.replace(".json","") for f in os.listdir("questions") if f.endswith(".json")]
+    temas.append("Todos os Temas")
+    tema = st.selectbox("Selecione o tema:", temas)
+    faixa = st.selectbox("Sua faixa:", ["Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"])
+
+    if st.button("Iniciar Treino 🤼"):
+        if tema == "Todos os Temas":
+            questoes = []
+            for arquivo in os.listdir("questions"):
+                with open(f"questions/{arquivo}", "r", encoding="utf-8") as f:
+                    questoes += json.load(f)
+        else:
+            questoes = carregar_questoes(tema)
+
+        if not questoes:
+            st.error("Nenhuma questão disponível.")
+            return
+
+        random.shuffle(questoes)
+        acertos = 0
+        total = len(questoes)
+
+        for i, q in enumerate(questoes, 1):
+            st.markdown(f"### {i}. {q['pergunta']}")
+            if q.get("imagem"): st.image(q["imagem"], use_container_width=True)
+            if q.get("video"): st.video(q["video"])
+            resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"rola_{i}")
+            if st.button(f"Confirmar resposta {i}", key=f"confirma_{i}"):
+                if resposta.startswith(q["resposta"]):
+                    acertos += 1
+                    st.success("✅ Correto!")
+                else:
+                    st.error(f"❌ Incorreto. Resposta correta: {q['resposta']}")
+
+        percentual = int((acertos / total) * 100)
+        st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO rola_resultados (usuario, faixa, tema, acertos, total, percentual)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (usuario_logado["nome"], faixa, tema, acertos, total, percentual))
+        conn.commit()
+        conn.close()
+        st.success("Resultado salvo com sucesso! 🏆")
+
+# =========================================
+# 🏆 RANKING
+# =========================================
+def ranking():
+    st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking do Modo Rola</h1>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM rola_resultados", conn)
+    conn.close()
+
+    if df.empty:
+        st.info("Nenhum resultado disponível no ranking ainda.")
+        return
+
+    filtro_faixa = st.selectbox("Filtrar por faixa:", ["Todas"] + sorted(df["faixa"].unique().tolist()))
+    if filtro_faixa != "Todas":
+        df = df[df["faixa"] == filtro_faixa]
+
+    ranking_df = df.groupby("usuario", as_index=False).agg(
+        media_percentual=("percentual","mean"),
+        total_treinos=("id","count")
+    ).sort_values(by="media_percentual", ascending=False)
+
+    ranking_df["Posição"] = range(1, len(ranking_df)+1)
+    st.dataframe(ranking_df[["Posição","usuario","media_percentual","total_treinos"]], use_container_width=True)
+
+    fig = px.bar(ranking_df.head(10), x="usuario", y="media_percentual",
+                 text_auto=True, title="Top 10 - Modo Rola",
+                 color="media_percentual", color_continuous_scale="YlOrBr")
+    st.plotly_chart(fig, use_container_width=True)
+
+# =========================================
 # PAINEL DO PROFESSOR
 # =========================================
 def painel_professor():
@@ -179,7 +282,6 @@ def painel_professor():
             nome = st.text_input("Nome completo do aluno:")
             faixa = st.selectbox("Faixa atual:", ["Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"])
             turma = st.text_input("Turma:")
-            equipe = st.text_input("Equipe:")
             enviar = st.form_submit_button("💾 Salvar Aluno")
             if enviar and nome.strip():
                 cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, turma, status_vinculo) VALUES (NULL,?,?, 'pendente')",
@@ -240,23 +342,18 @@ def painel_professor():
             c1.metric("Total de Exames", total)
             c2.metric("Média de Pontuação", f"{media:.2f}")
             c3.metric("Taxa de Aprovação", f"{taxa:.1f}%")
-
-            st.markdown("#### Evolução temporal")
             fig = px.line(df, x="data", y="pontuacao", color="faixa", title="Evolução das Notas")
             st.plotly_chart(fig, use_container_width=True)
     conn.close()
 
 # =========================================
-# TELA INICIAL
+# MENU DINÂMICO POR PERFIL
 # =========================================
 def tela_inicio():
     st.image("assets/logo.png", use_container_width=True)
     st.markdown("<h2 style='text-align:center;color:#FFD700;'>Bem-vindo(a) ao Sistema BJJ Digital</h2>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center;'>Selecione uma das opções no menu lateral para começar.</p>", unsafe_allow_html=True)
+    st.write("Selecione uma das opções no menu lateral para começar.")
 
-# =========================================
-# MENU DINÂMICO POR PERFIL
-# =========================================
 def main():
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown(f"<h3 style='color:{COR_DESTAQUE};'>Usuário: {usuario_logado['nome'].title()}</h3>", unsafe_allow_html=True)
@@ -264,16 +361,20 @@ def main():
     st.sidebar.markdown("---")
 
     if tipo_usuario == "admin":
-        opcoes = ["🏠 Início", "👩‍🏫 Painel do Professor"]
+        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "👩‍🏫 Painel do Professor"]
     elif tipo_usuario == "professor":
-        opcoes = ["🏠 Início", "👩‍🏫 Painel do Professor"]
-    else:  # aluno
-        opcoes = ["🏠 Início"]
+        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "👩‍🏫 Painel do Professor"]
+    else:
+        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking"]
 
     menu = st.sidebar.radio("Navegar:", opcoes)
 
     if menu == "🏠 Início":
         tela_inicio()
+    elif menu == "🤼 Modo Rola":
+        modo_rola()
+    elif menu == "🏆 Ranking":
+        ranking()
     elif menu == "👩‍🏫 Painel do Professor":
         painel_professor()
 
