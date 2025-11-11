@@ -286,17 +286,24 @@ def exame_de_faixa(usuario_logado):
     dado = cursor.fetchone()
     conn.close()
 
-    if not dado or dado[0] == 0:
-        st.warning("🚫 Seu exame de faixa ainda não foi liberado. Aguarde a autorização do professor.")
+    if usuario_logado["tipo"] not in ["admin", "professor"]:
+        if not dado or dado[0] == 0:
+            st.warning("🚫 Seu exame de faixa ainda não foi liberado. Aguarde a autorização do professor.")
+            return
+
+    faixa = st.selectbox("Selecione sua faixa:", ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+    exame_path = f"exames/faixa_{faixa.lower()}.json"
+
+    if not os.path.exists(exame_path):
+        st.error("Nenhum exame cadastrado para esta faixa ainda.")
         return
 
-    temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
-    tema = st.selectbox("Selecione o tema para o exame:", temas)
-    faixa = st.selectbox("Selecione sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+    with open(exame_path, "r", encoding="utf-8") as f:
+        exame = json.load(f)
 
-    questoes = carregar_questoes(tema)
+    questoes = exame.get("questoes", [])
     if not questoes:
-        st.error("Nenhuma questão encontrada para o tema selecionado.")
+        st.info("Ainda não há questões cadastradas para esta faixa.")
         return
 
     respostas = {}
@@ -558,16 +565,16 @@ def main():
     # =========================================
     # Menu dinâmico conforme perfil
     # =========================================
-    if tipo_usuario in ["admin", "professor"]:
-        # Admin e professores têm acesso total ao exame
-        opcoes = [
-            "🏠 Início",
-            "🤼 Modo Rola",
-            "🥋 Exame de Faixa",
-            "🏆 Ranking",
-            "👩‍🏫 Painel do Professor",
-            "🧠 Gestão de Questões"
-        ]
+if tipo_usuario in ["admin", "professor"]:
+    opcoes = [
+        "🏠 Início",
+        "🤼 Modo Rola",
+        "🥋 Exame de Faixa",
+        "🏆 Ranking",
+        "👩‍🏫 Painel do Professor",
+        "🧠 Gestão de Questões",
+        "🥋 Gestão de Exame de Faixa"
+    ]
     else:  # aluno
         opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking"]
         # Checa se exame está habilitado pelo professor
