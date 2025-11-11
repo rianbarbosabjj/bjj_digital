@@ -636,7 +636,6 @@ except json.JSONDecodeError as e:
     st.error(f"Erro ao carregar o arquivo: {arquivo}. Verifique o formato JSON.")
     st.code(str(e))
     continue
-                questoes = json.load(f)
                 for q in questoes:
                     q["tema"] = tema
                     todas.append(q)
