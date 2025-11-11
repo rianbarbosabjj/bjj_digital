@@ -1087,6 +1087,7 @@ def gestao_equipes():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
+    # Cria as três abas principais
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
     # ============================================================
@@ -1094,60 +1095,58 @@ def gestao_equipes():
     # ============================================================
     with aba1:
         st.subheader("Cadastrar nova equipe")
+        nome_equipe = st.text_input("Nome da nova equipe:", key="input_nome_equipe")
+        descricao = st.text_area("Descrição da nova equipe:", key="input_desc_equipe")
 
-        # 🔹 Campo de nome e descrição
-        nome_equipe = st.text_input("Nome da equipe:")
-        descricao = st.text_area("Descrição:")
-
-        # 🔹 Seleciona o professor responsável
-        professores_disp = pd.read_sql_query(
-            "SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn
-        )
-        professor_responsavel = None
-        if professores_disp.empty:
-            st.warning("⚠️ Nenhum professor cadastrado. Cadastre um professor primeiro.")
-        else:
-            nome_prof = st.selectbox(
-                "Professor responsável:", professores_disp["nome"]
-            )
-            professor_responsavel = professores_disp.loc[
-                professores_disp["nome"] == nome_prof, "id"
-            ].values[0]
-
-        # 🔘 Botão para criar equipe
-        if st.button("➕ Criar Equipe"):
-            if not nome_equipe.strip():
-                st.error("O nome da equipe é obrigatório.")
-            elif professor_responsavel is None:
-                st.error("Selecione um professor responsável.")
-            else:
-                cursor.execute(
-                    """
-                    INSERT INTO equipes (nome, descricao, professor_responsavel_id, ativo)
-                    VALUES (?, ?, ?, 1)
-                    """,
-                    (nome_equipe, descricao, professor_responsavel),
-                )
+        if st.button("➕ Criar Equipe", key="btn_criar_equipe_final"):
+            if nome_equipe.strip():
+                cursor.execute("INSERT INTO equipes (nome, descricao) VALUES (?, ?)", (nome_equipe, descricao))
                 conn.commit()
-                st.success(f"Equipe '{nome_equipe}' criada com sucesso! 🥋")
+                st.success(f"Equipe '{nome_equipe}' criada com sucesso! ✅")
                 st.rerun()
+            else:
+                st.error("O nome da equipe é obrigatório.")
 
         st.markdown("---")
         st.subheader("Equipes existentes")
 
-        equipes = pd.read_sql_query(
-            """
-            SELECT e.id, e.nome, e.descricao, u.nome AS professor_responsavel, e.ativo
-            FROM equipes e
-            LEFT JOIN usuarios u ON e.professor_responsavel_id = u.id
-            """,
-            conn,
-        )
-
-        if equipes.empty:
+        equipes_df = pd.read_sql_query("SELECT * FROM equipes", conn)
+        if equipes_df.empty:
             st.info("Nenhuma equipe cadastrada.")
         else:
-            st.dataframe(equipes, use_container_width=True)
+            st.dataframe(equipes_df, use_container_width=True)
+
+            # Seção de edição/exclusão
+            st.markdown("### ✏️ Editar ou Excluir Equipe")
+            equipe_lista = equipes_df["nome"].tolist()
+            equipe_selecionada = st.selectbox(
+                "Selecione a equipe para editar ou excluir:",
+                equipe_lista,
+                key="select_equipe_gestao"
+            )
+
+            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_selecionada, "id"].values[0])
+
+            with st.expander(f"Gerenciar {equipe_selecionada}", expanded=True):
+                novo_nome = st.text_input("Novo nome:", value=equipe_selecionada, key=f"edit_nome_{equipe_id}")
+                nova_desc = st.text_area(
+                    "Nova descrição:", 
+                    value=equipes_df.loc[equipes_df["id"] == equipe_id, "descricao"].values[0] or "",
+                    key=f"edit_desc_{equipe_id}"
+                )
+
+                col1, col2 = st.columns(2)
+                if col1.button("💾 Salvar Alterações", key=f"btn_salvar_{equipe_id}"):
+                    cursor.execute("UPDATE equipes SET nome=?, descricao=? WHERE id=?", (novo_nome, nova_desc, equipe_id))
+                    conn.commit()
+                    st.success(f"Equipe '{novo_nome}' atualizada com sucesso!")
+                    st.rerun()
+
+                if col2.button("🗑️ Excluir Equipe", key=f"btn_excluir_{equipe_id}"):
+                    cursor.execute("DELETE FROM equipes WHERE id=?", (equipe_id,))
+                    conn.commit()
+                    st.warning(f"Equipe '{equipe_selecionada}' excluída com sucesso.")
+                    st.rerun()
 
     # ============================================================
     # 👩‍🏫 ABA 2 - PROFESSORES
@@ -1155,42 +1154,34 @@ def gestao_equipes():
     with aba2:
         st.subheader("Vincular professor a uma equipe")
 
-        professores = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
-        equipes = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
+        professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
+        equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
 
-        if professores.empty or equipes.empty:
+        if professores_df.empty or equipes_df.empty:
             st.warning("Cadastre pelo menos uma equipe e um professor primeiro.")
         else:
-            prof = st.selectbox("Professor:", professores["nome"])
-            equipe = st.selectbox("Equipe:", equipes["nome"])
+            prof = st.selectbox("👩‍🏫 Professor:", professores_df["nome"], key="select_professor_gestao")
+            equipe_prof = st.selectbox("🏫 Equipe para vincular:", equipes_df["nome"], key="select_equipe_professor_gestao")
 
-            prof_id = professores.loc[professores["nome"] == prof, "id"].values[0]
-            equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
+            prof_id = int(professores_df.loc[professores_df["nome"] == prof, "id"].values[0])
+            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_prof, "id"].values[0])
 
-            if st.button("📎 Vincular Professor"):
+            if st.button("📎 Vincular Professor à Equipe", key="btn_vincular_professor_final"):
                 cursor.execute(
                     "INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, status_vinculo) VALUES (?, ?, ?, ?)",
-                    (prof_id, equipe_id, 1, "ativo"),
+                    (prof_id, equipe_id, 1, "ativo")
                 )
                 conn.commit()
-                st.success(f"Professor {prof} vinculado à equipe {equipe}! ✅")
+                st.success(f"Professor {prof} vinculado à equipe {equipe_prof}! 🎓")
                 st.rerun()
 
         st.markdown("---")
         st.subheader("Professores vinculados")
-        profs = pd.read_sql_query(
-            """
-            SELECT p.id, u.nome AS professor, e.nome AS equipe, p.status_vinculo, p.data_vinculo
-            FROM professores p
-            LEFT JOIN usuarios u ON p.usuario_id = u.id
-            LEFT JOIN equipes e ON p.equipe_id = e.id
-            """,
-            conn,
-        )
-        if profs.empty:
-            st.info("Nenhum professor vinculado.")
+        profs_df = pd.read_sql_query("SELECT * FROM professores", conn)
+        if profs_df.empty:
+            st.info("Nenhum professor vinculado ainda.")
         else:
-            st.dataframe(profs, use_container_width=True)
+            st.dataframe(profs_df, use_container_width=True)
 
     # ============================================================
     # 🥋 ABA 3 - ALUNOS
@@ -1198,47 +1189,36 @@ def gestao_equipes():
     with aba3:
         st.subheader("Vincular aluno a professor e equipe")
 
-        alunos = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
-        professores = pd.read_sql_query("SELECT id, usuario_id, equipe_id FROM professores WHERE status_vinculo='ativo'", conn)
-        equipes = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
+        alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
+        professores_df = pd.read_sql_query("SELECT id, usuario_id, equipe_id FROM professores WHERE status_vinculo='ativo'", conn)
+        equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
 
-        if alunos.empty or professores.empty or equipes.empty:
+        if alunos_df.empty or professores_df.empty or equipes_df.empty:
             st.warning("Cadastre alunos, professores e equipes antes de vincular.")
         else:
-            aluno = st.selectbox("Aluno:", alunos["nome"])
-            professor_id = st.selectbox("Professor (ID da tabela professores):", professores["id"])
-            equipe = st.selectbox("Equipe:", equipes["nome"])
+            aluno = st.selectbox("🥋 Aluno:", alunos_df["nome"], key="select_aluno_gestao")
+            professor_id = st.selectbox("👩‍🏫 Professor vinculado (ID):", professores_df["id"], key="select_professor_id_gestao")
+            equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"], key="select_equipe_aluno_gestao")
 
-            aluno_id = alunos.loc[alunos["nome"] == aluno, "id"].values[0]
-            equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
+            aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
+            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
 
-            if st.button("✅ Vincular Aluno"):
-                cursor.execute(
-                    """
+            if st.button("✅ Vincular Aluno", key="btn_vincular_aluno_final"):
+                cursor.execute("""
                     INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
                     VALUES (?, ?, ?, ?, ?, 'ativo')
-                    """,
-                    (aluno_id, "Branca", "Turma 1", professor_id, equipe_id),
-                )
+                """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
                 conn.commit()
-                st.success(f"Aluno {aluno} vinculado com sucesso! 🥋")
+                st.success(f"Aluno {aluno} vinculado à equipe {equipe_aluno}! 🥋")
                 st.rerun()
 
         st.markdown("---")
         st.subheader("Alunos vinculados")
-        alunos_vinc = pd.read_sql_query(
-            """
-            SELECT a.id, u.nome AS aluno, e.nome AS equipe, a.faixa_atual, a.turma, a.status_vinculo
-            FROM alunos a
-            LEFT JOIN usuarios u ON a.usuario_id = u.id
-            LEFT JOIN equipes e ON a.equipe_id = e.id
-            """,
-            conn,
-        )
-        if alunos_vinc.empty:
+        alunos_vinc_df = pd.read_sql_query("SELECT * FROM alunos", conn)
+        if alunos_vinc_df.empty:
             st.info("Nenhum aluno vinculado ainda.")
         else:
-            st.dataframe(alunos_vinc, use_container_width=True)
+            st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
 
