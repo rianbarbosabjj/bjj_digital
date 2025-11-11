@@ -177,37 +177,38 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     if os.path.exists(logo_path):
         pdf.image(logo_path,x=133,y=40,w=32)
     pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica","",16)
-    pdf.set_xy(0,80)
-    pdf.cell(297,10,"Certificamos que o(a) aluno(a)",align="C")
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica","B",18)
-    pdf.set_xy(0,90)
-    pdf.cell(297,10,usuario.upper(),align="C")
+pdf.set_font("Helvetica", "", 16)
+pdf.cell(0, 10, "Certificamos que o(a) aluno(a)", align="C")
+pdf.ln(15) # Adiciona 15mm de espaço vertical
 
-    cores_faixa = {
-        "Cinza":(169,169,169),"Amarela":(255,215,0),"Laranja":(255,140,0),
-        "Verde":(0,128,0),"Azul":(30,144,255),"Roxa":(128,0,128),
-        "Marrom":(139,69,19),"Preta":(0,0,0)
-    }
-    cor_faixa = cores_faixa.get(faixa,preto)
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica","",20)
-    pdf.set_xy(0,104)
-    pdf.cell(297,8,"concluiu o exame teórico para a faixa",align="C")
-    pdf.set_text_color(*cor_faixa)
-    pdf.set_font("Helvetica","B",16)
-    pdf.set_xy(0,112)
-    pdf.cell(297,8,faixa.upper(),align="C")
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica","B",16)
-    pdf.set_xy(0,130)
-    pdf.cell(297,8,"APROVADO",align="C")
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica","",16)
-    texto_final=f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
-    pdf.set_xy(0,140)
-    pdf.cell(297,6,texto_final,align="C")
+# --- Bloco 2: Nome do Aluno (Destaque Principal) ---
+pdf.set_text_color(*dourado)
+pdf.set_font("Helvetica", "B", 24) # Fonte maior para o nome
+pdf.cell(0, 10, usuario.upper(), align="C")
+pdf.ln(20) # Mais espaço após o nome
+
+# --- Bloco 3: "Concluiu o exame..." ---
+pdf.set_text_color(*preto)
+pdf.set_font("Helvetica", "", 16) # Fonte menor que o nome (era 20)
+pdf.cell(0, 8, "concluiu o exame teórico para a faixa", align="C")
+pdf.ln(12) # Espaço
+
+# --- Bloco 4: Faixa (com cor) ---
+cores_faixa = {
+    "Cinza": (169, 169, 169), "Amarela": (255, 215, 0), "Laranja": (255, 140, 0),
+    "Verde": (0, 128, 0), "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
+    "Marrom": (139, 69, 19), "Preta": (0, 0, 0)
+}
+cor_faixa = cores_faixa.get(faixa, preto)
+pdf.set_text_color(*cor_faixa)
+pdf.set_font("Helvetica", "B", 20) # Fonte maior para a faixa (era 16)
+pdf.cell(0, 8, faixa.upper(), align="C")
+pdf.ln(25) # Espaço maior antes do status
+
+# --- Bloco 5: Status "APROVADO" (Destaque Secundário) ---
+pdf.set_text_color(*dourado)
+pdf.set_font("Helvetica", "B", 22) # Fonte grande para o status (era 16)
+pdf.cell(0, 8, "APROVADO", align="C")
     selo_path="assets/selo_dourado.png"
     if os.path.exists(selo_path):
         pdf.image(selo_path,x=23,y=155,w=30)
