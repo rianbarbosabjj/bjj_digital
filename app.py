@@ -798,16 +798,16 @@ def main():
             "🥋 Gestão de Exame de Faixa"
         ]
     else:  # aluno
-        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking"]
-        # Checa se exame está habilitado pelo professor
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
-        dado = cursor.fetchone()
-        conn.close()
-        if dado and dado[0] == 1:
-            opcoes.insert(2, "🥋 Exame de Faixa")
-
+else:  # aluno
+    opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "📜 Meus Certificados"]
+    # Checa se exame está habilitado pelo professor
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+    dado = cursor.fetchone()
+    conn.close()
+    if dado and dado[0] == 1:
+        opcoes.insert(2, "🥋 Exame de Faixa")
     # =========================================
     # Navegação entre módulos
     # =========================================
@@ -938,7 +938,52 @@ def gestao_exame_de_faixa():
         st.warning(f"O exame da faixa {faixa} foi excluído.")
         st.rerun()
 
+def meus_certificados(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
 
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT faixa, pontuacao, data, codigo_verificacao
+        FROM resultados
+        WHERE usuario = ? AND modo = 'Exame de Faixa'
+        ORDER BY data DESC
+    """, (usuario_logado["nome"],))
+    certificados = cursor.fetchall()
+    conn.close()
+
+    if not certificados:
+        st.info("Você ainda não possui certificados emitidos. Complete um exame de faixa para conquistá-los! 🥋")
+        return
+
+    for i, (faixa, pontuacao, data, codigo) in enumerate(certificados, 1):
+        st.markdown(f"### 🥋 {i}. Faixa {faixa}")
+        st.markdown(f"- **Aproveitamento:** {pontuacao}%")
+        st.markdown(f"- **Data:** {data}")
+        st.markdown(f"- **Código de Verificação:** `{codigo}`")
+
+        caminho_pdf = f"relatorios/Certificado_{usuario_logado['nome']}_{faixa}.pdf"
+
+        # 🔹 Se o certificado não estiver salvo, ele será recriado automaticamente
+        if not os.path.exists(caminho_pdf):
+            caminho_pdf = gerar_pdf(
+                usuario_logado["nome"],
+                faixa,
+                int((pontuacao / 100) * 10),  # dummy proporcional
+                10,
+                codigo
+            )
+
+        with open(caminho_pdf, "rb") as f:
+            st.download_button(
+                label=f"📥 Baixar Certificado - Faixa {faixa}",
+                data=f.read(),
+                file_name=os.path.basename(caminho_pdf),
+                mime="application/pdf",
+                key=f"baixar_{i}"
+            )
+
+        st.markdown("---")
 # =========================================
 # EXECUÇÃO
 # =========================================
