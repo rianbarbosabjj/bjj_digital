@@ -630,6 +630,12 @@ def carregar_todas_questoes():
         if arquivo.endswith(".json"):
             tema = arquivo.replace(".json", "")
             with open(f"questions/{arquivo}", "r", encoding="utf-8") as f:
+                try:
+    questoes = json.load(f)
+except json.JSONDecodeError as e:
+    st.error(f"Erro ao carregar o arquivo: {arquivo}. Verifique o formato JSON.")
+    st.code(str(e))
+    continue
                 questoes = json.load(f)
                 for q in questoes:
                     q["tema"] = tema
