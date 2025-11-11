@@ -215,15 +215,17 @@ def salvar_questoes(tema, questoes):
 
 
 def gerar_codigo_verificacao():
-    """Gera código de verificação no formato BJJDIGITAL-ANO-NNNN"""
+    """Gera código de verificação único no formato BJJDIGITAL-ANO-XXXX."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    
+    # Conta quantos certificados já foram gerados
     cursor.execute("SELECT COUNT(*) FROM resultados")
     total = cursor.fetchone()[0] + 1
     conn.close()
 
     ano = datetime.now().year
-    codigo = f"BJJDIGITAL-{ano}-{str(total).zfill(4)}"
+    codigo = f"BJJDIGITAL-{ano}-{total:04d}"  # Exemplo: BJJDIGITAL-2025-0001
     return codigo
 # =========================================
 # 🤼 MODO ROLA (versão aprimorada – layout limpo)
@@ -446,27 +448,24 @@ def normalizar_nome(nome):
 
 
 def gerar_qrcode(codigo):
-    """Gera QR Code com link de verificação oficial."""
+    """Gera QR Code com link de verificação oficial do BJJ Digital."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
 
-    # 🔗 URL de verificação (ajuste o domínio se mudar futuramente)
-    base_url = "https://bjjdigital.vercel.app/verificar"
+    # URL de verificação oficial
+    base_url = "https://bjjdigital.netlify.app/verificar"
     link_verificacao = f"{base_url}?codigo={codigo}"
 
-    texto_qr = (
-        f"Verifique a autenticidade deste certificado no site oficial:\n\n"
-        f"{link_verificacao}"
-    )
-
+    # Criação do QR
     qr = qrcode.QRCode(
         version=1,
         box_size=10,
         border=4,
         error_correction=qrcode.constants.ERROR_CORRECT_H
     )
-    qr.add_data(texto_qr)
+    qr.add_data(link_verificacao)
     qr.make(fit=True)
+
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(caminho_qr)
 
