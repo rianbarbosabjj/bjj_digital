@@ -787,16 +787,16 @@ def main():
     # Menu dinâmico conforme perfil
     # =========================================
     if tipo_usuario in ["admin", "professor"]:
-    opcoes = [
-        "🏠 Início",
-        "🤼 Modo Rola",
-        "🥋 Exame de Faixa",
-        "🏆 Ranking",
-        "👩‍🏫 Painel do Professor",
-        "🧠 Gestão de Questões",
-        "🏛️ Gestão de Equipes",  # 👈 NOVA OPÇÃO
-        "🥋 Gestão de Exame de Faixa"
-    ]
+        opcoes = [
+            "🏠 Início",
+            "🤼 Modo Rola",
+            "🥋 Exame de Faixa",
+            "🏆 Ranking",
+            "👩‍🏫 Painel do Professor",
+            "🧠 Gestão de Questões",
+            "🏛️ Gestão de Equipes",  # 👈 NOVA OPÇÃO
+            "🥋 Gestão de Exame de Faixa"
+        ]
     else:  # aluno
         opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "📜 Meus Certificados"]
 
@@ -825,7 +825,7 @@ def main():
     elif menu == "👩‍🏫 Painel do Professor":
         painel_professor()
     elif menu == "🏛️ Gestão de Equipes":
-    gestao_equipes()
+        gestao_equipes()
     elif menu == "🧠 Gestão de Questões":
         gestao_questoes()
     elif menu == "🥋 Gestão de Exame de Faixa":
@@ -840,7 +840,6 @@ def main():
     if st.sidebar.button("🚪 Sair"):
         st.session_state.usuario = None
         st.rerun()
-
 # =========================================
 # 🥋 GESTÃO DE EXAME DE FAIXA (modo híbrido)
 # =========================================
