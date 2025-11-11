@@ -220,8 +220,12 @@ def gerar_codigo_verificacao():
 # =========================================
 # 🤼 MODO ROLA
 # =========================================
+# =========================================
+# 🤼 MODO ROLA (versão aprimorada – layout limpo)
+# =========================================
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
+
     temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
     temas.append("Todos os Temas")
 
@@ -229,40 +233,66 @@ def modo_rola(usuario_logado):
     faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
 
     if st.button("Iniciar Treino 🤼"):
+        # 🔹 Carrega questões conforme seleção
         if tema == "Todos os Temas":
             questoes = []
             for arquivo in os.listdir("questions"):
-                with open(f"questions/{arquivo}", "r", encoding="utf-8") as f:
-                    questoes += json.load(f)
+                if arquivo.endswith(".json"):
+                    caminho = f"questions/{arquivo}"
+                    try:
+                        with open(caminho, "r", encoding="utf-8") as f:
+                            questoes += json.load(f)
+                    except json.JSONDecodeError:
+                        st.warning(f"⚠️ Arquivo '{arquivo}' ignorado (erro de formatação).")
+                        continue
         else:
             questoes = carregar_questoes(tema)
 
         if not questoes:
-            st.error("Nenhuma questão disponível.")
+            st.error("Nenhuma questão disponível para este tema.")
             return
 
         random.shuffle(questoes)
         acertos = 0
         total = len(questoes)
 
+        st.markdown(f"### 🧩 Total de questões: {total}")
+
         for i, q in enumerate(questoes, 1):
             st.markdown(f"### {i}. {q['pergunta']}")
+
+            # 🔹 Exibe imagem (somente se existir e for válida)
             if q.get("imagem"):
-                st.image(q["imagem"], use_container_width=True)
+                imagem_path = q["imagem"].strip()
+                if imagem_path and os.path.exists(imagem_path):
+                    st.image(imagem_path, use_container_width=True)
+                elif imagem_path:
+                    st.warning(f"⚠️ Imagem não encontrada: {imagem_path}")
+            # (Sem else — espaço oculto se não houver imagem)
+
+            # 🔹 Exibe vídeo (somente se existir)
             if q.get("video"):
-                st.video(q["video"])
+                try:
+                    st.video(q["video"])
+                except Exception:
+                    st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
+            # (Sem else — espaço oculto se não houver vídeo)
 
             resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"rola_{i}")
+
             if st.button(f"Confirmar resposta {i}", key=f"confirma_{i}"):
                 if resposta.startswith(q["resposta"]):
                     acertos += 1
                     st.success("✅ Correto!")
                 else:
                     st.error(f"❌ Incorreto. Resposta correta: {q['resposta']}")
+            
+            st.markdown("---")  # separador visual entre as questões
 
         percentual = int((acertos / total) * 100)
         st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
 
+        # 🔹 Salva resultado no banco
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("""
@@ -271,11 +301,10 @@ def modo_rola(usuario_logado):
         """, (usuario_logado["nome"], faixa, tema, acertos, total, percentual))
         conn.commit()
         conn.close()
+
         st.success("Resultado salvo com sucesso! 🏆")
-
-
 # =========================================
-# 🥋 EXAME DE FAIXA
+# 🥋 EXAME DE FAIXA (versão aprimorada – layout limpo)
 # =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
@@ -286,7 +315,7 @@ def exame_de_faixa(usuario_logado):
     dado = cursor.fetchone()
     conn.close()
 
-    # Apenas alunos precisam de liberação
+    # 🔒 Apenas alunos precisam de liberação
     if usuario_logado["tipo"] not in ["admin", "professor"]:
         if not dado or dado[0] == 0:
             st.warning("🚫 Seu exame de faixa ainda não foi liberado. Aguarde a autorização do professor.")
@@ -302,24 +331,45 @@ def exame_de_faixa(usuario_logado):
         st.error("Nenhum exame cadastrado para esta faixa ainda.")
         return
 
-    with open(exame_path, "r", encoding="utf-8") as f:
-        exame = json.load(f)
+    # 🔍 Tenta carregar o arquivo do exame
+    try:
+        with open(exame_path, "r", encoding="utf-8") as f:
+            exame = json.load(f)
+    except json.JSONDecodeError:
+        st.error(f"⚠️ O arquivo '{exame_path}' está corrompido. Verifique o formato JSON.")
+        return
 
     questoes = exame.get("questoes", [])
     if not questoes:
         st.info("Ainda não há questões cadastradas para esta faixa.")
         return
 
+    st.markdown(f"### 🧩 {len(questoes)} questões no exame da faixa {faixa}")
+
     respostas = {}
     for i, q in enumerate(questoes, 1):
         st.markdown(f"### {i}. {q['pergunta']}")
+
+        # 🔹 Exibe imagem (somente se existir e for válida)
         if q.get("imagem"):
-            st.image(q["imagem"], use_container_width=True)
+            imagem_path = q["imagem"].strip()
+            if imagem_path and os.path.exists(imagem_path):
+                st.image(imagem_path, use_container_width=True)
+            elif imagem_path:
+                st.warning(f"⚠️ Imagem não encontrada: {imagem_path}")
+        # Nenhum espaço reservado se não houver imagem
+
+        # 🔹 Exibe vídeo (somente se existir e for válido)
         if q.get("video"):
-            st.video(q["video"])
+            try:
+                st.video(q["video"])
+            except Exception:
+                st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
+        # Nenhum espaço reservado se não houver vídeo
 
         respostas[i] = st.radio("Escolha a alternativa:", q["opcoes"], key=f"exame_{i}")
 
+    # 🔘 Botão para finalizar o exame
     if st.button("Finalizar Exame 🏁"):
         acertos = sum(
             1 for i, q in enumerate(questoes, 1)
@@ -330,10 +380,11 @@ def exame_de_faixa(usuario_logado):
         percentual = int((acertos / total) * 100)
         st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
 
+        # ✅ Aprovação e geração de certificado
         if percentual >= 70:
-            st.success("🎉 Parabéns! Você foi aprovado(a) no Exame de Faixa!")
-            codigo = gerar_codigo_verificacao()
+            st.success("🎉 Parabéns! Você foi aprovado(a) no Exame de Faixa! 👏")
 
+            codigo = gerar_codigo_verificacao()
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             cursor.execute("""
@@ -343,10 +394,12 @@ def exame_de_faixa(usuario_logado):
             conn.commit()
             conn.close()
 
+            # 🔘 Botão para baixar certificado
+            st.info("Clique abaixo para gerar seu certificado em PDF:")
             if st.button("📜 Baixar Certificado"):
                 gerar_certificado(usuario_logado["nome"], faixa, percentual, codigo)
         else:
-            st.error("Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
+            st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
 
 
 # =========================================
