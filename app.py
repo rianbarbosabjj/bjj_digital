@@ -159,11 +159,12 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = None
 
 if st.session_state.usuario is None:
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.image("assets/logo.png", width=180)  # Centralizada e ajustável
-
-    st.markdown("<h2 style='text-align:center;color:#FFD700;'>Bem-vindo(a) ao BJJ Digital</h2>", unsafe_allow_html=True)
+    st.markdown("""
+        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:40px;'>
+            <img src='assets/logo.png' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>
+            <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
+        </div>
+    """, unsafe_allow_html=True)
 
     user = st.text_input("Usuário:")
     pwd = st.text_input("Senha:", type="password")
@@ -176,7 +177,6 @@ if st.session_state.usuario is None:
             st.rerun()
         else:
             st.error("Usuário ou senha incorretos. Tente novamente.")
-
     st.stop()
 
 # =========================================
