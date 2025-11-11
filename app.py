@@ -373,7 +373,13 @@ def exame_de_faixa(usuario_logado):
             except Exception:
                 st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
 
-        respostas[i] = st.radio("Escolha a alternativa:", q["opcoes"], key=f"exame_{i}")
+        # 🔹 Exibe as opções sem nenhuma pré-seleção
+respostas[i] = st.radio(
+    "Escolha a alternativa:",
+    q["opcoes"],
+    key=f"exame_{i}",
+    index=None  # <- ESSENCIAL: impede pré-seleção
+)
         st.markdown("---")
 
     # 🔘 Botão para finalizar o exame
