@@ -11,6 +11,7 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 import bcrypt
+import base64
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -159,9 +160,18 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = None
 
 if st.session_state.usuario is None:
-    st.markdown("""
+    # Converte a logo local em base64 para exibição segura
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_base64 = base64.b64encode(f.read()).decode()
+        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>"
+    else:
+        logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
+
+    st.markdown(f"""
         <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:40px;'>
-            <img src='assets/logo.png' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>
+            {logo_html}
             <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
         </div>
     """, unsafe_allow_html=True)
