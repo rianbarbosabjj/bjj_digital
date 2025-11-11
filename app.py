@@ -649,70 +649,22 @@ def ranking():
 # =========================================
 def painel_professor():
     st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
-
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    usuario_id = st.session_state.usuario["id"]
 
-    # 🔹 Identifica as equipes sob responsabilidade
-    cursor.execute("""
-        SELECT e.id, e.nome
-        FROM equipes e
-        JOIN professores p ON e.id = p.equipe_id
-        WHERE p.usuario_id = ? AND p.eh_responsavel = 1
-    """, (usuario_id,))
-    equipes_responsavel = cursor.fetchall()
+    aba1, aba2, aba3 = st.tabs(["📋 Gerenciar Alunos", "⚙️ Gestão da Equipe", "🏛️ Gestão de Equipes"])
 
-    if equipes_responsavel:
-        st.markdown("### 🥋 Equipes sob sua responsabilidade:")
-        for eid, enome in equipes_responsavel:
-            st.markdown(f"- **{enome}**")
-    else:
-        st.info("Você ainda não é responsável por nenhuma equipe.")
-    
-    st.markdown("---")
-
-    # 🔹 Abas do painel
-    aba1, aba2, aba3 = st.tabs(["👥 Alunos", "⚙️ Professores Vinculados", "📊 Desempenho dos Alunos"])
-
-    # ============================================================
-    # 🧩 ABA 1 - ALUNOS
-    # ============================================================
+    # --- 📋 ABA 1: Gerenciar alunos e habilitar exame ---
     with aba1:
-        st.markdown("### 📋 Meus alunos")
-
-        if equipes_responsavel:
-            equipe_ids = tuple([e[0] for e in equipes_responsavel])
-            query = f"""
-                SELECT a.id, u.nome AS aluno, e.nome AS equipe, a.faixa_atual, a.turma,
-                       a.status_vinculo, a.exame_habilitado
-                FROM alunos a
-                JOIN usuarios u ON a.usuario_id = u.id
-                JOIN equipes e ON a.equipe_id = e.id
-                WHERE a.equipe_id IN {equipe_ids}
-            """
+        st.markdown("### 👥 Alunos cadastrados")
+        df = pd.read_sql_query("SELECT * FROM alunos", conn)
+        if df.empty:
+            st.info("Nenhum aluno cadastrado ainda.")
         else:
-            query = f"""
-                SELECT a.id, u.nome AS aluno, e.nome AS equipe, a.faixa_atual, a.turma,
-                       a.status_vinculo, a.exame_habilitado
-                FROM alunos a
-                JOIN usuarios u ON a.usuario_id = u.id
-                JOIN equipes e ON a.equipe_id = e.id
-                WHERE a.professor_id IN (
-                    SELECT id FROM professores WHERE usuario_id = {usuario_id}
-                )
-            """
+            df["Exame Habilitado"] = df["exame_habilitado"].apply(lambda x: "Sim" if x else "Não")
+            st.dataframe(df[["id", "faixa_atual", "turma", "status_vinculo", "Exame Habilitado"]], use_container_width=True)
 
-        df_alunos = pd.read_sql_query(query, conn)
-
-        if df_alunos.empty:
-            st.info("Nenhum aluno vinculado às suas equipes ainda.")
-        else:
-            df_alunos["Exame Habilitado"] = df_alunos["exame_habilitado"].apply(lambda x: "Sim" if x else "Não")
-            st.dataframe(df_alunos, use_container_width=True)
-
-            aluno_id = st.number_input("Informe o ID do aluno:", min_value=1, step=1)
-
+            aluno_id = st.number_input("ID do aluno:", min_value=1, step=1)
             col1, col2 = st.columns(2)
             if col1.button("✅ Habilitar Exame"):
                 cursor.execute("UPDATE alunos SET exame_habilitado=1 WHERE id=?", (aluno_id,))
@@ -725,122 +677,73 @@ def painel_professor():
                 st.warning(f"Exame desabilitado para o aluno ID {aluno_id}.")
                 st.rerun()
 
-    # ============================================================
-    # 🧩 ABA 2 - PROFESSORES VINCULADOS
-    # ============================================================
+    # --- ⚙️ ABA 2: Professores da equipe ---
     with aba2:
-        st.markdown("### 👨‍🏫 Professores vinculados à sua equipe")
-
-        if not equipes_responsavel:
-            st.info("Nenhuma equipe sob sua responsabilidade para exibir professores.")
+        st.markdown("### 👨‍🏫 Professores da equipe")
+        professores = pd.read_sql_query("SELECT * FROM professores", conn)
+        if professores.empty:
+            st.info("Nenhum professor cadastrado.")
         else:
-            equipe_ids = tuple([e[0] for e in equipes_responsavel])
-            query_prof = f"""
-                SELECT p.id, u.nome AS professor, e.nome AS equipe, 
-                       CASE WHEN p.eh_responsavel = 1 THEN 'Responsável' ELSE 'Auxiliar' END AS função,
-                       p.status_vinculo, p.data_vinculo
-                FROM professores p
-                JOIN usuarios u ON p.usuario_id = u.id
-                JOIN equipes e ON p.equipe_id = e.id
-                WHERE p.equipe_id IN {equipe_ids}
-            """
-            df_prof = pd.read_sql_query(query_prof, conn)
+            st.dataframe(professores)
 
-            if df_prof.empty:
-                st.info("Nenhum professor auxiliar vinculado às suas equipes.")
-            else:
-                st.dataframe(df_prof, use_container_width=True)
-
-                st.markdown("### 🔄 Gerenciar vínculo")
-                prof_id = st.number_input("Informe o ID do professor auxiliar:", min_value=1, step=1)
-                col1, col2 = st.columns(2)
-                if col1.button("✅ Ativar Vínculo"):
-                    cursor.execute("UPDATE professores SET status_vinculo='ativo' WHERE id=?", (prof_id,))
-                    conn.commit()
-                    st.success("Vínculo ativado com sucesso!")
-                    st.rerun()
-                if col2.button("❌ Rejeitar Vínculo"):
-                    cursor.execute("UPDATE professores SET status_vinculo='rejeitado' WHERE id=?", (prof_id,))
-                    conn.commit()
-                    st.warning("Vínculo rejeitado.")
-                    st.rerun()
-
-    # ============================================================
-    # 🧩 ABA 3 - DESEMPENHO DOS ALUNOS
-    # ============================================================
+    # --- 🏛️ ABA 3: Gestão de Equipes (com edição e exclusão) ---
     with aba3:
-        st.markdown("### 📊 Desempenho dos Alunos")
+        st.markdown("### 🏛️ Equipes Cadastradas")
 
-        if not equipes_responsavel:
-            st.info("Nenhuma equipe sob sua responsabilidade para gerar análises.")
+        df_eq = pd.read_sql_query("SELECT * FROM equipes", conn)
+        if df_eq.empty:
+            st.info("Nenhuma equipe cadastrada ainda.")
         else:
-            equipe_ids = tuple([e[0] for e in equipes_responsavel])
+            for i, row in df_eq.iterrows():
+                with st.expander(f"🏋️ {row['nome']}"):
+                    st.markdown(f"**Descrição:** {row['descricao'] or 'Sem descrição.'}")
+                    st.markdown(f"**Professor Responsável (ID):** {row['professor_responsavel_id'] or 'Não definido'}")
+                    st.markdown(f"**Ativa:** {'✅ Sim' if row['ativo'] else '❌ Não'}")
 
-            # 🔹 Consulta desempenho no modo rola e exame de faixa
-            query_resultados = f"""
-                SELECT r.usuario AS aluno, r.modo, r.faixa, r.pontuacao AS percentual, r.data
-                FROM resultados r
-                WHERE r.usuario IN (
-                    SELECT u.nome
-                    FROM alunos a
-                    JOIN usuarios u ON a.usuario_id = u.id
-                    WHERE a.equipe_id IN {equipe_ids}
-                )
-            """
-            query_rola = f"""
-                SELECT rr.usuario AS aluno, rr.faixa, rr.percentual, rr.data
-                FROM rola_resultados rr
-                WHERE rr.usuario IN (
-                    SELECT u.nome
-                    FROM alunos a
-                    JOIN usuarios u ON a.usuario_id = u.id
-                    WHERE a.equipe_id IN {equipe_ids}
-                )
-            """
+                    col1, col2 = st.columns(2)
+                    if col1.button(f"✏️ Editar Equipe {row['id']}", key=f"editar_{row['id']}"):
+                        with st.form(f"form_editar_{row['id']}"):
+                            novo_nome = st.text_input("Nome da equipe:", value=row['nome'])
+                            nova_descricao = st.text_area("Descrição:", value=row['descricao'] or "")
+                            novo_prof = st.number_input("ID do Professor Responsável:", value=row['professor_responsavel_id'] or 0, min_value=0)
+                            ativo = st.checkbox("Equipe Ativa", value=bool(row['ativo']))
 
-            df_exame = pd.read_sql_query(query_resultados, conn)
-            df_rola = pd.read_sql_query(query_rola, conn)
+                            salvar = st.form_submit_button("💾 Salvar Alterações")
+                            if salvar:
+                                cursor.execute("""
+                                    UPDATE equipes
+                                    SET nome=?, descricao=?, professor_responsavel_id=?, ativo=?
+                                    WHERE id=?
+                                """, (novo_nome, nova_descricao, novo_prof, ativo, row['id']))
+                                conn.commit()
+                                st.success(f"Equipe '{novo_nome}' atualizada com sucesso! ✅")
+                                st.rerun()
 
-            if df_exame.empty and df_rola.empty:
-                st.info("Ainda não há resultados registrados para análise.")
-            else:
-                if not df_exame.empty:
-                    df_exame["tipo"] = "Exame de Faixa"
-                if not df_rola.empty:
-                    df_rola["tipo"] = "Modo Rola"
-                df_total = pd.concat([df_exame, df_rola], ignore_index=True)
+                    if col2.button(f"🗑️ Excluir Equipe {row['id']}", key=f"excluir_{row['id']}"):
+                        confirm = st.warning(f"Tem certeza que deseja excluir a equipe '{row['nome']}'?", icon="⚠️")
+                        if st.button(f"Confirmar Exclusão {row['id']}", key=f"confirmar_excluir_{row['id']}"):
+                            cursor.execute("DELETE FROM equipes WHERE id=?", (row['id'],))
+                            conn.commit()
+                            st.error(f"Equipe '{row['nome']}' foi excluída com sucesso.")
+                            st.rerun()
 
-                # 🔸 Filtros
-                col1, col2 = st.columns(2)
-                faixas = sorted(df_total["faixa"].dropna().unique().tolist())
-                filtro_faixa = col1.selectbox("Filtrar por faixa:", ["Todas"] + faixas)
-                modos = sorted(df_total["tipo"].dropna().unique().tolist())
-                filtro_modo = col2.selectbox("Filtrar por modo:", ["Todos"] + modos)
+        st.markdown("---")
+        st.markdown("### ➕ Cadastrar Nova Equipe")
+        with st.form("nova_equipe"):
+            nome_eq = st.text_input("Nome da Equipe:")
+            descricao_eq = st.text_area("Descrição:")
+            prof_resp = st.number_input("ID do Professor Responsável:", min_value=0)
+            ativo_eq = st.checkbox("Ativa", value=True)
+            salvar_eq = st.form_submit_button("💾 Criar Equipe")
 
-                df_filtrado = df_total.copy()
-                if filtro_faixa != "Todas":
-                    df_filtrado = df_filtrado[df_filtrado["faixa"] == filtro_faixa]
-                if filtro_modo != "Todos":
-                    df_filtrado = df_filtrado[df_filtrado["tipo"] == filtro_modo]
-
-                # 🔹 Cálculo de médias
-                df_media = df_filtrado.groupby(["aluno", "tipo"], as_index=False)["percentual"].mean()
-
-                st.markdown("#### 📈 Média de Aproveitamento por Aluno")
-                fig = px.bar(
-                    df_media,
-                    x="aluno",
-                    y="percentual",
-                    color="tipo",
-                    barmode="group",
-                    text_auto=True,
-                    color_discrete_sequence=["#FFD700", "#078B6C"]
-                )
-                fig.update_layout(xaxis_title="Aluno", yaxis_title="Aproveitamento (%)")
-                st.plotly_chart(fig, use_container_width=True)
-
-                st.markdown("#### 📋 Tabela detalhada")
-                st.dataframe(df_media, use_container_width=True)
+            if salvar_eq and nome_eq.strip():
+                cursor.execute("""
+                    INSERT INTO equipes (nome, descricao, professor_responsavel_id, ativo)
+                    VALUES (?, ?, ?, ?)
+                """, (nome_eq.strip(), descricao_eq.strip(), prof_resp, ativo_eq))
+                conn.commit()
+                st.success(f"Equipe '{nome_eq}' criada com sucesso! 🎉")
+                st.rerun()
 
     conn.close()
 # =========================================
