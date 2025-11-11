@@ -52,7 +52,7 @@ h1, h2, h3 {{
 """, unsafe_allow_html=True)
 
 # =========================================
-# BANCO DE DADOS E TABELAS RELACIONADAS
+# BANCO DE DADOS
 # =========================================
 DB_PATH = os.path.join("database", "bjj_digital.db")
 
@@ -126,7 +126,7 @@ def criar_banco():
 criar_banco()
 
 # =========================================
-# AUTENTICAÇÃO SIMPLES LOCAL
+# AUTENTICAÇÃO
 # =========================================
 def autenticar(usuario, senha):
     conn = sqlite3.connect(DB_PATH)
@@ -141,11 +141,15 @@ def autenticar(usuario, senha):
 def criar_usuarios_teste():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    for nome, tipo in [("admin", "admin"), ("professor", "professor"), ("aluno", "aluno")]:
-        senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-        cursor.execute("INSERT OR IGNORE INTO usuarios (nome, tipo_usuario, senha) VALUES (?, ?, ?)", (nome, tipo, senha_hash))
+    usuarios = [("admin", "admin"), ("professor", "professor"), ("aluno", "aluno")]
+    for nome, tipo in usuarios:
+        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
+        if cursor.fetchone() is None:
+            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+            cursor.execute("INSERT INTO usuarios (nome, tipo_usuario, senha) VALUES (?, ?, ?)", (nome, tipo, senha_hash))
     conn.commit()
     conn.close()
+
 criar_usuarios_teste()
 
 # =========================================
@@ -155,21 +159,24 @@ if "usuario" not in st.session_state:
     st.session_state.usuario = None
 
 if st.session_state.usuario is None:
-    st.image("assets/logo.png", use_container_width=True)
+    st.markdown("""
+        <div style='display:flex;justify-content:center;align-items:center;'>
+            <img src='assets/logo.png' style='width:25%;max-width:180px;height:auto;'/>
+        </div>
+    """, unsafe_allow_html=True)
     st.markdown("<h2 style='text-align:center;color:#FFD700;'>Bem-vindo(a) ao BJJ Digital</h2>", unsafe_allow_html=True)
     user = st.text_input("Usuário:")
     pwd = st.text_input("Senha:", type="password")
     if st.button("Entrar"):
-        u = autenticar(user, pwd)
+        u = autenticar(user.strip(), pwd.strip())
         if u:
             st.session_state.usuario = u
             st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
             st.rerun()
         else:
-            st.error("Usuário ou senha incorretos.")
+            st.error("Usuário ou senha incorretos. Tente novamente.")
     st.stop()
 
-# ⚙️ Correção para evitar erro de acesso
 usuario_logado = st.session_state.get("usuario", None)
 tipo_usuario = usuario_logado["tipo"] if usuario_logado else "aluno"
 
@@ -184,7 +191,7 @@ def carregar_questoes(tema):
     return []
 
 # =========================================
-# 🤼 MODO ROLA (Treino Livre)
+# 🤼 MODO ROLA
 # =========================================
 def modo_rola():
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
@@ -348,7 +355,7 @@ def painel_professor():
     conn.close()
 
 # =========================================
-# MENU DINÂMICO POR PERFIL
+# MENU
 # =========================================
 def tela_inicio():
     st.image("assets/logo.png", use_container_width=True)
