@@ -291,7 +291,6 @@ def painel_professor():
     aba1, aba2, aba3, aba4 = st.tabs([
         "➕ Cadastrar Aluno", "📋 Pedidos Pendentes", "⚙️ Gestão da Equipe", "📊 Desempenho dos Alunos"
     ])
-    # [Conteúdo igual ao seu anterior]
     conn.close()
 
 # =========================================
@@ -319,8 +318,22 @@ def main():
     menu = st.sidebar.radio("Navegar:", opcoes)
 
     if menu == "🏠 Início":
-        st.image("assets/logo.png", use_container_width=True)
-        st.markdown("<h2 style='text-align:center;color:#FFD700;'>Bem-vindo(a) ao Sistema BJJ Digital</h2>", unsafe_allow_html=True)
+        logo_path = "assets/logo.png"
+        if os.path.exists(logo_path):
+            with open(logo_path, "rb") as f:
+                logo_base64 = base64.b64encode(f.read()).decode()
+            logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>"
+        else:
+            logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
+
+        st.markdown(f"""
+            <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:40px;'>
+                {logo_html}
+                <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
+                <p style='color:#FFFFFF;text-align:center;font-size:1.1em;'>Selecione uma opção no menu lateral para começar o treino 💪</p>
+            </div>
+        """, unsafe_allow_html=True)
+
     elif menu == "🤼 Modo Rola":
         modo_rola(usuario_logado)
     elif menu == "🏆 Ranking":
