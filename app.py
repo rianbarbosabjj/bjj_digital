@@ -55,10 +55,11 @@ h1, h2, h3 {{
 # =========================================
 # BANCO DE DADOS
 # =========================================
-DB_PATH = os.path.join("database", "bjj_digital.db")
+DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
 def criar_banco():
-    os.makedirs("database", exist_ok=True)
+    """Cria o banco de dados e suas tabelas, caso não existam."""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
@@ -83,7 +84,7 @@ def criar_banco():
         usuario_id INTEGER,
         equipe_id INTEGER,
         pode_aprovar BOOLEAN DEFAULT 0,
-        eh_responsavel BOOLEAN DEFAULT 0, -- 🔹 novo campo
+        eh_responsavel BOOLEAN DEFAULT 0,
         status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
         data_vinculo DATETIME DEFAULT CURRENT_TIMESTAMP
     );
@@ -124,16 +125,12 @@ def criar_banco():
     );
     """)
 
-    # 🔹 Garante compatibilidade com bancos antigos
-    try:
-        cursor.execute("ALTER TABLE professores ADD COLUMN eh_responsavel BOOLEAN DEFAULT 0")
-    except sqlite3.OperationalError:
-        pass  # coluna já existe
-
     conn.commit()
     conn.close()
 
-criar_banco()
+# 🔹 Cria o banco apenas se ainda não existir
+if not os.path.exists(DB_PATH):
+    criar_banco()
 # =========================================
 # AUTENTICAÇÃO
 # =========================================
