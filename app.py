@@ -620,8 +620,23 @@ def main():
         st.rerun()
 
 # =========================================
-# 🥋 GESTÃO DE EXAME DE FAIXA
+# 🥋 GESTÃO DE EXAME DE FAIXA (modo híbrido)
 # =========================================
+def carregar_todas_questoes():
+    """Carrega todas as questões de todos os temas, adicionando o campo 'tema'."""
+    todas = []
+    os.makedirs("questions", exist_ok=True)
+    for arquivo in os.listdir("questions"):
+        if arquivo.endswith(".json"):
+            tema = arquivo.replace(".json", "")
+            with open(f"questions/{arquivo}", "r", encoding="utf-8") as f:
+                questoes = json.load(f)
+                for q in questoes:
+                    q["tema"] = tema
+                    todas.append(q)
+    return todas
+
+
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>🥋 Gestão de Exame de Faixa</h1>", unsafe_allow_html=True)
 
@@ -642,35 +657,37 @@ def gestao_exame_de_faixa():
             "questoes": []
         }
 
-    temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
-    tema = st.selectbox("Selecione o tema para escolher as questões:", temas)
-
-    if not tema:
-        st.warning("Selecione um tema para visualizar as questões.")
+    # 🔹 Carrega todas as questões disponíveis
+    todas_questoes = carregar_todas_questoes()
+    if not todas_questoes:
+        st.warning("Nenhuma questão cadastrada nos temas até o momento.")
         return
 
-    questoes = carregar_questoes(tema)
-    if not questoes:
-        st.info("Nenhuma questão encontrada neste tema.")
-        return
+    # 🔹 Filtro por tema
+    temas_disponiveis = sorted(list(set(q["tema"] for q in todas_questoes)))
+    tema_filtro = st.selectbox("Filtrar questões por tema:", ["Todos"] + temas_disponiveis)
+
+    # 🔹 Exibição com filtro
+    if tema_filtro != "Todos":
+        questoes_filtradas = [q for q in todas_questoes if q["tema"] == tema_filtro]
+    else:
+        questoes_filtradas = todas_questoes
 
     st.markdown("### ✅ Selecione as questões que farão parte do exame")
     selecao = []
-    for i, q in enumerate(questoes, 1):
-        st.markdown(f"**{i}. {q['pergunta']}**")
-        if st.checkbox(f"Adicionar ao exame ({tema})", key=f"{faixa}_{tema}_{i}"):
+    for i, q in enumerate(questoes_filtradas, 1):
+        st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
+        if st.checkbox(f"Adicionar esta questão ({q['tema']})", key=f"{faixa}_{q['tema']}_{i}"):
             selecao.append(q)
 
-    # 🔘 Botão para inserir as questões selecionadas
+    # 🔘 Botão para inserir as selecionadas
     if selecao and st.button("➕ Inserir Questões Selecionadas"):
         for q in selecao:
-            # evita duplicatas
             if not any(q["pergunta"] == ex_q["pergunta"] for ex_q in exame["questoes"]):
-                q["tema"] = tema
                 exame["questoes"].append(q)
-        exame["temas_incluidos"] = sorted(list(set(exame.get("temas_incluidos", []) + [tema])))
+        exame["temas_incluidos"] = sorted(list(set(exame.get("temas_incluidos", []) + [q["tema"] for q in selecao])))
         exame["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
-        st.success(f"{len(selecao)} questão(ões) inserida(s) no exame da faixa {faixa}.")
+        st.success(f"{len(selecao)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
         with open(exame_path, "w", encoding="utf-8") as f:
             json.dump(exame, f, indent=4, ensure_ascii=False)
         st.rerun()
@@ -681,21 +698,22 @@ def gestao_exame_de_faixa():
         exame["criado_por"] = st.session_state.usuario["nome"]
         with open(exame_path, "w", encoding="utf-8") as f:
             json.dump(exame, f, indent=4, ensure_ascii=False)
-        st.success(f"Exame da faixa {faixa} salvo com sucesso! 🥇")
+        st.success(f"Exame da faixa {faixa} salvo com sucesso! 🥋")
 
     st.markdown("---")
     st.markdown("### 📋 Questões já incluídas no exame atual:")
     if not exame["questoes"]:
-        st.info("Nenhuma questão selecionada ainda.")
+        st.info("Nenhuma questão adicionada ainda.")
     else:
         for i, q in enumerate(exame["questoes"], 1):
-            st.markdown(f"**{i}. {q['pergunta']}**  _(Tema: {q.get('tema', 'Desconhecido')})_")
+            st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
             st.markdown(f"<small>Resposta correta: {q['resposta']}</small>", unsafe_allow_html=True)
 
     if st.button("🗑️ Excluir exame desta faixa"):
         os.remove(exame_path)
-        st.warning(f"O exame da faixa {faixa} foi removido.")
+        st.warning(f"O exame da faixa {faixa} foi excluído.")
         st.rerun()
+
 
 # =========================================
 # EXECUÇÃO
