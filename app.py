@@ -1003,21 +1003,56 @@ def gestao_equipes():
     # ============================================================
     with aba1:
         st.subheader("Cadastrar nova equipe")
+
+        # 🔹 Campo de nome e descrição
         nome_equipe = st.text_input("Nome da equipe:")
         descricao = st.text_area("Descrição:")
 
+        # 🔹 Seleciona o professor responsável
+        professores_disp = pd.read_sql_query(
+            "SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn
+        )
+        professor_responsavel = None
+        if professores_disp.empty:
+            st.warning("⚠️ Nenhum professor cadastrado. Cadastre um professor primeiro.")
+        else:
+            nome_prof = st.selectbox(
+                "Professor responsável:", professores_disp["nome"]
+            )
+            professor_responsavel = professores_disp.loc[
+                professores_disp["nome"] == nome_prof, "id"
+            ].values[0]
+
+        # 🔘 Botão para criar equipe
         if st.button("➕ Criar Equipe"):
-            if nome_equipe.strip():
-                cursor.execute("INSERT INTO equipes (nome, descricao) VALUES (?, ?)", (nome_equipe, descricao))
-                conn.commit()
-                st.success(f"Equipe '{nome_equipe}' criada com sucesso!")
-                st.rerun()
-            else:
+            if not nome_equipe.strip():
                 st.error("O nome da equipe é obrigatório.")
+            elif professor_responsavel is None:
+                st.error("Selecione um professor responsável.")
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO equipes (nome, descricao, professor_responsavel_id, ativo)
+                    VALUES (?, ?, ?, 1)
+                    """,
+                    (nome_equipe, descricao, professor_responsavel),
+                )
+                conn.commit()
+                st.success(f"Equipe '{nome_equipe}' criada com sucesso! 🥋")
+                st.rerun()
 
         st.markdown("---")
         st.subheader("Equipes existentes")
-        equipes = pd.read_sql_query("SELECT * FROM equipes", conn)
+
+        equipes = pd.read_sql_query(
+            """
+            SELECT e.id, e.nome, e.descricao, u.nome AS professor_responsavel, e.ativo
+            FROM equipes e
+            LEFT JOIN usuarios u ON e.professor_responsavel_id = u.id
+            """,
+            conn,
+        )
+
         if equipes.empty:
             st.info("Nenhuma equipe cadastrada.")
         else:
@@ -1044,15 +1079,23 @@ def gestao_equipes():
             if st.button("📎 Vincular Professor"):
                 cursor.execute(
                     "INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, status_vinculo) VALUES (?, ?, ?, ?)",
-                    (prof_id, equipe_id, 1, "ativo")
+                    (prof_id, equipe_id, 1, "ativo"),
                 )
                 conn.commit()
-                st.success(f"Professor {prof} vinculado à equipe {equipe}!")
+                st.success(f"Professor {prof} vinculado à equipe {equipe}! ✅")
                 st.rerun()
 
         st.markdown("---")
         st.subheader("Professores vinculados")
-        profs = pd.read_sql_query("SELECT * FROM professores", conn)
+        profs = pd.read_sql_query(
+            """
+            SELECT p.id, u.nome AS professor, e.nome AS equipe, p.status_vinculo, p.data_vinculo
+            FROM professores p
+            LEFT JOIN usuarios u ON p.usuario_id = u.id
+            LEFT JOIN equipes e ON p.equipe_id = e.id
+            """,
+            conn,
+        )
         if profs.empty:
             st.info("Nenhum professor vinculado.")
         else:
@@ -1079,23 +1122,35 @@ def gestao_equipes():
             equipe_id = equipes.loc[equipes["nome"] == equipe, "id"].values[0]
 
             if st.button("✅ Vincular Aluno"):
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
                     VALUES (?, ?, ?, ?, ?, 'ativo')
-                """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
+                    """,
+                    (aluno_id, "Branca", "Turma 1", professor_id, equipe_id),
+                )
                 conn.commit()
-                st.success(f"Aluno {aluno} vinculado com sucesso!")
+                st.success(f"Aluno {aluno} vinculado com sucesso! 🥋")
                 st.rerun()
 
         st.markdown("---")
         st.subheader("Alunos vinculados")
-        alunos_vinc = pd.read_sql_query("SELECT * FROM alunos", conn)
+        alunos_vinc = pd.read_sql_query(
+            """
+            SELECT a.id, u.nome AS aluno, e.nome AS equipe, a.faixa_atual, a.turma, a.status_vinculo
+            FROM alunos a
+            LEFT JOIN usuarios u ON a.usuario_id = u.id
+            LEFT JOIN equipes e ON a.equipe_id = e.id
+            """,
+            conn,
+        )
         if alunos_vinc.empty:
             st.info("Nenhum aluno vinculado ainda.")
         else:
             st.dataframe(alunos_vinc, use_container_width=True)
 
     conn.close()
+
 
 # =========================================
 # EXECUÇÃO
