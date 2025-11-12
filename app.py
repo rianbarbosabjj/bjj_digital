@@ -962,18 +962,23 @@ def gestao_equipes():
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
 
+    # 🔹 Lista temas existentes (arquivos JSON)
     temas_existentes = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
     tema_selecionado = st.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
 
+    # 🔹 Define o nome do tema
     if tema_selecionado == "Novo Tema":
         tema = st.text_input("Digite o nome do novo tema:")
     else:
         tema = tema_selecionado
 
-    # 🔹 O trecho abaixo PRECISA estar com a mesma indentação das linhas acima
+    # 🔹 Verifica se o tema está vazio antes de prosseguir
     if not tema.strip():
         st.warning("Digite um nome válido para o tema antes de salvar questões.")
         return
+
+    # 🔹 Carrega as questões do tema atual
+    questoes = carregar_questoes(tema) if tema else []
 
     # ======================================================
     # ✍️ Seção para adicionar nova questão
@@ -1025,6 +1030,7 @@ def gestao_questoes():
                 salvar_questoes(tema, questoes)
                 st.warning("Questão removida.")
                 st.rerun()
+
 
 # =========================================
 # 🏠 TELA INÍCIO (DO SEU PROJETO ORIGINAL)
