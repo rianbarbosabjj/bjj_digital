@@ -490,12 +490,12 @@ def gerar_qrcode(codigo):
 
 
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    """Gera certificado oficial do exame de faixa."""
-    pdf = FPDF("L", "mm", "A4")  # Layout Paisagem (297x210)
+    """Gera certificado oficial do exame de faixa com assinatura caligráfica (Allura)."""
+    pdf = FPDF("L", "mm", "A4")  # Layout paisagem
     pdf.set_auto_page_break(False)
     pdf.add_page()
 
-    # Cores principais
+    # 🎨 Cores e layout base
     dourado, preto, branco = (218, 165, 32), (40, 40, 40), (255, 255, 255)
     percentual = int((pontuacao / total) * 100)
     data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
@@ -523,7 +523,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         pdf.image(logo_path, x=133, y=40, w=32)
 
     # ---------------------------------------------------
-    # BLOCO CENTRAL (Texto Hierarquizado e Equilibrado)
+    # BLOCO CENTRAL
     # ---------------------------------------------------
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 16)
@@ -569,7 +569,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.cell(0, 6, texto_final, align="C")
 
     # ---------------------------------------------------
-    # SEL0, QR CODE E ASSINATURA
+    # SELO E QR CODE
     # ---------------------------------------------------
     selo_path = "assets/selo_dourado.png"
     if os.path.exists(selo_path):
@@ -583,18 +583,34 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(220, 180)
     pdf.cell(60, 6, f"Código: {codigo}", align="R")
 
+    # ---------------------------------------------------
+    # ASSINATURA DO PROFESSOR (Allura)
+    # ---------------------------------------------------
     if professor:
-        assinatura_path = f"assets/assinaturas/{normalizar_nome(professor)}.png"
-        if os.path.exists(assinatura_path):
-            pdf.image(assinatura_path, x=118, y=160, w=60)
+        fonte_assinatura = "assets/fonts/Allura-Regular.ttf"
+        if os.path.exists(fonte_assinatura):
+            try:
+                pdf.add_font("Assinatura", "", fonte_assinatura, uni=True)
+                pdf.set_font("Assinatura", "", 30)
+            except Exception:
+                pdf.set_font("Helvetica", "I", 18)
+        else:
+            pdf.set_font("Helvetica", "I", 18)
+
         pdf.set_text_color(*preto)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_y(175)
-        pdf.cell(0, 6, "Assinatura do Professor Responsável", align="C")
+        pdf.set_y(158)
+        pdf.cell(0, 12, professor, align="C")
+
         pdf.set_draw_color(*dourado)
         pdf.line(100, 173, 197, 173)
 
-    # Rodapé
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_y(175)
+        pdf.cell(0, 6, "Assinatura do Professor Responsável", align="C")
+
+    # ---------------------------------------------------
+    # RODAPÉ
+    # ---------------------------------------------------
     pdf.set_draw_color(*dourado)
     pdf.line(30, 190, 268, 190)
     pdf.set_text_color(*dourado)
