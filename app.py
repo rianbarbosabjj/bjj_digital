@@ -91,17 +91,21 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
 def criar_banco():
-    """Cria o banco de dados e suas tabelas, caso não existam."""
+    """Cria o banco de dados e todas as tabelas necessárias, atualizando se houver campos novos."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
+    # =========================================
+    # Criação das tabelas principais
+    # =========================================
     cursor.executescript("""
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         tipo_usuario TEXT,
-        senha TEXT
+        senha TEXT,
+        perfil_completo INTEGER DEFAULT 0  -- indica se o cadastro foi concluído
     );
 
     CREATE TABLE IF NOT EXISTS equipes (
@@ -144,8 +148,8 @@ def criar_banco():
         tempo TEXT,
         data DATETIME DEFAULT CURRENT_TIMESTAMP,
         codigo_verificacao TEXT,
-        acertos INTEGER,      -- 👈 [BUGFIX] Adicionado
-        total_questoes INTEGER  -- 👈 [BUGFIX] Adicionado
+        acertos INTEGER,
+        total_questoes INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS rola_resultados (
@@ -159,6 +163,24 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
+
+    # =========================================
+    # Atualizações retroativas (bancos antigos)
+    # =========================================
+    try:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN perfil_completo INTEGER DEFAULT 0")
+        conn.commit()
+    except sqlite3.OperationalError:
+        # A coluna já existe — ignorar
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE resultados ADD COLUMN acertos INTEGER")
+        cursor.execute("ALTER TABLE resultados ADD COLUMN total_questoes INTEGER")
+        conn.commit()
+    except sqlite3.OperationalError:
+        # Colunas já existem — ignorar
+        pass
 
     conn.commit()
     conn.close()
