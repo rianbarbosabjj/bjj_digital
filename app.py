@@ -1536,8 +1536,7 @@ if __name__ == "__main__":
         
     else:
         # ROTA 3: Usuário está deslogado (mostra tela de login)
-<<<<<<< Updated upstream
         tela_login()
 =======
         tela_login()
->>>>>>> Stashed changes
+
