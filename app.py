@@ -966,10 +966,10 @@ def gestao_questoes():
     tema_selecionado = st.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
 
     if tema_selecionado == "Novo Tema":
-        tema = st.text_input("Digite o nome do novo tema:")
+     # 🔹 Verifica se o tema está vazio antes de prosseguir
     if not tema.strip():
-    st.warning("Digite um nome válido para o tema antes de salvar questões.")
-    return
+        st.warning("Digite um nome válido para o tema antes de salvar questões.")
+        return
     
     else:
         tema = tema_selecionado
