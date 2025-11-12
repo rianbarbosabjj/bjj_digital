@@ -660,12 +660,31 @@ def gestao_equipes():
     # ============================================================
     with aba1:
         st.subheader("Cadastrar nova equipe")
+
         nome_equipe = st.text_input("Nome da nova equipe:", key="input_nome_equipe")
         descricao = st.text_area("Descrição da nova equipe:", key="input_desc_equipe")
 
+        professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
+        professor_responsavel_nome = None
+        professor_responsavel_id = None
+
+        if not professores_df.empty:
+            professor_responsavel_nome = st.selectbox(
+                "👩‍🏫 Professor responsável:",
+                ["Nenhum"] + professores_df["nome"].tolist(),
+                key="select_prof_resp_cadastro"
+            )
+            if professor_responsavel_nome != "Nenhum":
+                professor_responsavel_id = int(
+                    professores_df.loc[professores_df["nome"] == professor_responsavel_nome, "id"].values[0]
+                )
+
         if st.button("➕ Criar Equipe", key="btn_criar_equipe_final"):
             if nome_equipe.strip():
-                cursor.execute("INSERT INTO equipes (nome, descricao) VALUES (?, ?)", (nome_equipe, descricao))
+                cursor.execute(
+                    "INSERT INTO equipes (nome, descricao, professor_responsavel_id) VALUES (?, ?, ?)",
+                    (nome_equipe, descricao, professor_responsavel_id)
+                )
                 conn.commit()
                 st.success(f"Equipe '{nome_equipe}' criada com sucesso! ✅")
                 st.rerun()
@@ -675,7 +694,12 @@ def gestao_equipes():
         st.markdown("---")
         st.subheader("Equipes existentes")
 
-        equipes_df = pd.read_sql_query("SELECT * FROM equipes", conn)
+        equipes_df = pd.read_sql_query("""
+            SELECT e.id, e.nome, e.descricao, u.nome AS professor_responsavel
+            FROM equipes e
+            LEFT JOIN usuarios u ON e.professor_responsavel_id = u.id
+        """, conn)
+
         if equipes_df.empty:
             st.info("Nenhuma equipe cadastrada.")
         else:
@@ -694,14 +718,34 @@ def gestao_equipes():
             with st.expander(f"Gerenciar {equipe_selecionada}", expanded=True):
                 novo_nome = st.text_input("Novo nome:", value=equipe_selecionada, key=f"edit_nome_{equipe_id}")
                 nova_desc = st.text_area(
-                    "Nova descrição:", 
+                    "Nova descrição:",
                     value=equipes_df.loc[equipes_df["id"] == equipe_id, "descricao"].values[0] or "",
                     key=f"edit_desc_{equipe_id}"
                 )
 
+                professor_atual = equipes_df.loc[equipes_df["id"] == equipe_id, "professor_responsavel"].values[0]
+                professor_atual = professor_atual if professor_atual else "Nenhum"
+
+                professor_responsavel_edit = st.selectbox(
+                    "👩‍🏫 Professor responsável:",
+                    ["Nenhum"] + professores_df["nome"].tolist(),
+                    index=(["Nenhum"] + professores_df["nome"].tolist()).index(professor_atual)
+                    if professor_atual in (["Nenhum"] + professores_df["nome"].tolist()) else 0,
+                    key=f"edit_prof_resp_{equipe_id}"
+                )
+
+                novo_prof_id = None
+                if professor_responsavel_edit != "Nenhum":
+                    novo_prof_id = int(
+                        professores_df.loc[professores_df["nome"] == professor_responsavel_edit, "id"].values[0]
+                    )
+
                 col1, col2 = st.columns(2)
                 if col1.button("💾 Salvar Alterações", key=f"btn_salvar_{equipe_id}"):
-                    cursor.execute("UPDATE equipes SET nome=?, descricao=? WHERE id=?", (novo_nome, nova_desc, equipe_id))
+                    cursor.execute(
+                        "UPDATE equipes SET nome=?, descricao=?, professor_responsavel_id=? WHERE id=?",
+                        (novo_nome, nova_desc, novo_prof_id, equipe_id)
+                    )
                     conn.commit()
                     st.success(f"Equipe '{novo_nome}' atualizada com sucesso!")
                     st.rerun()
