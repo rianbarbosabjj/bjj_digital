@@ -444,7 +444,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         fonte_assinatura = "assets/fonts/Allura-Regular.ttf"
         if os.path.exists(fonte_assinatura):
             try:
-                pdf.add_font("Assinatura", "", fonte_assinatura, uni=True)
+                pdf.add_font("Assinatura", fonte_assinatura, uni=True)
                 pdf.set_font("Assinatura", "", 30)
             except Exception:
                 pdf.set_font("Helvetica", "I", 18)
@@ -967,6 +967,10 @@ def gestao_questoes():
 
     if tema_selecionado == "Novo Tema":
         tema = st.text_input("Digite o nome do novo tema:")
+    if not tema.strip():
+    st.warning("Digite um nome válido para o tema antes de salvar questões.")
+    return
+    
     else:
         tema = tema_selecionado
 
@@ -1151,16 +1155,29 @@ def gestao_exame_de_faixa():
             selecao.append(q)
 
     # 🔘 Botão para inserir as selecionadas
-    if selecao and st.button("➕ Inserir Questões Selecionadas"):
-        exame["questoes"].extend(selecao)
+if selecao and st.button("➕ Inserir Questões Selecionadas"):
+    # 🔹 Evita duplicatas com base no texto da pergunta
+    novas_questoes = []
+    perguntas_existentes = {q["pergunta"] for q in exame["questoes"]}
+
+    for q in selecao:
+        if q["pergunta"] not in perguntas_existentes:
+            novas_questoes.append(q)
+            perguntas_existentes.add(q["pergunta"])
+
+    if novas_questoes:
+        exame["questoes"].extend(novas_questoes)
         exame["temas_incluidos"] = sorted(list(set(q["tema"] for q in exame["questoes"])))
         exame["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
-        
+
         with open(exame_path, "w", encoding="utf-8") as f:
             json.dump(exame, f, indent=4, ensure_ascii=False)
-        
-        st.success(f"{len(selecao)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
-        st.rerun()
+
+        st.success(f"{len(novas_questoes)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
+    else:
+        st.info("Nenhuma nova questão foi adicionada (todas já estavam no exame).")
+
+    st.rerun()
 
     st.markdown("---")
     st.markdown("### 📋 Questões já incluídas no exame atual:")
@@ -1213,7 +1230,7 @@ def meus_certificados(usuario_logado):
     for i, (faixa, pontuacao, data, codigo, acertos, total) in enumerate(certificados, 1):
         st.markdown(f"### 🥋 {i}. Faixa {faixa}")
         st.markdown(f"- **Aproveitamento:** {pontuacao}%")
-        st.markdown(f"- **Data:** {datetime.fromisoformat(data).strftime('%d/%m/%Y às %H:%M')}")
+        st.markdown(f"- **Data:** {datetime.strptime(str(data).split('.')[0], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y às %H:%M')}")
         st.markdown(f"- **Código de Verificação:** `{codigo}`")
 
         # Define um nome de arquivo padronizado
@@ -1479,7 +1496,7 @@ def app_principal():
             key="menu_selection",
             orientation="horizontal",
             styles={
-                "container": {"padding": "0!importan", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
+                "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
                 "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
                 "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
                 "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
