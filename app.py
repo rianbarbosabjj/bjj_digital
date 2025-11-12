@@ -982,19 +982,22 @@ def tela_inicio():
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        with st.container(border=True): # Usando o novo 'border=True' e estilizando via CSS
-            st.markdown("<h3>🤼</h3>\nModo Rola")
-            st.markdown("<p>Treino livre com questões aleatórias de todos os temas.</p>", unsafe_allow_html=True)
+        with st.container(border=True):
+            # 👇 CORRIGIDO AQUI
+            st.markdown("<h3>🤼 Modo Rola</h3>", unsafe_allow_html=True) 
+            st.write("Treino livre com questões aleatórias de todos os temas.")
 
     with col2:
         with st.container(border=True):
-            st.markdown("<h3>🥋</h3>\nExame de Faixa")
-            st.markdown("<p>Realize sua avaliação teórica oficial quando liberada.</p>", unsafe_allow_html=True)
+            # 👇 CORRIGIDO AQUI
+            st.markdown("<h3>🥋 Exame de Faixa</h3>", unsafe_allow_html=True)
+            st.write("Realize sua avaliação teórica oficial quando liberada.")
             
     with col3:
         with st.container(border=True):
-            st.markdown("<h3>🏆</h3>\nRanking")
-            st.markdown("<p>Veja sua posição e a dos seus colegas no Modo Rola.</p>", unsafe_allow_html=True)
+            # 👇 CORRIGIDO AQUI
+            st.markdown("<h3>🏆 Ranking</h3>", unsafe_allow_html=True)
+            st.write("Veja sua posição e a dos seus colegas no Modo Rola.")
 
     # --- Cartões de Gestão (Admin/Professor) ---
     if st.session_state.usuario["tipo"] in ["admin", "professor"]:
@@ -1004,16 +1007,19 @@ def tela_inicio():
         c1, c2, c3 = st.columns(3)
         with c1:
             with st.container(border=True):
-                st.markdown("<h3>🧠</h3>\nGestão de Questões")
-                st.markdown("<p>Adicione, edite ou remova questões dos temas.</p>", unsafe_allow_html=True)
+                # 👇 CORRIGIDO AQUI
+                st.markdown("<h3>🧠 Gestão de Questões</h3>", unsafe_allow_html=True)
+                st.write("Adicione, edite ou remova questões dos temas.")
         with c2:
             with st.container(border=True):
-                st.markdown("<h3>🏛️</h3>\nGestão de Equipes")
-                st.markdown("<p>Gerencie equipes, professores e alunos vinculados.</p>", unsafe_allow_html=True)
+                # 👇 CORRIGIDO AQUI
+                st.markdown("<h3>🏛️ Gestão de Equipes</h3>", unsafe_allow_html=True)
+                st.write("Gerencie equipes, professores e alunos vinculados.")
         with c3:
             with st.container(border=True):
-                st.markdown("<h3>📜</h3>\nGestão de Exames")
-                st.markdown("<p>Monte as provas oficiais selecionando questões.</p>", unsafe_allow_html=True)
+                # 👇 CORRIGIDO AQUI
+                st.markdown("<h3>📜 Gestão de Exame</h3>", unsafe_allow_html=True)
+                st.write("Monte as provas oficiais selecionando questões.")
 
 
 # =========================================
