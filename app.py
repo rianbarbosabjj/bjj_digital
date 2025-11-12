@@ -992,21 +992,21 @@ def tela_inicio():
     with col1:
         with st.container(border=True):
             st.markdown("<h3>🤼 Modo Rola</h3>", unsafe_allow_html=True) 
-            st.write("Treino livre com questões aleatórias de todos os temas.")
+            st.markdown("""<p style='text-align: center; min-height: 50px;'>Treino livre com questões aleatórias de todos os temas.</p> """, unsafe_allow_html=True
             # 2. 👇 BOTÃO DE NAVEGAÇÃO
             st.button("Acessar", key="nav_rola", on_click=navigate_to, args=("Modo Rola",), use_container_width=True)
 
     with col2:
         with st.container(border=True):
             st.markdown("<h3>🥋 Exame de Faixa</h3>", unsafe_allow_html=True)
-            st.write("Realize sua avaliação teórica oficial quando liberada.")
+            st.markdown("""<p style='text-align: center; min-height: 50px;'>Realize sua avaliação teórica oficial quando liberada.</p> """, unsafe_allow_html=True
             # 2. 👇 BOTÃO DE NAVEGAÇÃO
             st.button("Acessar", key="nav_exame", on_click=navigate_to, args=("Exame de Faixa",), use_container_width=True)
             
     with col3:
         with st.container(border=True):
             st.markdown("<h3>🏆 Ranking</h3>", unsafe_allow_html=True)
-            st.write("Veja sua posição e a dos seus colegas no Modo Rola.")
+            st.markdown("""<p style='text-align: center; min-height: 50px;'>Veja sua posição e a dos seus colegas no Modo Rola.</p> """, unsafe_allow_html=True
             # 2. 👇 BOTÃO DE NAVEGAÇÃO
             st.button("Acessar", key="nav_ranking", on_click=navigate_to, args=("Ranking",), use_container_width=True)
 
@@ -1019,19 +1019,19 @@ def tela_inicio():
         with c1:
             with st.container(border=True):
                 st.markdown("<h3>🧠 Gestão de Questões</h3>", unsafe_allow_html=True)
-                st.write("Adicione, edite ou remova questões dos temas.")
+                st.markdown("""<p style='text-align: center; min-height: 50px;'>Adicione, edite ou remova questões dos temas.</p> """, unsafe_allow_html=True
                 # 2. 👇 BOTÃO DE NAVEGAÇÃO
                 st.button("Gerenciar", key="nav_gest_questoes", on_click=navigate_to, args=("Gestão de Questões",), use_container_width=True)
         with c2:
             with st.container(border=True):
                 st.markdown("<h3>🏛️ Gestão de Equipes</h3>", unsafe_allow_html=True)
-                st.write("Gerencie equipes, professores e alunos vinculados.")
+                st.markdown("""<p style='text-align: center; min-height: 50px;'>Gerencie equipes, professores e alunos vinculados.</p> """, unsafe_allow_html=True
                 # 2. 👇 BOTÃO DE NAVEGAÇÃO
                 st.button("Gerenciar", key="nav_gest_equipes", on_click=navigate_to, args=("Gestão de Equipes",), use_container_width=True)
         with c3:
             with st.container(border=True):
                 st.markdown("<h3>📜 Gestão de Exame</h3>", unsafe_allow_html=True)
-                st.write("Monte as provas oficiais selecionando questões.")
+                st.markdown("""<p style='text-align: center; min-height: 50px;'>Monte as provas oficiais selecionando questões.</p> """, unsafe_allow_html=True
                 # 2. 👇 BOTÃO DE NAVEGAÇÃO
                 st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
 
