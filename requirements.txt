@@ -8,4 +8,8 @@ plotly
 qrcode
 streamlit-option-menu
 streamlit-oauth
+<<<<<<< Updated upstream
 requests
+=======
+requests
+>>>>>>> Stashed changes
