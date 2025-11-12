@@ -852,7 +852,6 @@ def gestao_equipes():
             st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
-
 # =========================================
 # 🧩 GESTÃO DE QUESTÕES
 # =========================================
