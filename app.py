@@ -169,23 +169,48 @@ if not os.path.exists(DB_PATH):
     criar_banco()
 
 # =========================================
-# AUTENTICAÇÃO (ATUALIZADO)
-# =========================================
-
-# =========================================
 # AUTENTICAÇÃO (ATUALIZADO) - BLOCO DE DEPURAÇÃO V2
 # =========================================
-# 1. Configuração do Google OAuth (lendo do secrets.toml)
-try:
-    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
-    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
-    REDIRECT_URI = "http://localhost:8501" # Mude para sua URL de produção
-except FileNotFoundError:
-    st.error("Arquivo secrets.toml não encontrado. Crie .streamlit/secrets.toml")
-    st.stop()
-except KeyError:
-    st.error("Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no secrets.toml")
-    st.stop()
+st.subheader("Modo de Depuração de Segredos (Teste V3 - Lendo o Arquivo)")
+
+# 1. Definir o caminho
+secrets_file_path = os.path.join(".streamlit", "secrets.toml")
+st.write(f"Procurando pelo arquivo em: `{os.path.abspath(secrets_file_path)}`")
+
+# 2. Verificar se o arquivo existe
+if os.path.exists(secrets_file_path):
+    st.success(f"✅ Arquivo encontrado em: `{secrets_file_path}`")
+
+    # 3. Tentar ler o conteúdo
+    try:
+        with open(secrets_file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        if not content:
+            st.error("❌ O arquivo está VAZIO.")
+        else:
+            st.warning("Conteúdo LIDO do arquivo (veja abaixo):")
+            st.code(content, language="toml")
+
+        # 4. Checar o conteúdo
+        if "GOOGLE_CLIENT_ID" in content:
+            st.success("✅ O texto 'GOOGLE_CLIENT_ID' FOI encontrado no conteúdo.")
+        else:
+            st.error("❌ O texto 'GOOGLE_CLIENT_ID' NÃO FOI encontrado no conteúdo.")
+
+        if "GOOGLE_CLIENT_SECRET" in content:
+            st.success("✅ O texto 'GOOGLE_CLIENT_SECRET' FOI encontrado no conteúdo.")
+        else:
+            st.error("❌ O texto 'GOOGLE_CLIENT_SECRET' NÃO FOI encontrado no conteúdo.")
+
+    except Exception as e:
+        st.error(f"Erro ao LER o arquivo: {e}")
+
+else:
+    st.error(f"❌ ARQUIVO NÃO ENCONTRADO no caminho: `{secrets_file_path}`")
+    st.write("Verifique se a pasta `.streamlit` (com ponto) está no local correto e no mesmo nível do `app.py`.")
+
+st.stop()
 
 # 2. Inicialização do componente OAuth
 oauth_google = OAuth2Component(
