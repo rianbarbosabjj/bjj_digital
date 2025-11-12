@@ -1278,7 +1278,7 @@ def tela_login():
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         with st.container(border=True, height=270):
-            st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
+            st.markdown("<h3 style='color:white; text-align:center;'>Login Local</h3>", unsafe_allow_html=True)
             user = st.text_input("Usuário:", key="login_user")
             pwd = st.text_input("Senha:", type="password", key="login_pwd")
 
@@ -1537,6 +1537,3 @@ if __name__ == "__main__":
     else:
         # ROTA 3: Usuário está deslogado (mostra tela de login)
         tela_login()
-=======
-        tela_login()
-
