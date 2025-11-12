@@ -610,7 +610,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 14)
-    texto_final = f"obtendo {percentual}% de aproveitamento ({pontuacao}/{total} acertos), realizado em {data_hora}."
+    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
     pdf.set_y(142)
     pdf.cell(0, 6, texto_final, align="C")
 
