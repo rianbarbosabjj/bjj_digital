@@ -973,7 +973,7 @@ def main():
         st.session_state.usuario = None
         st.rerun()
 # =========================================
-# 🥋 GESTÃO DE EXAME DE FAIXA (modo híbrido)
+# 🥋 GESTÃO DE EXAME DE FAIXA (versão unificada e estável)
 # =========================================
 def carregar_todas_questoes():
     """Carrega todas as questões de todos os temas, adicionando o campo 'tema'."""
@@ -984,14 +984,13 @@ def carregar_todas_questoes():
         if arquivo.endswith(".json"):
             tema = arquivo.replace(".json", "")
             caminho = f"questions/{arquivo}"
-
             try:
                 with open(caminho, "r", encoding="utf-8") as f:
                     questoes = json.load(f)
             except json.JSONDecodeError as e:
                 st.error(f"⚠️ Erro ao carregar o arquivo '{arquivo}'. Verifique o formato JSON.")
                 st.code(str(e))
-                continue  # ignora o arquivo problemático
+                continue
 
             for q in questoes:
                 q["tema"] = tema
@@ -1020,17 +1019,14 @@ def gestao_exame_de_faixa():
             "questoes": []
         }
 
-    # 🔹 Carrega todas as questões disponíveis
     todas_questoes = carregar_todas_questoes()
     if not todas_questoes:
         st.warning("Nenhuma questão cadastrada nos temas até o momento.")
         return
 
-    # 🔹 Filtro por tema
     temas_disponiveis = sorted(list(set(q["tema"] for q in todas_questoes)))
     tema_filtro = st.selectbox("Filtrar questões por tema:", ["Todos"] + temas_disponiveis)
 
-    # 🔹 Exibição com filtro
     if tema_filtro != "Todos":
         questoes_filtradas = [q for q in todas_questoes if q["tema"] == tema_filtro]
     else:
@@ -1043,19 +1039,17 @@ def gestao_exame_de_faixa():
         if st.checkbox(f"Adicionar esta questão ({q['tema']})", key=f"{faixa}_{q['tema']}_{i}"):
             selecao.append(q)
 
-    # 🔘 Botão para inserir as selecionadas
     if selecao and st.button("➕ Inserir Questões Selecionadas"):
         for q in selecao:
             if not any(q["pergunta"] == ex_q["pergunta"] for ex_q in exame["questoes"]):
                 exame["questoes"].append(q)
         exame["temas_incluidos"] = sorted(list(set(exame.get("temas_incluidos", []) + [q["tema"] for q in selecao])))
         exame["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
-        st.success(f"{len(selecao)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
         with open(exame_path, "w", encoding="utf-8") as f:
             json.dump(exame, f, indent=4, ensure_ascii=False)
+        st.success(f"{len(selecao)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
         st.rerun()
 
-    # 🔘 Botão para salvar tudo
     if st.button("💾 Salvar Exame Completo"):
         exame["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
         exame["criado_por"] = st.session_state.usuario["nome"]
@@ -1077,9 +1071,12 @@ def gestao_exame_de_faixa():
         st.warning(f"O exame da faixa {faixa} foi excluído.")
         st.rerun()
 
+
+# =========================================
+# 📜 MEUS CERTIFICADOS
+# =========================================
 def meus_certificados(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
-
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
@@ -1092,7 +1089,7 @@ def meus_certificados(usuario_logado):
     conn.close()
 
     if not certificados:
-        st.info("Você ainda não possui certificados emitidos. Complete um exame de faixa para conquistá-los! 🥋")
+        st.info("Você ainda não possui certificados emitidos.")
         return
 
     for i, (faixa, pontuacao, data, codigo) in enumerate(certificados, 1):
@@ -1100,29 +1097,18 @@ def meus_certificados(usuario_logado):
         st.markdown(f"- **Aproveitamento:** {pontuacao}%")
         st.markdown(f"- **Data:** {data}")
         st.markdown(f"- **Código de Verificação:** `{codigo}`")
-
         caminho_pdf = f"relatorios/Certificado_{usuario_logado['nome']}_{faixa}.pdf"
-
-        # 🔹 Se o certificado não estiver salvo, ele será recriado automaticamente
-        if not os.path.exists(caminho_pdf):
-            caminho_pdf = gerar_pdf(
-                usuario_logado["nome"],
-                faixa,
-                int((pontuacao / 100) * 10),  # dummy proporcional
-                10,
-                codigo
-            )
-
-        with open(caminho_pdf, "rb") as f:
-            st.download_button(
-                label=f"📥 Baixar Certificado - Faixa {faixa}",
-                data=f.read(),
-                file_name=os.path.basename(caminho_pdf),
-                mime="application/pdf",
-                key=f"baixar_{i}"
-            )
-
+        if os.path.exists(caminho_pdf):
+            with open(caminho_pdf, "rb") as f:
+                st.download_button(
+                    label=f"📥 Baixar Certificado - Faixa {faixa}",
+                    data=f.read(),
+                    file_name=os.path.basename(caminho_pdf),
+                    mime="application/pdf",
+                    key=f"baixar_{i}"
+                )
         st.markdown("---")
+
 def gestao_equipes():
     st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_PATH)
