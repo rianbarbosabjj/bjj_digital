@@ -444,7 +444,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         fonte_assinatura = "assets/fonts/Allura-Regular.ttf"
         if os.path.exists(fonte_assinatura):
             try:
-                pdf.add_font("Assinatura", fonte_assinatura, uni=True)
+                pdf.add_font("Assinatura", "", fonte_assinatura, uni=True)
                 pdf.set_font("Assinatura", "", 30)
             except Exception:
                 pdf.set_font("Helvetica", "I", 18)
@@ -962,27 +962,16 @@ def gestao_equipes():
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
 
-    # 🔹 Lista temas existentes (arquivos JSON)
     temas_existentes = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
     tema_selecionado = st.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
 
-    # 🔹 Define o nome do tema
     if tema_selecionado == "Novo Tema":
         tema = st.text_input("Digite o nome do novo tema:")
     else:
         tema = tema_selecionado
 
-    # 🔹 Verifica se o tema está vazio antes de prosseguir
-    if not tema.strip():
-        st.warning("Digite um nome válido para o tema antes de salvar questões.")
-        return
-
-    # 🔹 Carrega as questões do tema atual
     questoes = carregar_questoes(tema) if tema else []
 
-    # ======================================================
-    # ✍️ Seção para adicionar nova questão
-    # ======================================================
     st.markdown("### ✍️ Adicionar nova questão")
     with st.expander("Expandir para adicionar questão", expanded=False):
         pergunta = st.text_area("Pergunta:")
@@ -1000,21 +989,13 @@ def gestao_questoes():
                     "imagem": imagem.strip(),
                     "video": video.strip(),
                 }
-
-                # 🔹 Evita duplicatas (mesma pergunta)
-                if any(q["pergunta"] == nova["pergunta"] for q in questoes):
-                    st.warning("Essa pergunta já existe neste tema.")
-                else:
-                    questoes.append(nova)
-                    salvar_questoes(tema, questoes)
-                    st.success("Questão adicionada com sucesso! ✅")
-                    st.rerun()
+                questoes.append(nova)
+                salvar_questoes(tema, questoes)
+                st.success("Questão adicionada com sucesso! ✅")
+                st.rerun()
             else:
                 st.error("A pergunta e o nome do tema não podem estar vazios.")
 
-    # ======================================================
-    # 📚 Seção para listar e excluir questões
-    # ======================================================
     st.markdown("### 📚 Questões cadastradas")
     if not questoes:
         st.info("Nenhuma questão cadastrada para este tema ainda.")
@@ -1024,13 +1005,11 @@ def gestao_questoes():
             for alt in q["opcoes"]:
                 st.markdown(f"- {alt}")
             st.markdown(f"**Resposta:** {q['resposta']}")
-
             if st.button(f"🗑️ Excluir questão {i}", key=f"del_{i}"):
                 questoes.pop(i - 1)
                 salvar_questoes(tema, questoes)
                 st.warning("Questão removida.")
                 st.rerun()
-
 
 # =========================================
 # 🏠 TELA INÍCIO (DO SEU PROJETO ORIGINAL)
@@ -1129,15 +1108,16 @@ def gestao_exame_de_faixa():
             exame = {} # Reseta
     else:
         exame = {}
-# 🔹 Garante que o dicionário 'exame' sempre tenha a estrutura base
-if "questoes" not in exame:
-    exame = {
-        "faixa": faixa,
-        "ultima_atualizacao": datetime.now().strftime("%Y-%m-%d"),
-        "criado_por": st.session_state.usuario["nome"],
-        "temas_incluidos": [],
-        "questoes": []
-    }
+
+    # Garante que a estrutura base exista
+    if "questoes" not in exame:
+        exame = {
+            "faixa": faixa,
+            "ultima_atualizacao": datetime.now().strftime("%Y-%m-%d"),
+            "criado_por": st.session_state.usuario["nome"],
+            "temas_incluidos": [],
+            "questoes": []
+        }
 
     # 🔹 Carrega todas as questões disponíveis
     todas_questoes = carregar_todas_questoes()
@@ -1155,47 +1135,32 @@ if "questoes" not in exame:
     else:
         questoes_filtradas = todas_questoes
 
-st.markdown("### ✅ Selecione as questões que farão parte do exame")
+    st.markdown("### ✅ Selecione as questões que farão parte do exame")
+    selecao = []
+    
+    # Filtra questões que JÁ ESTÃO no exame para evitar duplicatas
+    perguntas_no_exame = set(q["pergunta"] for q in exame["questoes"])
+    questoes_para_selecao = [q for q in questoes_filtradas if q["pergunta"] not in perguntas_no_exame]
 
-# 🔹 Inicializa a lista de seleção antes do loop
-selecao = []
+    if not questoes_para_selecao:
+        st.info(f"Todas as questões {('do tema ' + tema_filtro) if tema_filtro != 'Todos' else ''} já foram adicionadas ou não há questões disponíveis.")
 
-# Filtra questões que JÁ ESTÃO no exame para evitar duplicatas
-perguntas_no_exame = set(q["pergunta"] for q in exame["questoes"])
-questoes_para_selecao = [q for q in questoes_filtradas if q["pergunta"] not in perguntas_no_exame]
+    for i, q in enumerate(questoes_para_selecao, 1):
+        st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
+        if st.checkbox(f"Adicionar esta questão ({q['tema']})", key=f"{faixa}_{q['tema']}_{i}"):
+            selecao.append(q)
 
-if not questoes_para_selecao:
-    st.info(f"Todas as questões {('do tema ' + tema_filtro) if tema_filtro != 'Todos' else ''} já foram adicionadas ou não há questões disponíveis.")
-
-for i, q in enumerate(questoes_para_selecao, 1):
-    st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
-    if st.checkbox(f"Adicionar esta questão ({q['tema']})", key=f"{faixa}_{q['tema']}_{i}"):
-        selecao.append(q)
-
-# 🔹 Aqui sim, podemos verificar se há seleções
-if selecao and st.button("➕ Inserir Questões Selecionadas"):
-    # 🔹 Evita duplicatas com base no texto da pergunta
-    novas_questoes = []
-    perguntas_existentes = {q["pergunta"] for q in exame["questoes"]}
-
-    for q in selecao:
-        if q["pergunta"] not in perguntas_existentes:
-            novas_questoes.append(q)
-            perguntas_existentes.add(q["pergunta"])
-
-    if novas_questoes:
-        exame["questoes"].extend(novas_questoes)
+    # 🔘 Botão para inserir as selecionadas
+    if selecao and st.button("➕ Inserir Questões Selecionadas"):
+        exame["questoes"].extend(selecao)
         exame["temas_incluidos"] = sorted(list(set(q["tema"] for q in exame["questoes"])))
         exame["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
-
+        
         with open(exame_path, "w", encoding="utf-8") as f:
             json.dump(exame, f, indent=4, ensure_ascii=False)
-
-        st.success(f"{len(novas_questoes)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
-    else:
-        st.info("Nenhuma nova questão foi adicionada (todas já estavam no exame).")
-
-    st.rerun()
+        
+        st.success(f"{len(selecao)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
+        st.rerun()
 
     st.markdown("---")
     st.markdown("### 📋 Questões já incluídas no exame atual:")
@@ -1248,7 +1213,7 @@ def meus_certificados(usuario_logado):
     for i, (faixa, pontuacao, data, codigo, acertos, total) in enumerate(certificados, 1):
         st.markdown(f"### 🥋 {i}. Faixa {faixa}")
         st.markdown(f"- **Aproveitamento:** {pontuacao}%")
-        st.markdown(f"- **Data:** {datetime.strptime(str(data).split('.')[0], '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y às %H:%M')}")
+        st.markdown(f"- **Data:** {datetime.fromisoformat(data).strftime('%d/%m/%Y às %H:%M')}")
         st.markdown(f"- **Código de Verificação:** `{codigo}`")
 
         # Define um nome de arquivo padronizado
@@ -1514,7 +1479,7 @@ def app_principal():
             key="menu_selection",
             orientation="horizontal",
             styles={
-                "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
+                "container": {"padding": "0!importan", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
                 "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
                 "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
                 "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
