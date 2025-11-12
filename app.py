@@ -992,7 +992,7 @@ def tela_inicio():
     with col1:
         with st.container(border=True):
             st.markdown("<h3>🤼 Modo Rola</h3>", unsafe_allow_html=True) 
-            st.write(<centro>"Treino livre com questões aleatórias de todos os temas."</centro>)
+            st.write("text-align:center;Treino livre com questões aleatórias de todos os temas.")
             # 2. 👇 BOTÃO DE NAVEGAÇÃO
             st.button("Acessar", key="nav_rola", on_click=navigate_to, args=("Modo Rola",), use_container_width=True)
 
