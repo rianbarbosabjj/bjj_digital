@@ -173,16 +173,71 @@ if not os.path.exists(DB_PATH):
 # =========================================
 
 # 1. Configuração do Google OAuth (lendo do secrets.toml)
+st.subheader("Modo de Depuração de Segredos (Apenas Teste)")
+
 try:
+    # Tentamos ler os segredos
     GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
     GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
-    REDIRECT_URI = "http://localhost:8501" # Mude para sua URL de produção
-except FileNotFoundError:
-    st.error("Arquivo secrets.toml não encontrado. Crie .streamlit/secrets.toml")
-    st.stop()
+    
+    # Se chegarmos aqui, as chaves foram ENCONTRADAS
+    st.success("✅ As chaves foram ENCONTRADAS no secrets.toml.")
+    
+    # Agora, vamos verificar se elas têm conteúdo
+    if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+        st.success("✅ As chaves PARECEM ter conteúdo.")
+        
+        # Vamos mostrar os primeiros 5 caracteres para confirmar
+        st.write(f"Início do CLIENT_ID: `{GOOGLE_CLIENT_ID[:5]}...`")
+        st.write(f"Início do CLIENT_SECRET: `{GOOGLE_CLIENT_SECRET[:5]}...`")
+        
+        st.info("Tentando inicializar o componente OAuth...")
+        
+        # Tenta inicializar o componente (onde o TypeError ocorre)
+        REDIRECT_URI = "http://localhost:8501"
+        oauth_google = OAuth2Component(
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET,
+            authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+            token_endpoint="https://oauth2.googleapis.com/token",
+            refresh_token_endpoint="https://oauth2.googleapis.com/token",
+            revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
+            scope="email profile",
+            redirect_uri=REDIRECT_URI,
+        )
+        st.success("✅ Componente OAuth inicializado com sucesso!")
+        st.warning("Pode apagar este bloco de depuração e continuar.")
+
+    else:
+        st.error("❌ ERRO: As chaves foram encontradas, mas estão VAZIAS.")
+        st.code("""
+Verifique seu .streamlit/secrets.toml.
+Ele não pode estar assim:
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+""")
+
 except KeyError:
-    st.error("Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no secrets.toml")
-    st.stop()
+    # Se chegarmos aqui, as chaves NÃO foram encontradas
+    st.error("❌ ERRO (KeyError): Não foi possível ENCONTRAR as chaves no secrets.toml.")
+    st.code("""
+Verifique seu .streamlit/secrets.toml.
+O nome das chaves está digitado exatamente assim?
+GOOGLE_CLIENT_ID="sua_chave"
+GOOGLE_CLIENT_SECRET="sua_chave"
+(Verifique maiúsculas, minúsculas e o underscore '_')
+""")
+except TypeError:
+    st.error("❌ ERRO (TypeError): Ocorreu o erro que você reportou.")
+    st.code("""
+Isso geralmente significa que as chaves estão mal formatadas.
+Verifique se as aspas estão corretas (use " e não “ ou ”).
+Verifique se não há um número em vez de texto (ex: GOOGLE_CLIENT_ID = 12345).
+O formato DEVE ser:
+GOOGLE_CLIENT_ID="texto-da-chave-aqui"
+""")
+
+st.stop() # Para a execução do app aqui para vermos o resultado
 
 # 2. Inicialização do componente OAuth
 oauth_google = OAuth2Component(
