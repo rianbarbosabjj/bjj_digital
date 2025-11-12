@@ -12,6 +12,7 @@ import plotly.express as px
 from datetime import datetime
 import bcrypt
 import base64
+from streamlit_option_menu import option_menu # 👈 NOVA IMPORTAÇÃO
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -20,17 +21,18 @@ st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout
 
 COR_FUNDO = "#0e2d26"
 COR_TEXTO = "#FFFFFF"
-COR_DESTAQUE = "#FFD700"
+COR_DESTAQUE = "#FFD770" # Ajustei para um dourado um pouco mais suave
 COR_BOTAO = "#078B6C"
-COR_HOVER = "#FFD700"
+COR_HOVER = "#FFD770"
 
+# CSS ATUALIZADO (Sugestão 3 e 1)
+# 1. Importa a fonte 'Poppins'
+# 2. Remove o 'body' (agora no config.toml)
+# 3. Adiciona estilo para os "cards" do dashboard
 st.markdown(f"""
 <style>
-body {{
-    background-color: {COR_FUNDO};
-    color: {COR_TEXTO};
-    font-family: 'Poppins', sans-serif;
-}}
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
+
 .stButton>button {{
     background: linear-gradient(90deg, {COR_BOTAO}, #056853);
     color: white;
@@ -43,14 +45,45 @@ body {{
 .stButton>button:hover {{
     background: {COR_HOVER};
     color: {COR_FUNDO};
+    transform: scale(1.02);
 }}
 h1, h2, h3 {{
     color: {COR_DESTAQUE};
     text-align: center;
     font-weight: 700;
 }}
+
+/* Estilo para os cartões do dashboard (tela_inicio) */
+div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{
+    background-color: #0c241e; 
+    border: 1px solid #078B6C;
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    transition: 0.3s;
+    height: 190px; /* Força uma altura uniforme */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}}
+div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"]:hover {{
+    transform: scale(1.03); 
+    border-color: {COR_DESTAQUE};
+    background-color: #1a4d40;
+}}
+div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] h3 {{
+     color: {COR_DESTAQUE};
+     margin-bottom: 10px;
+     font-size: 1.8rem; /* Aumenta o ícone/título */
+}}
+div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] p {{
+     color: {COR_TEXTO};
+     font-size: 0.95rem;
+}}
 </style>
 """, unsafe_allow_html=True)
+
 
 # =========================================
 # BANCO DE DADOS
@@ -110,7 +143,9 @@ def criar_banco():
         pontuacao INTEGER,
         tempo TEXT,
         data DATETIME DEFAULT CURRENT_TIMESTAMP,
-        codigo_verificacao TEXT
+        codigo_verificacao TEXT,
+        acertos INTEGER,      -- 👈 [BUGFIX] Adicionado
+        total_questoes INTEGER  -- 👈 [BUGFIX] Adicionado
     );
 
     CREATE TABLE IF NOT EXISTS rola_resultados (
@@ -131,6 +166,7 @@ def criar_banco():
 # 🔹 Cria o banco apenas se ainda não existir
 if not os.path.exists(DB_PATH):
     criar_banco()
+
 # =========================================
 # AUTENTICAÇÃO
 # =========================================
@@ -186,17 +222,19 @@ if st.session_state.usuario is None:
         </div>
     """, unsafe_allow_html=True)
 
-    user = st.text_input("Usuário:")
-    pwd = st.text_input("Senha:", type="password")
+    c1, c2, c3 = st.columns([1, 1.5, 1])
+    with c2:
+        user = st.text_input("Usuário:", key="login_user")
+        pwd = st.text_input("Senha:", type="password", key="login_pwd")
 
-    if st.button("Entrar"):
-        u = autenticar(user.strip(), pwd.strip())
-        if u:
-            st.session_state.usuario = u
-            st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
-            st.rerun()
-        else:
-            st.error("Usuário ou senha incorretos. Tente novamente.")
+        if st.button("Entrar", use_container_width=True):
+            u = autenticar(user.strip(), pwd.strip())
+            if u:
+                st.session_state.usuario = u
+                st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
+                st.rerun()
+            else:
+                st.error("Usuário ou senha incorretos. Tente novamente.")
     st.stop()
 
 
@@ -213,7 +251,7 @@ def carregar_questoes(tema):
 
 
 def salvar_questoes(tema, questoes):
-    """Salva lista de questões no arquivo JSON."""
+    """Sava lista de questões no arquivo JSON."""
     os.makedirs("questions", exist_ok=True)
     with open(f"questions/{tema}.json", "w", encoding="utf-8") as f:
         json.dump(questoes, f, indent=4, ensure_ascii=False)
@@ -232,8 +270,9 @@ def gerar_codigo_verificacao():
     ano = datetime.now().year
     codigo = f"BJJDIGITAL-{ano}-{total:04d}"  # Exemplo: BJJDIGITAL-2025-0001
     return codigo
+
 # =========================================
-# 🤼 MODO ROLA (versão aprimorada – layout limpo)
+# 🤼 MODO ROLA
 # =========================================
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
@@ -241,10 +280,13 @@ def modo_rola(usuario_logado):
     temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
     temas.append("Todos os Temas")
 
-    tema = st.selectbox("Selecione o tema:", temas)
-    faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+    col1, col2 = st.columns(2)
+    with col1:
+        tema = st.selectbox("Selecione o tema:", temas)
+    with col2:
+        faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
 
-    if st.button("Iniciar Treino 🤼"):
+    if st.button("Iniciar Treino 🤼", use_container_width=True):
         # 🔹 Carrega questões conforme seleção
         if tema == "Todos os Temas":
             questoes = []
@@ -315,8 +357,9 @@ def modo_rola(usuario_logado):
         conn.close()
 
         st.success("Resultado salvo com sucesso! 🏆")
+
 # =========================================
-# 🥋 EXAME DE FAIXA (versão integrada com certificado profissional)
+# 🥋 EXAME DE FAIXA
 # =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
@@ -389,7 +432,7 @@ def exame_de_faixa(usuario_logado):
         st.markdown("---")
 
     # 🔘 Botão para finalizar o exame
-    finalizar = st.button("Finalizar Exame 🏁")
+    finalizar = st.button("Finalizar Exame 🏁", use_container_width=True)
 
     if finalizar:
         acertos = sum(
@@ -419,10 +462,11 @@ def exame_de_faixa(usuario_logado):
 
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
+            # [BUGFIX] Salva acertos e total para recriação do PDF
             cursor.execute("""
-                INSERT INTO resultados (usuario, modo, faixa, pontuacao, data, codigo_verificacao)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (usuario_logado["nome"], "Exame de Faixa", faixa, percentual, datetime.now(), codigo))
+                INSERT INTO resultados (usuario, modo, faixa, pontuacao, acertos, total_questoes, data, codigo_verificacao)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (usuario_logado["nome"], "Exame de Faixa", faixa, percentual, acertos, total, datetime.now(), codigo))
             conn.commit()
             conn.close()
 
@@ -446,10 +490,12 @@ def exame_de_faixa(usuario_logado):
                 label="📥 Baixar Certificado de Exame",
                 data=f.read(),
                 file_name=os.path.basename(caminho_pdf),
-                mime="application/pdf"
+                mime="application/pdf",
+                use_container_width=True
             )
 
         st.success("Certificado gerado com sucesso! 🥋")
+
 
 # =========================================
 # GERAÇÃO DE CERTIFICADO
@@ -564,7 +610,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 14)
-    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
+    texto_final = f"obtendo {percentual}% de aproveitamento ({pontuacao}/{total} acertos), realizado em {data_hora}."
     pdf.set_y(142)
     pdf.cell(0, 6, texto_final, align="C")
 
@@ -622,9 +668,11 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # EXPORTAÇÃO
     # ---------------------------------------------------
     os.makedirs("relatorios", exist_ok=True)
-    caminho_pdf = os.path.abspath(f"relatorios/Certificado_{usuario}_{faixa}.pdf")
+    nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
+    caminho_pdf = os.path.abspath(f"relatorios/{nome_arquivo}")
     pdf.output(caminho_pdf)
     return caminho_pdf
+
 # =========================================
 # 🏆 RANKING
 # =========================================
@@ -642,29 +690,46 @@ def ranking():
     if filtro_faixa != "Todas":
         df = df[df["faixa"] == filtro_faixa]
 
+    if df.empty:
+        st.info("Nenhum resultado para esta faixa.")
+        return
+
     ranking_df = df.groupby("usuario", as_index=False).agg(
         media_percentual=("percentual", "mean"),
         total_treinos=("id", "count")
-    ).sort_values(by="media_percentual", ascending=False)
+    ).sort_values(by="media_percentual", ascending=False).reset_index(drop=True)
 
     ranking_df["Posição"] = range(1, len(ranking_df) + 1)
-    st.dataframe(ranking_df[["Posição", "usuario", "media_percentual", "total_treinos"]], use_container_width=True)
+    ranking_df["media_percentual"] = ranking_df["media_percentual"].round(2)
+    
+    st.dataframe(
+        ranking_df[["Posição", "usuario", "media_percentual", "total_treinos"]], 
+        use_container_width=True,
+        column_config={"media_percentual": st.column_config.NumberColumn(format="%.2f%%")}
+    )
 
     fig = px.bar(
         ranking_df.head(10),
         x="usuario",
         y="media_percentual",
         text_auto=True,
-        title="Top 10 - Modo Rola",
+        title="Top 10 - Modo Rola (% Média de Acertos)",
         color="media_percentual",
         color_continuous_scale="YlOrBr",
     )
+    fig.update_layout(xaxis_title="Usuário", yaxis_title="% Média de Acertos")
     st.plotly_chart(fig, use_container_width=True)
+
 # =========================================
-# 👩‍🏫 PAINEL DO PROFESSOR
+# 👩‍🏫 PAINEL DO PROFESSOR (Função 'dummy' - implementar)
 # =========================================
+def painel_professor():
+    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+    st.info("Esta área está em desenvolvimento. Use a 'Gestão de Equipes' e 'Gestão de Exames'.")
+    # Aqui entraria a lógica de aprovar alunos, liberar exames, etc.
+
 # =========================================
-# 🏛️ GESTÃO DE EQUIPES (v1.5 com Professor Responsável)
+# 🏛️ GESTÃO DE EQUIPES
 # =========================================
 def gestao_equipes():
     st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
@@ -851,31 +916,32 @@ def gestao_questoes():
     questoes = carregar_questoes(tema) if tema else []
 
     st.markdown("### ✍️ Adicionar nova questão")
-    pergunta = st.text_area("Pergunta:")
-    opcoes = [st.text_input(f"Alternativa {letra}:", key=f"opt_{letra}") for letra in ["A", "B", "C", "D", "E"]]
-    resposta = st.selectbox("Resposta correta:", ["A", "B", "C", "D", "E"])
-    imagem = st.text_input("Caminho da imagem (opcional):")
-    video = st.text_input("URL do vídeo (opcional):")
+    with st.expander("Expandir para adicionar questão", expanded=False):
+        pergunta = st.text_area("Pergunta:")
+        opcoes = [st.text_input(f"Alternativa {letra}:", key=f"opt_{letra}") for letra in ["A", "B", "C", "D", "E"]]
+        resposta = st.selectbox("Resposta correta:", ["A", "B", "C", "D", "E"])
+        imagem = st.text_input("Caminho da imagem (opcional):")
+        video = st.text_input("URL do vídeo (opcional):")
 
-    if st.button("💾 Salvar Questão"):
-        if pergunta.strip():
-            nova = {
-                "pergunta": pergunta.strip(),
-                "opcoes": [f"{letra}) {txt}" for letra, txt in zip(["A", "B", "C", "D", "E"], opcoes) if txt.strip()],
-                "resposta": resposta,
-                "imagem": imagem.strip(),
-                "video": video.strip(),
-            }
-            questoes.append(nova)
-            salvar_questoes(tema, questoes)
-            st.success("Questão adicionada com sucesso! ✅")
-            st.rerun()
-        else:
-            st.error("A pergunta não pode estar vazia.")
+        if st.button("💾 Salvar Questão"):
+            if pergunta.strip() and tema.strip():
+                nova = {
+                    "pergunta": pergunta.strip(),
+                    "opcoes": [f"{letra}) {txt}" for letra, txt in zip(["A", "B", "C", "D", "E"], opcoes) if txt.strip()],
+                    "resposta": resposta,
+                    "imagem": imagem.strip(),
+                    "video": video.strip(),
+                }
+                questoes.append(nova)
+                salvar_questoes(tema, questoes)
+                st.success("Questão adicionada com sucesso! ✅")
+                st.rerun()
+            else:
+                st.error("A pergunta e o nome do tema não podem estar vazios.")
 
     st.markdown("### 📚 Questões cadastradas")
     if not questoes:
-        st.info("Nenhuma questão cadastrada ainda.")
+        st.info("Nenhuma questão cadastrada para este tema ainda.")
     else:
         for i, q in enumerate(questoes, 1):
             st.markdown(f"**{i}. {q['pergunta']}**")
@@ -890,9 +956,10 @@ def gestao_questoes():
 
 
 # =========================================
-# 🏠 MENU PRINCIPAL
+# 🏠 TELA INÍCIO (AGORA DASHBOARD - Sugestão 1)
 # =========================================
 def tela_inicio():
+    # Logo centralizado
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
@@ -902,16 +969,55 @@ def tela_inicio():
         logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
 
     st.markdown(f"""
-        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:40px;'>
+        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:30px;'>
             {logo_html}
-            <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
-            <p style='color:#FFFFFF;text-align:center;font-size:1.1em;'>Selecione uma opção no menu lateral para começar o treino 💪</p>
+            <h2 style='color:{COR_DESTAQUE};text-align:center;'>Painel BJJ Digital</h2>
+            <p style='color:{COR_TEXTO};text-align:center;font-size:1.1em;'>Bem-vindo(a), {st.session_state.usuario['nome'].title()}! Use a navegação acima para começar.</p>
         </div>
     """, unsafe_allow_html=True)
 
+    st.markdown("---")
+
+    # --- Cartões Principais (Para todos) ---
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        with st.container(border=True): # Usando o novo 'border=True' e estilizando via CSS
+            st.markdown("<h3>🤼</h3>\nModo Rola")
+            st.markdown("<p>Treino livre com questões aleatórias de todos os temas.</p>", unsafe_allow_html=True)
+
+    with col2:
+        with st.container(border=True):
+            st.markdown("<h3>🥋</h3>\nExame de Faixa")
+            st.markdown("<p>Realize sua avaliação teórica oficial quando liberada.</p>", unsafe_allow_html=True)
+            
+    with col3:
+        with st.container(border=True):
+            st.markdown("<h3>🏆</h3>\nRanking")
+            st.markdown("<p>Veja sua posição e a dos seus colegas no Modo Rola.</p>", unsafe_allow_html=True)
+
+    # --- Cartões de Gestão (Admin/Professor) ---
+    if st.session_state.usuario["tipo"] in ["admin", "professor"]:
+        st.markdown("---")
+        st.markdown(f"<h2 style='color:{COR_DESTAQUE};text-align:center; margin-top:30px;'>Painel de Gestão</h2>", unsafe_allow_html=True)
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            with st.container(border=True):
+                st.markdown("<h3>🧠</h3>\nGestão de Questões")
+                st.markdown("<p>Adicione, edite ou remova questões dos temas.</p>", unsafe_allow_html=True)
+        with c2:
+            with st.container(border=True):
+                st.markdown("<h3>🏛️</h3>\nGestão de Equipes")
+                st.markdown("<p>Gerencie equipes, professores e alunos vinculados.</p>", unsafe_allow_html=True)
+        with c3:
+            with st.container(border=True):
+                st.markdown("<h3>📜</h3>\nGestão de Exames")
+                st.markdown("<p>Monte as provas oficiais selecionando questões.</p>", unsafe_allow_html=True)
+
 
 # =========================================
-# 🚀 MAIN
+# 🚀 MAIN (COM NAVEGAÇÃO HORIZONTAL - Sugestão 4)
 # =========================================
 def main():
     usuario_logado = st.session_state.usuario
@@ -922,9 +1028,10 @@ def main():
 
     tipo_usuario = usuario_logado["tipo"]
 
+    # --- Sidebar (Agora apenas para Info e Logout) ---
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown(
-        f"<h3 style='color:{COR_DESTAQUE};'>Usuário: {usuario_logado['nome'].title()}</h3>",
+        f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
         unsafe_allow_html=True,
     )
     st.sidebar.markdown(
@@ -932,23 +1039,40 @@ def main():
         unsafe_allow_html=True,
     )
     st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Sair", use_container_width=True):
+        st.session_state.usuario = None
+        st.rerun()
 
     # =========================================
-    # Menu dinâmico conforme perfil
+    # Menu dinâmico (Horizontal)
     # =========================================
+    
+    # 🔹 Define opções e ícones com base no perfil
     if tipo_usuario in ["admin", "professor"]:
         opcoes = [
-            "🏠 Início",
-            "🤼 Modo Rola",
-            "🥋 Exame de Faixa",
-            "🏆 Ranking",
-            "👩‍🏫 Painel do Professor",
-            "🧠 Gestão de Questões",
-            "🏛️ Gestão de Equipes",  # 👈 NOVA OPÇÃO
-            "🥋 Gestão de Exame de Faixa"
+            "Início",
+            "Modo Rola",
+            "Exame de Faixa",
+            "Ranking",
+            "Painel do Professor",
+            "Gestão de Questões",
+            "Gestão de Equipes",
+            "Gestão de Exame"
+        ]
+        # Ícones do Bootstrap: https://icons.getbootstrap.com/
+        icons = [
+            "house-fill", 
+            "people-fill", 
+            "journal-check", 
+            "trophy-fill", 
+            "easel-fill", 
+            "cpu-fill", 
+            "building-fill", 
+            "file-earmark-check-fill"
         ]
     else:  # aluno
-        opcoes = ["🏠 Início", "🤼 Modo Rola", "🏆 Ranking", "📜 Meus Certificados"]
+        opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
+        icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
 
         # Checa se exame está habilitado pelo professor
         conn = sqlite3.connect(DB_PATH)
@@ -957,39 +1081,53 @@ def main():
         dado = cursor.fetchone()
         conn.close()
         if dado and dado[0] == 1:
-            opcoes.insert(2, "🥋 Exame de Faixa")
+            opcoes.insert(2, "Exame de Faixa")
+            icons.insert(2, "journal-check")
+
+    # 🔹 Renderiza o menu horizontal
+    menu = option_menu(
+        menu_title=None,
+        options=opcoes,
+        icons=icons,
+        orientation="horizontal",
+        styles={
+            "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
+            "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
+            "nav-link": {
+                "font-size": "14px",
+                "text-align": "center",
+                "margin": "0px",
+                "--hover-color": "#1a4d40", # Cor de fundo do hover
+                "color": COR_TEXTO,
+                "font-weight": "600",
+            },
+            "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
+        }
+    )
 
     # =========================================
-    # Navegação entre módulos
+    # Navegação entre módulos (Roteamento)
     # =========================================
-    menu = st.sidebar.radio("Navegar:", opcoes)
-
-    if menu == "🏠 Início":
+    if menu == "Início":
         tela_inicio()
-    elif menu == "🤼 Modo Rola":
+    elif menu == "Modo Rola":
         modo_rola(usuario_logado)
-    elif menu == "🥋 Exame de Faixa":
+    elif menu == "Exame de Faixa":
         exame_de_faixa(usuario_logado)
-    elif menu == "🏆 Ranking":
+    elif menu == "Ranking":
         ranking()
-    elif menu == "👩‍🏫 Painel do Professor":
+    elif menu == "Painel do Professor":
         painel_professor()
-    elif menu == "🏛️ Gestão de Equipes":
+    elif menu == "Gestão de Equipes":
         gestao_equipes()
-    elif menu == "🧠 Gestão de Questões":
+    elif menu == "Gestão de Questões":
         gestao_questoes()
-    elif menu == "🥋 Gestão de Exame de Faixa":
+    elif menu == "Gestão de Exame":
         gestao_exame_de_faixa()
-    elif menu == "📜 Meus Certificados":
+    elif menu == "Meus Certificados":
         meus_certificados(usuario_logado)
 
-    # =========================================
-    # Botão de logout
-    # =========================================
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Sair"):
-        st.session_state.usuario = None
-        st.rerun()
+
 # =========================================
 # 🥋 GESTÃO DE EXAME DE FAIXA (modo híbrido)
 # =========================================
@@ -1027,9 +1165,17 @@ def gestao_exame_de_faixa():
 
     exame_path = f"exames/faixa_{faixa.lower()}.json"
     if os.path.exists(exame_path):
-        with open(exame_path, "r", encoding="utf-8") as f:
-            exame = json.load(f)
+        try:
+            with open(exame_path, "r", encoding="utf-8") as f:
+                exame = json.load(f)
+        except json.JSONDecodeError:
+            st.error("Arquivo de exame corrompido. Criando um novo.")
+            exame = {} # Reseta
     else:
+        exame = {}
+
+    # Garante que a estrutura base exista
+    if "questoes" not in exame:
         exame = {
             "faixa": faixa,
             "ultima_atualizacao": datetime.now().strftime("%Y-%m-%d"),
@@ -1041,7 +1187,7 @@ def gestao_exame_de_faixa():
     # 🔹 Carrega todas as questões disponíveis
     todas_questoes = carregar_todas_questoes()
     if not todas_questoes:
-        st.warning("Nenhuma questão cadastrada nos temas até o momento.")
+        st.warning("Nenhuma questão cadastrada nos temas (pasta 'questions') até o momento.")
         return
 
     # 🔹 Filtro por tema
@@ -1056,30 +1202,30 @@ def gestao_exame_de_faixa():
 
     st.markdown("### ✅ Selecione as questões que farão parte do exame")
     selecao = []
-    for i, q in enumerate(questoes_filtradas, 1):
+    
+    # Filtra questões que JÁ ESTÃO no exame para evitar duplicatas
+    perguntas_no_exame = set(q["pergunta"] for q in exame["questoes"])
+    questoes_para_selecao = [q for q in questoes_filtradas if q["pergunta"] not in perguntas_no_exame]
+
+    if not questoes_para_selecao:
+        st.info(f"Todas as questões {('do tema ' + tema_filtro) if tema_filtro != 'Todos' else ''} já foram adicionadas ou não há questões disponíveis.")
+
+    for i, q in enumerate(questoes_para_selecao, 1):
         st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
         if st.checkbox(f"Adicionar esta questão ({q['tema']})", key=f"{faixa}_{q['tema']}_{i}"):
             selecao.append(q)
 
     # 🔘 Botão para inserir as selecionadas
     if selecao and st.button("➕ Inserir Questões Selecionadas"):
-        for q in selecao:
-            if not any(q["pergunta"] == ex_q["pergunta"] for ex_q in exame["questoes"]):
-                exame["questoes"].append(q)
-        exame["temas_incluidos"] = sorted(list(set(exame.get("temas_incluidos", []) + [q["tema"] for q in selecao])))
+        exame["questoes"].extend(selecao)
+        exame["temas_incluidos"] = sorted(list(set(q["tema"] for q in exame["questoes"])))
         exame["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
+        
+        with open(exame_path, "w", encoding="utf-8") as f:
+            json.dump(exame, f, indent=4, ensure_ascii=False)
+        
         st.success(f"{len(selecao)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
-        with open(exame_path, "w", encoding="utf-8") as f:
-            json.dump(exame, f, indent=4, ensure_ascii=False)
         st.rerun()
-
-    # 🔘 Botão para salvar tudo
-    if st.button("💾 Salvar Exame Completo"):
-        exame["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
-        exame["criado_por"] = st.session_state.usuario["nome"]
-        with open(exame_path, "w", encoding="utf-8") as f:
-            json.dump(exame, f, indent=4, ensure_ascii=False)
-        st.success(f"Exame da faixa {faixa} salvo com sucesso! 🥋")
 
     st.markdown("---")
     st.markdown("### 📋 Questões já incluídas no exame atual:")
@@ -1087,21 +1233,37 @@ def gestao_exame_de_faixa():
         st.info("Nenhuma questão adicionada ainda.")
     else:
         for i, q in enumerate(exame["questoes"], 1):
-            st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
-            st.markdown(f"<small>Resposta correta: {q['resposta']}</small>", unsafe_allow_html=True)
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
+                st.markdown(f"<small>Resposta correta: {q['resposta']}</small>", unsafe_allow_html=True)
+            with col2:
+                if st.button(f"Remover {i}", key=f"rem_{i}"):
+                    exame["questoes"].pop(i - 1)
+                    with open(exame_path, "w", encoding="utf-8") as f:
+                        json.dump(exame, f, indent=4, ensure_ascii=False)
+                    st.rerun()
 
-    if st.button("🗑️ Excluir exame desta faixa"):
-        os.remove(exame_path)
-        st.warning(f"O exame da faixa {faixa} foi excluído.")
-        st.rerun()
+    st.markdown("---")
+    if st.button("🗑️ Excluir exame completo desta faixa", type="primary"):
+        if os.path.exists(exame_path):
+            os.remove(exame_path)
+            st.warning(f"O exame da faixa {faixa} foi excluído.")
+            st.rerun()
+        else:
+            st.error("O arquivo de exame não existe.")
 
+# =========================================
+# 📜 MEUS CERTIFICADOS (COM BUGFIX)
+# =========================================
 def meus_certificados(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    # [BUGFIX] Seleciona acertos e total_questoes
     cursor.execute("""
-        SELECT faixa, pontuacao, data, codigo_verificacao
+        SELECT faixa, pontuacao, data, codigo_verificacao, acertos, total_questoes
         FROM resultados
         WHERE usuario = ? AND modo = 'Exame de Faixa'
         ORDER BY data DESC
@@ -1113,34 +1275,49 @@ def meus_certificados(usuario_logado):
         st.info("Você ainda não possui certificados emitidos. Complete um exame de faixa para conquistá-los! 🥋")
         return
 
-    for i, (faixa, pontuacao, data, codigo) in enumerate(certificados, 1):
+    for i, (faixa, pontuacao, data, codigo, acertos, total) in enumerate(certificados, 1):
         st.markdown(f"### 🥋 {i}. Faixa {faixa}")
         st.markdown(f"- **Aproveitamento:** {pontuacao}%")
-        st.markdown(f"- **Data:** {data}")
+        st.markdown(f"- **Data:** {datetime.fromisoformat(data).strftime('%d/%m/%Y às %H:%M')}")
         st.markdown(f"- **Código de Verificação:** `{codigo}`")
 
-        caminho_pdf = f"relatorios/Certificado_{usuario_logado['nome']}_{faixa}.pdf"
+        # Define um nome de arquivo padronizado
+        nome_arquivo = f"Certificado_{normalizar_nome(usuario_logado['nome'])}_{normalizar_nome(faixa)}.pdf"
+        caminho_pdf_esperado = f"relatorios/{nome_arquivo}"
 
-        # 🔹 Se o certificado não estiver salvo, ele será recriado automaticamente
-        if not os.path.exists(caminho_pdf):
+        # 🔹 Se o certificado não estiver salvo, ele será recriado
+        if not os.path.exists(caminho_pdf_esperado):
+            
+            # [BUGFIX] Usa os valores corretos do banco.
+            # Se acertos ou total for NULO (de dados antigos), usa um fallback.
+            acertos_pdf = acertos if acertos is not None else int((pontuacao / 100) * 10) # Fallback
+            total_pdf = total if total is not None else 10 # Fallback
+
             caminho_pdf = gerar_pdf(
                 usuario_logado["nome"],
                 faixa,
-                int((pontuacao / 100) * 10),  # dummy proporcional
-                10,
+                acertos_pdf,
+                total_pdf,
                 codigo
             )
-
-        with open(caminho_pdf, "rb") as f:
-            st.download_button(
-                label=f"📥 Baixar Certificado - Faixa {faixa}",
-                data=f.read(),
-                file_name=os.path.basename(caminho_pdf),
-                mime="application/pdf",
-                key=f"baixar_{i}"
-            )
-
+        else:
+            caminho_pdf = caminho_pdf_esperado
+        
+        try:
+            with open(caminho_pdf, "rb") as f:
+                st.download_button(
+                    label=f"📥 Baixar Certificado - Faixa {faixa}",
+                    data=f.read(),
+                    file_name=os.path.basename(caminho_pdf),
+                    mime="application/pdf",
+                    key=f"baixar_{i}",
+                    use_container_width=True
+                )
+        except FileNotFoundError:
+            st.error(f"Erro ao tentar recarregar o certificado '{nome_arquivo}'. Tente novamente.")
+            
         st.markdown("---")
+
 # =========================================
 # EXECUÇÃO
 # =========================================
