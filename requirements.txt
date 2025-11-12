@@ -6,3 +6,4 @@ pillow
 pandas
 plotly
 qrcode
+streamlit-option-menu
