@@ -8,3 +8,4 @@ plotly
 qrcode
 streamlit-option-menu
 streamlit-oauth
+requests
