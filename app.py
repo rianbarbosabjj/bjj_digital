@@ -1036,7 +1036,7 @@ def tela_inicio():
                 st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
 
 # =========================================
-# 🚀 MAIN (AGORA COM NAVEGAÇÃO POR ESTADO)
+# 🚀 MAIN (COM MENU OCULTO NO INÍCIO)
 # =========================================
 def main():
     usuario_logado = st.session_state.usuario
@@ -1067,7 +1067,7 @@ def main():
     # Menu dinâmico (Horizontal)
     # =========================================
 
-    # 1. 👇 INICIALIZA O ESTADO DE NAVEGAÇÃO
+    # 1. Inicializa o estado de navegação
     if "menu_selection" not in st.session_state:
         st.session_state.menu_selection = "Início"
 
@@ -1108,34 +1108,38 @@ def main():
             icons.insert(2, "journal-check")
 
     
-    # 2. 👇 ADICIONA O 'key' PARA CONTROLAR O ESTADO
-    # O 'default_index' lê o estado para saber qual aba marcar
-    menu = option_menu(
-        menu_title=None,
-        options=opcoes,
-        icons=icons,
-        key="menu_selection", # <--- ESSA É A MUDANÇA PRINCIPAL
-        orientation="horizontal",
-        styles={
-            "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
-            "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
-            "nav-link": {
-                "font-size": "14px",
-                "text-align": "center",
-                "margin": "0px",
-                "--hover-color": "#1a4d40", 
-                "color": COR_TEXTO,
-                "font-weight": "600",
-            },
-            "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
-        }
-    )
+    # 2. 👇 [MUDANÇA PRINCIPAL]
+    #    SÓ EXIBE O MENU SE A PÁGINA ATUAL NÃO FOR "Início"
+    if st.session_state.menu_selection != "Início":
+        menu = option_menu(
+            menu_title=None,
+            options=opcoes,
+            icons=icons,
+            key="menu_selection", # Chave é a mesma
+            orientation="horizontal",
+            styles={
+                "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
+                "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
+                "nav-link": {
+                    "font-size": "14px",
+                    "text-align": "center",
+                    "margin": "0px",
+                    "--hover-color": "#1a4d40", 
+                    "color": COR_TEXTO,
+                    "font-weight": "600",
+                },
+                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
+            }
+        )
+    else:
+        # Se estamos no "Início", o menu não é renderizado (pois o "if" falhou),
+        # mas a variável 'menu' precisa ter o valor correto para o roteamento.
+        menu = "Início" 
 
     # =========================================
     # Navegação entre módulos (Roteamento)
     # =========================================
-    # 3. 👇 O ROTEAMENTO AGORA LÊ A VARIÁVEL DE ESTADO
-    # (O 'menu' local é atualizado pelo 'key' do option_menu, então isso funciona)
+    # (O roteamento abaixo continua funcionando perfeitamente)
     if menu == "Início":
         tela_inicio()
     elif menu == "Modo Rola":
@@ -1154,7 +1158,6 @@ def main():
         gestao_exame_de_faixa()
     elif menu == "Meus Certificados":
         meus_certificados(usuario_logado)
-
 
 # =========================================
 # 🥋 GESTÃO DE EXAME DE FAIXA (modo híbrido)
