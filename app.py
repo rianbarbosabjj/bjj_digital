@@ -652,6 +652,7 @@ def gestao_equipes():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
+    # Cria as três abas principais
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
     # ============================================================
@@ -673,8 +674,8 @@ def gestao_equipes():
 
         st.markdown("---")
         st.subheader("Equipes existentes")
-        equipes_df = pd.read_sql_query("SELECT * FROM equipes", conn)
 
+        equipes_df = pd.read_sql_query("SELECT * FROM equipes", conn)
         if equipes_df.empty:
             st.info("Nenhuma equipe cadastrada.")
         else:
@@ -687,12 +688,13 @@ def gestao_equipes():
                 equipe_lista,
                 key="select_equipe_gestao"
             )
+
             equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_selecionada, "id"].values[0])
 
             with st.expander(f"Gerenciar {equipe_selecionada}", expanded=True):
                 novo_nome = st.text_input("Novo nome:", value=equipe_selecionada, key=f"edit_nome_{equipe_id}")
                 nova_desc = st.text_area(
-                    "Nova descrição:",
+                    "Nova descrição:", 
                     value=equipes_df.loc[equipes_df["id"] == equipe_id, "descricao"].values[0] or "",
                     key=f"edit_desc_{equipe_id}"
                 )
@@ -801,7 +803,6 @@ def gestao_equipes():
             st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
-
 # =========================================
 # 🧩 GESTÃO DE QUESTÕES
 # =========================================
