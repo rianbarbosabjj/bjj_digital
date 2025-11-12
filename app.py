@@ -760,7 +760,6 @@ def gestao_equipes():
                     conn.commit()
                     st.warning(f"Equipe '{equipe_selecionada}' excluída com sucesso.")
                     st.rerun()
-
     # ============================================================
     # 👩‍🏫 ABA 2 - PROFESSORES (SEM PROFESSOR RESPONSÁVEL)
     # ============================================================
