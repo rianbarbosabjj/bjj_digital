@@ -1155,22 +1155,24 @@ def gestao_exame_de_faixa():
     else:
         questoes_filtradas = todas_questoes
 
-    st.markdown("### ✅ Selecione as questões que farão parte do exame")
-    selecao = []
-    
-    # Filtra questões que JÁ ESTÃO no exame para evitar duplicatas
-    perguntas_no_exame = set(q["pergunta"] for q in exame["questoes"])
-    questoes_para_selecao = [q for q in questoes_filtradas if q["pergunta"] not in perguntas_no_exame]
+st.markdown("### ✅ Selecione as questões que farão parte do exame")
 
-    if not questoes_para_selecao:
-        st.info(f"Todas as questões {('do tema ' + tema_filtro) if tema_filtro != 'Todos' else ''} já foram adicionadas ou não há questões disponíveis.")
+# 🔹 Inicializa a lista de seleção antes do loop
+selecao = []
 
-    for i, q in enumerate(questoes_para_selecao, 1):
-        st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
-        if st.checkbox(f"Adicionar esta questão ({q['tema']})", key=f"{faixa}_{q['tema']}_{i}"):
-            selecao.append(q)
+# Filtra questões que JÁ ESTÃO no exame para evitar duplicatas
+perguntas_no_exame = set(q["pergunta"] for q in exame["questoes"])
+questoes_para_selecao = [q for q in questoes_filtradas if q["pergunta"] not in perguntas_no_exame]
 
-    # 🔘 Botão para inserir as selecionadas
+if not questoes_para_selecao:
+    st.info(f"Todas as questões {('do tema ' + tema_filtro) if tema_filtro != 'Todos' else ''} já foram adicionadas ou não há questões disponíveis.")
+
+for i, q in enumerate(questoes_para_selecao, 1):
+    st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
+    if st.checkbox(f"Adicionar esta questão ({q['tema']})", key=f"{faixa}_{q['tema']}_{i}"):
+        selecao.append(q)
+
+# 🔹 Aqui sim, podemos verificar se há seleções
 if selecao and st.button("➕ Inserir Questões Selecionadas"):
     # 🔹 Evita duplicatas com base no texto da pergunta
     novas_questoes = []
