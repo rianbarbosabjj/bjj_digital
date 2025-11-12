@@ -176,50 +176,44 @@ if not os.path.exists(DB_PATH):
 # AUTENTICAÇÃO (ATUALIZADO) - BLOCO DE DEPURAÇÃO V2
 # =========================================
 
-st.subheader("Modo de Depuração de Segredos (Teste V2)")
+st.subheader("Modo de Depuração de Segredos (Teste V3 - Lendo o Arquivo)")
 
-try:
-    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
-    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+# 1. Definir o caminho
+secrets_file_path = os.path.join(".streamlit", "secrets.toml")
+st.write(f"Procurando pelo arquivo em: `{os.path.abspath(secrets_file_path)}`")
+
+# 2. Verificar se o arquivo existe
+if os.path.exists(secrets_file_path):
+    st.success(f"✅ Arquivo encontrado em: `{secrets_file_path}`")
     
-    st.success("✅ Chaves encontradas.")
-    
-    # NOVO TESTE: Mostrar as chaves com marcadores para ver espaços
-    st.write("Verificando CLIENT_ID (deve estar colado nos marcadores):")
-    st.code(f"->{GOOGLE_CLIENT_ID}<-")
-    
-    st.write("Verificando CLIENT_SECRET (deve estar colado nos marcadores):")
-    st.code(f"->{GOOGLE_CLIENT_SECRET}<-")
+    # 3. Tentar ler o conteúdo
+    try:
+        with open(secrets_file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        
+        if not content:
+            st.error("❌ O arquivo está VAZIO.")
+        else:
+            st.warning("Conteúdo LIDO do arquivo (veja abaixo):")
+            st.code(content, language="toml")
+        
+        # 4. Checar o conteúdo
+        if "GOOGLE_CLIENT_ID" in content:
+            st.success("✅ O texto 'GOOGLE_CLIENT_ID' FOI encontrado no conteúdo.")
+        else:
+            st.error("❌ O texto 'GOOGLE_CLIENT_ID' NÃO FOI encontrado no conteúdo.")
+            
+        if "GOOGLE_CLIENT_SECRET" in content:
+            st.success("✅ O texto 'GOOGLE_CLIENT_SECRET' FOI encontrado no conteúdo.")
+        else:
+            st.error("❌ O texto 'GOOGLE_CLIENT_SECRET' NÃO FOI encontrado no conteúdo.")
 
-    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
-        st.error("❌ ERRO: Uma das chaves está vazia.")
-    elif " " in GOOGLE_CLIENT_ID or " " in GOOGLE_CLIENT_SECRET:
-         st.warning("⚠️ AVISO: Foi detectado um ESPAÇO dentro de uma das suas chaves. Isso é muito incomum. Verifique a cópia.")
-
-    st.info("Tentando inicializar o componente OAuth...")
-
-    REDIRECT_URI = "http://localhost:8501"
-    oauth_google = OAuth2Component(
-        client_id=GOOGLE_CLIENT_ID.strip(), # Adicionei .strip() por segurança
-        client_secret=GOOGLE_CLIENT_SECRET.strip(), # Adicionei .strip() por segurança
-        authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-        token_endpoint="https://oauth2.googleapis.com/token",
-        refresh_token_endpoint="https://oauth2.googleapis.com/token",
-        revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
-        scope="email profile",
-        redirect_uri=REDIRECT_URI,
-    )
-    st.success("✅ Componente OAuth inicializado com sucesso!")
-    st.warning("Pode apagar este bloco de depuração e continuar.")
-
-except KeyError:
-    st.error("❌ ERRO (KeyError): Não foi possível ENCONTRAR as chaves. Verifique a digitação.")
-except TypeError:
-    st.error("❌ ERRO (TypeError): Ocorreu o erro que você reportou.")
-    st.code("Isso quase sempre significa um caractere inválido ou aspas erradas (' “ ' vs ' \" '). Apague e digite as chaves e as aspas manualmente.")
-except Exception as e:
-    st.error(f"❌ Ocorreu um erro inesperado: {e}")
-
+    except Exception as e:
+        st.error(f"Erro ao LER o arquivo: {e}")
+        
+else:
+    st.error(f"❌ ARQUIVO NÃO ENCONTRADO no caminho: `{secrets_file_path}`")
+    st.write("Verifique se a pasta `.streamlit` (com ponto) está no local correto e no mesmo nível do `app.py`.")
 
 st.stop()
 
