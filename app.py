@@ -962,20 +962,27 @@ def gestao_equipes():
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
 
+    # 🔹 Lista temas existentes (arquivos JSON)
     temas_existentes = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
     tema_selecionado = st.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
 
+    # 🔹 Define o nome do tema
     if tema_selecionado == "Novo Tema":
-     # 🔹 Verifica se o tema está vazio antes de prosseguir
-    if not tema.strip():
-        st.warning("Digite um nome válido para o tema antes de salvar questões.")
-        return
-    
+        tema = st.text_input("Digite o nome do novo tema:")
     else:
         tema = tema_selecionado
 
+    # 🔹 Verifica se o tema está vazio antes de prosseguir
+    if not tema.strip():
+        st.warning("Digite um nome válido para o tema antes de salvar questões.")
+        return
+
+    # 🔹 Carrega as questões do tema atual
     questoes = carregar_questoes(tema) if tema else []
 
+    # ======================================================
+    # ✍️ Seção para adicionar nova questão
+    # ======================================================
     st.markdown("### ✍️ Adicionar nova questão")
     with st.expander("Expandir para adicionar questão", expanded=False):
         pergunta = st.text_area("Pergunta:")
@@ -993,13 +1000,21 @@ def gestao_questoes():
                     "imagem": imagem.strip(),
                     "video": video.strip(),
                 }
-                questoes.append(nova)
-                salvar_questoes(tema, questoes)
-                st.success("Questão adicionada com sucesso! ✅")
-                st.rerun()
+
+                # 🔹 Evita duplicatas (mesma pergunta)
+                if any(q["pergunta"] == nova["pergunta"] for q in questoes):
+                    st.warning("Essa pergunta já existe neste tema.")
+                else:
+                    questoes.append(nova)
+                    salvar_questoes(tema, questoes)
+                    st.success("Questão adicionada com sucesso! ✅")
+                    st.rerun()
             else:
                 st.error("A pergunta e o nome do tema não podem estar vazios.")
 
+    # ======================================================
+    # 📚 Seção para listar e excluir questões
+    # ======================================================
     st.markdown("### 📚 Questões cadastradas")
     if not questoes:
         st.info("Nenhuma questão cadastrada para este tema ainda.")
@@ -1009,6 +1024,7 @@ def gestao_questoes():
             for alt in q["opcoes"]:
                 st.markdown(f"- {alt}")
             st.markdown(f"**Resposta:** {q['resposta']}")
+
             if st.button(f"🗑️ Excluir questão {i}", key=f"del_{i}"):
                 questoes.pop(i - 1)
                 salvar_questoes(tema, questoes)
