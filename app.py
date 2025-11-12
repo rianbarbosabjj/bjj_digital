@@ -1128,16 +1128,15 @@ def gestao_exame_de_faixa():
             exame = {} # Reseta
     else:
         exame = {}
-
-    # Garante que a estrutura base exista
-    if "questoes" not in exame:
-        exame = {
-            "faixa": faixa,
-            "ultima_atualizacao": datetime.now().strftime("%Y-%m-%d"),
-            "criado_por": st.session_state.usuario["nome"],
-            "temas_incluidos": [],
-            "questoes": []
-        }
+# 🔹 Garante que o dicionário 'exame' sempre tenha a estrutura base
+if "questoes" not in exame:
+    exame = {
+        "faixa": faixa,
+        "ultima_atualizacao": datetime.now().strftime("%Y-%m-%d"),
+        "criado_por": st.session_state.usuario["nome"],
+        "temas_incluidos": [],
+        "questoes": []
+    }
 
     # 🔹 Carrega todas as questões disponíveis
     todas_questoes = carregar_todas_questoes()
