@@ -13,7 +13,8 @@ from datetime import datetime
 import bcrypt
 import base64
 from streamlit_option_menu import option_menu
-from streamlit_oauth import OAuth2Component # 👈 [NOVO] IMPORTAÇÃO DO OAUTH
+from streamlit_oauth import OAuth2Component
+import requests
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -1292,7 +1293,6 @@ def tela_login():
         
         st.markdown("<p style='text-align:center; color:white; margin: 15px;'>OU</p>", unsafe_allow_html=True)
 
-        # 👈 [MUDANÇA AQUI] O botão agora é chamado e o resultado salvo em 'token'
         token = oauth_google.authorize_button(
             name="Entrar com o Google",
             icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
@@ -1302,19 +1302,51 @@ def tela_login():
             redirect_uri=REDIRECT_URI,
         )
 
-        # 👈 [LÓGICA MOVIDA PARA CÁ]
-        # Se 'token' não for None, o usuário foi autenticado pelo Google
+        # 👈 [MUDANÇA CRÍTICA AQUI]
         if token:
-            st.session_state.token = token # Salva o token (opcional)
+            st.session_state.token = token 
             
-            # Busca as infos do usuário no Google
-            user_info = oauth_google.get_user_info(token)
-            user_email = user_info.get("email")
-            user_name = user_info.get("name")
+            # Nós mesmos vamos buscar as infos do usuário
+            access_token = token.get("access_token")
+            headers = {"Authorization": f"Bearer {access_token}"}
+            
+            # Faz a requisição ao endpoint userinfo do Google
+            user_info_response = requests.get(
+                "https://www.googleapis.com/oauth2/v3/userinfo", 
+                headers=headers
+            )
+            
+            # Se a requisição funcionar, pegamos os dados
+            if user_info_response.status_code == 200:
+                user_info = user_info_response.json() # Converte a resposta em um dict
+                user_email = user_info.get("email")
+                user_name = user_info.get("name")
+            else:
+                st.error("Não foi possível buscar as informações do usuário no Google.")
+                user_email = None
+                user_name = None
+
+            # ----------------- FIM DA MUDANÇA -----------------
 
             if user_email:
                 # 3. Verifica se o usuário já existe no nosso banco
                 usuario_db = buscar_usuario_por_email(user_email)
+                
+                if usuario_db:
+                    # 4.a. Usuário existe. O perfil está completo?
+                    if usuario_db["perfil_completo"]:
+                        st.session_state.usuario = {"id": usuario_db["id"], "nome": usuario_db["nome"], "tipo": usuario_db["tipo"]}
+                    else:
+                        st.session_state.registration_pending = {"id": usuario_db["id"], "email": user_email, "nome": user_name}
+                else:
+                    # 4.b. Novo usuário. Criar registro parcial e ir para cadastro
+                    novo_usuario_parcial = criar_usuario_parcial_google(user_email, user_name)
+                    if novo_usuario_parcial:
+                        st.session_state.registration_pending = novo_usuario_parcial
+                    else:
+                        st.error("Ocorreu um erro ao criar seu usuário. Tente novamente.")
+                
+                st.rerun()
                 
 def tela_completar_cadastro(user_data):
     """Exibe o formulário para novos usuários do Google completarem o perfil."""
