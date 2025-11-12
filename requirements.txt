@@ -7,3 +7,4 @@ pandas
 plotly
 qrcode
 streamlit-option-menu
+streamlit-oauth
