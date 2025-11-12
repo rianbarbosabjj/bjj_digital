@@ -958,7 +958,15 @@ def gestao_questoes():
 # =========================================
 # 🏠 TELA INÍCIO (AGORA DASHBOARD - Sugestão 1)
 # =========================================
+# =========================================
+# 🏠 TELA INÍCIO (AGORA COM CARTÕES CLICÁVEIS)
+# =========================================
 def tela_inicio():
+    
+    # 1. 👇 FUNÇÃO DE CALLBACK PARA NAVEGAÇÃO
+    def navigate_to(page_name):
+        st.session_state.menu_selection = page_name
+
     # Logo centralizado
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
@@ -972,7 +980,7 @@ def tela_inicio():
         <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:30px;'>
             {logo_html}
             <h2 style='color:{COR_DESTAQUE};text-align:center;'>Painel BJJ Digital</h2>
-            <p style='color:{COR_TEXTO};text-align:center;font-size:1.1em;'>Bem-vindo(a), {st.session_state.usuario['nome'].title()}! Use a navegação acima para começar.</p>
+            <p style='color:{COR_TEXTO};text-align:center;font-size:1.1em;'>Bem-vindo(a), {st.session_state.usuario['nome'].title()}! Use a navegação acima ou os cartões abaixo.</p>
         </div>
     """, unsafe_allow_html=True)
 
@@ -983,21 +991,24 @@ def tela_inicio():
 
     with col1:
         with st.container(border=True):
-            # 👇 CORRIGIDO AQUI
             st.markdown("<h3>🤼 Modo Rola</h3>", unsafe_allow_html=True) 
             st.write("Treino livre com questões aleatórias de todos os temas.")
+            # 2. 👇 BOTÃO DE NAVEGAÇÃO
+            st.button("Acessar", key="nav_rola", on_click=navigate_to, args=("Modo Rola",), use_container_width=True)
 
     with col2:
         with st.container(border=True):
-            # 👇 CORRIGIDO AQUI
             st.markdown("<h3>🥋 Exame de Faixa</h3>", unsafe_allow_html=True)
             st.write("Realize sua avaliação teórica oficial quando liberada.")
+            # 2. 👇 BOTÃO DE NAVEGAÇÃO
+            st.button("Acessar", key="nav_exame", on_click=navigate_to, args=("Exame de Faixa",), use_container_width=True)
             
     with col3:
         with st.container(border=True):
-            # 👇 CORRIGIDO AQUI
             st.markdown("<h3>🏆 Ranking</h3>", unsafe_allow_html=True)
             st.write("Veja sua posição e a dos seus colegas no Modo Rola.")
+            # 2. 👇 BOTÃO DE NAVEGAÇÃO
+            st.button("Acessar", key="nav_ranking", on_click=navigate_to, args=("Ranking",), use_container_width=True)
 
     # --- Cartões de Gestão (Admin/Professor) ---
     if st.session_state.usuario["tipo"] in ["admin", "professor"]:
@@ -1007,23 +1018,25 @@ def tela_inicio():
         c1, c2, c3 = st.columns(3)
         with c1:
             with st.container(border=True):
-                # 👇 CORRIGIDO AQUI
                 st.markdown("<h3>🧠 Gestão de Questões</h3>", unsafe_allow_html=True)
                 st.write("Adicione, edite ou remova questões dos temas.")
+                # 2. 👇 BOTÃO DE NAVEGAÇÃO
+                st.button("Gerenciar", key="nav_gest_questoes", on_click=navigate_to, args=("Gestão de Questões",), use_container_width=True)
         with c2:
             with st.container(border=True):
-                # 👇 CORRIGIDO AQUI
                 st.markdown("<h3>🏛️ Gestão de Equipes</h3>", unsafe_allow_html=True)
                 st.write("Gerencie equipes, professores e alunos vinculados.")
+                # 2. 👇 BOTÃO DE NAVEGAÇÃO
+                st.button("Gerenciar", key="nav_gest_equipes", on_click=navigate_to, args=("Gestão de Equipes",), use_container_width=True)
         with c3:
             with st.container(border=True):
-                # 👇 CORRIGIDO AQUI
                 st.markdown("<h3>📜 Gestão de Exame</h3>", unsafe_allow_html=True)
                 st.write("Monte as provas oficiais selecionando questões.")
-
+                # 2. 👇 BOTÃO DE NAVEGAÇÃO
+                st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
 
 # =========================================
-# 🚀 MAIN (COM NAVEGAÇÃO HORIZONTAL - Sugestão 4)
+# 🚀 MAIN (AGORA COM NAVEGAÇÃO POR ESTADO)
 # =========================================
 def main():
     usuario_logado = st.session_state.usuario
@@ -1034,7 +1047,7 @@ def main():
 
     tipo_usuario = usuario_logado["tipo"]
 
-    # --- Sidebar (Agora apenas para Info e Logout) ---
+    # --- Sidebar (Info e Logout) ---
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown(
         f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
@@ -1047,12 +1060,17 @@ def main():
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair", use_container_width=True):
         st.session_state.usuario = None
+        st.session_state.pop("menu_selection", None) # Limpa o estado do menu
         st.rerun()
 
     # =========================================
     # Menu dinâmico (Horizontal)
     # =========================================
-    
+
+    # 1. 👇 INICIALIZA O ESTADO DE NAVEGAÇÃO
+    if "menu_selection" not in st.session_state:
+        st.session_state.menu_selection = "Início"
+
     # 🔹 Define opções e ícones com base no perfil
     if tipo_usuario in ["admin", "professor"]:
         opcoes = [
@@ -1065,7 +1083,6 @@ def main():
             "Gestão de Equipes",
             "Gestão de Exame"
         ]
-        # Ícones do Bootstrap: https://icons.getbootstrap.com/
         icons = [
             "house-fill", 
             "people-fill", 
@@ -1080,7 +1097,7 @@ def main():
         opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
         icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
 
-        # Checa se exame está habilitado pelo professor
+        # Checa se exame está habilitado
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
@@ -1090,11 +1107,14 @@ def main():
             opcoes.insert(2, "Exame de Faixa")
             icons.insert(2, "journal-check")
 
-    # 🔹 Renderiza o menu horizontal
+    
+    # 2. 👇 ADICIONA O 'key' PARA CONTROLAR O ESTADO
+    # O 'default_index' lê o estado para saber qual aba marcar
     menu = option_menu(
         menu_title=None,
         options=opcoes,
         icons=icons,
+        key="menu_selection", # <--- ESSA É A MUDANÇA PRINCIPAL
         orientation="horizontal",
         styles={
             "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
@@ -1103,7 +1123,7 @@ def main():
                 "font-size": "14px",
                 "text-align": "center",
                 "margin": "0px",
-                "--hover-color": "#1a4d40", # Cor de fundo do hover
+                "--hover-color": "#1a4d40", 
                 "color": COR_TEXTO,
                 "font-weight": "600",
             },
@@ -1114,6 +1134,8 @@ def main():
     # =========================================
     # Navegação entre módulos (Roteamento)
     # =========================================
+    # 3. 👇 O ROTEAMENTO AGORA LÊ A VARIÁVEL DE ESTADO
+    # (O 'menu' local é atualizado pelo 'key' do option_menu, então isso funciona)
     if menu == "Início":
         tela_inicio()
     elif menu == "Modo Rola":
