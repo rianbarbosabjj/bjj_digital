@@ -956,7 +956,7 @@ def gestao_equipes():
 
     conn.close()
 # =========================================
-# 🔑 GESTÃO DE USUÁRIOS (NOVO)
+# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA)
 # =========================================
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários, restrita ao Admin."""
@@ -993,8 +993,13 @@ def gestao_usuarios(usuario_logado):
 
     if nome_selecionado:
         # Busca o ID do usuário selecionado
-        user_id_selecionado = df[df["nome"] == nome_selecionado]["id"].values[0]
-
+        try:
+            user_id_selecionado = df[df["nome"] == nome_selecionado]["id"].values[0]
+        except IndexError:
+            st.error("Usuário não encontrado no DataFrame. Tente recarregar a página.")
+            conn.close()
+            return
+            
         # Busca dados ATUAIS do usuário (para preencher o formulário)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
@@ -1002,7 +1007,7 @@ def gestao_usuarios(usuario_logado):
         user_data = cursor.fetchone()
         
         if not user_data:
-            st.error("Usuário não encontrado.")
+            st.error("Usuário não encontrado no banco de dados.")
             conn.close()
             return
 
@@ -1034,7 +1039,8 @@ def gestao_usuarios(usuario_logado):
                         )
                         conn.commit()
                         st.success("Dados do usuário atualizados com sucesso!")
-                        st.rerun() # Recarrega a página para atualizar o selectbox
+                        # 👈 [CORREÇÃO] st.rerun() foi removido daqui
+                        
                     except sqlite3.IntegrityError:
                         st.error(f"Erro: O email '{novo_email}' já está em uso por outro usuário.")
                     except Exception as e:
@@ -1065,6 +1071,7 @@ def gestao_usuarios(usuario_logado):
                             )
                             conn.commit()
                             st.success("Senha do usuário redefinida com sucesso!")
+                            # 👈 [CORREÇÃO] Nenhuma ação de rerun aqui
             else:
                 st.info(f"Não é possível redefinir a senha de usuários via '{user_data['auth_provider']}'.")
     
