@@ -955,19 +955,6 @@ def gestao_equipes():
             st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
-Ah, Rian, agora sim. Entendi perfeitamente.
-
-Esse é um bug sutil de tipo de dado. Peço desculpas por isso.
-
-O que está acontecendo é que o Pandas (ao criar o DataFrame df) e o SQLite (o banco de dados) às vezes não concordam sobre o formato exato de um número. O DataFrame pode estar tratando o id como um tipo (ex: int64 do NumPy) que o cursor do SQLite não está conseguindo usar para fazer a busca (WHERE id=?).
-
-A correção é simples: Vamos forçar o id a ser um int padrão do Python assim que o pegarmos.
-
-🛠️ Correção (V3)
-Substitua toda a função gestao_usuarios por esta nova versão. A única linha que mudei está marcada com um comentário.
-
-Python
-
 # =========================================
 # 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA 3)
 # =========================================
