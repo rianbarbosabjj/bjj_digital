@@ -1261,7 +1261,7 @@ def tela_login():
     st.session_state.setdefault("modo_login", "login")
 
     # =========================================
-    # CSS — layout fixo, centralizado e com botão verde original
+    # CSS — layout fixo e botão verde original
     # =========================================
     st.markdown("""
     <style>
@@ -1289,7 +1289,7 @@ def tela_login():
             box-shadow: 0px 0px 8px rgba(0,0,0,0.3);
         }
 
-        /* Botão principal (verde estilo original) */
+        /* Botão principal (verde estilo GFTeam) */
         .stButton>button[kind="primary"] {
             background: linear-gradient(90deg, #078B6C, #056853) !important;
             color: white !important;
@@ -1306,25 +1306,7 @@ def tela_login():
             transform: scale(1.02);
         }
 
-        /* Botões secundários (Criar Conta / Esqueci Senha) */
-        .login-links {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            margin-top: 10px;
-        }
-        .login-links button {
-            background: none !important;
-            border: none !important;
-            color: #aaa !important;
-            font-size: 13px !important;
-            padding: 2px !important;
-        }
-        .login-links button:hover {
-            color: #FFD770 !important;
-            text-decoration: underline !important;
-        }
-
+        /* Divisor 'OU' */
         .divider {
             text-align: center;
             color: gray;
@@ -1372,20 +1354,23 @@ def tela_login():
                     else:
                         st.error("Usuário ou senha incorretos. Tente novamente.")
 
-                # 🔹 Botões centralizados no card
-                st.markdown("<div class='login-links'>", unsafe_allow_html=True)
-                if st.button("🆕 Criar Conta", key="criar_conta_btn", type="secondary"):
-                    st.session_state["modo_login"] = "cadastro"
-                    st.rerun()
-                if st.button("🔑 Esqueci Senha", key="esqueci_btn", type="secondary"):
-                    st.session_state["modo_login"] = "recuperar"
-                    st.rerun()
-                st.markdown("</div>", unsafe_allow_html=True)
+                # 🔹 Botões lado a lado e centralizados
+                colx, coly, colz = st.columns([1, 2, 1])
+                with coly:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("Criar Conta", key="criar_conta_btn"):
+                            st.session_state["modo_login"] = "cadastro"
+                            st.rerun()
+                    with col2:
+                        if st.button("Esqueci Senha", key="esqueci_btn"):
+                            st.session_state["modo_login"] = "recuperar"
+                            st.rerun()
 
             # Divisor “OU”
             st.markdown("<div class='divider'>— OU —</div>", unsafe_allow_html=True)
 
-            # ✅ Botão Google (mantido visível e estilizado)
+            # ✅ Botão Google visível
             token = oauth_google.authorize_button(
                 name="Entrar com o Google",
                 icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
@@ -1422,6 +1407,75 @@ def tela_login():
                         st.session_state.registration_pending = novo
                     st.rerun()
 
+        # =========================================
+        # CADASTRO
+        # =========================================
+        elif st.session_state["modo_login"] == "cadastro":
+            st.subheader("📋 Cadastro de Novo Usuário")
+
+            nome = st.text_input("Nome completo:")
+            email = st.text_input("E-mail:")
+            usuario = st.text_input("Usuário (login):")
+            senha = st.text_input("Senha:", type="password")
+            confirmar = st.text_input("Confirmar senha:", type="password")
+
+            tipo_usuario = st.selectbox("Tipo de Usuário:", ["Aluno", "Professor"])
+            graduacao = st.selectbox("Graduação (faixa):", [
+                "Branca", "Cinza", "Amarela", "Laranja", "Verde",
+                "Azul", "Roxa", "Marrom", "Preta"
+            ])
+            graus = st.number_input("Quantos graus possui?", 0, 6, 0) if tipo_usuario == "Professor" else 0
+
+            if st.button("Cadastrar", use_container_width=True, type="primary"):
+                if not (nome and usuario and email and senha and confirmar):
+                    st.warning("Preencha todos os campos obrigatórios.")
+                elif senha != confirmar:
+                    st.error("As senhas não coincidem.")
+                else:
+                    conn = sqlite3.connect("bjj_digital.db")
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS usuarios (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            nome TEXT NOT NULL,
+                            usuario TEXT UNIQUE NOT NULL,
+                            email TEXT UNIQUE,
+                            senha TEXT NOT NULL,
+                            tipo TEXT DEFAULT 'Aluno',
+                            graduacao TEXT,
+                            graus INTEGER DEFAULT 0
+                        );
+                    """)
+                    cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
+                    if cursor.fetchone():
+                        st.error("Usuário ou e-mail já cadastrado.")
+                    else:
+                        hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                        cursor.execute(
+                            "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
+                        )
+                        conn.commit()
+                        conn.close()
+                        st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
+                        st.session_state["modo_login"] = "login"
+                        st.rerun()
+
+            if st.button("⬅️ Voltar para Login", use_container_width=True):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
+
+        # =========================================
+        # RECUPERAÇÃO DE SENHA
+        # =========================================
+        elif st.session_state["modo_login"] == "recuperar":
+            st.subheader("🔑 Recuperar Senha")
+            email = st.text_input("Digite o e-mail cadastrado:")
+            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                st.info("Em breve será implementado o envio de recuperação de senha.")
+            if st.button("⬅️ Voltar para Login", use_container_width=True):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
         # =========================================
         # CADASTRO
         # =========================================
