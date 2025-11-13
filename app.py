@@ -1860,7 +1860,7 @@ def app_principal():
     def navigate_to_sidebar(page):
         st.session_state.menu_selection = page
 
-    # --- Sidebar (Atualizada) ---
+    # --- Sidebar (Com 'Meu Perfil' e 'Gestão de Usuários') ---
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown(
         f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
@@ -1871,7 +1871,6 @@ def app_principal():
         unsafe_allow_html=True,
     )
     
-    # Botão "Meu Perfil" (Para todos)
     st.sidebar.button(
         "👤 Meu Perfil", 
         on_click=navigate_to_sidebar, 
@@ -1879,9 +1878,6 @@ def app_principal():
         use_container_width=True
     )
 
-    # ==========================================================
-    # 👈 [MUDANÇA 1: BOTÃO DE GESTÃO DE USUÁRIOS NA SIDEBAR]
-    # ==========================================================
     if tipo_usuario == "admin":
         st.sidebar.button(
             "🔑 Gestão de Usuários", 
@@ -1889,7 +1885,6 @@ def app_principal():
             args=("Gestão de Usuários",), 
             use_container_width=True
         )
-    # ==========================================================
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair", use_container_width=True):
@@ -1900,63 +1895,65 @@ def app_principal():
         st.rerun()
 
     # =========================================
-    # LÓGICA DE ROTA (Atualizada)
+    # LÓGICA DE ROTA (ATUALIZADA)
     # =========================================
     
     if "menu_selection" not in st.session_state:
         st.session_state.menu_selection = "Início"
 
-    # ==========================================================
-    # 👈 [MUDANÇA 2: ROTEAMENTO DA SIDEBAR]
-    # Verifica se a seleção é 'Meu Perfil' OU 'Gestão de Usuários'
-    # ==========================================================
-    if st.session_state.menu_selection in ["Meu Perfil", "Gestão de Usuários"]:
+    pagina_selecionada = st.session_state.menu_selection
+
+    # --- ROTA 1: Telas da Sidebar (Sem menu horizontal) ---
+    if pagina_selecionada in ["Meu Perfil", "Gestão de Usuários"]:
         
-        # Mostra a tela correta baseada na seleção
-        if st.session_state.menu_selection == "Meu Perfil":
+        if pagina_selecionada == "Meu Perfil":
             tela_meu_perfil(usuario_logado)
-        elif st.session_state.menu_selection == "Gestão de Usuários":
-            # (A função gestao_usuarios já tem sua própria verificação de admin)
+        elif pagina_selecionada == "Gestão de Usuários":
             gestao_usuarios(usuario_logado) 
         
-        # Botão para voltar ao Início (Dashboard)
         if st.button("⬅️ Voltar ao Início", use_container_width=True):
             navigate_to_sidebar("Início")
             st.rerun()
-            
-    # --- ROTA 2: MOSTRAR MENU PRINCIPAL E TELAS NORMAIS ---
-    else:
-        # ==========================================================
-        # 👈 [MUDANÇA 3: LIMPEZA DO MENU HORIZONTAL]
-        # "Gestão de Usuários" foi removido da lista 'opcoes' do admin
-        # ==========================================================
-        if tipo_usuario in ["admin", "professor"]:
-            opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-            icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
-            
-            # (A lógica 'if admin' que adicionava 'Gestão de Usuários' aqui foi removida)
 
+    # --- ROTA 2: Tela "Início" (Sem menu horizontal) ---
+    elif pagina_selecionada == "Início":
+        # Chama a tela inicial diretamente, sem desenhar o menu
+        tela_inicio()
+
+    # --- ROTA 3: Telas do Menu Horizontal (Desenha o menu) ---
+    else:
+        # Define as opções de menu (sem "Início", "Meu Perfil" ou "Gestão")
+        if tipo_usuario in ["admin", "professor"]:
+            opcoes = ["Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+            icons = ["people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+        
         else: # aluno
-            opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
-            icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
+            opcoes = ["Modo Rola", "Ranking", "Meus Certificados"]
+            icons = ["people-fill", "trophy-fill", "patch-check-fill"]
             
+            # Lógica para adicionar Exame (se habilitado)
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
             dado = cursor.fetchone()
             conn.close()
-            
             if dado and dado[0] == 1:
-                opcoes.insert(2, "Exame de Faixa") # O índice 2 está correto
-                icons.insert(2, "journal-check")
+                opcoes.insert(1, "Exame de Faixa") # Insere na posição 1 (depois de Modo Rola)
+                icons.insert(1, "journal-check")
         
-        # Desenha o option_menu
+        # Adiciona "Início" de volta ao começo das listas
+        opcoes.insert(0, "Início")
+        icons.insert(0, "house-fill")
+
+        # Desenha o menu horizontal
+        # A 'key' é a mesma (menu_selection), então ela controla o estado
         menu = option_menu(
             menu_title=None,
             options=opcoes,
             icons=icons,
-            key="menu_selection", # Esta chave controla o estado
+            key="menu_selection",
             orientation="horizontal",
+            default_index=opcoes.index(pagina_selecionada), # Garante que a aba correta esteja selecionada
             styles={
                 "container": {"padding": "0!importan", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
                 "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
@@ -1965,8 +1962,9 @@ def app_principal():
             }
         )
 
-        # Roteamento Padrão
+        # Roteamento das telas do menu horizontal
         if menu == "Início":
+            # (Este 'if' garante que se o usuário clicar em "Início" no menu, ele volte)
             tela_inicio()
         elif menu == "Modo Rola":
             modo_rola(usuario_logado)
