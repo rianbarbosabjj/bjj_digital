@@ -1342,7 +1342,7 @@ def tela_login():
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
-                user = st.text_input("Usuário:")
+                user = st.text_input("Usuário ou E-mail:")
                 pwd = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
@@ -1359,11 +1359,11 @@ def tela_login():
                 with coly:
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("📋 Criar Conta", key="criar_conta_btn"):
+                        if st.button("Criar Conta", key="criar_conta_btn"):
                             st.session_state["modo_login"] = "cadastro"
                             st.rerun()
                     with col2:
-                        if st.button("🔑 Esqueci Senha", key="esqueci_btn"):
+                        if st.button("Esqueci Senha", key="esqueci_btn"):
                             st.session_state["modo_login"] = "recuperar"
                             st.rerun()
 
@@ -1408,7 +1408,7 @@ def tela_login():
                     st.rerun()
 
         # =========================================
-        # CADASTRO
+        # CADASTRO INTEGRADO AO BANCO OFICIAL
         # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             st.subheader("📋 Cadastro de Novo Usuário")
@@ -1432,31 +1432,36 @@ def tela_login():
                 elif senha != confirmar:
                     st.error("As senhas não coincidem.")
                 else:
-                    conn = sqlite3.connect("bjj_digital.db")
+                    conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
-                    cursor.execute("""
-                        CREATE TABLE IF NOT EXISTS usuarios (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            nome TEXT NOT NULL,
-                            usuario TEXT UNIQUE NOT NULL,
-                            email TEXT UNIQUE,
-                            senha TEXT NOT NULL,
-                            tipo TEXT DEFAULT 'Aluno',
-                            graduacao TEXT,
-                            graus INTEGER DEFAULT 0
-                        );
-                    """)
-                    cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
+
+                    # Verifica se já existe e-mail ou nome de usuário
+                    cursor.execute("SELECT id FROM usuarios WHERE email=? OR nome=?", (email, usuario))
                     if cursor.fetchone():
                         st.error("Usuário ou e-mail já cadastrado.")
                     else:
-                        hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                        cursor.execute(
-                            "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
-                        )
+                        senha_hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                        cursor.execute("""
+                            INSERT INTO usuarios (nome, email, tipo_usuario, senha, auth_provider, perfil_completo)
+                            VALUES (?, ?, ?, ?, 'local', 1)
+                        """, (nome, email, tipo_usuario.lower(), senha_hash))
+                        usuario_id = cursor.lastrowid
+
+                        # Cria entrada adicional na tabela 'alunos' ou 'professores'
+                        if tipo_usuario == "Aluno":
+                            cursor.execute("""
+                                INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo)
+                                VALUES (?, ?, 'ativo')
+                            """, (usuario_id, graduacao))
+                        else:
+                            cursor.execute("""
+                                INSERT INTO professores (usuario_id, pode_aprovar, eh_responsavel, status_vinculo)
+                                VALUES (?, 0, 0, 'ativo')
+                            """, (usuario_id,))
+
                         conn.commit()
                         conn.close()
+
                         st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
                         st.session_state["modo_login"] = "login"
                         st.rerun()
@@ -1465,6 +1470,17 @@ def tela_login():
                 st.session_state["modo_login"] = "login"
                 st.rerun()
 
+        # =========================================
+        # RECUPERAÇÃO DE SENHA
+        # =========================================
+        elif st.session_state["modo_login"] == "recuperar":
+            st.subheader("🔑 Recuperar Senha")
+            email = st.text_input("Digite o e-mail cadastrado:")
+            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                st.info("Em breve será implementado o envio de recuperação de senha.")
+            if st.button("⬅️ Voltar para Login", use_container_width=True):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
         # =========================================
         # RECUPERAÇÃO DE SENHA
         # =========================================
