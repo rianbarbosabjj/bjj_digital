@@ -1261,63 +1261,75 @@ def tela_login():
     st.session_state.setdefault("modo_login", "login")
 
     # =========================================
-    # CSS AJUSTADO — layout centralizado e sem overflow
+    # CSS — layout fixo, centralizado e com botão verde original
     # =========================================
     st.markdown("""
     <style>
-        /* Centraliza verticalmente o conteúdo, mas permite leve scroll em telas menores */
         html, body, [data-testid="stAppViewContainer"] {
             height: 100%;
             overflow-y: auto;
         }
 
-        /* Centralização suave */
         [data-testid="stAppViewContainer"] > .main {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             min-height: 95vh;
-            padding-top: 20px;
         }
 
-        /* Caixa do login */
+        /* Card principal */
         div[data-testid="stContainer"] > div[style*="border"] {
             background-color: #0c241e !important;
             border: 1px solid #078B6C !important;
             border-radius: 12px !important;
-            padding: 25px 30px !important;
+            padding: 25px 35px !important;
             max-width: 400px !important;
             margin: 0 auto !important;
+            box-shadow: 0px 0px 8px rgba(0,0,0,0.3);
         }
 
-        /* Botões secundários discretos */
-        .stButton > button[kind="secondary"] {
+        /* Botão principal (verde estilo original) */
+        .stButton>button[kind="primary"] {
+            background: linear-gradient(90deg, #078B6C, #056853) !important;
+            color: white !important;
+            font-weight: bold !important;
+            border: none !important;
+            border-radius: 8px !important;
+            padding: 0.6em 1.2em !important;
+            width: 100% !important;
+            transition: 0.3s;
+        }
+        .stButton>button[kind="primary"]:hover {
+            background: #FFD770 !important;
+            color: #0c241e !important;
+            transform: scale(1.02);
+        }
+
+        /* Botões secundários (Criar Conta / Esqueci Senha) */
+        .login-links {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .login-links button {
             background: none !important;
+            border: none !important;
             color: #aaa !important;
             font-size: 13px !important;
-            border: none !important;
-            padding: 0 !important;
-            height: auto !important;
+            padding: 2px !important;
         }
-        .stButton > button[kind="secondary"]:hover {
+        .login-links button:hover {
             color: #FFD770 !important;
-            text-decoration: underline;
+            text-decoration: underline !important;
         }
 
-        /* Divisor 'ou' */
         .divider {
             text-align: center;
             color: gray;
             font-size: 13px;
-            margin: 10px 0;
-        }
-
-        /* Responsividade */
-        @media (max-height: 700px) {
-            [data-testid="stAppViewContainer"] > .main {
-                padding-top: 40px;
-            }
+            margin: 12px 0;
         }
     </style>
     """, unsafe_allow_html=True)
@@ -1351,7 +1363,7 @@ def tela_login():
                 user = st.text_input("Usuário:")
                 pwd = st.text_input("Senha:", type="password")
 
-                if st.button("Entrar", use_container_width=True, key="entrar_btn"):
+                if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
                     u = autenticar_local(user.strip(), pwd.strip())
                     if u:
                         st.session_state.usuario = u
@@ -1360,21 +1372,20 @@ def tela_login():
                     else:
                         st.error("Usuário ou senha incorretos. Tente novamente.")
 
-                # Botões discretos abaixo do botão Entrar
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("🆕 Criar Conta", key="criar_conta_btn", type="secondary"):
-                        st.session_state["modo_login"] = "cadastro"
-                        st.rerun()
-                with col2:
-                    if st.button("🔑 Esqueci Senha", key="esqueci_btn", type="secondary"):
-                        st.session_state["modo_login"] = "recuperar"
-                        st.rerun()
+                # 🔹 Botões centralizados no card
+                st.markdown("<div class='login-links'>", unsafe_allow_html=True)
+                if st.button("🆕 Criar Conta", key="criar_conta_btn", type="secondary"):
+                    st.session_state["modo_login"] = "cadastro"
+                    st.rerun()
+                if st.button("🔑 Esqueci Senha", key="esqueci_btn", type="secondary"):
+                    st.session_state["modo_login"] = "recuperar"
+                    st.rerun()
+                st.markdown("</div>", unsafe_allow_html=True)
 
             # Divisor “OU”
             st.markdown("<div class='divider'>— OU —</div>", unsafe_allow_html=True)
 
-            # ✅ Botão Google sempre visível e ajustado
+            # ✅ Botão Google (mantido visível e estilizado)
             token = oauth_google.authorize_button(
                 name="Entrar com o Google",
                 icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
@@ -1384,7 +1395,6 @@ def tela_login():
                 redirect_uri=REDIRECT_URI,
             )
 
-            # Verificação do token Google
             if token and "access_token" in token:
                 st.session_state.token = token
                 access_token = token["access_token"]
@@ -1431,7 +1441,7 @@ def tela_login():
             ])
             graus = st.number_input("Quantos graus possui?", 0, 6, 0) if tipo_usuario == "Professor" else 0
 
-            if st.button("Cadastrar"):
+            if st.button("Cadastrar", use_container_width=True, type="primary"):
                 if not (nome and usuario and email and senha and confirmar):
                     st.warning("Preencha todos os campos obrigatórios.")
                 elif senha != confirmar:
@@ -1466,7 +1476,7 @@ def tela_login():
                         st.session_state["modo_login"] = "login"
                         st.rerun()
 
-            if st.button("⬅️ Voltar para Login"):
+            if st.button("⬅️ Voltar para Login", use_container_width=True, type="secondary"):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
 
@@ -1476,9 +1486,9 @@ def tela_login():
         elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
             email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções"):
+            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
                 st.info("Em breve será implementado o envio de recuperação de senha.")
-            if st.button("⬅️ Voltar para Login"):
+            if st.button("⬅️ Voltar para Login", use_container_width=True, type="secondary"):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
                 
