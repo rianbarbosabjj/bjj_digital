@@ -1697,6 +1697,11 @@ def app_principal():
         gestao_exame_de_faixa()
     elif menu == "Meus Certificados":
         meus_certificados(usuario_logado)
+    elif menu == "Gestão de Usuários":
+    if tipo_usuario == "admin":
+        gestao_usuarios()
+    else:
+        st.error("Acesso restrito. Apenas administradores podem acessar esta seção.")
 
 # =========================================
 # EXECUÇÃO PRINCIPAL (ROTEADOR)
