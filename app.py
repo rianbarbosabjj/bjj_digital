@@ -1261,69 +1261,100 @@ def tela_login():
     st.session_state.setdefault("modo_login", "login")
 
     # =========================================
+    # CSS para centralizar tudo e remover rolagem
+    # =========================================
+    st.markdown("""
+    <style>
+        /* Remove rolagem vertical e centraliza tudo */
+        html, body, [data-testid="stAppViewContainer"], [data-testid="stVerticalBlock"] {
+            height: 100vh !important;
+            overflow: hidden !important;
+        }
+        [data-testid="stAppViewContainer"] > .main {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            padding: 0;
+        }
+        /* Caixa de login */
+        div[data-testid="stContainer"] > div[style*="border"] {
+            margin: auto !important;
+            max-width: 400px;
+            background-color: #0c241e;
+            border: 1px solid #078B6C;
+            border-radius: 12px;
+            padding: 20px 30px !important;
+        }
+        /* Botões secundários discretos */
+        .stButton > button[kind="secondary"] {
+            background: none !important;
+            color: #ccc !important;
+            font-size: 13px !important;
+            border: none !important;
+            padding: 0 !important;
+            height: auto !important;
+        }
+        .stButton > button[kind="secondary"]:hover {
+            color: #FFD770 !important;
+            text-decoration: underline;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # =========================================
     # LOGO CENTRALIZADA
     # =========================================
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             logo_base64 = base64.b64encode(f.read()).decode()
-        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>"
+        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:150px;height:auto;margin-bottom:5px;'/>"
     else:
         logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
 
     st.markdown(f"""
-        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:40px;'>
+        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-40px;'>
             {logo_html}
             <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
         </div>
     """, unsafe_allow_html=True)
 
+    # =========================================
+    # BLOCO DE LOGIN / CADASTRO / RECUPERAÇÃO
+    # =========================================
     c1, c2, c3 = st.columns([1, 1.5, 1])
 
-    # =========================================
-    # LOGIN LOCAL
-    # =========================================
     with c2:
+        # --- LOGIN LOCAL ---
         if st.session_state["modo_login"] == "login":
-            with st.container(border=True, height=310):
+            with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
-                user = st.text_input("Usuário:", key="login_user")
-                pwd = st.text_input("Senha:", type="password", key="login_pwd")
+                user = st.text_input("Usuário:")
+                pwd = st.text_input("Senha:", type="password")
 
-                if st.button("Entrar", use_container_width=True):
-                    u = autenticar_local(user.strip(), pwd.strip())
-                    if u:
-                        st.session_state.usuario = u
-                        st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
-                        st.rerun()
-                    else:
-                        st.error("Usuário ou senha incorretos. Tente novamente.")
+                st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary")
 
-                # -----------------------------------------
-                # Botões discretos de ações secundárias
-                # -----------------------------------------
+                # 🔹 Botões discretos abaixo do botão Entrar
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("🆕 Criar Conta", use_container_width=True, type="secondary"):
+                    if st.button("🆕 Criar Conta", key="criar_conta_btn", type="secondary"):
                         st.session_state["modo_login"] = "cadastro"
                         st.rerun()
                 with col2:
-                    if st.button("🔑 Esqueci Senha", use_container_width=True, type="secondary"):
+                    if st.button("🔑 Esqueci Senha", key="esqueci_btn", type="secondary"):
                         st.session_state["modo_login"] = "recuperar"
                         st.rerun()
 
-            # -----------------------------------------
-            # Divisor “OU”
-            # -----------------------------------------
+            # 🔸 Separador “ou”
             st.markdown(
-                "<p style='text-align:center; color:gray; font-size:13px; margin-top:10px;'>— OU —</p>",
+                "<p style='text-align:center; color:gray; font-size:13px; margin:10px;'>— OU —</p>",
                 unsafe_allow_html=True
             )
 
-            # =========================================
-            # LOGIN GOOGLE
-            # =========================================
-            token = oauth_google.authorize_button(
+            # --- LOGIN GOOGLE ---
+            oauth_google.authorize_button(
                 name="Entrar com o Google",
                 icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
                 use_container_width=True,
@@ -1332,106 +1363,71 @@ def tela_login():
                 redirect_uri=REDIRECT_URI,
             )
 
-            if token and "access_token" in token:
-                st.session_state.token = token
-                access_token = token["access_token"]
-                headers = {"Authorization": f"Bearer {access_token}"}
+        # --- CADASTRO ---
+        elif st.session_state["modo_login"] == "cadastro":
+            st.subheader("📋 Cadastro de Novo Usuário")
 
-                try:
-                    response = requests.get(
-                        "https://www.googleapis.com/oauth2/v3/userinfo",
-                        headers=headers,
-                        timeout=5
-                    )
-                    response.raise_for_status()
-                    info = response.json()
-                    user_email = info.get("email")
-                    user_name = info.get("name")
-                except Exception as e:
-                    st.error(f"Falha na autenticação Google: {e}")
-                    user_email, user_name = None, None
+            nome = st.text_input("Nome completo:")
+            email = st.text_input("E-mail:")
+            usuario = st.text_input("Usuário (login):")
+            senha = st.text_input("Senha:", type="password")
+            confirmar = st.text_input("Confirmar senha:", type="password")
 
-                if user_email:
-                    usuario_db = buscar_usuario_por_email(user_email)
-                    if usuario_db:
-                        st.session_state.usuario = usuario_db
-                    else:
-                        novo = criar_usuario_parcial_google(user_email, user_name)
-                        st.session_state.registration_pending = novo
-                    st.rerun()
+            tipo_usuario = st.selectbox("Tipo de Usuário:", ["Aluno", "Professor"])
+            graduacao = st.selectbox("Graduação (faixa):", [
+                "Branca", "Cinza", "Amarela", "Laranja", "Verde",
+                "Azul", "Roxa", "Marrom", "Preta"
+            ])
+            graus = st.number_input("Quantos graus possui?", 0, 6, 0) if tipo_usuario == "Professor" else 0
 
-    # =========================================
-    # TELA DE CADASTRO
-    # =========================================
-    if st.session_state["modo_login"] == "cadastro":
-        st.subheader("📋 Cadastro de Novo Usuário")
-
-        nome = st.text_input("Nome completo:")
-        email = st.text_input("E-mail:")
-        usuario = st.text_input("Usuário (login):")
-        senha = st.text_input("Senha:", type="password")
-        confirmar = st.text_input("Confirmar senha:", type="password")
-
-        tipo_usuario = st.selectbox("Tipo de Usuário:", ["Aluno", "Professor"])
-        graduacao = st.selectbox("Graduação (faixa):", [
-            "Branca", "Cinza", "Amarela", "Laranja", "Verde",
-            "Azul", "Roxa", "Marrom", "Preta"
-        ])
-
-        graus = 0
-        if tipo_usuario == "Professor":
-            graus = st.number_input("Quantos graus possui na faixa atual?", 0, 6, 0)
-
-        if st.button("Cadastrar"):
-            if not (nome and usuario and email and senha and confirmar):
-                st.warning("Preencha todos os campos obrigatórios.")
-            elif senha != confirmar:
-                st.error("As senhas não coincidem.")
-            else:
-                conn = sqlite3.connect("bjj_digital.db")
-                cursor = conn.cursor()
-                cursor.execute("""
-                    CREATE TABLE IF NOT EXISTS usuarios (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        nome TEXT NOT NULL,
-                        usuario TEXT UNIQUE NOT NULL,
-                        email TEXT UNIQUE,
-                        senha TEXT NOT NULL,
-                        tipo TEXT DEFAULT 'Aluno',
-                        graduacao TEXT,
-                        graus INTEGER DEFAULT 0
-                    );
-                """)
-                cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
-                if cursor.fetchone():
-                    st.error("Usuário ou e-mail já cadastrado.")
+            if st.button("Cadastrar"):
+                if not (nome and usuario and email and senha and confirmar):
+                    st.warning("Preencha todos os campos obrigatórios.")
+                elif senha != confirmar:
+                    st.error("As senhas não coincidem.")
                 else:
-                    hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                    cursor.execute(
-                        "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
-                    )
-                    conn.commit()
-                    conn.close()
-                    st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
-                    st.session_state["modo_login"] = "login"
-                    st.rerun()
+                    conn = sqlite3.connect("bjj_digital.db")
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS usuarios (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            nome TEXT NOT NULL,
+                            usuario TEXT UNIQUE NOT NULL,
+                            email TEXT UNIQUE,
+                            senha TEXT NOT NULL,
+                            tipo TEXT DEFAULT 'Aluno',
+                            graduacao TEXT,
+                            graus INTEGER DEFAULT 0
+                        );
+                    """)
+                    cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
+                    if cursor.fetchone():
+                        st.error("Usuário ou e-mail já cadastrado.")
+                    else:
+                        hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                        cursor.execute(
+                            "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
+                        )
+                        conn.commit()
+                        conn.close()
+                        st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
+                        st.session_state["modo_login"] = "login"
+                        st.rerun()
 
-        if st.button("⬅️ Voltar para Login"):
-            st.session_state["modo_login"] = "login"
-            st.rerun()
+            if st.button("⬅️ Voltar para Login"):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
 
-    # =========================================
-    # RECUPERAÇÃO DE SENHA (placeholder)
-    # =========================================
-    if st.session_state["modo_login"] == "recuperar":
-        st.subheader("🔑 Recuperar Senha")
-        email = st.text_input("Digite o e-mail cadastrado:")
-        if st.button("Enviar Instruções"):
-            st.info("Em breve será implementado o envio de recuperação de senha.")
-        if st.button("⬅️ Voltar para Login"):
-            st.session_state["modo_login"] = "login"
-            st.rerun()
+        # --- RECUPERAÇÃO ---
+        elif st.session_state["modo_login"] == "recuperar":
+            st.subheader("🔑 Recuperar Senha")
+            email = st.text_input("Digite o e-mail cadastrado:")
+            if st.button("Enviar Instruções"):
+                st.info("Em breve será implementado o envio de recuperação de senha.")
+            if st.button("⬅️ Voltar para Login"):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
                 
 def tela_completar_cadastro(user_data):
     """Exibe o formulário para novos usuários do Google completarem o perfil."""
