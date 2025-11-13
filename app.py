@@ -1871,13 +1871,25 @@ def app_principal():
         unsafe_allow_html=True,
     )
     
-    # --- 2. NOVO BOTÃO DE PERFIL ---
+    # Botão "Meu Perfil" (Para todos)
     st.sidebar.button(
         "👤 Meu Perfil", 
         on_click=navigate_to_sidebar, 
         args=("Meu Perfil",), 
         use_container_width=True
     )
+
+    # ==========================================================
+    # 👈 [MUDANÇA 1: BOTÃO DE GESTÃO DE USUÁRIOS NA SIDEBAR]
+    # ==========================================================
+    if tipo_usuario == "admin":
+        st.sidebar.button(
+            "🔑 Gestão de Usuários", 
+            on_click=navigate_to_sidebar, 
+            args=("Gestão de Usuários",), 
+            use_container_width=True
+        )
+    # ==========================================================
 
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair", use_container_width=True):
@@ -1888,34 +1900,41 @@ def app_principal():
         st.rerun()
 
     # =========================================
-    # --- 3. LÓGICA DE ROTA (Atualizada) ---
-    # Verifica se deve mostrar o Perfil ou o Menu Principal
+    # LÓGICA DE ROTA (Atualizada)
     # =========================================
     
     if "menu_selection" not in st.session_state:
         st.session_state.menu_selection = "Início"
 
-    # --- ROTA 1: MOSTRAR TELA "MEU PERFIL" ---
-    if st.session_state.menu_selection == "Meu Perfil":
+    # ==========================================================
+    # 👈 [MUDANÇA 2: ROTEAMENTO DA SIDEBAR]
+    # Verifica se a seleção é 'Meu Perfil' OU 'Gestão de Usuários'
+    # ==========================================================
+    if st.session_state.menu_selection in ["Meu Perfil", "Gestão de Usuários"]:
         
-        # Mostra a tela de perfil
-        tela_meu_perfil(usuario_logado)
+        # Mostra a tela correta baseada na seleção
+        if st.session_state.menu_selection == "Meu Perfil":
+            tela_meu_perfil(usuario_logado)
+        elif st.session_state.menu_selection == "Gestão de Usuários":
+            # (A função gestao_usuarios já tem sua própria verificação de admin)
+            gestao_usuarios(usuario_logado) 
         
-        # Adiciona um botão para voltar ao início
+        # Botão para voltar ao Início (Dashboard)
         if st.button("⬅️ Voltar ao Início", use_container_width=True):
             navigate_to_sidebar("Início")
             st.rerun()
             
     # --- ROTA 2: MOSTRAR MENU PRINCIPAL E TELAS NORMAIS ---
     else:
-        # Define opções e ícones (REMOVEMOS "MEU PERFIL" DAQUI)
+        # ==========================================================
+        # 👈 [MUDANÇA 3: LIMPEZA DO MENU HORIZONTAL]
+        # "Gestão de Usuários" foi removido da lista 'opcoes' do admin
+        # ==========================================================
         if tipo_usuario in ["admin", "professor"]:
             opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
             icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
             
-            if tipo_usuario == "admin":
-                opcoes.append("Gestão de Usuários")
-                icons.append("key-fill")
+            # (A lógica 'if admin' que adicionava 'Gestão de Usuários' aqui foi removida)
 
         else: # aluno
             opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
@@ -1928,8 +1947,7 @@ def app_principal():
             conn.close()
             
             if dado and dado[0] == 1:
-                # --- 4. Índice de inserção corrigido (de 3 para 2) ---
-                opcoes.insert(2, "Exame de Faixa")
+                opcoes.insert(2, "Exame de Faixa") # O índice 2 está correto
                 icons.insert(2, "journal-check")
         
         # Desenha o option_menu
@@ -1947,7 +1965,7 @@ def app_principal():
             }
         )
 
-        # Roteamento Padrão (REMOVEMOS "MEU PERFIL" DAQUI)
+        # Roteamento Padrão
         if menu == "Início":
             tela_inicio()
         elif menu == "Modo Rola":
@@ -1966,8 +1984,6 @@ def app_principal():
             gestao_exame_de_faixa()
         elif menu == "Meus Certificados":
             meus_certificados(usuario_logado)
-        elif menu == "Gestão de Usuários":
-            gestao_usuarios(usuario_logado)
         
 # =========================================
 # EXECUÇÃO PRINCIPAL (ROTEADOR)
