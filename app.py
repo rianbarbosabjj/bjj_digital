@@ -1359,11 +1359,11 @@ def tela_login():
                 with coly:
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("Criar Conta", key="criar_conta_btn"):
+                        if st.button("📋 Criar Conta", key="criar_conta_btn"):
                             st.session_state["modo_login"] = "cadastro"
                             st.rerun()
                     with col2:
-                        if st.button("Esqueci Senha", key="esqueci_btn"):
+                        if st.button("🔑 Esqueci Senha", key="esqueci_btn"):
                             st.session_state["modo_login"] = "recuperar"
                             st.rerun()
 
