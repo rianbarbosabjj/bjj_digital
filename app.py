@@ -1491,7 +1491,7 @@ def tela_login():
     st.session_state.setdefault("modo_login", "login")
 
     # =========================================
-    # CSS (Sem alterações)
+    # CSS
     # =========================================
     st.markdown("""
     <style>
@@ -1541,7 +1541,7 @@ def tela_login():
     """, unsafe_allow_html=True)
 
     # =========================================
-    # LOGO CENTRALIZADA (Sem alterações)
+    # LOGO CENTRALIZADA
     # =========================================
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
@@ -1559,7 +1559,7 @@ def tela_login():
     """, unsafe_allow_html=True)
 
     # =========================================
-    # BLOCO DE LOGIN (Atualizado)
+    # BLOCO DE LOGIN
     # =========================================
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
@@ -1567,6 +1567,7 @@ def tela_login():
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
+                # Campo de login que aceita usuário ou email
                 user_ou_email = st.text_input("Nome de Usuário ou Email:")
                 pwd = st.text_input("Senha:", type="password")
 
@@ -1579,6 +1580,7 @@ def tela_login():
                     else:
                         st.error("Usuário/Email ou senha incorretos. Tente novamente.")
 
+                # Botões Criar Conta / Esqueci Senha
                 colx, coly, colz = st.columns([1, 2, 1])
                 with coly:
                     col1, col2 = st.columns(2)
@@ -1591,7 +1593,7 @@ def tela_login():
                             st.session_state["modo_login"] = "recuperar"
                             st.rerun()
 
-            # Google Login (Sem alterações)
+            # Botão Google
             st.markdown("<div class='divider'>— OU —</div>", unsafe_allow_html=True)
             token = oauth_google.authorize_button(
                 name="Entrar com o Google",
@@ -1602,8 +1604,8 @@ def tela_login():
                 redirect_uri=REDIRECT_URI,
             )
             
+            # Lógica do token Google
             if token and "access_token" in token:
-                # ... (lógica do google token sem alteração) ...
                 st.session_state.token = token
                 access_token = token["access_token"]
                 headers = {"Authorization": f"Bearer {access_token}"}
@@ -1625,13 +1627,14 @@ def tela_login():
                     st.rerun()
 
         # =========================================
-        # CADASTRO (COM O DB_PATH CORRIGIDO)
+        # CADASTRO (Corrigido)
         # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             
             st.subheader("📋 Cadastro de Novo Usuário")
 
-            nome = st.text_input("Nome de Usuário (login):")
+            # Este é o campo "Usuário (login)" que você quer
+            nome = st.text_input("Nome de Usuário (login):") 
             email = st.text_input("E-mail:")
             senha = st.text_input("Senha:", type="password")
             confirmar = st.text_input("Confirmar senha:", type="password")
@@ -1656,11 +1659,8 @@ def tela_login():
                 elif senha != confirmar:
                     st.error("As senhas não coincidem.")
                 else:
-                    # ==================================================
-                    # 👈 [CORREÇÃO CRÍTICA AQUI]
-                    # Usa a variável global DB_PATH, e não "bjj_digital.db"
+                    # CORREÇÃO: Conecta no banco de dados correto
                     conn = sqlite3.connect(DB_PATH) 
-                    # ==================================================
                     cursor = conn.cursor()
                     
                     cursor.execute("SELECT id FROM usuarios WHERE nome=? OR email=?", (nome, email))
@@ -1672,7 +1672,7 @@ def tela_login():
                             hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
                             tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
 
-                            # 1. INSERE NA TABELA 'usuarios'
+                            # 1. Salva na tabela 'usuarios'
                             cursor.execute(
                                 """
                                 INSERT INTO usuarios (nome, email, tipo_usuario, senha, auth_provider, perfil_completo)
@@ -1682,7 +1682,7 @@ def tela_login():
                             )
                             novo_id = cursor.lastrowid
                             
-                            # 2. INSERE NA TABELA 'alunos' OU 'professores'
+                            # 2. Salva na tabela 'alunos' ou 'professores'
                             if tipo_db == "aluno":
                                 cursor.execute(
                                     """
@@ -1716,7 +1716,7 @@ def tela_login():
                 st.rerun()
 
         # =========================================
-        # RECUPERAÇÃO DE SENHA (Sem alterações)
+        # RECUPERAÇÃO DE SENHA
         # =========================================
         elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
@@ -1726,89 +1726,7 @@ def tela_login():
             
             if st.button("⬅️ Voltar para Login", use_container_width=True):
                 st.session_state["modo_login"] = "login"
-                st.rerun()
-
-        # =========================================
-        # RECUPERAÇÃO DE SENHA
-        # =========================================
-        elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Em breve será implementado o envio de recuperação de senha.")
-            if st.button("⬅️ Voltar para Login", use_container_width=True):
-                st.session_state["modo_login"] = "login"
-                st.rerun()
-        # =========================================
-        # CADASTRO
-        # =========================================
-        elif st.session_state["modo_login"] == "cadastro":
-            st.subheader("📋 Cadastro de Novo Usuário")
-
-            nome = st.text_input("Nome completo:")
-            email = st.text_input("E-mail:")
-            usuario = st.text_input("Usuário (login):")
-            senha = st.text_input("Senha:", type="password")
-            confirmar = st.text_input("Confirmar senha:", type="password")
-
-            tipo_usuario = st.selectbox("Tipo de Usuário:", ["Aluno", "Professor"])
-            graduacao = st.selectbox("Graduação (faixa):", [
-                "Branca", "Cinza", "Amarela", "Laranja", "Verde",
-                "Azul", "Roxa", "Marrom", "Preta"
-            ])
-            graus = st.number_input("Quantos graus possui?", 0, 6, 0) if tipo_usuario == "Professor" else 0
-
-            if st.button("Cadastrar", use_container_width=True, type="primary"):
-                if not (nome and usuario and email and senha and confirmar):
-                    st.warning("Preencha todos os campos obrigatórios.")
-                elif senha != confirmar:
-                    st.error("As senhas não coincidem.")
-                else:
-                    conn = sqlite3.connect("bjj_digital.db")
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        CREATE TABLE IF NOT EXISTS usuarios (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            nome TEXT NOT NULL,
-                            usuario TEXT UNIQUE NOT NULL,
-                            email TEXT UNIQUE,
-                            senha TEXT NOT NULL,
-                            tipo TEXT DEFAULT 'Aluno',
-                            graduacao TEXT,
-                            graus INTEGER DEFAULT 0
-                        );
-                    """)
-                    cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
-                    if cursor.fetchone():
-                        st.error("Usuário ou e-mail já cadastrado.")
-                    else:
-                        hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                        cursor.execute(
-                            "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
-                        )
-                        conn.commit()
-                        conn.close()
-                        st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
-                        st.session_state["modo_login"] = "login"
-                        st.rerun()
-
-            if st.button("⬅️ Voltar para Login", use_container_width=True, type="secondary"):
-                st.session_state["modo_login"] = "login"
-                st.rerun()
-
-        # =========================================
-        # RECUPERAÇÃO DE SENHA
-        # =========================================
-        elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Em breve será implementado o envio de recuperação de senha.")
-            if st.button("⬅️ Voltar para Login", use_container_width=True, type="secondary"):
-                st.session_state["modo_login"] = "login"
-                st.rerun()
-                
+                st.rerun()                
 def tela_completar_cadastro(user_data):
     """Exibe o formulário para novos usuários do Google completarem o perfil."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
