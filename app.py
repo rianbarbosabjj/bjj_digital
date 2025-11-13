@@ -196,24 +196,18 @@ oauth_google = OAuth2Component(
 )
 
 # 3. Autenticação local (Login/Senha)
-def autenticar_local(login, senha):
-    """Autentica o usuário pelo nome de login ou e-mail."""
+def autenticar_local(usuario, senha):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, nome, tipo_usuario, senha
-        FROM usuarios
-        WHERE (nome=? OR email=?) AND auth_provider='local'
-    """, (login, login))
+    # Busca por 'nome' (usuário) E 'local' (para não logar usuários do Google)
+    cursor.execute(
+        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE nome=? AND auth_provider='local'", 
+        (usuario,)
+    )
     dados = cursor.fetchone()
     conn.close()
-
-    if dados and dados[3]:
-        try:
-            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
-                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
-        except Exception:
-            pass
+    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
+        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
     return None
 
 # 4. Funções de busca e criação de usuário
@@ -961,45 +955,7 @@ def gestao_equipes():
             st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
-# =========================================
-# 👑 GESTÃO DE USUÁRIOS (ADMIN)
-# =========================================
-def gestao_usuarios():
-    st.markdown("<h1 style='color:#FFD700;'>👑 Gestão de Usuários</h1>", unsafe_allow_html=True)
-    st.info("Apenas administradores podem redefinir senhas de usuários. Use com responsabilidade ⚠️")
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    filtro_tipo = st.selectbox("Filtrar por tipo de usuário:", ["Todos", "admin", "professor", "aluno"])
-    if filtro_tipo == "Todos":
-        df = pd.read_sql_query("SELECT id, nome, email, tipo_usuario FROM usuarios", conn)
-    else:
-        df = pd.read_sql_query("SELECT id, nome, email, tipo_usuario FROM usuarios WHERE tipo_usuario=?", conn, params=(filtro_tipo,))
-    conn.close()
-
-    if df.empty:
-        st.warning("Nenhum usuário encontrado para este filtro.")
-        return
-
-    st.dataframe(df, use_container_width=True)
-
-    st.markdown("---")
-    st.subheader("🔄 Resetar Senha")
-
-    usuario_sel = st.selectbox("Selecione o usuário:", df["nome"].tolist())
-    nova_senha = st.text_input("Nova senha temporária:", value="nova123")
-
-    if st.button("✅ Confirmar Redefinição", use_container_width=True, type="primary"):
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        senha_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
-
-        cursor.execute("UPDATE usuarios SET senha=?, auth_provider='local' WHERE nome=?", (senha_hash, usuario_sel))
-        conn.commit()
-        conn.close()
-
-        st.success(f"A senha de **{usuario_sel}** foi redefinida com sucesso para `{nova_senha}` (o usuário deve alterá-la no próximo login).")
 # =========================================
 # 🧩 GESTÃO DE QUESTÕES (DO SEU PROJETO ORIGINAL)
 # =========================================
@@ -1386,11 +1342,11 @@ def tela_login():
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
-                login_input = st.text_input("Usuário ou E-mail:")
-                senha_input = st.text_input("Senha:", type="password")
+                user = st.text_input("Usuário:")
+                pwd = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    u = autenticar_local(login_input.strip(), senha_input.strip())
+                    u = autenticar_local(user.strip(), pwd.strip())
                     if u:
                         st.session_state.usuario = u
                         st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
@@ -1403,11 +1359,11 @@ def tela_login():
                 with coly:
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("Criar Conta", key="criar_conta_btn"):
+                        if st.button("📋 Criar Conta", key="criar_conta_btn"):
                             st.session_state["modo_login"] = "cadastro"
                             st.rerun()
                     with col2:
-                        if st.button("Esqueci Senha", key="esqueci_btn"):
+                        if st.button("🔑 Esqueci Senha", key="esqueci_btn"):
                             st.session_state["modo_login"] = "recuperar"
                             st.rerun()
 
@@ -1452,14 +1408,14 @@ def tela_login():
                     st.rerun()
 
         # =========================================
-        # CADASTRO INTEGRADO AO BANCO OFICIAL
+        # CADASTRO
         # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             st.subheader("📋 Cadastro de Novo Usuário")
 
-            nome_login = st.text_input("Usuário (login):")
-            nome_completo = st.text_input("Nome completo:")
+            nome = st.text_input("Nome completo:")
             email = st.text_input("E-mail:")
+            usuario = st.text_input("Usuário (login):")
             senha = st.text_input("Senha:", type="password")
             confirmar = st.text_input("Confirmar senha:", type="password")
 
@@ -1471,40 +1427,36 @@ def tela_login():
             graus = st.number_input("Quantos graus possui?", 0, 6, 0) if tipo_usuario == "Professor" else 0
 
             if st.button("Cadastrar", use_container_width=True, type="primary"):
-                if not (nome_login and nome_completo and email and senha and confirmar):
+                if not (nome and usuario and email and senha and confirmar):
                     st.warning("Preencha todos os campos obrigatórios.")
                 elif senha != confirmar:
                     st.error("As senhas não coincidem.")
                 else:
-                    conn = sqlite3.connect(DB_PATH)
+                    conn = sqlite3.connect("bjj_digital.db")
                     cursor = conn.cursor()
-
-                    cursor.execute("SELECT id FROM usuarios WHERE email=? OR nome=?", (email, nome_login))
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS usuarios (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            nome TEXT NOT NULL,
+                            usuario TEXT UNIQUE NOT NULL,
+                            email TEXT UNIQUE,
+                            senha TEXT NOT NULL,
+                            tipo TEXT DEFAULT 'Aluno',
+                            graduacao TEXT,
+                            graus INTEGER DEFAULT 0
+                        );
+                    """)
+                    cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
                     if cursor.fetchone():
                         st.error("Usuário ou e-mail já cadastrado.")
                     else:
-                        senha_hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                        cursor.execute("""
-                            INSERT INTO usuarios (nome, email, tipo_usuario, senha, auth_provider, perfil_completo)
-                            VALUES (?, ?, ?, ?, 'local', 1)
-                        """, (nome_login, email, tipo_usuario.lower(), senha_hash))
-                        usuario_id = cursor.lastrowid
-
-                        # Cria entrada adicional na tabela 'alunos' ou 'professores'
-                        if tipo_usuario == "Aluno":
-                            cursor.execute("""
-                                INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo)
-                                VALUES (?, ?, 'ativo')
-                            """, (usuario_id, graduacao))
-                        else:
-                            cursor.execute("""
-                                INSERT INTO professores (usuario_id, pode_aprovar, eh_responsavel, status_vinculo)
-                                VALUES (?, 0, 0, 'ativo')
-                            """, (usuario_id,))
-
+                        hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                        cursor.execute(
+                            "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
+                        )
                         conn.commit()
                         conn.close()
-
                         st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
                         st.session_state["modo_login"] = "login"
                         st.rerun()
@@ -1522,6 +1474,75 @@ def tela_login():
             if st.button("Enviar Instruções", use_container_width=True, type="primary"):
                 st.info("Em breve será implementado o envio de recuperação de senha.")
             if st.button("⬅️ Voltar para Login", use_container_width=True):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
+        # =========================================
+        # CADASTRO
+        # =========================================
+        elif st.session_state["modo_login"] == "cadastro":
+            st.subheader("📋 Cadastro de Novo Usuário")
+
+            nome = st.text_input("Nome completo:")
+            email = st.text_input("E-mail:")
+            usuario = st.text_input("Usuário (login):")
+            senha = st.text_input("Senha:", type="password")
+            confirmar = st.text_input("Confirmar senha:", type="password")
+
+            tipo_usuario = st.selectbox("Tipo de Usuário:", ["Aluno", "Professor"])
+            graduacao = st.selectbox("Graduação (faixa):", [
+                "Branca", "Cinza", "Amarela", "Laranja", "Verde",
+                "Azul", "Roxa", "Marrom", "Preta"
+            ])
+            graus = st.number_input("Quantos graus possui?", 0, 6, 0) if tipo_usuario == "Professor" else 0
+
+            if st.button("Cadastrar", use_container_width=True, type="primary"):
+                if not (nome and usuario and email and senha and confirmar):
+                    st.warning("Preencha todos os campos obrigatórios.")
+                elif senha != confirmar:
+                    st.error("As senhas não coincidem.")
+                else:
+                    conn = sqlite3.connect("bjj_digital.db")
+                    cursor = conn.cursor()
+                    cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS usuarios (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            nome TEXT NOT NULL,
+                            usuario TEXT UNIQUE NOT NULL,
+                            email TEXT UNIQUE,
+                            senha TEXT NOT NULL,
+                            tipo TEXT DEFAULT 'Aluno',
+                            graduacao TEXT,
+                            graus INTEGER DEFAULT 0
+                        );
+                    """)
+                    cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
+                    if cursor.fetchone():
+                        st.error("Usuário ou e-mail já cadastrado.")
+                    else:
+                        hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                        cursor.execute(
+                            "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
+                        )
+                        conn.commit()
+                        conn.close()
+                        st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
+                        st.session_state["modo_login"] = "login"
+                        st.rerun()
+
+            if st.button("⬅️ Voltar para Login", use_container_width=True, type="secondary"):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
+
+        # =========================================
+        # RECUPERAÇÃO DE SENHA
+        # =========================================
+        elif st.session_state["modo_login"] == "recuperar":
+            st.subheader("🔑 Recuperar Senha")
+            email = st.text_input("Digite o e-mail cadastrado:")
+            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                st.info("Em breve será implementado o envio de recuperação de senha.")
+            if st.button("⬅️ Voltar para Login", use_container_width=True, type="secondary"):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
                 
@@ -1596,98 +1617,97 @@ def tela_completar_cadastro(user_data):
 
 
 def app_principal():
-    """Função principal do aplicativo BJJ Digital (menu e roteamento de páginas)."""
-
-    # ==============================
-    # Cabeçalho e informações do usuário
-    # ==============================
-    st.sidebar.image("assets/logo.png", width=120)
+    """Função 'main' refatorada - executa o app principal quando logado."""
     usuario_logado = st.session_state.usuario
-    tipo_usuario = usuario_logado.get("tipo", "")
-    nome_usuario = usuario_logado.get("nome", "Usuário")
+    if not usuario_logado:
+        st.error("Sessão expirada. Faça login novamente.")
+        st.session_state.usuario = None
+        st.rerun()
 
-    st.sidebar.markdown(f"👋 **Olá, {nome_usuario.title()}!**")
+    tipo_usuario = usuario_logado["tipo"]
 
-    # ==============================
-    # Definição de opções do menu
-    # ==============================
-    if tipo_usuario in ["admin", "professor"]:
-        opcoes = [
-            "Início", "Modo Rola", "Exame de Faixa", "Ranking",
-            "Painel do Professor", "Gestão de Questões",
-            "Gestão de Equipes", "Gestão de Exame"
-        ]
-        icons = [
-            "house-fill", "people-fill", "journal-check", "trophy-fill",
-            "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"
-        ]
-
-        # Aba extra para administradores
-        if tipo_usuario == "admin":
-            opcoes.append("Gestão de Usuários")
-            icons.append("person-fill-gear")
-
-    else:
-        opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
-        icons = ["house-fill", "people-fill", "journal-check", "trophy-fill"]
-
-    # ==============================
-    # MENU LATERAL
-    # ==============================
-    menu = option_menu(
-        menu_title=None,
-        options=opcoes,
-        icons=icons,
-        orientation="horizontal",
+    # --- Sidebar (Info e Logout) ---
+    st.sidebar.image("assets/logo.png", use_container_width=True)
+    st.sidebar.markdown(
+        f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
+        unsafe_allow_html=True,
     )
+    st.sidebar.markdown(
+        f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>",
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Sair", use_container_width=True):
+        st.session_state.usuario = None
+        st.session_state.pop("menu_selection", None)
+        # Limpa token do Google (se existir)
+        st.session_state.pop("token", None) 
+        st.session_state.pop("registration_pending", None) 
+        st.rerun()
 
-    # ==============================
-    # Roteamento das Páginas
-    # ==============================
+    # =========================================
+    # Menu dinâmico (Horizontal)
+    # =========================================
+    if "menu_selection" not in st.session_state:
+        st.session_state.menu_selection = "Início"
+
+    # Define opções e ícones com base no perfil
+    if tipo_usuario in ["admin", "professor"]:
+        opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+        icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+    else: # aluno
+        opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
+        icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
+        # Checa se exame está habilitado
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+        dado = cursor.fetchone()
+        conn.close()
+        if dado and dado[0] == 1:
+            opcoes.insert(2, "Exame de Faixa")
+            icons.insert(2, "journal-check")
+    
+    # [Lógica do menu (sem alteração)]
+    if st.session_state.menu_selection != "Início":
+        menu = option_menu(
+            menu_title=None,
+            options=opcoes,
+            icons=icons,
+            key="menu_selection",
+            orientation="horizontal",
+            styles={
+                "container": {"padding": "0!importan", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
+                "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
+                "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
+                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
+            }
+        )
+    else:
+        menu = "Início"
+
+    # =========================================
+    # Navegação entre módulos (Roteamento)
+    # =========================================
     if menu == "Início":
         tela_inicio()
-
     elif menu == "Modo Rola":
-        modo_rola()
-
+        modo_rola(usuario_logado)
     elif menu == "Exame de Faixa":
-        exame_de_faixa()
-
+        exame_de_faixa(usuario_logado)
     elif menu == "Ranking":
         ranking()
-
     elif menu == "Painel do Professor":
-        if tipo_usuario in ["admin", "professor"]:
-            painel_professor()
-        else:
-            st.error("Acesso restrito a professores e administradores.")
-
-    elif menu == "Gestão de Questões":
-        if tipo_usuario in ["admin", "professor"]:
-            gestao_questoes()
-        else:
-            st.error("Acesso restrito a professores e administradores.")
-
+        painel_professor()
     elif menu == "Gestão de Equipes":
-        if tipo_usuario in ["admin", "professor"]:
-            gestao_equipes()
-        else:
-            st.error("Acesso restrito a professores e administradores.")
-
+        gestao_equipes()
+    elif menu == "Gestão de Questões":
+        gestao_questoes()
     elif menu == "Gestão de Exame":
-        if tipo_usuario in ["admin", "professor"]:
-            gestao_exame()
-        else:
-            st.error("Acesso restrito a professores e administradores.")
+        gestao_exame_de_faixa()
+    elif menu == "Meus Certificados":
+        meus_certificados(usuario_logado)
 
-    elif menu == "Gestão de Usuários":
-        if tipo_usuario == "admin":
-            gestao_usuarios()
-        else:
-            st.error("Acesso restrito. Apenas administradores podem acessar esta seção.")
-
-    else:
-        st.warning("Selecione uma opção válida no menu.")
 # =========================================
 # EXECUÇÃO PRINCIPAL (ROTEADOR)
 # =========================================
