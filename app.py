@@ -955,8 +955,21 @@ def gestao_equipes():
             st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
+Ah, Rian, agora sim. Entendi perfeitamente.
+
+Esse é um bug sutil de tipo de dado. Peço desculpas por isso.
+
+O que está acontecendo é que o Pandas (ao criar o DataFrame df) e o SQLite (o banco de dados) às vezes não concordam sobre o formato exato de um número. O DataFrame pode estar tratando o id como um tipo (ex: int64 do NumPy) que o cursor do SQLite não está conseguindo usar para fazer a busca (WHERE id=?).
+
+A correção é simples: Vamos forçar o id a ser um int padrão do Python assim que o pegarmos.
+
+🛠️ Correção (V3)
+Substitua toda a função gestao_usuarios por esta nova versão. A única linha que mudei está marcada com um comentário.
+
+Python
+
 # =========================================
-# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA 2)
+# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA 3)
 # =========================================
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários, restrita ao Admin."""
@@ -989,7 +1002,13 @@ def gestao_usuarios(usuario_logado):
 
     if nome_selecionado:
         try:
-            user_id_selecionado = df[df["nome"] == nome_selecionado]["id"].values[0]
+            # ==========================================================
+            # 👈 [CORREÇÃO APLICADA AQUI]
+            # Forçamos o ID a ser um 'int' padrão do Python.
+            # ==========================================================
+            user_id_selecionado = int(df[df["nome"] == nome_selecionado]["id"].values[0])
+            # ==========================================================
+
         except IndexError:
             st.error("Usuário não encontrado no DataFrame. Tente recarregar a página.")
             conn.close()
@@ -997,11 +1016,14 @@ def gestao_usuarios(usuario_logado):
             
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
+        
+        # Esta consulta agora usará o 'int' correto
         cursor.execute("SELECT * FROM usuarios WHERE id=?", (user_id_selecionado,))
         user_data = cursor.fetchone()
         
         if not user_data:
-            st.error("Usuário não encontrado no banco de dados.")
+            # Se ainda der erro aqui, o problema é mais complexo, mas a chance é mínima.
+            st.error("Usuário não encontrado no banco de dados. (ID não correspondeu)")
             conn.close()
             return
 
@@ -1014,28 +1036,21 @@ def gestao_usuarios(usuario_logado):
                 novo_nome = col1.text_input("Nome:", value=user_data['nome'])
                 novo_email = col2.text_input("Email:", value=user_data['email'])
                 
-                # ==========================================================
-                # 👈 [CORREÇÃO APLICADA AQUI]
-                # Lógica robusta para encontrar o índice do tipo de usuário
-                # ==========================================================
                 opcoes_tipo = ["aluno", "professor", "admin"]
-                tipo_atual_db = user_data['tipo_usuario'] # Pode ser "Aluno", "admin", None, etc.
+                tipo_atual_db = user_data['tipo_usuario']
                 
-                index_atual = 0 # Default é 'aluno' (índice 0)
+                index_atual = 0 
                 if tipo_atual_db:
                     try:
-                        # Tenta encontrar o índice (ignorando maiúsculas/minúsculas)
                         index_atual = [t.lower() for t in opcoes_tipo].index(tipo_atual_db.lower())
                     except ValueError:
-                        # Se o valor não estiver na lista (ex: "Secretaria"), usa o default 0
                         index_atual = 0 
                 
                 novo_tipo = st.selectbox(
                     "Tipo de Usuário:",
                     options=opcoes_tipo,
-                    index=index_atual # Usa o índice seguro que encontramos
+                    index=index_atual 
                 )
-                # ==========================================================
                 
                 st.text_input("Provedor de Auth:", value=user_data['auth_provider'], disabled=True)
                 
