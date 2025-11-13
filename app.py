@@ -1226,6 +1226,101 @@ def tela_inicio():
 # =========================================
 # 🥋 GESTÃO DE EXAME DE FAIXA (DO SEU PROJETO ORIGINAL)
 # =========================================
+# =========================================
+# 👤 MEU PERFIL (NOVO)
+# =========================================
+def tela_meu_perfil(usuario_logado):
+    """Página para o usuário editar seu próprio perfil e senha."""
+    
+    st.markdown("<h1 style='color:#FFD700;'>👤 Meu Perfil</h1>", unsafe_allow_html=True)
+    st.markdown("Atualize suas informações pessoais e gerencie sua senha de acesso.")
+
+    user_id_logado = usuario_logado["id"]
+    
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    # 1. Busca os dados mais recentes do usuário no banco
+    cursor.execute("SELECT * FROM usuarios WHERE id=?", (user_id_logado,))
+    user_data = cursor.fetchone()
+    
+    if not user_data:
+        st.error("Erro: Não foi possível carregar os dados do seu perfil.")
+        conn.close()
+        return
+
+    # --- Expander 1: Informações Pessoais ---
+    with st.expander("📝 Informações Pessoais", expanded=True):
+        with st.form(key="form_edit_perfil"):
+            st.markdown("#### Editar Informações")
+            
+            novo_nome = st.text_input("Nome de Usuário:", value=user_data['nome'])
+            novo_email = st.text_input("Email:", value=user_data['email'])
+            
+            st.text_input("Tipo de Perfil:", value=user_data['tipo_usuario'].capitalize(), disabled=True)
+            
+            submitted_info = st.form_submit_button("💾 Salvar Alterações", use_container_width=True)
+            
+            if submitted_info:
+                if not novo_nome or not novo_email:
+                    st.warning("Nome e Email são obrigatórios.")
+                else:
+                    try:
+                        cursor.execute(
+                            "UPDATE usuarios SET nome=?, email=? WHERE id=?",
+                            (novo_nome, novo_email, user_id_logado)
+                        )
+                        conn.commit()
+                        st.success("Dados atualizados com sucesso!")
+                        
+                        # ATUALIZA A SESSÃO para refletir o novo nome
+                        st.session_state.usuario['nome'] = novo_nome
+                        st.rerun() # Recarrega a página
+                        
+                    except sqlite3.IntegrityError:
+                        st.error(f"Erro: O email '{novo_email}' já está em uso por outro usuário.")
+                    except Exception as e:
+                        st.error(f"Ocorreu um erro: {e}")
+
+    # --- Expander 2: Alteração de Senha (Somente para 'local') ---
+    if user_data['auth_provider'] == 'local':
+        with st.expander("🔑 Alterar Senha", expanded=False):
+            with st.form(key="form_change_pass"):
+                st.markdown("#### Redefinir Senha")
+                
+                senha_atual = st.text_input("Senha Atual:", type="password")
+                nova_senha = st.text_input("Nova Senha:", type="password")
+                confirmar_senha = st.text_input("Confirmar Nova Senha:", type="password")
+                
+                submitted_pass = st.form_submit_button("🔑 Alterar Senha", use_container_width=True)
+                
+                if submitted_pass:
+                    if not senha_atual or not nova_senha or not confirmar_senha:
+                        st.warning("Por favor, preencha todos os campos de senha.")
+                    elif nova_senha != confirmar_senha:
+                        st.error("As novas senhas não coincidem.")
+                    else:
+                        # Verifica a senha atual
+                        hash_atual_db = user_data['senha']
+                        if bcrypt.checkpw(senha_atual.encode(), hash_atual_db.encode()):
+                            # Se a senha atual estiver correta, atualiza
+                            novo_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+                            cursor.execute(
+                                "UPDATE usuarios SET senha=? WHERE id=?",
+                                (novo_hash, user_id_logado)
+                            )
+                            conn.commit()
+                            st.success("Senha alterada com sucesso!")
+                        else:
+                            st.error("A 'Senha Atual' está incorreta.")
+    else:
+        # Mostra esta mensagem para usuários do Google
+        st.info(f"Seu login é gerenciado pelo **{user_data['auth_provider'].capitalize()}**. Para alterar sua senha, você deve fazê-lo diretamente na sua conta Google.")
+
+    conn.close()
+
+
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>🥋 Gestão de Exame de Faixa</h1>", unsafe_allow_html=True)
 
@@ -1761,7 +1856,11 @@ def app_principal():
 
     tipo_usuario = usuario_logado["tipo"]
 
-    # [Sem alterações aqui - Sidebar]
+    # --- 1. Callback para os botões da Sidebar ---
+    def navigate_to_sidebar(page):
+        st.session_state.menu_selection = page
+
+    # --- Sidebar (Atualizada) ---
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown(
         f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
@@ -1771,6 +1870,15 @@ def app_principal():
         f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>",
         unsafe_allow_html=True,
     )
+    
+    # --- 2. NOVO BOTÃO DE PERFIL ---
+    st.sidebar.button(
+        "👤 Meu Perfil", 
+        on_click=navigate_to_sidebar, 
+        args=("Meu Perfil",), 
+        use_container_width=True
+    )
+
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair", use_container_width=True):
         st.session_state.usuario = None
@@ -1780,41 +1888,56 @@ def app_principal():
         st.rerun()
 
     # =========================================
-    # Menu dinâmico (Horizontal)
+    # --- 3. LÓGICA DE ROTA (Atualizada) ---
+    # Verifica se deve mostrar o Perfil ou o Menu Principal
     # =========================================
+    
     if "menu_selection" not in st.session_state:
         st.session_state.menu_selection = "Início"
 
-    # Define opções e ícones com base no perfil
-    if tipo_usuario in ["admin", "professor"]:
-        opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-        icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+    # --- ROTA 1: MOSTRAR TELA "MEU PERFIL" ---
+    if st.session_state.menu_selection == "Meu Perfil":
         
-        # 👈 [ALTERAÇÃO 1: ADICIONAR O MENU SOMENTE PARA ADMIN]
-        if tipo_usuario == "admin":
-            opcoes.append("Gestão de Usuários")
-            icons.append("key-fill") # Adiciona o ícone
+        # Mostra a tela de perfil
+        tela_meu_perfil(usuario_logado)
+        
+        # Adiciona um botão para voltar ao início
+        if st.button("⬅️ Voltar ao Início", use_container_width=True):
+            navigate_to_sidebar("Início")
+            st.rerun()
+            
+    # --- ROTA 2: MOSTRAR MENU PRINCIPAL E TELAS NORMAIS ---
+    else:
+        # Define opções e ícones (REMOVEMOS "MEU PERFIL" DAQUI)
+        if tipo_usuario in ["admin", "professor"]:
+            opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+            icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+            
+            if tipo_usuario == "admin":
+                opcoes.append("Gestão de Usuários")
+                icons.append("key-fill")
 
-    else: # aluno
-        opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
-        icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
-        # [Sem alterações aqui - Lógica do exame do aluno]
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
-        dado = cursor.fetchone()
-        conn.close()
-        if dado and dado[0] == 1:
-            opcoes.insert(2, "Exame de Faixa")
-            icons.insert(2, "journal-check")
-    
-    # [Sem alterações aqui - Lógica do option_menu]
-    if st.session_state.menu_selection != "Início":
+        else: # aluno
+            opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
+            icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
+            
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+            dado = cursor.fetchone()
+            conn.close()
+            
+            if dado and dado[0] == 1:
+                # --- 4. Índice de inserção corrigido (de 3 para 2) ---
+                opcoes.insert(2, "Exame de Faixa")
+                icons.insert(2, "journal-check")
+        
+        # Desenha o option_menu
         menu = option_menu(
             menu_title=None,
             options=opcoes,
             icons=icons,
-            key="menu_selection",
+            key="menu_selection", # Esta chave controla o estado
             orientation="horizontal",
             styles={
                 "container": {"padding": "0!importan", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
@@ -1823,34 +1946,28 @@ def app_principal():
                 "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
             }
         )
-    else:
-        menu = "Início"
 
-    # =========================================
-    # Navegação entre módulos (Roteamento)
-    # =========================================
-    if menu == "Início":
-        tela_inicio()
-    elif menu == "Modo Rola":
-        modo_rola(usuario_logado)
-    elif menu == "Exame de Faixa":
-        exame_de_faixa(usuario_logado)
-    elif menu == "Ranking":
-        ranking()
-    elif menu == "Painel do Professor":
-        painel_professor()
-    elif menu == "Gestão de Equipes":
-        gestao_equipes()
-    elif menu == "Gestão de Questões":
-        gestao_questoes()
-    elif menu == "Gestão de Exame":
-        gestao_exame_de_faixa()
-    elif menu == "Meus Certificados":
-        meus_certificados(usuario_logado)
-    
-    # 👈 [ALTERAÇÃO 2: ADICIONAR A ROTA PARA A NOVA FUNÇÃO]
-    elif menu == "Gestão de Usuários":
-        gestao_usuarios(usuario_logado) # Chama a nova função
+        # Roteamento Padrão (REMOVEMOS "MEU PERFIL" DAQUI)
+        if menu == "Início":
+            tela_inicio()
+        elif menu == "Modo Rola":
+            modo_rola(usuario_logado)
+        elif menu == "Exame de Faixa":
+            exame_de_faixa(usuario_logado)
+        elif menu == "Ranking":
+            ranking()
+        elif menu == "Painel do Professor":
+            painel_professor()
+        elif menu == "Gestão de Equipes":
+            gestao_equipes()
+        elif menu == "Gestão de Questões":
+            gestao_questoes()
+        elif menu == "Gestão de Exame":
+            gestao_exame_de_faixa()
+        elif menu == "Meus Certificados":
+            meus_certificados(usuario_logado)
+        elif menu == "Gestão de Usuários":
+            gestao_usuarios(usuario_logado)
         
 # =========================================
 # EXECUÇÃO PRINCIPAL (ROTEADOR)
