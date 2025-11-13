@@ -1261,36 +1261,40 @@ def tela_login():
     st.session_state.setdefault("modo_login", "login")
 
     # =========================================
-    # CSS para centralizar tudo e remover rolagem
+    # CSS AJUSTADO — layout centralizado e sem overflow
     # =========================================
     st.markdown("""
     <style>
-        /* Remove rolagem vertical e centraliza tudo */
-        html, body, [data-testid="stAppViewContainer"], [data-testid="stVerticalBlock"] {
-            height: 100vh !important;
-            overflow: hidden !important;
+        /* Centraliza verticalmente o conteúdo, mas permite leve scroll em telas menores */
+        html, body, [data-testid="stAppViewContainer"] {
+            height: 100%;
+            overflow-y: auto;
         }
+
+        /* Centralização suave */
         [data-testid="stAppViewContainer"] > .main {
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            height: 100vh;
-            padding: 0;
+            min-height: 95vh;
+            padding-top: 20px;
         }
-        /* Caixa de login */
+
+        /* Caixa do login */
         div[data-testid="stContainer"] > div[style*="border"] {
-            margin: auto !important;
-            max-width: 400px;
-            background-color: #0c241e;
-            border: 1px solid #078B6C;
-            border-radius: 12px;
-            padding: 20px 30px !important;
+            background-color: #0c241e !important;
+            border: 1px solid #078B6C !important;
+            border-radius: 12px !important;
+            padding: 25px 30px !important;
+            max-width: 400px !important;
+            margin: 0 auto !important;
         }
+
         /* Botões secundários discretos */
         .stButton > button[kind="secondary"] {
             background: none !important;
-            color: #ccc !important;
+            color: #aaa !important;
             font-size: 13px !important;
             border: none !important;
             padding: 0 !important;
@@ -1299,6 +1303,21 @@ def tela_login():
         .stButton > button[kind="secondary"]:hover {
             color: #FFD770 !important;
             text-decoration: underline;
+        }
+
+        /* Divisor 'ou' */
+        .divider {
+            text-align: center;
+            color: gray;
+            font-size: 13px;
+            margin: 10px 0;
+        }
+
+        /* Responsividade */
+        @media (max-height: 700px) {
+            [data-testid="stAppViewContainer"] > .main {
+                padding-top: 40px;
+            }
         }
     </style>
     """, unsafe_allow_html=True)
@@ -1310,33 +1329,38 @@ def tela_login():
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             logo_base64 = base64.b64encode(f.read()).decode()
-        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:150px;height:auto;margin-bottom:5px;'/>"
+        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:140px;height:auto;margin-bottom:5px;'/>"
     else:
         logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
 
     st.markdown(f"""
-        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-40px;'>
+        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-20px;'>
             {logo_html}
             <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
         </div>
     """, unsafe_allow_html=True)
 
     # =========================================
-    # BLOCO DE LOGIN / CADASTRO / RECUPERAÇÃO
+    # BLOCO DE LOGIN
     # =========================================
     c1, c2, c3 = st.columns([1, 1.5, 1])
-
     with c2:
-        # --- LOGIN LOCAL ---
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 user = st.text_input("Usuário:")
                 pwd = st.text_input("Senha:", type="password")
 
-                st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary")
+                if st.button("Entrar", use_container_width=True, key="entrar_btn"):
+                    u = autenticar_local(user.strip(), pwd.strip())
+                    if u:
+                        st.session_state.usuario = u
+                        st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
+                        st.rerun()
+                    else:
+                        st.error("Usuário ou senha incorretos. Tente novamente.")
 
-                # 🔹 Botões discretos abaixo do botão Entrar
+                # Botões discretos abaixo do botão Entrar
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("🆕 Criar Conta", key="criar_conta_btn", type="secondary"):
@@ -1347,14 +1371,11 @@ def tela_login():
                         st.session_state["modo_login"] = "recuperar"
                         st.rerun()
 
-            # 🔸 Separador “ou”
-            st.markdown(
-                "<p style='text-align:center; color:gray; font-size:13px; margin:10px;'>— OU —</p>",
-                unsafe_allow_html=True
-            )
+            # Divisor “OU”
+            st.markdown("<div class='divider'>— OU —</div>", unsafe_allow_html=True)
 
-            # --- LOGIN GOOGLE ---
-            oauth_google.authorize_button(
+            # ✅ Botão Google sempre visível e ajustado
+            token = oauth_google.authorize_button(
                 name="Entrar com o Google",
                 icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
                 use_container_width=True,
@@ -1363,7 +1384,37 @@ def tela_login():
                 redirect_uri=REDIRECT_URI,
             )
 
-        # --- CADASTRO ---
+            # Verificação do token Google
+            if token and "access_token" in token:
+                st.session_state.token = token
+                access_token = token["access_token"]
+                headers = {"Authorization": f"Bearer {access_token}"}
+
+                try:
+                    resp = requests.get(
+                        "https://www.googleapis.com/oauth2/v3/userinfo",
+                        headers=headers,
+                        timeout=5
+                    )
+                    resp.raise_for_status()
+                    info = resp.json()
+                    email, nome = info.get("email"), info.get("name")
+                except Exception as e:
+                    st.error(f"Erro ao autenticar com Google: {e}")
+                    email, nome = None, None
+
+                if email:
+                    usuario_db = buscar_usuario_por_email(email)
+                    if usuario_db:
+                        st.session_state.usuario = usuario_db
+                    else:
+                        novo = criar_usuario_parcial_google(email, nome)
+                        st.session_state.registration_pending = novo
+                    st.rerun()
+
+        # =========================================
+        # CADASTRO
+        # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             st.subheader("📋 Cadastro de Novo Usuário")
 
@@ -1419,7 +1470,9 @@ def tela_login():
                 st.session_state["modo_login"] = "login"
                 st.rerun()
 
-        # --- RECUPERAÇÃO ---
+        # =========================================
+        # RECUPERAÇÃO DE SENHA
+        # =========================================
         elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
             email = st.text_input("Digite o e-mail cadastrado:")
