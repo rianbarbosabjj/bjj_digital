@@ -1596,89 +1596,54 @@ def tela_completar_cadastro(user_data):
 
 
 def app_principal():
-    """Função 'main' refatorada - executa o app principal quando logado."""
+    """Função principal do aplicativo BJJ Digital (menu e roteamento de páginas)."""
+
+    # ==============================
+    # Cabeçalho e informações do usuário
+    # ==============================
+    st.sidebar.image("assets/logo.png", width=120)
     usuario_logado = st.session_state.usuario
-    if not usuario_logado:
-        st.error("Sessão expirada. Faça login novamente.")
-        st.session_state.usuario = None
-        st.rerun()
+    tipo_usuario = usuario_logado.get("tipo", "")
+    nome_usuario = usuario_logado.get("nome", "Usuário")
 
-    tipo_usuario = usuario_logado["tipo"]
+    st.sidebar.markdown(f"👋 **Olá, {nome_usuario.title()}!**")
 
-    # --- Sidebar (Info e Logout) ---
-    st.sidebar.image("assets/logo.png", use_container_width=True)
-    st.sidebar.markdown(
-        f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
-        unsafe_allow_html=True,
-    )
-    st.sidebar.markdown(
-        f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>",
-        unsafe_allow_html=True,
-    )
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Sair", use_container_width=True):
-        st.session_state.usuario = None
-        st.session_state.pop("menu_selection", None)
-        # Limpa token do Google (se existir)
-        st.session_state.pop("token", None) 
-        st.session_state.pop("registration_pending", None) 
-        st.rerun()
+    # ==============================
+    # Definição de opções do menu
+    # ==============================
+    if tipo_usuario in ["admin", "professor"]:
+        opcoes = [
+            "Início", "Modo Rola", "Exame de Faixa", "Ranking",
+            "Painel do Professor", "Gestão de Questões",
+            "Gestão de Equipes", "Gestão de Exame"
+        ]
+        icons = [
+            "house-fill", "people-fill", "journal-check", "trophy-fill",
+            "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"
+        ]
 
-    # =========================================
-    # Menu dinâmico (Horizontal)
-    # =========================================
-    if "menu_selection" not in st.session_state:
-        st.session_state.menu_selection = "Início"
+        # Aba extra para administradores
+        if tipo_usuario == "admin":
+            opcoes.append("Gestão de Usuários")
+            icons.append("person-fill-gear")
 
-    # Define opções e ícones com base no perfil
-if tipo_usuario in ["admin", "professor"]:
-    opcoes = [
-        "Início", "Modo Rola", "Exame de Faixa", "Ranking",
-        "Painel do Professor", "Gestão de Questões", "Gestão de Equipes",
-        "Gestão de Exame"
-    ]
-    icons = [
-        "house-fill", "people-fill", "journal-check", "trophy-fill",
-        "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"
-    ]
-
-    if tipo_usuario == "admin":
-        opcoes.append("Gestão de Usuários")
-        icons.append("person-fill-gear")
-    else: # aluno
-        opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
-        icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
-        # Checa se exame está habilitado
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
-        dado = cursor.fetchone()
-        conn.close()
-        if dado and dado[0] == 1:
-            opcoes.insert(2, "Exame de Faixa")
-            icons.insert(2, "journal-check")
-    
-    # [Lógica do menu (sem alteração)]
-    if st.session_state.menu_selection != "Início":
-        menu = option_menu(
-            menu_title=None,
-            options=opcoes,
-            icons=icons,
-            key="menu_selection",
-            orientation="horizontal",
-            styles={
-                "container": {"padding": "0!importan", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
-                "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
-                "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
-                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
-            }
-        )
     else:
-        menu = "Início"
+        opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
+        icons = ["house-fill", "people-fill", "journal-check", "trophy-fill"]
 
-    # =========================================
-    # Roteamento de Páginas do App
-    # =========================================
+    # ==============================
+    # MENU LATERAL
+    # ==============================
+    menu = option_menu(
+        menu_title=None,
+        options=opcoes,
+        icons=icons,
+        orientation="horizontal",
+    )
+
+    # ==============================
+    # Roteamento das Páginas
+    # ==============================
     if menu == "Início":
         pagina_inicial()
 
@@ -1721,6 +1686,8 @@ if tipo_usuario in ["admin", "professor"]:
         else:
             st.error("Acesso restrito. Apenas administradores podem acessar esta seção.")
 
+    else:
+        st.warning("Selecione uma opção válida no menu.")
 # =========================================
 # EXECUÇÃO PRINCIPAL (ROTEADOR)
 # =========================================
