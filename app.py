@@ -196,18 +196,24 @@ oauth_google = OAuth2Component(
 )
 
 # 3. Autenticação local (Login/Senha)
-def autenticar_local(usuario, senha):
+def autenticar_local(login, senha):
+    """Autentica o usuário pelo nome de login ou e-mail."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # Busca por 'nome' (usuário) E 'local' (para não logar usuários do Google)
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE nome=? AND auth_provider='local'", 
-        (usuario,)
-    )
+    cursor.execute("""
+        SELECT id, nome, tipo_usuario, senha
+        FROM usuarios
+        WHERE (nome=? OR email=?) AND auth_provider='local'
+    """, (login, login))
     dados = cursor.fetchone()
     conn.close()
-    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
-        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+
+    if dados and dados[3]:
+        try:
+            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
+                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+        except Exception:
+            pass
     return None
 
 # 4. Funções de busca e criação de usuário
@@ -1342,11 +1348,11 @@ def tela_login():
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
-                user = st.text_input("Usuário ou E-mail:")
-                pwd = st.text_input("Senha:", type="password")
+                login_input = st.text_input("Usuário ou E-mail:")
+                senha_input = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    u = autenticar_local(user.strip(), pwd.strip())
+                    u = autenticar_local(login_input.strip(), senha_input.strip())
                     if u:
                         st.session_state.usuario = u
                         st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
@@ -1413,9 +1419,9 @@ def tela_login():
         elif st.session_state["modo_login"] == "cadastro":
             st.subheader("📋 Cadastro de Novo Usuário")
 
-            nome = st.text_input("Nome completo:")
+            nome_login = st.text_input("Usuário (login):")
+            nome_completo = st.text_input("Nome completo:")
             email = st.text_input("E-mail:")
-            usuario = st.text_input("Usuário (login):")
             senha = st.text_input("Senha:", type="password")
             confirmar = st.text_input("Confirmar senha:", type="password")
 
@@ -1427,7 +1433,7 @@ def tela_login():
             graus = st.number_input("Quantos graus possui?", 0, 6, 0) if tipo_usuario == "Professor" else 0
 
             if st.button("Cadastrar", use_container_width=True, type="primary"):
-                if not (nome and usuario and email and senha and confirmar):
+                if not (nome_login and nome_completo and email and senha and confirmar):
                     st.warning("Preencha todos os campos obrigatórios.")
                 elif senha != confirmar:
                     st.error("As senhas não coincidem.")
@@ -1435,8 +1441,7 @@ def tela_login():
                     conn = sqlite3.connect(DB_PATH)
                     cursor = conn.cursor()
 
-                    # Verifica se já existe e-mail ou nome de usuário
-                    cursor.execute("SELECT id FROM usuarios WHERE email=? OR nome=?", (email, usuario))
+                    cursor.execute("SELECT id FROM usuarios WHERE email=? OR nome=?", (email, nome_login))
                     if cursor.fetchone():
                         st.error("Usuário ou e-mail já cadastrado.")
                     else:
@@ -1444,7 +1449,7 @@ def tela_login():
                         cursor.execute("""
                             INSERT INTO usuarios (nome, email, tipo_usuario, senha, auth_provider, perfil_completo)
                             VALUES (?, ?, ?, ?, 'local', 1)
-                        """, (nome, email, tipo_usuario.lower(), senha_hash))
+                        """, (nome_login, email, tipo_usuario.lower(), senha_hash))
                         usuario_id = cursor.lastrowid
 
                         # Cria entrada adicional na tabela 'alunos' ou 'professores'
@@ -1479,86 +1484,6 @@ def tela_login():
             if st.button("Enviar Instruções", use_container_width=True, type="primary"):
                 st.info("Em breve será implementado o envio de recuperação de senha.")
             if st.button("⬅️ Voltar para Login", use_container_width=True):
-                st.session_state["modo_login"] = "login"
-                st.rerun()
-        # =========================================
-        # RECUPERAÇÃO DE SENHA
-        # =========================================
-        elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Em breve será implementado o envio de recuperação de senha.")
-            if st.button("⬅️ Voltar para Login", use_container_width=True):
-                st.session_state["modo_login"] = "login"
-                st.rerun()
-        # =========================================
-        # CADASTRO
-        # =========================================
-        elif st.session_state["modo_login"] == "cadastro":
-            st.subheader("📋 Cadastro de Novo Usuário")
-
-            nome = st.text_input("Nome completo:")
-            email = st.text_input("E-mail:")
-            usuario = st.text_input("Usuário (login):")
-            senha = st.text_input("Senha:", type="password")
-            confirmar = st.text_input("Confirmar senha:", type="password")
-
-            tipo_usuario = st.selectbox("Tipo de Usuário:", ["Aluno", "Professor"])
-            graduacao = st.selectbox("Graduação (faixa):", [
-                "Branca", "Cinza", "Amarela", "Laranja", "Verde",
-                "Azul", "Roxa", "Marrom", "Preta"
-            ])
-            graus = st.number_input("Quantos graus possui?", 0, 6, 0) if tipo_usuario == "Professor" else 0
-
-            if st.button("Cadastrar", use_container_width=True, type="primary"):
-                if not (nome and usuario and email and senha and confirmar):
-                    st.warning("Preencha todos os campos obrigatórios.")
-                elif senha != confirmar:
-                    st.error("As senhas não coincidem.")
-                else:
-                    conn = sqlite3.connect("bjj_digital.db")
-                    cursor = conn.cursor()
-                    cursor.execute("""
-                        CREATE TABLE IF NOT EXISTS usuarios (
-                            id INTEGER PRIMARY KEY AUTOINCREMENT,
-                            nome TEXT NOT NULL,
-                            usuario TEXT UNIQUE NOT NULL,
-                            email TEXT UNIQUE,
-                            senha TEXT NOT NULL,
-                            tipo TEXT DEFAULT 'Aluno',
-                            graduacao TEXT,
-                            graus INTEGER DEFAULT 0
-                        );
-                    """)
-                    cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
-                    if cursor.fetchone():
-                        st.error("Usuário ou e-mail já cadastrado.")
-                    else:
-                        hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                        cursor.execute(
-                            "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                            (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
-                        )
-                        conn.commit()
-                        conn.close()
-                        st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
-                        st.session_state["modo_login"] = "login"
-                        st.rerun()
-
-            if st.button("⬅️ Voltar para Login", use_container_width=True, type="secondary"):
-                st.session_state["modo_login"] = "login"
-                st.rerun()
-
-        # =========================================
-        # RECUPERAÇÃO DE SENHA
-        # =========================================
-        elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Em breve será implementado o envio de recuperação de senha.")
-            if st.button("⬅️ Voltar para Login", use_container_width=True, type="secondary"):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
                 
