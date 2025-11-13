@@ -961,7 +961,45 @@ def gestao_equipes():
             st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
+# =========================================
+# 👑 GESTÃO DE USUÁRIOS (ADMIN)
+# =========================================
+def gestao_usuarios():
+    st.markdown("<h1 style='color:#FFD700;'>👑 Gestão de Usuários</h1>", unsafe_allow_html=True)
+    st.info("Apenas administradores podem redefinir senhas de usuários. Use com responsabilidade ⚠️")
 
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    filtro_tipo = st.selectbox("Filtrar por tipo de usuário:", ["Todos", "admin", "professor", "aluno"])
+    if filtro_tipo == "Todos":
+        df = pd.read_sql_query("SELECT id, nome, email, tipo_usuario FROM usuarios", conn)
+    else:
+        df = pd.read_sql_query("SELECT id, nome, email, tipo_usuario FROM usuarios WHERE tipo_usuario=?", conn, params=(filtro_tipo,))
+    conn.close()
+
+    if df.empty:
+        st.warning("Nenhum usuário encontrado para este filtro.")
+        return
+
+    st.dataframe(df, use_container_width=True)
+
+    st.markdown("---")
+    st.subheader("🔄 Resetar Senha")
+
+    usuario_sel = st.selectbox("Selecione o usuário:", df["nome"].tolist())
+    nova_senha = st.text_input("Nova senha temporária:", value="nova123")
+
+    if st.button("✅ Confirmar Redefinição", use_container_width=True, type="primary"):
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        senha_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+
+        cursor.execute("UPDATE usuarios SET senha=?, auth_provider='local' WHERE nome=?", (senha_hash, usuario_sel))
+        conn.commit()
+        conn.close()
+
+        st.success(f"A senha de **{usuario_sel}** foi redefinida com sucesso para `{nova_senha}` (o usuário deve alterá-la no próximo login).")
 # =========================================
 # 🧩 GESTÃO DE QUESTÕES (DO SEU PROJETO ORIGINAL)
 # =========================================
@@ -1594,8 +1632,19 @@ def app_principal():
 
     # Define opções e ícones com base no perfil
     if tipo_usuario in ["admin", "professor"]:
-        opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-        icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+        opcoes = [
+            "Início", "Modo Rola", "Exame de Faixa", "Ranking",
+            "Painel do Professor", "Gestão de Questões", "Gestão de Equipes",
+            "Gestão de Exame"
+    ]
+    icons = [
+        "house-fill", "people-fill", "journal-check", "trophy-fill",
+        "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"
+    ]
+
+        if tipo_usuario == "admin":
+            opcoes.append("Gestão de Usuários")
+            icons.append("person-fill-gear")
     else: # aluno
         opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
         icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
