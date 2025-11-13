@@ -1285,7 +1285,7 @@ def tela_login():
     # =========================================
     with c2:
         if st.session_state["modo_login"] == "login":
-            with st.container(border=True, height=300):
+            with st.container(border=True, height=310):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 user = st.text_input("Usuário:", key="login_user")
                 pwd = st.text_input("Senha:", type="password", key="login_pwd")
@@ -1299,7 +1299,26 @@ def tela_login():
                     else:
                         st.error("Usuário ou senha incorretos. Tente novamente.")
 
-            st.markdown("<p style='text-align:center; color:white; margin: 15px;'>OU</p>", unsafe_allow_html=True)
+                # -----------------------------------------
+                # Botões discretos de ações secundárias
+                # -----------------------------------------
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🆕 Criar Conta", use_container_width=True, type="secondary"):
+                        st.session_state["modo_login"] = "cadastro"
+                        st.rerun()
+                with col2:
+                    if st.button("🔑 Esqueci Senha", use_container_width=True, type="secondary"):
+                        st.session_state["modo_login"] = "recuperar"
+                        st.rerun()
+
+            # -----------------------------------------
+            # Divisor “OU”
+            # -----------------------------------------
+            st.markdown(
+                "<p style='text-align:center; color:gray; font-size:13px; margin-top:10px;'>— OU —</p>",
+                unsafe_allow_html=True
+            )
 
             # =========================================
             # LOGIN GOOGLE
@@ -1339,19 +1358,6 @@ def tela_login():
                     else:
                         novo = criar_usuario_parcial_google(user_email, user_name)
                         st.session_state.registration_pending = novo
-                    st.rerun()
-
-            # =========================================
-            # OPÇÕES ADICIONAIS
-            # =========================================
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🆕 Criar Conta", use_container_width=True):
-                    st.session_state["modo_login"] = "cadastro"
-                    st.rerun()
-            with col2:
-                if st.button("🔑 Esqueci Minha Senha", use_container_width=True):
-                    st.session_state["modo_login"] = "recuperar"
                     st.rerun()
 
     # =========================================
