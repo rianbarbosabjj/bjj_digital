@@ -1645,7 +1645,7 @@ def app_principal():
     # Roteamento das Páginas
     # ==============================
     if menu == "Início":
-        pagina_inicial()
+        tela_inicio()
 
     elif menu == "Modo Rola":
         modo_rola()
