@@ -1631,20 +1631,20 @@ def app_principal():
         st.session_state.menu_selection = "Início"
 
     # Define opções e ícones com base no perfil
-    if tipo_usuario in ["admin", "professor"]:
-        opcoes = [
-            "Início", "Modo Rola", "Exame de Faixa", "Ranking",
-            "Painel do Professor", "Gestão de Questões", "Gestão de Equipes",
-            "Gestão de Exame"
+if tipo_usuario in ["admin", "professor"]:
+    opcoes = [
+        "Início", "Modo Rola", "Exame de Faixa", "Ranking",
+        "Painel do Professor", "Gestão de Questões", "Gestão de Equipes",
+        "Gestão de Exame"
     ]
     icons = [
         "house-fill", "people-fill", "journal-check", "trophy-fill",
         "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"
     ]
 
-        if tipo_usuario == "admin":
-            opcoes.append("Gestão de Usuários")
-            icons.append("person-fill-gear")
+    if tipo_usuario == "admin":
+        opcoes.append("Gestão de Usuários")
+        icons.append("person-fill-gear")
     else: # aluno
         opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
         icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
