@@ -955,7 +955,120 @@ def gestao_equipes():
             st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
+# =========================================
+# 🔑 GESTÃO DE USUÁRIOS (NOVO)
+# =========================================
+def gestao_usuarios(usuario_logado):
+    """Página de gerenciamento de usuários, restrita ao Admin."""
+    
+    # 1. Verificação de Segurança
+    if usuario_logado["tipo"] != "admin":
+        st.error("Acesso negado. Esta página é restrita aos administradores.")
+        st.warning("Se você é um administrador e está vendo esta mensagem, contate o suporte.")
+        return
 
+    st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
+    st.markdown("Edite informações, redefina senhas ou altere o tipo de perfil de um usuário.")
+
+    conn = sqlite3.connect(DB_PATH)
+    # 2. Carrega todos os usuários em um DataFrame
+    df = pd.read_sql_query(
+        "SELECT id, nome, email, tipo_usuario, auth_provider, perfil_completo FROM usuarios ORDER BY nome", 
+        conn
+    )
+
+    st.subheader("Visão Geral dos Usuários")
+    st.dataframe(df, use_container_width=True)
+    st.markdown("---")
+
+    # 3. Seleção de Usuário para Edição
+    st.subheader("Editar Usuário")
+    lista_nomes = df["nome"].tolist()
+    nome_selecionado = st.selectbox(
+        "Selecione um usuário para gerenciar:",
+        options=lista_nomes,
+        index=None,
+        placeholder="Selecione..."
+    )
+
+    if nome_selecionado:
+        # Busca o ID do usuário selecionado
+        user_id_selecionado = df[df["nome"] == nome_selecionado]["id"].values[0]
+
+        # Busca dados ATUAIS do usuário (para preencher o formulário)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM usuarios WHERE id=?", (user_id_selecionado,))
+        user_data = cursor.fetchone()
+        
+        if not user_data:
+            st.error("Usuário não encontrado.")
+            conn.close()
+            return
+
+        with st.expander(f"Gerenciando: {user_data['nome']}", expanded=True):
+            
+            # --- FORMULÁRIO DE EDIÇÃO BÁSICA ---
+            with st.form(key="form_edit_user"):
+                st.markdown("#### 1. Informações do Perfil")
+                
+                col1, col2 = st.columns(2)
+                novo_nome = col1.text_input("Nome:", value=user_data['nome'])
+                novo_email = col2.text_input("Email:", value=user_data['email'])
+                
+                novo_tipo = st.selectbox(
+                    "Tipo de Usuário:",
+                    options=["aluno", "professor", "admin"],
+                    index=["aluno", "professor", "admin"].index(user_data['tipo_usuario'])
+                )
+                
+                st.text_input("Provedor de Auth:", value=user_data['auth_provider'], disabled=True)
+                
+                submitted_info = st.form_submit_button("💾 Salvar Alterações", use_container_width=True)
+                
+                if submitted_info:
+                    try:
+                        cursor.execute(
+                            "UPDATE usuarios SET nome=?, email=?, tipo_usuario=? WHERE id=?",
+                            (novo_nome, novo_email, novo_tipo, user_id_selecionado)
+                        )
+                        conn.commit()
+                        st.success("Dados do usuário atualizados com sucesso!")
+                        st.rerun() # Recarrega a página para atualizar o selectbox
+                    except sqlite3.IntegrityError:
+                        st.error(f"Erro: O email '{novo_email}' já está em uso por outro usuário.")
+                    except Exception as e:
+                        st.error(f"Ocorreu um erro: {e}")
+
+            st.markdown("---")
+
+            # --- FORMULÁRIO DE RESET DE SENHA ---
+            st.markdown("#### 2. Redefinição de Senha")
+            if user_data['auth_provider'] == 'local':
+                with st.form(key="form_reset_pass"):
+                    nova_senha = st.text_input("Nova Senha:", type="password")
+                    confirmar_senha = st.text_input("Confirmar Nova Senha:", type="password")
+                    
+                    submitted_pass = st.form_submit_button("🔑 Redefinir Senha", use_container_width=True)
+                    
+                    if submitted_pass:
+                        if not nova_senha or not confirmar_senha:
+                            st.warning("Por favor, preencha os dois campos de senha.")
+                        elif nova_senha != confirmar_senha:
+                            st.error("As senhas não coincidem.")
+                        else:
+                            # Hash da nova senha
+                            novo_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+                            cursor.execute(
+                                "UPDATE usuarios SET senha=? WHERE id=?",
+                                (novo_hash, user_id_selecionado)
+                            )
+                            conn.commit()
+                            st.success("Senha do usuário redefinida com sucesso!")
+            else:
+                st.info(f"Não é possível redefinir a senha de usuários via '{user_data['auth_provider']}'.")
+    
+    conn.close()
 # =========================================
 # 🧩 GESTÃO DE QUESTÕES (DO SEU PROJETO ORIGINAL)
 # =========================================
@@ -1626,7 +1739,7 @@ def app_principal():
 
     tipo_usuario = usuario_logado["tipo"]
 
-    # --- Sidebar (Info e Logout) ---
+    # [Sem alterações aqui - Sidebar]
     st.sidebar.image("assets/logo.png", use_container_width=True)
     st.sidebar.markdown(
         f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
@@ -1640,7 +1753,6 @@ def app_principal():
     if st.sidebar.button("🚪 Sair", use_container_width=True):
         st.session_state.usuario = None
         st.session_state.pop("menu_selection", None)
-        # Limpa token do Google (se existir)
         st.session_state.pop("token", None) 
         st.session_state.pop("registration_pending", None) 
         st.rerun()
@@ -1655,10 +1767,16 @@ def app_principal():
     if tipo_usuario in ["admin", "professor"]:
         opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+        
+        # 👈 [ALTERAÇÃO 1: ADICIONAR O MENU SOMENTE PARA ADMIN]
+        if tipo_usuario == "admin":
+            opcoes.append("Gestão de Usuários")
+            icons.append("key-fill") # Adiciona o ícone
+
     else: # aluno
         opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
         icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
-        # Checa se exame está habilitado
+        # [Sem alterações aqui - Lógica do exame do aluno]
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
         cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
@@ -1668,7 +1786,7 @@ def app_principal():
             opcoes.insert(2, "Exame de Faixa")
             icons.insert(2, "journal-check")
     
-    # [Lógica do menu (sem alteração)]
+    # [Sem alterações aqui - Lógica do option_menu]
     if st.session_state.menu_selection != "Início":
         menu = option_menu(
             menu_title=None,
@@ -1707,7 +1825,11 @@ def app_principal():
         gestao_exame_de_faixa()
     elif menu == "Meus Certificados":
         meus_certificados(usuario_logado)
-
+    
+    # 👈 [ALTERAÇÃO 2: ADICIONAR A ROTA PARA A NOVA FUNÇÃO]
+    elif menu == "Gestão de Usuários":
+        gestao_usuarios(usuario_logado) # Chama a nova função
+        
 # =========================================
 # EXECUÇÃO PRINCIPAL (ROTEADOR)
 # =========================================
