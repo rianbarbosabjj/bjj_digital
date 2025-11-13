@@ -196,18 +196,27 @@ oauth_google = OAuth2Component(
 )
 
 # 3. Autenticação local (Login/Senha)
-def autenticar_local(usuario, senha):
+def autenticar_local(email, senha):
+    """
+    Atualizado: Autentica o usuário local usando EMAIL e senha.
+    """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # Busca por 'nome' (usuário) E 'local' (para não logar usuários do Google)
+    # 
+    # MUDANÇA CRÍTICA AQUI:
+    # Buscamos por 'email' em vez de 'nome'
+    #
     cursor.execute(
-        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE nome=? AND auth_provider='local'", 
-        (usuario,)
+        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE email=? AND auth_provider='local'", 
+        (email,)
     )
     dados = cursor.fetchone()
     conn.close()
+    
     if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
+        # Retorna os dados do usuário se a senha bater
         return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+        
     return None
 
 # 4. Funções de busca e criação de usuário
