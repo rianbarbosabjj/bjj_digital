@@ -956,22 +956,19 @@ def gestao_equipes():
 
     conn.close()
 # =========================================
-# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA)
+# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA 2)
 # =========================================
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários, restrita ao Admin."""
     
-    # 1. Verificação de Segurança
     if usuario_logado["tipo"] != "admin":
         st.error("Acesso negado. Esta página é restrita aos administradores.")
-        st.warning("Se você é um administrador e está vendo esta mensagem, contate o suporte.")
         return
 
     st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
     st.markdown("Edite informações, redefina senhas ou altere o tipo de perfil de um usuário.")
 
     conn = sqlite3.connect(DB_PATH)
-    # 2. Carrega todos os usuários em um DataFrame
     df = pd.read_sql_query(
         "SELECT id, nome, email, tipo_usuario, auth_provider, perfil_completo FROM usuarios ORDER BY nome", 
         conn
@@ -981,7 +978,6 @@ def gestao_usuarios(usuario_logado):
     st.dataframe(df, use_container_width=True)
     st.markdown("---")
 
-    # 3. Seleção de Usuário para Edição
     st.subheader("Editar Usuário")
     lista_nomes = df["nome"].tolist()
     nome_selecionado = st.selectbox(
@@ -992,7 +988,6 @@ def gestao_usuarios(usuario_logado):
     )
 
     if nome_selecionado:
-        # Busca o ID do usuário selecionado
         try:
             user_id_selecionado = df[df["nome"] == nome_selecionado]["id"].values[0]
         except IndexError:
@@ -1000,7 +995,6 @@ def gestao_usuarios(usuario_logado):
             conn.close()
             return
             
-        # Busca dados ATUAIS do usuário (para preencher o formulário)
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM usuarios WHERE id=?", (user_id_selecionado,))
@@ -1013,7 +1007,6 @@ def gestao_usuarios(usuario_logado):
 
         with st.expander(f"Gerenciando: {user_data['nome']}", expanded=True):
             
-            # --- FORMULÁRIO DE EDIÇÃO BÁSICA ---
             with st.form(key="form_edit_user"):
                 st.markdown("#### 1. Informações do Perfil")
                 
@@ -1021,11 +1014,28 @@ def gestao_usuarios(usuario_logado):
                 novo_nome = col1.text_input("Nome:", value=user_data['nome'])
                 novo_email = col2.text_input("Email:", value=user_data['email'])
                 
+                # ==========================================================
+                # 👈 [CORREÇÃO APLICADA AQUI]
+                # Lógica robusta para encontrar o índice do tipo de usuário
+                # ==========================================================
+                opcoes_tipo = ["aluno", "professor", "admin"]
+                tipo_atual_db = user_data['tipo_usuario'] # Pode ser "Aluno", "admin", None, etc.
+                
+                index_atual = 0 # Default é 'aluno' (índice 0)
+                if tipo_atual_db:
+                    try:
+                        # Tenta encontrar o índice (ignorando maiúsculas/minúsculas)
+                        index_atual = [t.lower() for t in opcoes_tipo].index(tipo_atual_db.lower())
+                    except ValueError:
+                        # Se o valor não estiver na lista (ex: "Secretaria"), usa o default 0
+                        index_atual = 0 
+                
                 novo_tipo = st.selectbox(
                     "Tipo de Usuário:",
-                    options=["aluno", "professor", "admin"],
-                    index=["aluno", "professor", "admin"].index(user_data['tipo_usuario'])
+                    options=opcoes_tipo,
+                    index=index_atual # Usa o índice seguro que encontramos
                 )
+                # ==========================================================
                 
                 st.text_input("Provedor de Auth:", value=user_data['auth_provider'], disabled=True)
                 
@@ -1039,8 +1049,6 @@ def gestao_usuarios(usuario_logado):
                         )
                         conn.commit()
                         st.success("Dados do usuário atualizados com sucesso!")
-                        # 👈 [CORREÇÃO] st.rerun() foi removido daqui
-                        
                     except sqlite3.IntegrityError:
                         st.error(f"Erro: O email '{novo_email}' já está em uso por outro usuário.")
                     except Exception as e:
@@ -1048,7 +1056,6 @@ def gestao_usuarios(usuario_logado):
 
             st.markdown("---")
 
-            # --- FORMULÁRIO DE RESET DE SENHA ---
             st.markdown("#### 2. Redefinição de Senha")
             if user_data['auth_provider'] == 'local':
                 with st.form(key="form_reset_pass"):
@@ -1063,7 +1070,6 @@ def gestao_usuarios(usuario_logado):
                         elif nova_senha != confirmar_senha:
                             st.error("As senhas não coincidem.")
                         else:
-                            # Hash da nova senha
                             novo_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
                             cursor.execute(
                                 "UPDATE usuarios SET senha=? WHERE id=?",
@@ -1071,7 +1077,6 @@ def gestao_usuarios(usuario_logado):
                             )
                             conn.commit()
                             st.success("Senha do usuário redefinida com sucesso!")
-                            # 👈 [CORREÇÃO] Nenhuma ação de rerun aqui
             else:
                 st.info(f"Não é possível redefinir a senha de usuários via '{user_data['auth_provider']}'.")
     
