@@ -1677,31 +1677,49 @@ if tipo_usuario in ["admin", "professor"]:
         menu = "Início"
 
     # =========================================
-    # Navegação entre módulos (Roteamento)
+    # Roteamento de Páginas do App
     # =========================================
     if menu == "Início":
-        tela_inicio()
+        pagina_inicial()
+
     elif menu == "Modo Rola":
-        modo_rola(usuario_logado)
+        modo_rola()
+
     elif menu == "Exame de Faixa":
-        exame_de_faixa(usuario_logado)
+        exame_de_faixa()
+
     elif menu == "Ranking":
         ranking()
+
     elif menu == "Painel do Professor":
-        painel_professor()
-    elif menu == "Gestão de Equipes":
-        gestao_equipes()
+        if tipo_usuario in ["admin", "professor"]:
+            painel_professor()
+        else:
+            st.error("Acesso restrito a professores e administradores.")
+
     elif menu == "Gestão de Questões":
-        gestao_questoes()
+        if tipo_usuario in ["admin", "professor"]:
+            gestao_questoes()
+        else:
+            st.error("Acesso restrito a professores e administradores.")
+
+    elif menu == "Gestão de Equipes":
+        if tipo_usuario in ["admin", "professor"]:
+            gestao_equipes()
+        else:
+            st.error("Acesso restrito a professores e administradores.")
+
     elif menu == "Gestão de Exame":
-        gestao_exame_de_faixa()
-    elif menu == "Meus Certificados":
-        meus_certificados(usuario_logado)
+        if tipo_usuario in ["admin", "professor"]:
+            gestao_exame()
+        else:
+            st.error("Acesso restrito a professores e administradores.")
+
     elif menu == "Gestão de Usuários":
-    if tipo_usuario == "admin":
-        gestao_usuarios()
-    else:
-        st.error("Acesso restrito. Apenas administradores podem acessar esta seção.")
+        if tipo_usuario == "admin":
+            gestao_usuarios()
+        else:
+            st.error("Acesso restrito. Apenas administradores podem acessar esta seção.")
 
 # =========================================
 # EXECUÇÃO PRINCIPAL (ROTEADOR)
