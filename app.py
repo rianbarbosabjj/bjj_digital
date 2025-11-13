@@ -1257,9 +1257,12 @@ def meus_certificados(usuario_logado):
 # O login não fica mais no topo, ele é gerenciado por este roteador.
 
 def tela_login():
-    """Exibe a tela de login local e o botão do Google."""
-    
-    # Exibe logo centralizado
+    """Tela de login com autenticação local, Google e opção de cadastro."""
+    st.session_state.setdefault("modo_login", "login")
+
+    # =========================================
+    # LOGO CENTRALIZADA
+    # =========================================
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
@@ -1276,77 +1279,153 @@ def tela_login():
     """, unsafe_allow_html=True)
 
     c1, c2, c3 = st.columns([1, 1.5, 1])
+
+    # =========================================
+    # LOGIN LOCAL
+    # =========================================
     with c2:
-        with st.container(border=True, height=270):
-            st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
-            user = st.text_input("Usuário:", key="login_user")
-            pwd = st.text_input("Senha:", type="password", key="login_pwd")
+        if st.session_state["modo_login"] == "login":
+            with st.container(border=True, height=300):
+                st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
+                user = st.text_input("Usuário:", key="login_user")
+                pwd = st.text_input("Senha:", type="password", key="login_pwd")
 
-            if st.button("Entrar", use_container_width=True):
-                u = autenticar_local(user.strip(), pwd.strip())
-                if u:
-                    st.session_state.usuario = u
-                    st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
-                    st.rerun()
-                else:
-                    st.error("Usuário ou senha incorretos. Tente novamente.")
-        
-        st.markdown("<p style='text-align:center; color:white; margin: 15px;'>OU</p>", unsafe_allow_html=True)
+                if st.button("Entrar", use_container_width=True):
+                    u = autenticar_local(user.strip(), pwd.strip())
+                    if u:
+                        st.session_state.usuario = u
+                        st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
+                        st.rerun()
+                    else:
+                        st.error("Usuário ou senha incorretos. Tente novamente.")
 
-        token = oauth_google.authorize_button(
-            name="Entrar com o Google",
-            icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
-            use_container_width=True,
-            scope="email profile",
-            key="google_login",
-            redirect_uri=REDIRECT_URI,
-        )
+            st.markdown("<p style='text-align:center; color:white; margin: 15px;'>OU</p>", unsafe_allow_html=True)
 
-        # 👈 [MUDANÇA CRÍTICA AQUI]
-        if token:
-            st.session_state.token = token 
-            
-            # Nós mesmos vamos buscar as infos do usuário
-            access_token = token.get("access_token")
-            headers = {"Authorization": f"Bearer {access_token}"}
-            
-            # Faz a requisição ao endpoint userinfo do Google
-            user_info_response = requests.get(
-                "https://www.googleapis.com/oauth2/v3/userinfo", 
-                headers=headers
+            # =========================================
+            # LOGIN GOOGLE
+            # =========================================
+            token = oauth_google.authorize_button(
+                name="Entrar com o Google",
+                icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
+                use_container_width=True,
+                scope="email profile",
+                key="google_login",
+                redirect_uri=REDIRECT_URI,
             )
-            
-            # Se a requisição funcionar, pegamos os dados
-            if user_info_response.status_code == 200:
-                user_info = user_info_response.json() # Converte a resposta em um dict
-                user_email = user_info.get("email")
-                user_name = user_info.get("name")
+
+            if token and "access_token" in token:
+                st.session_state.token = token
+                access_token = token["access_token"]
+                headers = {"Authorization": f"Bearer {access_token}"}
+
+                try:
+                    response = requests.get(
+                        "https://www.googleapis.com/oauth2/v3/userinfo",
+                        headers=headers,
+                        timeout=5
+                    )
+                    response.raise_for_status()
+                    info = response.json()
+                    user_email = info.get("email")
+                    user_name = info.get("name")
+                except Exception as e:
+                    st.error(f"Falha na autenticação Google: {e}")
+                    user_email, user_name = None, None
+
+                if user_email:
+                    usuario_db = buscar_usuario_por_email(user_email)
+                    if usuario_db:
+                        st.session_state.usuario = usuario_db
+                    else:
+                        novo = criar_usuario_parcial_google(user_email, user_name)
+                        st.session_state.registration_pending = novo
+                    st.rerun()
+
+            # =========================================
+            # OPÇÕES ADICIONAIS
+            # =========================================
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🆕 Criar Conta", use_container_width=True):
+                    st.session_state["modo_login"] = "cadastro"
+                    st.rerun()
+            with col2:
+                if st.button("🔑 Esqueci Minha Senha", use_container_width=True):
+                    st.session_state["modo_login"] = "recuperar"
+                    st.rerun()
+
+    # =========================================
+    # TELA DE CADASTRO
+    # =========================================
+    if st.session_state["modo_login"] == "cadastro":
+        st.subheader("📋 Cadastro de Novo Usuário")
+
+        nome = st.text_input("Nome completo:")
+        email = st.text_input("E-mail:")
+        usuario = st.text_input("Usuário (login):")
+        senha = st.text_input("Senha:", type="password")
+        confirmar = st.text_input("Confirmar senha:", type="password")
+
+        tipo_usuario = st.selectbox("Tipo de Usuário:", ["Aluno", "Professor"])
+        graduacao = st.selectbox("Graduação (faixa):", [
+            "Branca", "Cinza", "Amarela", "Laranja", "Verde",
+            "Azul", "Roxa", "Marrom", "Preta"
+        ])
+
+        graus = 0
+        if tipo_usuario == "Professor":
+            graus = st.number_input("Quantos graus possui na faixa atual?", 0, 6, 0)
+
+        if st.button("Cadastrar"):
+            if not (nome and usuario and email and senha and confirmar):
+                st.warning("Preencha todos os campos obrigatórios.")
+            elif senha != confirmar:
+                st.error("As senhas não coincidem.")
             else:
-                st.error("Não foi possível buscar as informações do usuário no Google.")
-                user_email = None
-                user_name = None
-
-            # ----------------- FIM DA MUDANÇA -----------------
-
-            if user_email:
-                # 3. Verifica se o usuário já existe no nosso banco
-                usuario_db = buscar_usuario_por_email(user_email)
-                
-                if usuario_db:
-                    # 4.a. Usuário existe. O perfil está completo?
-                    if usuario_db["perfil_completo"]:
-                        st.session_state.usuario = {"id": usuario_db["id"], "nome": usuario_db["nome"], "tipo": usuario_db["tipo"]}
-                    else:
-                        st.session_state.registration_pending = {"id": usuario_db["id"], "email": user_email, "nome": user_name}
+                conn = sqlite3.connect("bjj_digital.db")
+                cursor = conn.cursor()
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS usuarios (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        nome TEXT NOT NULL,
+                        usuario TEXT UNIQUE NOT NULL,
+                        email TEXT UNIQUE,
+                        senha TEXT NOT NULL,
+                        tipo TEXT DEFAULT 'Aluno',
+                        graduacao TEXT,
+                        graus INTEGER DEFAULT 0
+                    );
+                """)
+                cursor.execute("SELECT * FROM usuarios WHERE usuario=? OR email=?", (usuario, email))
+                if cursor.fetchone():
+                    st.error("Usuário ou e-mail já cadastrado.")
                 else:
-                    # 4.b. Novo usuário. Criar registro parcial e ir para cadastro
-                    novo_usuario_parcial = criar_usuario_parcial_google(user_email, user_name)
-                    if novo_usuario_parcial:
-                        st.session_state.registration_pending = novo_usuario_parcial
-                    else:
-                        st.error("Ocorreu um erro ao criar seu usuário. Tente novamente.")
-                
-                st.rerun()
+                    hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                    cursor.execute(
+                        "INSERT INTO usuarios (nome, usuario, email, senha, tipo, graduacao, graus) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (nome, usuario, email, hashed, tipo_usuario, graduacao, graus)
+                    )
+                    conn.commit()
+                    conn.close()
+                    st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
+                    st.session_state["modo_login"] = "login"
+                    st.rerun()
+
+        if st.button("⬅️ Voltar para Login"):
+            st.session_state["modo_login"] = "login"
+            st.rerun()
+
+    # =========================================
+    # RECUPERAÇÃO DE SENHA (placeholder)
+    # =========================================
+    if st.session_state["modo_login"] == "recuperar":
+        st.subheader("🔑 Recuperar Senha")
+        email = st.text_input("Digite o e-mail cadastrado:")
+        if st.button("Enviar Instruções"):
+            st.info("Em breve será implementado o envio de recuperação de senha.")
+        if st.button("⬅️ Voltar para Login"):
+            st.session_state["modo_login"] = "login"
+            st.rerun()
                 
 def tela_completar_cadastro(user_data):
     """Exibe o formulário para novos usuários do Google completarem o perfil."""
