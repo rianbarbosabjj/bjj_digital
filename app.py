@@ -91,9 +91,6 @@ def criar_banco():
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    
-    # 👈 [MUDANÇA CRÍTICA] Tabela 'usuarios' foi atualizada com CPF e Endereço
-    # Nota: O 'senha' deve ser NULO para logins sociais.
     cursor.executescript("""
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
