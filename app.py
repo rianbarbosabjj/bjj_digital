@@ -87,11 +87,11 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
 def criar_banco():
-"""Cria o banco de dados e suas tabelas, caso não existam."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
+    """Cria o banco de dados e suas tabelas, caso não existam."""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
     # 👈 [MUDANÇA CRÍTICA] Tabela 'usuarios' foi atualizada com CPF e Endereço
     # Nota: O 'senha' deve ser NULO para logins sociais.
     cursor.executescript("""
