@@ -254,18 +254,25 @@ def criar_usuario_parcial_google(email, nome):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
+        # 8 espaços
         cursor.execute(
             """
             INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
             VALUES (?, ?, 'google', 0)
             """, (email, nome)
         )
-        conn.commit()  # <-- Certifique-se que o alinhamento aqui é o correto
+        # 8 espaços (aqui estava o problema)
+        conn.commit()
+        # 8 espaços
         novo_id = cursor.lastrowid
+        # 8 espaços
         conn.close()
+        # 8 espaços
         return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
+      except sqlite3.IntegrityError: # Email já existe
+        # 4 espaços
         conn.close()
+        # 4 espaços
         return None
 
 
