@@ -2213,9 +2213,10 @@ def tela_login():
                         st.rerun()
 
         # =========================================
-        # CADASTRO (Nome Completo, Email e CPF para Login)
+        # CADASTRO (Professor se vincula à equipe)
         # =========================================
-elif st.session_state["modo_login"] == "cadastro":
+        # ESTA LINHA DEVE ESTAR ALINHADA COM O 'if' ACIMA (DENTRO DE 'with c2:')
+        elif st.session_state["modo_login"] == "cadastro":
             
             # --- Buscar equipes para o selectbox ---
             equipes_disponiveis = buscar_equipes()
@@ -2348,7 +2349,7 @@ elif st.session_state["modo_login"] == "cadastro":
                                         (novo_id, faixa) 
                                     )
                                 else: # Professor
-                                    # MUDANÇA CRÍTICA AQUI: Salva equipe_id (se selecionada) e status PENDENTE
+                                    # Salva equipe_id (se selecionada) e status PENDENTE
                                     status = 'pendente'
                                     cursor.execute(
                                         """
@@ -2361,11 +2362,11 @@ elif st.session_state["modo_login"] == "cadastro":
                                 conn.commit()
                                 conn.close()
                                 st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
-                                st.session_state["modo_login"] = "login"
                                 
                                 if tipo_db == "professor" and equipe_sel:
                                      st.info("Seu cadastro como professor está **pendente de aprovação** pelo responsável da equipe.")
 
+                                st.session_state["modo_login"] = "login"
                                 # Limpa o cache após o cadastro
                                 if "cadastro_endereco_cache" in st.session_state: del st.session_state["cadastro_endereco_cache"]
                                 st.rerun()
@@ -2383,6 +2384,7 @@ elif st.session_state["modo_login"] == "cadastro":
         # =========================================
         # RECUPERAÇÃO DE SENHA
         # =========================================
+        # ESTA LINHA DEVE ESTAR ALINHADA COM O 'if' e 'elif' ACIMA (DENTRO DE 'with c2:')
         elif st.session_state["modo_login"] == "recuperar":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>🔑 Recuperar Senha</h3>", unsafe_allow_html=True)
