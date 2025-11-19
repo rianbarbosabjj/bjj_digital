@@ -1831,7 +1831,7 @@ def tela_login():
         # =========================================
         # CADASTRO (CORRIGIDO E ATUALIZADO)
         # =========================================
-        elif st.session_state["modo_login"] == "cadastro":
+elif st.session_state["modo_login"] == "cadastro":
             
             st.subheader("📋 Cadastro de Novo Usuário")
 
@@ -1848,7 +1848,7 @@ def tela_login():
             conn = sqlite3.connect(DB_PATH)
             # Carrega equipes para o formulário
             equipes_df = pd.read_sql_query("SELECT id, nome, professor_responsavel_id FROM equipes", conn)
-            conn.close() # Fecha a conexão de leitura
+            # conn.close() # A conexão será fechada após o commit ou rollback
             
             # --- Definição da Faixa ---
             if tipo_usuario == "Aluno":
@@ -1876,10 +1876,63 @@ def tela_login():
                     st.warning("⚠️ Esta equipe não tem um Professor Responsável definido. O vínculo ficará pendente até que o Admin configure um.")
 
             
-            # O bloco do botão AGORA ESTÁ INDENTADO CORRETAMENTE DENTRO do 'elif'
+            st.markdown("---")
+            st.markdown("#### 3. Endereço (Opcional)")
+
+            # Inicializa estado para busca de CEP no cadastro
+            st.session_state.setdefault('endereco_cep_cadastro', {
+                'cep': '', 'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
+            })
+
+            col_cep, col_btn = st.columns([3, 1])
+            with col_cep:
+                # O key é necessário pois há outro campo CEP em outra tela (Meu Perfil)
+                novo_cep_input = st.text_input("CEP:", value=st.session_state.endereco_cep_cadastro['cep'], max_chars=9, key='reg_cep_input')
+            with col_btn:
+                st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True) # Espaçamento
+                if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_reg_cep'):
+                    endereco = buscar_cep(novo_cep_input)
+                    if endereco:
+                        st.session_state.endereco_cep_cadastro = {
+                            'cep': novo_cep_input,
+                            **endereco
+                        }
+                        st.success("Endereço encontrado e campos preenchidos! Preencha Número e Complemento.")
+                    else:
+                        st.error("CEP inválido ou não encontrado. Verifique o número.")
+                        # Limpa os campos se o CEP for inválido/não encontrado
+                        st.session_state.endereco_cep_cadastro = {
+                            'cep': novo_cep_input,
+                            'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
+                        }
+                    st.rerun() # Atualiza a tela para exibir os campos preenchidos
+
+            # Campos preenchidos automaticamente e desabilitados
+            col_logr, col_bairro = st.columns(2)
+            novo_logradouro = col_logr.text_input("Logradouro:", 
+                                                  value=st.session_state.endereco_cep_cadastro['logradouro'], 
+                                                  disabled=True, key='reg_logradouro')
+            novo_bairro = col_bairro.text_input("Bairro:", 
+                                                value=st.session_state.endereco_cep_cadastro['bairro'], 
+                                                disabled=True, key='reg_bairro')
+
+            col_cidade, col_uf = st.columns(2)
+            novo_cidade = col_cidade.text_input("Cidade:", 
+                                                value=st.session_state.endereco_cep_cadastro['cidade'], 
+                                                disabled=True, key='reg_cidade')
+            novo_uf = col_uf.text_input("UF:", 
+                                       value=st.session_state.endereco_cep_cadastro['uf'], 
+                                       disabled=True, key='reg_uf')
+            
+            # Campos preenchidos pelo usuário
+            col_num, col_comp = st.columns(2)
+            novo_numero = col_num.text_input("Número:", value="", key='reg_numero')
+            novo_complemento = col_comp.text_input("Complemento:", value="", key='reg_complemento')
+
+
             if st.button("Cadastrar", use_container_width=True, type="primary"):
                 if not (nome and email and cpf and senha and confirmar):
-                    st.warning("Preencha todos os campos obrigatórios.")
+                    st.warning("Preencha todos os campos de contato e senha obrigatórios.")
                 elif senha != confirmar:
                     st.error("As senhas não coincidem.")
                 else:
@@ -1888,12 +1941,11 @@ def tela_login():
                     cpf_formatado = formatar_e_validar_cpf(cpf)
                     if not cpf_formatado:
                         st.error("CPF inválido. Por favor, digite um CPF válido (11 dígitos).")
+                        conn.close()
                         return
                     
-                    conn = sqlite3.connect(DB_PATH) 
+                    # Verifica se nome, email ou cpf já existem (unicidade)
                     cursor = conn.cursor()
-                    
-                    # ⚠️ Verifica se nome, email ou cpf já existem (unicidade)
                     cursor.execute(
                         "SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", 
                         (nome, email, cpf_formatado)
@@ -1906,13 +1958,32 @@ def tela_login():
                             hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
                             tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
 
-                            # 1. Salva na tabela 'usuarios' (agora com CPF)
+                            # 1. Salva na tabela 'usuarios' (com Endereço)
+                            endereco_data = st.session_state.endereco_cep_cadastro
                             cursor.execute(
                                 """
-                                INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo)
-                                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                                INSERT INTO usuarios (
+                                    nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo,
+                                    cep, logradouro, numero, complemento, bairro, cidade, uf
+                                )
+                                VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?, ?, ?)
                                 """,
-                                (nome, email, cpf_formatado, tipo_db, hashed) 
+                                (
+                                    nome, 
+                                    email, 
+                                    cpf_formatado, 
+                                    tipo_db, 
+                                    hashed,
+                                    
+                                    # Dados de Endereço
+                                    endereco_data['cep'],
+                                    endereco_data['logradouro'],
+                                    novo_numero,
+                                    novo_complemento,
+                                    endereco_data['bairro'],
+                                    endereco_data['cidade'],
+                                    endereco_data['uf']
+                                )
                             )
                             novo_id = cursor.lastrowid
                             
@@ -1937,6 +2008,10 @@ def tela_login():
                             
                             conn.commit()
                             conn.close()
+                            
+                            # Limpa o estado do CEP de cadastro após o sucesso
+                            st.session_state.pop('endereco_cep_cadastro', None)
+                            
                             st.success("Cadastro realizado! Seu vínculo está **PENDENTE** de aprovação pelo Professor Responsável. Você será notificado.")
                             st.session_state["modo_login"] = "login"
                             st.rerun()
@@ -1947,19 +2022,7 @@ def tela_login():
                             st.error(f"Erro ao cadastrar: {e}")
 
             if st.button("⬅️ Voltar para Login", use_container_width=True):
-                st.session_state["modo_login"] = "login"
-                st.rerun()
-
-        # =========================================
-        # RECUPERAÇÃO DE SENHA
-        # =========================================
-        elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Em breve será implementado o envio de recuperação de senha.")
-            
-            if st.button("⬅️ Voltar para Login", use_container_width=True):
+                st.session_state.pop('endereco_cep_cadastro', None) # Limpa o estado da sessão ao sair
                 st.session_state["modo_login"] = "login"
                 st.rerun()
                 
