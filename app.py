@@ -972,6 +972,8 @@ def gestao_equipes():
     # Definição das variáveis de aba
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
+    # --- ABA 1 e ABA 2 (Lógica inalterada, mantida por brevidade) ---
+    
     # === 🏫 ABA 1 - EQUIPES ===
     with aba1:
         st.subheader("Cadastrar nova equipe")
@@ -1097,19 +1099,27 @@ def gestao_equipes():
         else:
             st.dataframe(profs_df, use_container_width=True)
 
-    # === 🥋 ABA 3 - ALUNOS (Com Edição de Vínculo) ===
-with aba3:
+    # === 🥋 ABA 3 - ALUNOS (Com Edição de Vínculo Segura) ===
+    with aba3:
         st.subheader("Vincular aluno a professor e equipe")
 
         alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
         
-        # --- (Lógica de busca de professores disponíveis permanece a mesma) ---
         professores_disponiveis_df = pd.read_sql_query("""
             -- Professores Responsáveis
-            SELECT u.id AS usuario_id, u.nome AS nome_professor, e.id AS equipe_id FROM usuarios u INNER JOIN equipes e ON u.id = e.professor_responsavel_id
+            SELECT 
+                u.id AS usuario_id, u.nome AS nome_professor, e.id AS equipe_id
+            FROM usuarios u
+            INNER JOIN equipes e ON u.id = e.professor_responsavel_id
+            
             UNION
+            
             -- Professores Auxiliares Ativos
-            SELECT u.id AS usuario_id, u.nome AS nome_professor, p.equipe_id FROM professores p JOIN usuarios u ON p.usuario_id = u.id WHERE p.status_vinculo='ativo'
+            SELECT 
+                u.id AS usuario_id, u.nome AS nome_professor, p.equipe_id
+            FROM professores p
+            JOIN usuarios u ON p.usuario_id = u.id
+            WHERE p.status_vinculo='ativo'
         """, conn)
         
         professores_disponiveis_nomes = sorted(professores_disponiveis_df["nome_professor"].unique().tolist())
@@ -1119,15 +1129,15 @@ with aba3:
             st.warning("Cadastre alunos, professores e equipes primeiro.")
         else:
             aluno = st.selectbox("🥋 Aluno:", alunos_df["nome"])
-            
             aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
-            
-            # 🚨 CORREÇÃO CRÍTICA NA BUSCA DO VÍNCULO EXISTENTE 🚨
+
+            # 🚨 CORREÇÃO CRÍTICA: Busca o vínculo existente de forma segura (LEFT JOIN)
             vinc_existente_df = pd.read_sql_query(f"""
-                SELECT a.professor_id, a.equipe_id, up.nome as professor_nome
+                SELECT a.professor_id, a.equipe_id, up.nome as professor_nome, e.nome as equipe_nome
                 FROM alunos a
-                JOIN professores p ON a.professor_id = p.id
-                JOIN usuarios up ON p.usuario_id = up.id
+                LEFT JOIN professores p ON a.professor_id = p.id
+                LEFT JOIN usuarios up ON p.usuario_id = up.id
+                LEFT JOIN equipes e ON a.equipe_id = e.id
                 WHERE a.usuario_id={aluno_id}
             """, conn)
             
@@ -1137,9 +1147,9 @@ with aba3:
             default_equipe_index = 0
             
             if vinc_existente is not None:
-                # Se o aluno já está vinculado, pré-seleciona os dados
-                prof_atual_nome = vinc_existente['professor_nome'] # Nome já está correto
-                equipe_atual_nome = equipes_df.loc[equipes_df["id"] == vinc_existente['equipe_id'], "nome"].iloc[0]
+                # 🎯 AGORA USAMOS OS NOMES CORRETOS JÁ BUSCADOS VIA JOIN
+                prof_atual_nome = vinc_existente['professor_nome']
+                equipe_atual_nome = vinc_existente['equipe_nome']
                 
                 if prof_atual_nome in professores_disponiveis_nomes:
                     default_prof_index = professores_disponiveis_nomes.index(prof_atual_nome)
@@ -1155,13 +1165,13 @@ with aba3:
             # 1. Encontra o usuario_id do professor selecionado
             prof_usuario_id = professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0]
 
-            # 2. Encontra a PK na tabela 'professores' (p.id) e garante o vínculo ativo (Lógica de correção anterior)
+            # 2. Encontra a PK na tabela 'professores' (p.id) e garante o vínculo ativo
             cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (prof_usuario_id,))
             prof_pk_id_result = cursor.fetchone()
             professor_id = prof_pk_id_result[0] if prof_pk_id_result else None
 
             if not professor_id:
-                # Lógica para criar/ativar o registro na tabela professores (mantida)
+                # Lógica para criar/ativar o registro na tabela professores
                 cursor.execute("SELECT id FROM professores WHERE usuario_id=?", (prof_usuario_id,))
                 existing_prof_record = cursor.fetchone()
                 
