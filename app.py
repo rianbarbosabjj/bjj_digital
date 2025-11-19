@@ -1903,10 +1903,10 @@ def tela_login():
     
     # ... (Lógica de exibição da Logo) ...
 
-    # =========================================
+# =========================================
     # BLOCO PRINCIPAL
     # =========================================
-c1, c2, c3 = st.columns([1, 1.5, 1])
+    c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
