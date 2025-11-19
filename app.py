@@ -1733,15 +1733,6 @@ def meus_certificados(usuario_logado):
 
 # Esta seção foi refatorada.
 # O login não fica mais no topo, ele é gerenciado por este roteador.
-Com certeza! Para resolver o erro NameError e garantir o funcionamento correto do preenchimento de endereço e das validações, aqui está a função tela_login completa e corrigida.
-
-A correção principal garante que o valor do CEP seja lido de forma estável através de sua chave de sessão (st.session_state['reg_cep_input']) na lógica de salvamento e validação.
-
-🛠️ Função tela_login (Completa e Finalizada)
-Substitua sua função def tela_login(): inteira por este bloco:
-
-Python
-
 def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
     
