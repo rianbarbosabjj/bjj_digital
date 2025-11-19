@@ -171,22 +171,25 @@ def criar_banco():
     conn.commit()
     conn.close()
 
-# 🔹 Cria o banco apenas se ainda não existir
-if not os.path.exists(DB_PATH):
-    st.toast("Criando novo banco de dados...")
-    criar_banco()
-# Se o banco já existe, adicionamos as novas colunas
-else:
+# 🔹 Cria o banco e realiza migrações APENAS UMA VEZ
+@st.cache_resource
+def get_db_connection():
+    """Garante que a conexão seja singleton e faz migrações iniciais."""
+    if not os.path.exists(DB_PATH):
+        st.toast("Criando novo banco de dados...")
+        criar_banco()
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # Adicionar CPF se não existir
+
+    # Lógica de migração (apenas será executada na primeira vez que o Streamlit rodar)
     try:
         cursor.execute("SELECT cpf FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN cpf TEXT UNIQUE")
         conn.commit()
         st.toast("Campo CPF adicionado à tabela 'usuarios'.")
-    # Adicionar campos de Endereço se não existirem
+
     try:
         cursor.execute("SELECT cep FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
@@ -197,16 +200,15 @@ else:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN estado TEXT")
         conn.commit()
         st.toast("Campos de Endereço adicionados à tabela 'usuarios'.")
-    # Adicionar campo NUMERO se não existir (CORREÇÃO: o erro ocorreu aqui)
+    
     try:
-        # Verifica a existência da coluna numero
         cursor.execute("SELECT numero FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
-        # Se a coluna não existe, adicione-a
         cursor.execute("ALTER TABLE usuarios ADD COLUMN numero TEXT")
         conn.commit()
         st.toast("Campo Número adicionado à tabela 'usuarios'.")
-    conn.close()
+        
+    return conn
 # =========================================
 # FUNÇÕES DE VALIDAÇÃO E BUSCA (NOVAS)
 # =========================================
