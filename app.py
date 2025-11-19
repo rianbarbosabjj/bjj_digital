@@ -89,8 +89,8 @@ def criar_banco():
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 conn = sqlite3.connect(DB_PATH)
 cursor = conn.cursor()
+cursor.executescript("""
 
-    cursor.executescript("""
 CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
