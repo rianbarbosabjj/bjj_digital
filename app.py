@@ -1479,19 +1479,19 @@ def tela_meu_perfil(usuario_logado):
             # Campos preenchidos automaticamente e desabilitados
             col_logr, col_bairro = st.columns(2)
             novo_logradouro = col_logr.text_input("Logradouro:", 
-                                                  value=st.session_state.endereco_cep['logradouro'], 
-                                                  disabled=True)
-            novo_bairro = col_bairro.text_input("Bairro:", 
-                                                value=st.session_state.endereco_cep['bairro'], 
-                                                disabled=True)
+                                      value=st.session_state.endereco_cep_cadastro['logradouro'], 
+                                      key='reg_logradouro')
+novo_bairro = col_bairro.text_input("Bairro:", 
+                                    value=st.session_state.endereco_cep_cadastro['bairro'], 
+                                    key='reg_bairro')
 
-            col_cidade, col_uf = st.columns(2)
-            novo_cidade = col_cidade.text_input("Cidade:", 
-                                                value=st.session_state.endereco_cep['cidade'], 
-                                                disabled=True)
-            novo_uf = col_uf.text_input("UF:", 
-                                       value=st.session_state.endereco_cep['uf'], 
-                                       disabled=True)
+col_cidade, col_uf = st.columns(2)
+novo_cidade = col_cidade.text_input("Cidade:", 
+                                    value=st.session_state.endereco_cep_cadastro['cidade'], 
+                                    key='reg_cidade')
+novo_uf = col_uf.text_input("UF:", 
+                            value=st.session_state.endereco_cep_cadastro['uf'], 
+                            key='reg_uf')
             
             # Campos preenchidos pelo usuário
             col_num, col_comp = st.columns(2)
