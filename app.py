@@ -1,4 +1,3 @@
-
 import streamlit as st
 from fpdf import FPDF
 from PIL import Image
@@ -28,7 +27,7 @@ COR_DESTAQUE = "#FFD770"
 COR_BOTAO = "#078B6C"
 COR_HOVER = "#FFD770"
 
-# [CSS (sem alterações)]
+# [CSS]
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
@@ -80,8 +79,9 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 }}
 </style>
 """, unsafe_allow_html=True)
+
 # =========================================
-# BANCO DE DADOS (ATUALIZADO E CORRIGIDO)
+# BANCO DE DADOS
 # =========================================
 DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
@@ -91,7 +91,6 @@ def criar_banco():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 🚨 CORREÇÃO 1: Este bloco deve estar DENTRO da função criar_banco()
     cursor.executescript("""
 CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,7 +103,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
         perfil_completo BOOLEAN DEFAULT 0,
         data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP,
         
-        -- 🆕 CAMPOS DE ENDEREÇO
+        -- CAMPOS DE ENDEREÇO
         cep TEXT,
         logradouro TEXT,
         numero TEXT,
@@ -215,38 +214,55 @@ def autenticar_local(usuario_email_ou_cpf, senha):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # Busca por 'nome' OU 'email' OU 'cpf'
-    if cpf_formatado:
-        # Se for um CPF válido, usa o CPF formatado na busca
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=? OR cpf=?) AND auth_provider='local'", 
-            (usuario_email_ou_cpf, usuario_email_ou_cpf, cpf_formatado) 
-        )
-    else:
-         # Se não for CPF ou se for nome/email, busca nos dois primeiros campos
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
-            (usuario_email_ou_cpf, usuario_email_ou_cpf) 
-        )
-
+    # 1. Tenta autenticar usando NOME ou EMAIL (a entrada original)
+    cursor.execute(
+        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
+        (usuario_email_ou_cpf, usuario_email_ou_cpf) 
+    )
     dados = cursor.fetchone()
+    
+    # 2. Se a busca por NOME/EMAIL falhar e a entrada for um CPF válido, tenta autenticar por CPF
+    if not dados and cpf_formatado:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE cpf=? AND auth_provider='local'", 
+            (cpf_formatado,) # Busca usando o CPF formatado
+        )
+        dados = cursor.fetchone()
+        
     conn.close()
     
+    # 3. Verifica a senha no resultado final
     if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
         return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
         
     return None
 
 # 4. Funções de busca e criação de usuário
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
+def buscar_usuario_por_email(email_ou_cpf):
+    """
+    Busca um usuário pelo email (principalmente usado para Auth Social)
+    e retorna seus dados. Também verifica o CPF para garantir unicidade cruzada.
+    """
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-    )
+    
+    cpf_formatado = formatar_e_validar_cpf(email_ou_cpf)
+
+    # Busca por 'email' (o caso mais comum) ou 'cpf' (se a entrada for um CPF válido)
+    if cpf_formatado:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=? OR cpf=?", 
+            (email_ou_cpf, cpf_formatado)
+        )
+    else:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", 
+            (email_ou_cpf,)
+        )
+        
     dados = cursor.fetchone()
     conn.close()
+    
     if dados:
         return {
             "id": dados[0], 
@@ -254,6 +270,7 @@ def buscar_usuario_por_email(email):
             "tipo": dados[2], 
             "perfil_completo": bool(dados[3])
         }
+        
     return None
 
 def criar_usuario_parcial_google(email, nome):
@@ -271,7 +288,6 @@ def criar_usuario_parcial_google(email, nome):
         novo_id = cursor.lastrowid
         conn.close()
         return {"id": novo_id, "email": email, "nome": nome}
-    # 🚨 CORREÇÃO 2: Indentação incorreta do bloco except
     except sqlite3.IntegrityError: # Email já existe
         conn.close()
         return None
@@ -304,7 +320,7 @@ def criar_usuarios_teste():
 criar_usuarios_teste()
 
 # =========================================
-# FUNÇÕES AUXILIARES (DO SEU PROJETO ORIGINAL)
+# FUNÇÕES AUXILIARES
 # =========================================
 def carregar_questoes(tema):
     """Carrega as questões do arquivo JSON correspondente."""
@@ -356,9 +372,7 @@ def formatar_e_validar_cpf(cpf):
     # Remove caracteres não numéricos
     cpf_limpo = ''.join(filter(str.isdigit, cpf))
     
-    # ⚠️ [Simplificado] Verifica se tem 11 dígitos
     if len(cpf_limpo) == 11:
-        # Poderia ser adicionada aqui uma validação mais robusta (dígitos verificadores)
         return cpf_limpo
     else:
         return None
@@ -413,16 +427,21 @@ def buscar_cep(cep):
         }
     except requests.exceptions.RequestException:
         return None
-        
-        return {
-            "logradouro": data.get('logradouro', ''),
-            "bairro": data.get('bairro', ''),
-            "cidade": data.get('localidade', ''),
-            "uf": data.get('uf', ''),
-        }
-    except requests.exceptions.RequestException:
+def formatar_cep(cep):
+    """
+    Remove pontuação do CEP e garante 8 dígitos.
+    Retorna o CEP formatado (somente números) ou None.
+    """
+    if not cep:
         return None
-
+    
+    cep_limpo = ''.join(filter(str.isdigit, cep))
+    
+    if len(cep_limpo) == 8:
+        return cep_limpo
+    else:
+        return None
+        
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """Gera certificado oficial do exame de faixa com assinatura caligráfica (Allura)."""
     pdf = FPDF("L", "mm", "A4") # Layout paisagem
@@ -584,7 +603,6 @@ def carregar_todas_questoes():
                 todas.append(q)
 
     return todas
-
 # =========================================
 # 🤼 MODO ROLA (DO SEU PROJETO ORIGINAL)
 # =========================================
@@ -962,6 +980,7 @@ def painel_professor():
                 st.rerun()
 
     conn.close()
+
 # =========================================
 # 🏛️ GESTÃO DE EQUIPES (DO SEU PROJETO ORIGINAL)
 # =========================================
@@ -970,10 +989,10 @@ def gestao_equipes():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 🚨 LINHA CRÍTICA: Definição das variáveis de aba (agora garantida)
+    # Definição das variáveis de aba
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
-    # === 🏫 ABA 1 - EQUIPES ===
+    # --- ABA 1: Criação e Edição de Equipe ---
     with aba1:
         st.subheader("Cadastrar nova equipe")
         nome_equipe = st.text_input("Nome da nova equipe:")
@@ -1000,12 +1019,10 @@ def gestao_equipes():
                 
                 # 2. VERIFICA E ATIVA O VÍNCULO DO PROFESSOR RESPONSÁVEL
                 if professor_responsavel_id:
-                    # Checa se o registro na tabela professores já existe para este usuário (ativo)
                     cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", 
                                    (professor_responsavel_id,))
                     
                     if not cursor.fetchone():
-                        # Se não existe vínculo ativo, cria um novo para a nova equipe como "ativo" e "responsável"
                         cursor.execute("""
                             INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
                             VALUES (?, ?, 1, 1, 'ativo')
@@ -1100,13 +1117,12 @@ def gestao_equipes():
         else:
             st.dataframe(profs_df, use_container_width=True)
 
-    # === 🥋 ABA 3 - ALUNOS (Com Inclusão de Professor Responsável) ===
+    # === 🥋 ABA 3 - ALUNOS (Com Edição de Vínculo Segura) ===
     with aba3:
         st.subheader("Vincular aluno a professor e equipe")
 
         alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
         
-        # 🚨 LÓGICA ATUALIZADA: Buscar todos os professores ativos/responsáveis para o seletor
         professores_disponiveis_df = pd.read_sql_query("""
             -- Professores Responsáveis
             SELECT 
@@ -1124,50 +1140,100 @@ def gestao_equipes():
             WHERE p.status_vinculo='ativo'
         """, conn)
         
-        # Remove duplicatas e garante lista única de nomes de professores
         professores_disponiveis_nomes = sorted(professores_disponiveis_df["nome_professor"].unique().tolist())
-        
         equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
 
         if alunos_df.empty or professores_disponiveis_df.empty or equipes_df.empty:
             st.warning("Cadastre alunos, professores e equipes primeiro.")
         else:
             aluno = st.selectbox("🥋 Aluno:", alunos_df["nome"])
-            
-            professor_nome = st.selectbox("👩‍🏫 Professor vinculado (nome):", professores_disponiveis_nomes)
-            
-            equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"])
-
             aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
+
+            # 🚨 CORREÇÃO CRÍTICA: Busca o vínculo existente de forma segura (LEFT JOIN)
+            vinc_existente_df = pd.read_sql_query(f"""
+                SELECT a.professor_id, a.equipe_id, up.nome as professor_nome, e.nome as equipe_nome
+                FROM alunos a
+                LEFT JOIN professores p ON a.professor_id = p.id
+                LEFT JOIN usuarios up ON p.usuario_id = up.id
+                LEFT JOIN equipes e ON a.equipe_id = e.id
+                WHERE a.usuario_id={aluno_id}
+            """, conn)
+            
+            vinc_existente = vinc_existente_df.iloc[0] if not vinc_existente_df.empty else None
+            
+            default_prof_index = 0
+            default_equipe_index = 0
+            
+            if vinc_existente is not None and vinc_existente['professor_nome']:
+                # 🎯 AGORA USAMOS OS NOMES CORRETOS JÁ BUSCADOS VIA JOIN
+                prof_atual_nome = vinc_existente['professor_nome']
+                equipe_atual_nome = vinc_existente['equipe_nome']
+                
+                if prof_atual_nome in professores_disponiveis_nomes:
+                    default_prof_index = professores_disponiveis_nomes.index(prof_atual_nome)
+                if equipe_atual_nome in equipes_df["nome"].tolist():
+                    default_equipe_index = equipes_df["nome"].tolist().index(equipe_atual_nome)
+
+            # --- Selectboxes re-renderizadas ---
+            professor_nome = st.selectbox("👩‍🏫 Professor vinculado (nome):", professores_disponiveis_nomes, index=default_prof_index)
+            equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"], index=default_equipe_index)
+
             equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
 
-            # 1. Encontra o usuario_id do professor selecionado (para buscar na tabela 'professores')
-            # Usamos iloc[0] para pegar o primeiro ID correspondente ao nome
+            # 1. Encontra o usuario_id do professor selecionado
             prof_usuario_id = professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0]
 
-            # 2. Encontra a PK na tabela 'professores' (p.id) que é a chave de vínculo do aluno
+            # 2. Encontra a PK na tabela 'professores' (p.id) e garante o vínculo ativo
             cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (prof_usuario_id,))
             prof_pk_id_result = cursor.fetchone()
+            professor_id = prof_pk_id_result[0] if prof_pk_id_result else None
 
-            if prof_pk_id_result:
-                professor_id = prof_pk_id_result[0]
-            else:
-                st.error(f"Erro: O professor {professor_nome} não tem um vínculo ativo na tabela de professores. Não é possível vincular alunos.")
-                professor_id = None
-
-            if professor_id and st.button("✅ Vincular Aluno"):
-                # Verifica se o aluno já está vinculado
-                cursor.execute("SELECT id FROM alunos WHERE usuario_id=?", (aluno_id,))
-                if cursor.fetchone():
-                    st.warning("Este aluno já possui um registro de vínculo. Atualize-o em vez de criar um novo.")
+            if not professor_id:
+                # Lógica para criar/ativar o registro na tabela professores
+                cursor.execute("SELECT id FROM professores WHERE usuario_id=?", (prof_usuario_id,))
+                existing_prof_record = cursor.fetchone()
+                
+                if existing_prof_record:
+                    cursor.execute("UPDATE professores SET status_vinculo='ativo', equipe_id=? WHERE usuario_id=?", (equipe_id, prof_usuario_id))
+                    conn.commit()
+                    professor_id = existing_prof_record[0]
+                    st.info(f"O vínculo do professor {professor_nome} foi ATIVADO para prosseguir.")
                 else:
+                    cursor.execute("""
+                        INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
+                        VALUES (?, ?, 1, 0, 'ativo')
+                    """, (prof_usuario_id, equipe_id))
+                    conn.commit()
+                    professor_id = cursor.lastrowid
+                    st.info(f"Vínculo do professor {professor_nome} CRIADO para prosseguir.")
+            
+            # --- Tenta Vincular/Editar o Aluno ---
+            
+            # Verifica se o aluno já tem um registro na tabela 'alunos'
+            cursor.execute("SELECT id FROM alunos WHERE usuario_id=?", (aluno_id,))
+            aluno_registro_id = cursor.fetchone()
+            
+            botao_texto = "✅ Vincular Aluno" if aluno_registro_id is None else "💾 Atualizar Vínculo"
+
+            if professor_id and st.button(botao_texto):
+                
+                if aluno_registro_id:
+                    # UPDATE: Aluno já existe, atualiza o vínculo
+                    cursor.execute("""
+                        UPDATE alunos SET professor_id=?, equipe_id=?, status_vinculo='ativo'
+                        WHERE usuario_id=?
+                    """, (professor_id, equipe_id, aluno_id))
+                    st.success(f"Vínculo do aluno {aluno} ATUALIZADO (Professor: {professor_nome}, Equipe: {equipe_aluno}).")
+                else:
+                    # INSERT: Aluno não existe, cria o vínculo
                     cursor.execute("""
                         INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
                         VALUES (?, ?, ?, ?, ?, 'ativo')
                     """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
-                    conn.commit()
-                    st.success(f"Aluno {aluno} vinculado à equipe {equipe_aluno} sob orientação de {professor_nome}.")
-                    st.rerun()
+                    st.success(f"Aluno {aluno} VINCULADO com sucesso (Professor: {professor_nome}, Equipe: {equipe_aluno}).")
+                
+                conn.commit()
+                st.rerun()
 
         st.markdown("---")
         st.subheader("Alunos vinculados")
@@ -1186,7 +1252,7 @@ def gestao_equipes():
 
     conn.close()
 # =========================================
-# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA 3)
+# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA)
 # =========================================
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários, restrita ao Admin."""
@@ -1200,7 +1266,7 @@ def gestao_usuarios(usuario_logado):
     st.markdown("Edite informações, redefina senhas ou altere o tipo de perfil de um usuário.")
 
     conn = sqlite3.connect(DB_PATH)
-    # 🔎 Seleciona o CPF e o ID para uso na edição
+    # Seleciona o CPF e o ID para uso na edição
     df = pd.read_sql_query(
         "SELECT id, nome, email, cpf, tipo_usuario, auth_provider, perfil_completo FROM usuarios ORDER BY nome", 
         conn
@@ -1249,8 +1315,13 @@ def gestao_usuarios(usuario_logado):
                 novo_nome = col1.text_input("Nome:", value=user_data['nome'])
                 novo_email = col2.text_input("Email:", value=user_data['email'])
                 
-                # 🆕 NOVO CAMPO CPF
+                # NOVO CAMPO CPF
                 novo_cpf_input = st.text_input("CPF:", value=user_data['cpf'] or "")
+                
+                # Máscara visual do CPF
+                cpf_display_limpo = formatar_e_validar_cpf(novo_cpf_input)
+                if cpf_display_limpo:
+                    st.info(f"CPF Formatado: {cpf_display_limpo[:3]}.{cpf_display_limpo[3:6]}.{cpf_display_limpo[6:9]}-{cpf_display_limpo[9:]}")
                 
                 opcoes_tipo = ["aluno", "professor", "admin"]
                 tipo_atual_db = user_data['tipo_usuario']
@@ -1285,7 +1356,7 @@ def gestao_usuarios(usuario_logado):
                         # 3. Executa o UPDATE (incluindo o CPF)
                         cursor.execute(
                             "UPDATE usuarios SET nome=?, email=?, cpf=?, tipo_usuario=? WHERE id=?",
-                            (novo_nome, novo_email, cpf_editado, novo_tipo, user_id_selecionado)
+                            (novo_nome.upper(), novo_email.upper(), cpf_editado, novo_tipo, user_id_selecionado)
                         )
                         conn.commit()
                         st.success("Dados do usuário atualizados com sucesso!")
