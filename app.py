@@ -203,36 +203,37 @@ oauth_google = OAuth2Component(
 
 # 3. Autenticação local (Login/Senha)
 def autenticar_local(usuario_email_ou_cpf, senha):
-    """
-    Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
-    """
-    # 📝 Tenta formatar para CPF para verificar se a entrada é um CPF
-    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf) 
+    """
+    Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
+    """
+    # 📝 Tenta formatar e validar a entrada como CPF
+    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf) 
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Busca por 'nome' OU 'email' OU 'cpf'
-    if cpf_formatado:
-        # Se for um CPF válido, usa o CPF formatado na busca
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=? OR cpf=?) AND auth_provider='local'", 
-            (usuario_email_ou_cpf, usuario_email_ou_cpf, cpf_formatado) 
-        )
-    else:
-         # Se não for CPF ou se for nome/email, busca nos dois primeiros campos
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
-            (usuario_email_ou_cpf, usuario_email_ou_cpf) 
-        )
-
-    dados = cursor.fetchone()
-    conn.close()
-    
-    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
-        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
-        
-    return None
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 1. Tenta autenticar usando NOME ou EMAIL (a entrada original)
+    cursor.execute(
+        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
+        (usuario_email_ou_cpf, usuario_email_ou_cpf) 
+    )
+    dados = cursor.fetchone()
+    
+    # 2. Se a busca por NOME/EMAIL falhar e a entrada for um CPF válido, tenta autenticar por CPF
+    if not dados and cpf_formatado:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE cpf=? AND auth_provider='local'", 
+            (cpf_formatado,) # Busca usando o CPF formatado
+        )
+        dados = cursor.fetchone()
+        
+    conn.close()
+    
+    # 3. Verifica a senha no resultado final
+    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
+        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+        
+    return None
 
 # 4. Funções de busca e criação de usuário
 def buscar_usuario_por_email(email):
