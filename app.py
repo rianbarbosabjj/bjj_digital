@@ -252,17 +252,29 @@ def migrar_db():
         'numero': 'TEXT'
     }
     
+    # 1. MIGRAÇÃO DA TABELA USUARIOS
     for coluna, tipo in colunas_novas.items():
         try:
+            # 👈 Correção: ESTA LINHA DEVE SER INDENTADA
+            cursor.execute(f"SELECT {coluna} FROM usuarios LIMIT 1")
+        except sqlite3.OperationalError:
+            # 👈 E ESTE BLOCO DEVE ESTAR NO NÍVEL CORRETO
+            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} {tipo}")
+            conn.commit()
+            st.toast(f"Coluna {coluna} adicionada.")
+            
+    # 2. MIGRAÇÃO DA TABELA ALUNOS (Adição das datas de exame)
+    try:
+        # 👈 TENTATIVA DE LER UMA COLUNA DA TABELA ALUNOS
         cursor.execute("SELECT data_inicio_exame FROM alunos LIMIT 1")
     except sqlite3.OperationalError:
+        # 👈 SE FALHAR, AS COLUNAS ESTÃO FALTANDO
         cursor.execute("ALTER TABLE alunos ADD COLUMN data_inicio_exame TEXT")
         cursor.execute("ALTER TABLE alunos ADD COLUMN data_fim_exame TEXT")
         conn.commit()
         st.toast("Campos de Data de Exame adicionados à tabela 'alunos'.")
             
     conn.close()
-
 # 5. Usuários de teste (Atualizado)
 def criar_usuarios_teste():
     """Cria usuários padrão locais com perfil completo."""
