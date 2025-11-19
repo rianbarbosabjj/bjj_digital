@@ -1571,14 +1571,17 @@ def tela_meu_perfil(usuario_logado):
             col1, col2 = st.columns(2)
             novo_nome = col1.text_input("Nome de Usuário:", value=user_data['nome'])
             novo_email = col2.text_input("Email:", value=user_data['email'])
-            novo_cpf_input = st.text_input("CPF:", value=user_data['cpf'] or "")
+            
+            # 📌 CPF com Máscara Visual
+            cpf_limpo_db = user_data['cpf'] or ""
+            novo_cpf_input = st.text_input("CPF (somente números):", value=cpf_limpo_db, key="perfil_cpf_input")
+            cpf_display_limpo = formatar_e_validar_cpf(novo_cpf_input)
+            if cpf_display_limpo:
+                st.info(f"CPF Formatado: {cpf_display_limpo[:3]}.{cpf_display_limpo[3:6]}.{cpf_display_limpo[6:9]}-{cpf_display_limpo[9:]}")
             
             st.markdown("#### 2. Endereço")
             
-            # --- Lógica de Busca de CEP ---
-            
-            # Inicializa variáveis de endereço com dados do banco.
-            # Se o estado da sessão não existe, ele é criado com os dados do banco.
+            # Inicializa variáveis de endereço com dados do banco
             st.session_state.setdefault('endereco_cep', {
                 'cep': user_data['cep'] or "", 
                 'logradouro': user_data['logradouro'] or "", 
@@ -1586,97 +1589,99 @@ def tela_meu_perfil(usuario_logado):
                 'cidade': user_data['cidade'] or "", 
                 'uf': user_data['uf'] or ""
             })
-
-            # Garante que o estado da sessão seja limpo ao sair e recriado corretamente
-            # Se o usuário editar manualmente o CEP no input, ele será usado na busca.
             
+            # Sincroniza chaves dos widgets com o estado de sessão (necessário para edição manual e CEP)
+            st.session_state.setdefault('perfil_logradouro', st.session_state.endereco_cep['logradouro'])
+            st.session_state.setdefault('perfil_bairro', st.session_state.endereco_cep['bairro'])
+            st.session_state.setdefault('perfil_cidade', st.session_state.endereco_cep['cidade'])
+            st.session_state.setdefault('perfil_uf', st.session_state.endereco_cep['uf'])
+            st.session_state.setdefault('perfil_cep_input', st.session_state.endereco_cep['cep'])
+
+
             col_cep, col_btn = st.columns([3, 1])
             with col_cep:
-                # O campo CEP sempre exibe o valor salvo ou o último pesquisado/editado
-                novo_cep = st.text_input("CEP:", 
-                                         value=st.session_state.endereco_cep['cep'], 
-                                         max_chars=9, 
-                                         key='perfil_cep_input')
+                # O input agora está ligado à sua chave de sessão
+                novo_cep = st.text_input("CEP:", max_chars=9, key='perfil_cep_input')
+                # 📌 Máscara Visual CEP
+                cep_digitado_limpo = formatar_cep(novo_cep)
+                if cep_digitado_limpo:
+                     st.info(f"CEP Formatado: {cep_digitado_limpo[:5]}-{cep_digitado_limpo[5:]}")
+
             with col_btn:
-                st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True) # Espaçamento
-                if st.form_submit_button("Buscar CEP 🔍", type="secondary", use_container_width=True, help="Use o botão Buscar CEP antes de Salvar"):
-                    endereco = buscar_cep(novo_cep)
+                st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
+                if st.form_submit_button("Buscar CEP 🔍", type="secondary", use_container_width=True, help="Busca o endereço antes de salvar o perfil"):
+                    cep_digitado = st.session_state.perfil_cep_input
+                    endereco = buscar_cep(cep_digitado)
+                    
                     if endereco:
                         st.session_state.endereco_cep = {
                             'cep': novo_cep,
                             **endereco
                         }
+                        # AÇÃO CRÍTICA: Atualiza o valor interno de CADA WIDGET via chave de sessão
+                        st.session_state['perfil_logradouro'] = endereco['logradouro']
+                        st.session_state['perfil_bairro'] = endereco['bairro']
+                        st.session_state['perfil_cidade'] = endereco['cidade']
+                        st.session_state['perfil_uf'] = endereco['uf']
+                        
                         st.success("Endereço encontrado e campos preenchidos! Preencha Número e Complemento.")
                     else:
-                        st.error("CEP inválido ou não encontrado. Verifique o número.")
-                        st.session_state.endereco_cep = {
-                            'cep': novo_cep,
-                            'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
-                        }
-                    st.rerun() # Atualiza a tela para exibir os campos preenchidos
+                        st.error("CEP inválido ou não encontrado.")
+                    st.rerun() 
             
-            # CAMPOS HABILITADOS: O valor inicial é puxado do st.session_state após a busca.
+            # CAMPOS HABILITADOS (Lendo diretamente da chave de sessão)
             col_logr, col_bairro = st.columns(2)
-            novo_logradouro = col_logr.text_input("Logradouro:", 
-                                                  value=st.session_state.endereco_cep['logradouro'], 
-                                                  key='perfil_logradouro')
-            novo_bairro = col_bairro.text_input("Bairro:", 
-                                                value=st.session_state.endereco_cep['bairro'], 
-                                                key='perfil_bairro')
+            novo_logradouro = col_logr.text_input("Logradouro:", key='perfil_logradouro')
+            novo_bairro = col_bairro.text_input("Bairro:", key='perfil_bairro')
 
             col_cidade, col_uf = st.columns(2)
-            novo_cidade = col_cidade.text_input("Cidade:", 
-                                                value=st.session_state.endereco_cep['cidade'], 
-                                                key='perfil_cidade')
-            novo_uf = col_uf.text_input("UF:", 
-                                       value=st.session_state.endereco_cep['uf'], 
-                                       key='perfil_uf')
+            novo_cidade = col_cidade.text_input("Cidade:", key='perfil_cidade')
+            novo_uf = col_uf.text_input("UF:", key='perfil_uf')
             
-            # Campos preenchidos pelo usuário (lendo o valor do banco se existir, ou do state)
+            # Campos Número e Complemento (Opcionais)
             col_num, col_comp = st.columns(2)
-            novo_numero = col_num.text_input("Número:", value=user_data['numero'] or "", key='perfil_numero')
-            novo_complemento = col_comp.text_input("Complemento:", value=user_data['complemento'] or "", key='perfil_complemento')
+            novo_numero = col_num.text_input("Número (Opcional):", value=user_data['numero'] or "", key='perfil_numero')
+            novo_complemento = col_comp.text_input("Complemento (Opcional):", value=user_data['complemento'] or "", key='perfil_complemento')
             
             
             st.text_input("Tipo de Perfil:", value=user_data['tipo_usuario'].capitalize(), disabled=True)
             
-            # Botão de salvar principal
             submitted_info = st.form_submit_button("💾 Salvar Alterações", use_container_width=True, type="primary")
             
             if submitted_info:
-                # ... (Lógica de validação do CPF e campos obrigatórios) ...
                 
-                if not novo_nome or not novo_email:
+                # 🚨 Formatação e Validação Final
+                cpf_final = formatar_e_validar_cpf(st.session_state.perfil_cpf_input)
+                cep_final = formatar_cep(st.session_state.perfil_cep_input)
+
+                if not (novo_nome and novo_email):
                     st.warning("Nome e Email são obrigatórios.")
+                elif not cpf_final:
+                    st.error("CPF inválido. Por favor, corrija o formato (11 dígitos).")
                 else:
                     try:
-                        # Executa o UPDATE com todos os campos.
                         cursor.execute(
                             """
                             UPDATE usuarios SET nome=?, email=?, cpf=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, uf=? WHERE id=?
                             """,
                             (
-                                novo_nome, 
-                                novo_email, 
-                                cpf_editado, 
-                                # 🚨 VALORES LIDOS DIRETAMENTE DOS WIDGETS
-                                novo_cep,
-                                novo_logradouro,
-                                novo_numero,
-                                novo_complemento,
-                                novo_bairro,
-                                novo_cidade,
-                                novo_uf,
+                                novo_nome.upper(), # 👈 MAIÚSCULO
+                                novo_email.upper(), # 👈 MAIÚSCULO
+                                cpf_final, # 👈 FORMATADO
+                                cep_final, # 👈 FORMATADO
+                                novo_logradouro.upper(), # 👈 MAIÚSCULO
+                                novo_numero.upper() if novo_numero else None, # 👈 MAIÚSCULO (Opcional)
+                                novo_complemento.upper() if novo_complemento else None, # 👈 MAIÚSCULO (Opcional)
+                                novo_bairro.upper(), # 👈 MAIÚSCULO
+                                novo_cidade.upper(), # 👈 MAIÚSCULO
+                                novo_uf.upper(), # 👈 MAIÚSCULO
                                 user_id_logado
                             )
                         )
                         conn.commit()
                         st.success("Dados e Endereço atualizados com sucesso!")
                         
-                        # Atualiza a sessão para refletir as mudanças no front-end
                         st.session_state.usuario['nome'] = novo_nome
-                        
-                        # A chave 'endereco_cep' já tem os dados mais recentes devido ao widget key.
                         st.rerun() 
                         
                     except sqlite3.IntegrityError:
@@ -1686,8 +1691,35 @@ def tela_meu_perfil(usuario_logado):
 
     # --- Expander 2: Alteração de Senha (Inalterada) ---
     if user_data['auth_provider'] == 'local':
-        # ... (Bloco de alteração de senha) ...
-        pass
+        with st.expander("🔑 Alterar Senha", expanded=False):
+            with st.form(key="form_change_pass"):
+                st.markdown("#### Redefinir Senha")
+                
+                senha_atual = st.text_input("Senha Atual:", type="password")
+                nova_senha = st.text_input("Nova Senha:", type="password")
+                confirmar_senha = st.text_input("Confirmar Nova Senha:", type="password")
+                
+                submitted_pass = st.form_submit_button("🔑 Alterar Senha", use_container_width=True)
+                
+                if submitted_pass:
+                    if not senha_atual or not nova_senha or not confirmar_senha:
+                        st.warning("Por favor, preencha todos os campos de senha.")
+                    elif nova_senha != confirmar_senha:
+                        st.error("As novas senhas não coincidem.")
+                    else:
+                        # Verifica a senha atual
+                        hash_atual_db = user_data['senha']
+                        if bcrypt.checkpw(senha_atual.encode(), hash_atual_db.encode()):
+                            # Se a senha atual estiver correta, atualiza
+                            novo_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+                            cursor.execute(
+                                "UPDATE usuarios SET senha=? WHERE id=?",
+                                (novo_hash, user_id_logado)
+                            )
+                            conn.commit()
+                            st.success("Senha alterada com sucesso!")
+                        else:
+                            st.error("A 'Senha Atual' está incorreta.")
     else:
         st.info(f"Seu login é gerenciado pelo **{user_data['auth_provider'].capitalize()}**.")
 
@@ -1868,9 +1900,6 @@ def tela_login():
     # CSS e Logo (Estrutura assumida como correta)
     # =========================================
     st.markdown(f"""
-    <style>
-        /* ... Seu CSS completo para containers e botões ... */
-    </style>
     """, unsafe_allow_html=True)
     
     # ... (Lógica de exibição da Logo) ...
@@ -1878,7 +1907,7 @@ def tela_login():
     # =========================================
     # BLOCO PRINCIPAL
     # =========================================
-    c1, c2, c3 = st.columns([1, 1.5, 1])
+c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
@@ -1912,7 +1941,7 @@ def tela_login():
                 # ... (Lógica de Login Google) ...
 
         # =========================================
-        # CADASTRO (FINAL CORREÇÃO DE ENDEREÇO E VALIDAÇÃO)
+        # CADASTRO (COM MÁSCARAS E VALIDAÇÃO)
         # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             
@@ -1920,7 +1949,15 @@ def tela_login():
 
             nome = st.text_input("Nome de Usuário (login):") 
             email = st.text_input("E-mail:")
-            cpf = st.text_input("CPF (somente números ou formato padrão):") 
+            
+            # CPF com Máscara Visual
+            cpf_input = st.text_input("CPF (somente números):") 
+            
+            # 🚨 MÁSCARA VISUAL CPF
+            cpf_display_limpo = formatar_e_validar_cpf(cpf_input)
+            if cpf_display_limpo: 
+                st.info(f"CPF Formatado: {cpf_display_limpo[:3]}.{cpf_display_limpo[3:6]}.{cpf_display_limpo[6:9]}-{cpf_display_limpo[9:]}")
+            
             senha = st.text_input("Senha:", type="password")
             confirmar = st.text_input("Confirmar senha:", type="password")
             
@@ -1961,19 +1998,23 @@ def tela_login():
                 'cep': '', 'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
             })
 
-            # --- CORREÇÃO DE PREENCHIMENTO ---
-            # Sincroniza os valores iniciais dos inputs com o estado da sessão
+            # --- Sincronização de Chaves (para garantir que o preenchimento funcione) ---
             st.session_state.setdefault('reg_logradouro', st.session_state.endereco_cep_cadastro['logradouro'])
             st.session_state.setdefault('reg_bairro', st.session_state.endereco_cep_cadastro['bairro'])
             st.session_state.setdefault('reg_cidade', st.session_state.endereco_cep_cadastro['cidade'])
             st.session_state.setdefault('reg_uf', st.session_state.endereco_cep_cadastro['uf'])
             st.session_state.setdefault('reg_cep_input', st.session_state.endereco_cep_cadastro['cep'])
-            # ---------------------------------
+            # -------------------------------------------------------------------------
 
             col_cep, col_btn = st.columns([3, 1])
             with col_cep:
                 # O input agora está ligado à sua chave de sessão
                 st.text_input("CEP:", max_chars=9, key='reg_cep_input')
+                # 📌 MÁSCARA VISUAL CEP
+                cep_digitado_limpo = formatar_cep(st.session_state.reg_cep_input)
+                if cep_digitado_limpo:
+                     st.info(f"CEP Formatado: {cep_digitado_limpo[:5]}-{cep_digitado_limpo[5:]}")
+
             with col_btn:
                 st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
                 if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_reg_cep'):
@@ -1985,7 +2026,7 @@ def tela_login():
                             'cep': cep_digitado,
                             **endereco
                         }
-                        # AÇÃO CRÍTICA: Atualiza o valor interno de CADA WIDGET via chave de sessão
+                        # Atualiza o valor interno de CADA WIDGET via chave de sessão
                         st.session_state['reg_logradouro'] = endereco['logradouro']
                         st.session_state['reg_bairro'] = endereco['bairro']
                         st.session_state['reg_cidade'] = endereco['cidade']
@@ -2023,25 +2064,29 @@ def tela_login():
 
 
             if st.button("Cadastrar", use_container_width=True, type="primary"):
-                if not (nome and email and cpf and senha and confirmar):
+                # Formatação Final dos Dados
+                nome_final = nome.upper()
+                email_final = email.upper()
+                cpf_final = formatar_e_validar_cpf(cpf_input)
+                cep_final = formatar_cep(st.session_state.reg_cep_input)
+
+                # ----------------------------------------------------
+
+                if not (nome and email and cpf_input and senha and confirmar):
                     st.warning("Preencha todos os campos de contato e senha obrigatórios.")
                 elif senha != confirmar:
                     st.error("As senhas não coincidem.")
-                # 🚨 VALIDAÇÃO DE ENDEREÇO OBRIGATÓRIO
-                elif not (st.session_state.reg_cep_input and novo_logradouro and novo_bairro and novo_cidade and novo_uf):
+                elif not cpf_final:
+                    st.error("CPF inválido. Por favor, corrija o formato (11 dígitos).")
+                # 🚨 VALIDAÇÃO DE ENDEREÇO OBRIGATÓRIO (CEP e dados principais)
+                elif not (cep_final and novo_logradouro and novo_bairro and novo_cidade and novo_uf):
                     st.error("O Endereço (CEP, Logradouro, Bairro, Cidade e UF) é obrigatório. Por favor, preencha o CEP e clique em 'Buscar CEP'.")
                 else:
-                    
-                    # ⚠️ Validação do CPF
-                    cpf_formatado = formatar_e_validar_cpf(cpf)
-                    if not cpf_formatado:
-                        st.error("CPF inválido. Por favor, corrija o formato (11 dígitos).")
-                        return
                     
                     cursor = conn.cursor()
                     cursor.execute(
                         "SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", 
-                        (nome, email, cpf_formatado)
+                        (nome, email, cpf_final)
                     )
                     
                     if cursor.fetchone():
@@ -2061,32 +2106,22 @@ def tela_login():
                                 VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?, ?, ?)
                                 """,
                                 (
-                                    nome, email, cpf_formatado, tipo_db, hashed,
+                                    nome_final, email_final, cpf_final, tipo_db, hashed,
                                     
-                                    # VALORES FINAIS LIDOS DAS CHAVES DE SESSÃO DOS WIDGETS
-                                    st.session_state.reg_cep_input, novo_logradouro, novo_numero, 
-                                    novo_complemento, novo_bairro, novo_cidade, novo_uf
+                                    # VALORES FINAIS MAIÚSCULOS E FORMATADOS
+                                    cep_final, 
+                                    st.session_state.reg_logradouro.upper(), 
+                                    novo_numero.upper() if novo_numero else None, 
+                                    novo_complemento.upper() if novo_complemento else None, 
+                                    st.session_state.reg_bairro.upper(), 
+                                    st.session_state.reg_cidade.upper(), 
+                                    st.session_state.reg_uf.upper()
                                 )
                             )
                             novo_id = cursor.lastrowid
                             
-                            if tipo_db == "aluno":
-                                cursor.execute(
-                                    """
-                                    INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) 
-                                    VALUES (?, ?, ?, 'pendente')
-                                    """,
-                                    (novo_id, faixa, equipe_id) 
-                                )
-                            else: # Professor
-                                cursor.execute(
-                                    """
-                                    INSERT INTO professores (usuario_id, equipe_id, eh_responsavel, status_vinculo) 
-                                    VALUES (?, ?, 0, 'pendente')
-                                    """,
-                                    (novo_id, equipe_id)
-                                )
-                            
+                            # ... (Lógica de inserção em 'alunos' ou 'professores') ...
+
                             conn.commit()
                             conn.close()
                             
