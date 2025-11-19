@@ -1535,11 +1535,14 @@ def meus_certificados(usuario_logado):
 
 def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
+    
+    # 🚨 Garante que o modo_login está definido (evita tela em branco)
     st.session_state.setdefault("modo_login", "login")
 
     # =========================================
     # CSS
     # =========================================
+    # Mantendo apenas o CSS crucial para o layout do login
     st.markdown("""
     <style>
         html, body, [data-testid="stAppViewContainer"] {
@@ -1605,22 +1608,82 @@ def tela_login():
         </div>
     """, unsafe_allow_html=True)
 
-# =========================================
-# BLOCO DE LOGIN
-# =========================================
+    # =========================================
+    # BLOCO DE LOGIN
+    # =========================================
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
-                # ... (Lógica de Login)
-                pass # Bloco reduzido por brevidade
+                st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
+                
+                # Campo de login que aceita usuário, email ou CPF
+                user_ou_email = st.text_input("Nome de Usuário, Email ou CPF:")
+                pwd = st.text_input("Senha:", type="password")
 
-        # 🚨 CORREÇÃO DE INDENTAÇÃO APLICADA AQUI!
+                if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
+                    # Agora autenticar_local verifica nome, email ou cpf
+                    u = autenticar_local(user_ou_email.strip(), pwd.strip()) 
+                    if u:
+                        st.session_state.usuario = u
+                        st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
+                        st.rerun()
+                    else:
+                        st.error("Usuário/Email/CPF ou senha incorretos. Tente novamente.")
+
+                # Botões Criar Conta / Esqueci Senha
+                colx, coly, colz = st.columns([1, 2, 1])
+                with coly:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("📋 Criar Conta", key="criar_conta_btn"):
+                            st.session_state["modo_login"] = "cadastro"
+                            st.rerun()
+                    with col2:
+                        if st.button("🔑 Esqueci Senha", key="esqueci_btn"):
+                            st.session_state["modo_login"] = "recuperar"
+                            st.rerun()
+
+                # Botão Google
+                st.markdown("<div class='divider'>— OU —</div>", unsafe_allow_html=True)
+                token = oauth_google.authorize_button(
+                    name="Entrar com o Google",
+                    icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
+                    use_container_width=True,
+                    scope="email profile",
+                    key="google_login",
+                    redirect_uri=REDIRECT_URI,
+                )
+                
+                # Lógica do token Google
+                if token and "access_token" in token:
+                    st.session_state.token = token
+                    access_token = token["access_token"]
+                    headers = {"Authorization": f"Bearer {access_token}"}
+                    try:
+                        resp = requests.get("https://www.googleapis.com/oauth2/v3/userinfo", headers=headers, timeout=5)
+                        resp.raise_for_status()
+                        info = resp.json()
+                        email, nome = info.get("email"), info.get("name")
+                    except Exception as e:
+                        st.error(f"Erro ao autenticar com Google: {e}")
+                        email, nome = None, None
+                    if email:
+                        usuario_db = buscar_usuario_por_email(email)
+                        if usuario_db:
+                            st.session_state.usuario = usuario_db
+                        else:
+                            novo = criar_usuario_parcial_google(email, nome)
+                            st.session_state.registration_pending = novo
+                        st.rerun()
+
+        # =========================================
+        # CADASTRO
+        # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             
             st.subheader("📋 Cadastro de Novo Usuário")
 
-            # Este é o campo "Usuário (login)" que você quer
             nome = st.text_input("Nome de Usuário (login):") 
             email = st.text_input("E-mail:")
             cpf = st.text_input("CPF (somente números ou formato padrão):") # 👈 NOVO CAMPO
@@ -1640,7 +1703,7 @@ def tela_login():
                 faixa = "Preta" 
                 st.info("Professores são cadastrados com faixa preta. Vínculos de equipe são feitos pelo Admin.")
 
-
+            # O bloco do botão AGORA ESTÁ INDENTADO CORRETAMENTE DENTRO do 'elif'
             if st.button("Cadastrar", use_container_width=True, type="primary"):
                 if not (nome and email and cpf and senha and confirmar):
                     st.warning("Preencha todos os campos obrigatórios.")
@@ -1648,18 +1711,16 @@ def tela_login():
                     st.error("As senhas não coincidem.")
                 else:
                     
-                    # ⚠️ NOVO: Validação do CPF
+                    # ⚠️ Validação do CPF
                     cpf_formatado = formatar_e_validar_cpf(cpf)
                     if not cpf_formatado:
                         st.error("CPF inválido. Por favor, digite um CPF válido (11 dígitos).")
-                        return # Sai da função de cadastro
-                    # --------------------------
-
-                    # CORREÇÃO: Conecta no banco de dados correto
+                        return
+                    
                     conn = sqlite3.connect(DB_PATH) 
                     cursor = conn.cursor()
                     
-                    # ⚠️ NOVO: Verifica se nome, email ou cpf já existem
+                    # ⚠️ Verifica se nome, email ou cpf já existem (unicidade)
                     cursor.execute(
                         "SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", 
                         (nome, email, cpf_formatado)
@@ -1711,6 +1772,19 @@ def tela_login():
                             conn.close()
                             st.error(f"Erro ao cadastrar: {e}")
 
+            if st.button("⬅️ Voltar para Login", use_container_width=True):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
+
+        # =========================================
+        # RECUPERAÇÃO DE SENHA
+        # =========================================
+        elif st.session_state["modo_login"] == "recuperar":
+            st.subheader("🔑 Recuperar Senha")
+            email = st.text_input("Digite o e-mail cadastrado:")
+            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                st.info("Em breve será implementado o envio de recuperação de senha.")
+            
             if st.button("⬅️ Voltar para Login", use_container_width=True):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
