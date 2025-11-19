@@ -1538,7 +1538,6 @@ def tela_inicio():
                 st.markdown("""<p style='text-align: center; min-height: 50px;'>Monte as provas oficiais selecionando questões.</p> """, unsafe_allow_html=True)
                 # 2. 👇 BOTÃO DE NAVEGAÇÃO
                 st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
-
 # =========================================
 # 👤 MEU PERFIL (CORRIGIDA E ATUALIZADA com CPF)
 # =========================================
