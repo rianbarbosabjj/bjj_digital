@@ -31,20 +31,27 @@ COR_HOVER = "#FFD770"
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
-.stButton>button {{
-    background: linear-gradient(90deg, {COR_BOTAO}, #056853);
-    color: white;
-    font-weight: bold;
-    border: none;
-    padding: 0.6em 1.2em;
-    border-radius: 10px;
+
+/* --- Estilo Base dos Botões (Incluindo todos os botões padrão) --- */
+/* Usando o seletor de atributo para ser mais robusto */
+.stButton button {{
+    background: linear-gradient(90deg, {COR_BOTAO}, #056853) !important;
+    color: white !important;
+    font-weight: bold !important;
+    border: none !important;
+    padding: 0.6em 1.2em !important;
+    border-radius: 10px !important;
     transition: 0.3s;
 }}
-.stButton>button:hover {{
-    background: {COR_HOVER};
-    color: {COR_FUNDO};
+
+/* --- Estilo de Hover --- */
+.stButton button:hover {{
+    background: {COR_HOVER} !important;
+    color: {COR_FUNDO} !important;
     transform: scale(1.02);
 }}
+
+/* --- Cores de Texto e Títulos (Mantido) --- */
 h1, h2, h3 {{
     color: {COR_DESTAQUE};
     text-align: center;
@@ -79,8 +86,6 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 }}
 </style>
 """, unsafe_allow_html=True)
-
-
 # =========================================
 # BANCO DE DADOS (ATUALIZADO E CORRIGIDO)
 # =========================================
