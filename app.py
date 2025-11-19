@@ -969,51 +969,52 @@ def gestao_equipes():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 🚨 CORREÇÃO CRÍTICA: Definição das variáveis de aba (aba1, aba2, aba3)
+    # 🚨 LINHA CRÍTICA: Definição das variáveis de aba (agora garantida)
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
-# === 🏫 ABA 1 - EQUIPES ===
-with aba1:
-    st.subheader("Cadastrar nova equipe")
-    # ... (campos nome_equipe, descricao) ...
-    
-    professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
-    professor_responsavel_id = None
-    if not professores_df.empty:
-        prof_resp_nome = st.selectbox(
-            "👩‍🏫 Professor responsável:",
-            ["Nenhum"] + professores_df["nome"].tolist()
-        )
-        if prof_resp_nome != "Nenhum":
-            professor_responsavel_id = int(professores_df.loc[professores_df["nome"] == prof_resp_nome, "id"].values[0])
+    # === 🏫 ABA 1 - EQUIPES ===
+    with aba1:
+        st.subheader("Cadastrar nova equipe")
+        nome_equipe = st.text_input("Nome da nova equipe:")
+        descricao = st.text_area("Descrição da nova equipe:")
 
-    if st.button("➕ Criar Equipe"):
-        if nome_equipe.strip():
-            # 1. Cria a equipe
-            cursor.execute(
-                "INSERT INTO equipes (nome, descricao, professor_responsavel_id) VALUES (?, ?, ?)",
-                (nome_equipe, descricao, professor_responsavel_id)
+        professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
+        professor_responsavel_id = None
+        if not professores_df.empty:
+            prof_resp_nome = st.selectbox(
+                "👩‍🏫 Professor responsável:",
+                ["Nenhum"] + professores_df["nome"].tolist()
             )
-            novo_equipe_id = cursor.lastrowid
-            
-            # 2. 🚨 VERIFICA E ATIVA O VÍNCULO DO PROFESSOR RESPONSÁVEL
-            if professor_responsavel_id:
-                # Checa se o registro na tabela professores já existe para este usuário (ativo)
-                cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", 
-                               (professor_responsavel_id,))
+            if prof_resp_nome != "Nenhum":
+                professor_responsavel_id = int(professores_df.loc[professores_df["nome"] == prof_resp_nome, "id"].values[0])
+
+        if st.button("➕ Criar Equipe"):
+            if nome_equipe.strip():
+                # 1. Cria a equipe
+                cursor.execute(
+                    "INSERT INTO equipes (nome, descricao, professor_responsavel_id) VALUES (?, ?, ?)",
+                    (nome_equipe, descricao, professor_responsavel_id)
+                )
+                novo_equipe_id = cursor.lastrowid
                 
-                if not cursor.fetchone():
-                    # Se não existe vínculo ativo, cria um novo para a nova equipe como "ativo" e "responsável"
-                    cursor.execute("""
-                        INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
-                        VALUES (?, ?, 1, 1, 'ativo')
-                    """, (professor_responsavel_id, novo_equipe_id))
-            
-            conn.commit()
-            st.success(f"Equipe '{nome_equipe}' criada com sucesso! Professor Responsável ativado.")
-            st.rerun()
-        else:
-            st.error("O nome da equipe é obrigatório.")
+                # 2. VERIFICA E ATIVA O VÍNCULO DO PROFESSOR RESPONSÁVEL
+                if professor_responsavel_id:
+                    # Checa se o registro na tabela professores já existe para este usuário (ativo)
+                    cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", 
+                                   (professor_responsavel_id,))
+                    
+                    if not cursor.fetchone():
+                        # Se não existe vínculo ativo, cria um novo para a nova equipe como "ativo" e "responsável"
+                        cursor.execute("""
+                            INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
+                            VALUES (?, ?, 1, 1, 'ativo')
+                        """, (professor_responsavel_id, novo_equipe_id))
+                
+                conn.commit()
+                st.success(f"Equipe '{nome_equipe}' criada com sucesso! Professor Responsável ativado.")
+                st.rerun()
+            else:
+                st.error("O nome da equipe é obrigatório.")
 
         st.markdown("---")
         st.subheader("Equipes existentes")
@@ -1061,7 +1062,7 @@ with aba1:
                     st.warning(f"Equipe '{equipe_sel}' excluída com sucesso.")
                     st.rerun()
 
-    # --- ABA 2 - PROFESSORES (Apoio) ---
+    # === 👩‍🏫 ABA 2 - PROFESSORES (Apoio) ===
     with aba2:
         st.subheader("Vincular professor de apoio a uma equipe")
 
@@ -1140,6 +1141,7 @@ with aba1:
             equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
 
             # 1. Encontra o usuario_id do professor selecionado (para buscar na tabela 'professores')
+            # Usamos iloc[0] para pegar o primeiro ID correspondente ao nome
             prof_usuario_id = professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0]
 
             # 2. Encontra a PK na tabela 'professores' (p.id) que é a chave de vínculo do aluno
