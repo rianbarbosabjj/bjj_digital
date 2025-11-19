@@ -86,11 +86,6 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 # =========================================
 DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
-# =========================================
-# BANCO DE DADOS (ATUALIZADO COM CPF, ENDEREÇO E NÚMERO)
-# =========================================
-DB_PATH = os.path.expanduser("~/bjj_digital.db")
-
 def criar_banco():
     """Cria o banco de dados e suas tabelas, caso não existam."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -172,88 +167,26 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
+
     conn.commit()
     conn.close()
 
-
-# 🔹 LÓGICA DE INICIALIZAÇÃO E MIGRAÇÃO DE DB (USANDO get_db_connection para simplificar)
-def migrar_db():
-    """Garante que todas as colunas existam, adicionando se necessário."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    colunas_novas = {
-        'cpf': 'TEXT UNIQUE', 
-        'cep': 'TEXT', 
-        'logradouro': 'TEXT', 
-        'bairro': 'TEXT', 
-        'cidade': 'TEXT', 
-        'estado': 'TEXT', 
-        'numero': 'TEXT'
-    }
-    
-    for coluna, tipo in colunas_novas.items():
-        try:
-            cursor.execute(f"SELECT {coluna} FROM usuarios LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} {tipo}")
-            conn.commit()
-            st.toast(f"Coluna {coluna} adicionada.")
-            
-    conn.close()
-
-# 5. Usuários de teste (Atualizado)
-def criar_usuarios_teste():
-    """Cria usuários padrão locais com perfil completo."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    usuarios = [
-        ("Admin User", "admin", "admin@bjj.local", "00000000000"), 
-        ("Professor User", "professor", "professor@bjj.local", "11111111111"), 
-        ("Aluno User", "aluno", "aluno@bjj.local", "22222222222")
-    ]
-    for nome, tipo, email, cpf in usuarios:
-        cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
-        if cursor.fetchone() is None:
-            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, ?, 'local', 1)
-                """,
-                (nome, tipo, senha_hash, email, cpf),
-            )
-    conn.commit()
-    conn.close()
-
-# 🔹 Lógica de inicialização do topo do script
+# 🔹 Cria o banco apenas se ainda não existir
 if not os.path.exists(DB_PATH):
     st.toast("Criando novo banco de dados...")
     criar_banco()
-    criar_usuarios_teste() # Cria usuários logo após criar o DB
-
-# Sempre execute a migração se o DB existir
-migrar_db()
-
-# 🔹 Cria o banco e realiza migrações APENAS UMA VEZ
-@st.cache_resource
-def get_db_connection():
-    """Garante que a conexão seja singleton e faz migrações iniciais."""
-    if not os.path.exists(DB_PATH):
-        st.toast("Criando novo banco de dados...")
-        criar_banco()
-
+# Se o banco já existe, adicionamos as novas colunas
+else:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-
-    # Lógica de migração (apenas será executada na primeira vez que o Streamlit rodar)
+    # Adicionar CPF se não existir
     try:
         cursor.execute("SELECT cpf FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN cpf TEXT UNIQUE")
         conn.commit()
         st.toast("Campo CPF adicionado à tabela 'usuarios'.")
-
+    # Adicionar campos de Endereço se não existirem
     try:
         cursor.execute("SELECT cep FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
@@ -264,15 +197,15 @@ def get_db_connection():
         cursor.execute("ALTER TABLE usuarios ADD COLUMN estado TEXT")
         conn.commit()
         st.toast("Campos de Endereço adicionados à tabela 'usuarios'.")
-    
+    # Adicionar campo NUMERO se não existir (NOVO)
     try:
         cursor.execute("SELECT numero FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN numero TEXT")
         conn.commit()
         st.toast("Campo Número adicionado à tabela 'usuarios'.")
-        
-    return conn
+    conn.close()
+
 # =========================================
 # FUNÇÕES DE VALIDAÇÃO E BUSCA (NOVAS)
 # =========================================
@@ -365,186 +298,24 @@ oauth_google = OAuth2Component(
 # 3. Autenticação local (Login/Senha)
 def autenticar_local(usuario_ou_email, senha):
     """
-    Autentica o usuário local usando EMAIL ou CPF.
-    (Conexão fechada após a operação)
+    Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
     """
-    conn = sqlite3.connect(DB_PATH) 
-    cursor = conn.cursor()
-    
-    try:
-        # Busca por 'email' OU 'cpf' (O nome completo não é mais usado para login)
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (email=? OR cpf=?) AND auth_provider='local'", 
-            (usuario_ou_email, usuario_ou_email)
-        )
-        dados = cursor.fetchone()
-        
-        if dados is not None and dados[3]: # dados[3] é 'senha'
-            # Se a senha existe e é válida
-            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
-                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
-            
-    except Exception as e:
-        # Erro de banco (ex: ProgrammingError)
-        st.error(f"Erro de autenticação no DB: {e}")
-        
-    finally:
-        # Garante que a conexão seja fechada SEMPRE
-        conn.close() 
-        
-    return None
-
-# [Substitua o código na função `buscar_usuario_por_email`]
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = sqlite3.connect(DB_PATH) 
-    cursor = conn.cursor()
-    dados = None
-    
-    try:
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-        )
-        dados = cursor.fetchone()
-        
-        if dados:
-            return {
-                "id": dados[0], 
-                "nome": dados[1], 
-                "tipo": dados[2], 
-                "perfil_completo": bool(dados[3])
-            }
-    finally:
-        conn.close()
-        
-    return None
-
-# [Substitua o código na função `criar_usuario_parcial_google`]
-def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    novo_id = None
     
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit()
-        novo_id = cursor.lastrowid
-        
-    except sqlite3.IntegrityError: # Email já existe
-        pass
-        
-    finally:
-        conn.close()
-        
-    if novo_id:
-        return {"id": novo_id, "email": email, "nome": nome}
-    return None
-
-# 4. Funções de busca e criação de usuário
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
+    # Busca por 'nome' OU 'email' OU 'cpf'
     cursor.execute(
-        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=? OR cpf=?) AND auth_provider='local'", 
+        (usuario_ou_email, usuario_ou_email, usuario_ou_email) # Passa o mesmo valor para os três '?'
     )
     dados = cursor.fetchone()
-    # NÃO FECHAR A CONEXÃO
-    if dados:
-        return {
-            "id": dados['id'], 
-            "nome": dados['nome'], 
-            "tipo": dados['tipo_usuario'], 
-            "perfil_completo": bool(dados['perfil_completo'])
-        }
+    conn.close()
+    
+    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
+        # Retorna os dados do usuário se a senha bater
+        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+        
     return None
-
-def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit() # COMMIT AQUI É CRUCIAL
-        novo_id = cursor.lastrowid
-        # NÃO FECHAR A CONEXÃO
-        return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
-        # NÃO FECHAR A CONEXÃO
-        return None
-# [Substitua o código na função `buscar_usuario_por_email`]
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-    )
-    dados = cursor.fetchone()
-    # NÃO FECHAR A CONEXÃO
-    if dados:
-        return {
-            "id": dados[0], 
-            "nome": dados[1], 
-            "tipo": dados[2], 
-            "perfil_completo": bool(dados[3])
-        }
-    return None
-
-# [Substitua o código na função `criar_usuario_parcial_google`]
-def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit() # COMMIT AQUI É CRUCIAL
-        novo_id = cursor.lastrowid
-        # NÃO FECHAR A CONEXÃO
-        return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
-        # NÃO FECHAR A CONEXÃO
-        return None
-
-# [Substitua o código na função `criar_usuarios_teste`]
-def criar_usuarios_teste():
-    """Cria usuários padrão locais com perfil completo."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    # ... (o resto da lógica permanece a mesma) ...
-    usuarios = [
-        ("admin", "admin", "admin@bjj.local", "00000000000"), 
-        ("professor", "professor", "professor@bjj.local", "11111111111"), 
-        ("aluno", "aluno", "aluno@bjj.local", "22222222222")
-    ]
-    for nome, tipo, email, cpf in usuarios:
-        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
-        if cursor.fetchone() is None:
-            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, ?, 'local', 1)
-                """,
-                (nome, tipo, senha_hash, email, cpf),
-            )
-    conn.commit()
 
 # 4. Funções de busca e criação de usuário
 def buscar_usuario_por_email(email):
@@ -2125,14 +1896,14 @@ def tela_login():
                             st.stop()
                         else:
                             # Lógica de salvar no DB
-                            conn = get_db_connection() # USANDO O CACHE
+                            conn = sqlite3.connect(DB_PATH) 
                             cursor = conn.cursor()
                             
                             # Verifica duplicidade de Email ou CPF (Nome completo pode ser duplicado)
                             cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
                             if cursor.fetchone():
                                 st.error("Email ou CPF já cadastrado. Use outro ou faça login.")
-                                # conn.close() # NÃO FECHAR A CONEXÃO
+                                conn.close()
                                 st.stop()
                             else:
                                 try:
@@ -2171,8 +1942,8 @@ def tela_login():
                                             (novo_id,)
                                         )
                                     
-                                    conn.commit() # COMMIT AQUI É CRUCIAL
-                                    # conn.close() # NÃO FECHAR A CONEXÃO
+                                    conn.commit()
+                                    conn.close()
                                     st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
                                     st.session_state["modo_login"] = "login"
                                     # Limpa o cache após o cadastro
@@ -2181,7 +1952,7 @@ def tela_login():
                                     
                                 except Exception as e:
                                     conn.rollback() 
-                                    # conn.close() # NÃO FECHAR A CONEXÃO
+                                    conn.close()
                                     st.error(f"Erro ao cadastrar: {e}")
 
             if st.button("⬅️ Voltar para Login", use_container_width=True):
