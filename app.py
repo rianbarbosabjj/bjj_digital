@@ -595,93 +595,229 @@ def carregar_todas_questoes():
                 todas.append(q)
 
     return todas
-
 # =========================================
 # 🤼 MODO ROLA (DO SEU PROJETO ORIGINAL)
 # =========================================
 def modo_rola(usuario_logado):
-    st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
 
-    temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
-    temas.append("Todos os Temas")
+    temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
+    temas.append("Todos os Temas")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        tema = st.selectbox("Selecione o tema:", temas)
-    with col2:
-        faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+    col1, col2 = st.columns(2)
+    with col1:
+        tema = st.selectbox("Selecione o tema:", temas)
+    with col2:
+        faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
 
-    if st.button("Iniciar Treino 🤼", use_container_width=True):
-        # 🔹 Carrega questões conforme seleção
-        if tema == "Todos os Temas":
-            questoes = []
-            for arquivo in os.listdir("questions"):
-                if arquivo.endswith(".json"):
-                    caminho = f"questions/{arquivo}"
-                    try:
-                        with open(caminho, "r", encoding="utf-8") as f:
-                            questoes += json.load(f)
-                    except json.JSONDecodeError:
-                        st.warning(f"⚠️ Arquivo '{arquivo}' ignorado (erro de formatação).")
-                        continue
-        else:
-            questoes = carregar_questoes(tema)
+    if st.button("Iniciar Treino 🤼", use_container_width=True):
+        # 🔹 Carrega questões conforme seleção
+        if tema == "Todos os Temas":
+            questoes = []
+            for arquivo in os.listdir("questions"):
+                if arquivo.endswith(".json"):
+                    caminho = f"questions/{arquivo}"
+                    try:
+                        with open(caminho, "r", encoding="utf-8") as f:
+                            questoes += json.load(f)
+                    except json.JSONDecodeError:
+                        st.warning(f"⚠️ Arquivo '{arquivo}' ignorado (erro de formatação).")
+                        continue
+        else:
+            questoes = carregar_questoes(tema)
 
-        if not questoes:
-            st.error("Nenhuma questão disponível para este tema.")
-            return
+        if not questoes:
+            st.error("Nenhuma questão disponível para este tema.")
+            return
 
-        random.shuffle(questoes)
-        acertos = 0
-        total = len(questoes)
+        random.shuffle(questoes)
+        acertos = 0
+        total = len(questoes)
 
-        st.markdown(f"### 🧩 Total de questões: {total}")
+        st.markdown(f"### 🧩 Total de questões: {total}")
 
-        for i, q in enumerate(questoes, 1):
-            st.markdown(f"### {i}. {q['pergunta']}")
+        for i, q in enumerate(questoes, 1):
+            st.markdown(f"### {i}. {q['pergunta']}")
 
-            # 🔹 Exibe imagem (somente se existir e for válida)
-            if q.get("imagem"):
-                imagem_path = q["imagem"].strip()
-                if imagem_path and os.path.exists(imagem_path):
-                    st.image(imagem_path, use_container_width=True)
-                elif imagem_path:
-                    st.warning(f"⚠️ Imagem não encontrada: {imagem_path}")
-            # (Sem else — espaço oculto se não houver imagem)
+            # 🔹 Exibe imagem (somente se existir e for válida)
+            if q.get("imagem"):
+                imagem_path = q["imagem"].strip()
+                if imagem_path and os.path.exists(imagem_path):
+                    st.image(imagem_path, use_container_width=True)
+                elif imagem_path:
+                    st.warning(f"⚠️ Imagem não encontrada: {imagem_path}")
+            # (Sem else — espaço oculto se não houver imagem)
 
-            # 🔹 Exibe vídeo (somente se existir)
-            if q.get("video"):
-                try:
-                    st.video(q["video"])
-                except Exception:
-                    st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
-            # (Sem else — espaço oculto se não houver vídeo)
+            # 🔹 Exibe vídeo (somente se existir)
+            if q.get("video"):
+                try:
+                    st.video(q["video"])
+                except Exception:
+                    st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
+            # (Sem else — espaço oculto se não houver vídeo)
 
-            resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"rola_{i}")
+            resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"rola_{i}")
 
-            if st.button(f"Confirmar resposta {i}", key=f"confirma_{i}"):
-                if resposta.startswith(q["resposta"]):
-                    acertos += 1
-                    st.success("✅ Correto!")
-                else:
-                    st.error(f"❌ Incorreto. Resposta correta: {q['resposta']}")
-            
-            st.markdown("---") # separador visual entre as questões
+            if st.button(f"Confirmar resposta {i}", key=f"confirma_{i}"):
+                if resposta.startswith(q["resposta"]):
+                    acertos += 1
+                    st.success("✅ Correto!")
+                else:
+                    st.error(f"❌ Incorreto. Resposta correta: {q['resposta']}")
+            
+            st.markdown("---") # separador visual entre as questões
 
-        percentual = int((acertos / total) * 100)
-        st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
+        percentual = int((acertos / total) * 100)
+        st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
 
-        # 🔹 Salva resultado no banco
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO rola_resultados (usuario, faixa, tema, acertos, total, percentual)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (usuario_logado["nome"], faixa, tema, acertos, total, percentual))
-        conn.commit()
-        conn.close()
+        # 🔹 Salva resultado no banco
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO rola_resultados (usuario, faixa, tema, acertos, total, percentual)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (usuario_logado["nome"], faixa, tema, acertos, total, percentual))
+        conn.commit()
+        conn.close()
 
-        st.success("Resultado salvo com sucesso! 🏆")
+        st.success("Resultado salvo com sucesso! 🏆")
+# =========================================
+# 🥋 EXAME DE FAIXA (DO SEU PROJETO ORIGINAL)
+# =========================================
+def exame_de_faixa(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
+
+    # Verifica se o aluno foi liberado para o exame
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+    dado = cursor.fetchone()
+    conn.close()
+
+    # 🔒 Apenas alunos precisam de liberação
+    if usuario_logado["tipo"] not in ["admin", "professor"]:
+        if not dado or dado[0] == 0:
+            st.warning("🚫 Seu exame de faixa ainda não foi liberado. Aguarde a autorização do professor.")
+            return
+
+    faixa = st.selectbox(
+        "Selecione sua faixa:",
+        ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+    )
+
+    exame_path = f"exames/faixa_{faixa.lower()}.json"
+    if not os.path.exists(exame_path):
+        st.error("Nenhum exame cadastrado para esta faixa ainda.")
+        return
+
+    # 🔍 Tenta carregar o exame
+    try:
+        with open(exame_path, "r", encoding="utf-8") as f:
+            exame = json.load(f)
+    except json.JSONDecodeError:
+        st.error(f"⚠️ O arquivo '{exame_path}' está corrompido. Verifique o formato JSON.")
+        return
+
+    questoes = exame.get("questoes", [])
+    if not questoes:
+        st.info("Ainda não há questões cadastradas para esta faixa.")
+        return
+
+    st.markdown(f"### 🧩 Total de questões: {len(questoes)}")
+
+    respostas = {}
+    for i, q in enumerate(questoes, 1):
+        st.markdown(f"### {i}. {q['pergunta']}")
+
+        # 🔹 Exibe imagem somente se existir e for válida
+        if q.get("imagem"):
+            imagem_path = q["imagem"].strip()
+            if imagem_path and os.path.exists(imagem_path):
+                st.image(imagem_path, use_container_width=True)
+            elif imagem_path:
+                st.warning(f"⚠️ Imagem não encontrada: {imagem_path}")
+
+        # 🔹 Exibe vídeo somente se existir
+        if q.get("video"):
+            try:
+                st.video(q["video"])
+            except Exception:
+                st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
+
+        # 🔹 Corrigido: nenhuma alternativa vem pré-selecionada
+        respostas[i] = st.radio(
+            "Escolha a alternativa:",
+            q["opcoes"],
+            key=f"exame_{i}",
+            index=None
+        )
+
+        st.markdown("---")
+
+    # 🔘 Botão para finalizar o exame
+    finalizar = st.button("Finalizar Exame 🏁", use_container_width=True)
+
+    if finalizar:
+        acertos = sum(
+            1 for i, q in enumerate(questoes, 1)
+            if respostas.get(i, "") and respostas[i].startswith(q["resposta"])
+        )
+
+        total = len(questoes)
+        percentual = int((acertos / total) * 100)
+        st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
+
+        # 🔹 Reseta variáveis antes de definir novo estado
+        st.session_state["certificado_pronto"] = False
+
+        if percentual >= 70:
+            st.success("🎉 Parabéns! Você foi aprovado(a) no Exame de Faixa! 👏")
+
+            codigo = gerar_codigo_verificacao()
+            st.session_state["certificado_pronto"] = True
+            st.session_state["dados_certificado"] = {
+                "usuario": usuario_logado["nome"],
+                "faixa": faixa,
+                "acertos": acertos,
+                "total": total,
+                "codigo": codigo
+            }
+
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            # [BUGFIX] Salva acertos e total para recriação do PDF
+            cursor.execute("""
+                INSERT INTO resultados (usuario, modo, faixa, pontuacao, acertos, total_questoes, data, codigo_verificacao)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (usuario_logado["nome"], "Exame de Faixa", faixa, percentual, acertos, total, datetime.now(), codigo))
+            conn.commit()
+            conn.close()
+
+        else:
+            st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
+
+    # 🔘 Exibição do botão de download — somente após clique e aprovação
+    if st.session_state.get("certificado_pronto") and finalizar:
+        dados = st.session_state["dados_certificado"]
+        caminho_pdf = gerar_pdf(
+            dados["usuario"],
+            dados["faixa"],
+            dados["acertos"],
+            dados["total"],
+            dados["codigo"]
+        )
+
+        st.info("Clique abaixo para gerar e baixar seu certificado.")
+        with open(caminho_pdf, "rb") as f:
+            st.download_button(
+                label="📥 Baixar Certificado de Exame",
+                data=f.read(),
+                file_name=os.path.basename(caminho_pdf),
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+        st.success("Certificado gerado com sucesso! 🥋")
 
 # =========================================
 # 🥋 EXAME DE FAIXA (DO SEU PROJETO ORIGINAL)
@@ -825,154 +961,154 @@ def exame_de_faixa(usuario_logado):
 # 🏆 RANKING (DO SEU PROJETO ORIGINAL)
 # =========================================
 def ranking():
-    st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking do Modo Rola</h1>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM rola_resultados", conn)
-    conn.close()
+    st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking do Modo Rola</h1>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM rola_resultados", conn)
+    conn.close()
 
-    if df.empty:
-        st.info("Nenhum resultado disponível no ranking ainda.")
-        return
+    if df.empty:
+        st.info("Nenhum resultado disponível no ranking ainda.")
+        return
 
-    filtro_faixa = st.selectbox("Filtrar por faixa:", ["Todas"] + sorted(df["faixa"].unique().tolist()))
-    if filtro_faixa != "Todas":
-        df = df[df["faixa"] == filtro_faixa]
+    filtro_faixa = st.selectbox("Filtrar por faixa:", ["Todas"] + sorted(df["faixa"].unique().tolist()))
+    if filtro_faixa != "Todas":
+        df = df[df["faixa"] == filtro_faixa]
 
-    if df.empty:
-        st.info("Nenhum resultado para esta faixa.")
-        return
+    if df.empty:
+        st.info("Nenhum resultado para esta faixa.")
+        return
 
-    ranking_df = df.groupby("usuario", as_index=False).agg(
-        media_percentual=("percentual", "mean"),
-        total_treinos=("id", "count")
-    ).sort_values(by="media_percentual", ascending=False).reset_index(drop=True)
+    ranking_df = df.groupby("usuario", as_index=False).agg(
+        media_percentual=("percentual", "mean"),
+        total_treinos=("id", "count")
+    ).sort_values(by="media_percentual", ascending=False).reset_index(drop=True)
 
-    ranking_df["Posição"] = range(1, len(ranking_df) + 1)
-    ranking_df["media_percentual"] = ranking_df["media_percentual"].round(2)
-    
-    st.dataframe(
-        ranking_df[["Posição", "usuario", "media_percentual", "total_treinos"]], 
-        use_container_width=True,
-        column_config={"media_percentual": st.column_config.NumberColumn(format="%.2f%%")}
-    )
+    ranking_df["Posição"] = range(1, len(ranking_df) + 1)
+    ranking_df["media_percentual"] = ranking_df["media_percentual"].round(2)
+    
+    st.dataframe(
+        ranking_df[["Posição", "usuario", "media_percentual", "total_treinos"]], 
+        use_container_width=True,
+        column_config={"media_percentual": st.column_config.NumberColumn(format="%.2f%%")}
+    )
 
-    fig = px.bar(
-        ranking_df.head(10),
-        x="usuario",
-        y="media_percentual",
-        text_auto=True,
-        title="Top 10 - Modo Rola (% Média de Acertos)",
-        color="media_percentual",
-        color_continuous_scale="YlOrBr",
-    )
-    fig.update_layout(xaxis_title="Usuário", yaxis_title="% Média de Acertos")
-    st.plotly_chart(fig, use_container_width=True)
+    fig = px.bar(
+        ranking_df.head(10),
+        x="usuario",
+        y="media_percentual",
+        text_auto=True,
+        title="Top 10 - Modo Rola (% Média de Acertos)",
+        color="media_percentual",
+        color_continuous_scale="YlOrBr",
+    )
+    fig.update_layout(xaxis_title="Usuário", yaxis_title="% Média de Acertos")
+    st.plotly_chart(fig, use_container_width=True)
 
 # =========================================
 # 👩‍🏫 PAINEL DO PROFESSOR (COM APROVAÇÃO)
 # =========================================
 def painel_professor():
-    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
-    usuario_logado = st.session_state.usuario
-    prof_usuario_id = usuario_logado["id"]
-    
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # 1. 🔍 Identifica a(s) equipe(s) onde o professor é responsável
-    cursor.execute("SELECT id, nome FROM equipes WHERE professor_responsavel_id=?", (prof_usuario_id,))
-    equipes_responsaveis = cursor.fetchall()
+    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+    usuario_logado = st.session_state.usuario
+    prof_usuario_id = usuario_logado["id"]
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 1. 🔍 Identifica a(s) equipe(s) onde o professor é responsável
+    cursor.execute("SELECT id, nome FROM equipes WHERE professor_responsavel_id=?", (prof_usuario_id,))
+    equipes_responsaveis = cursor.fetchall()
 
-    if not equipes_responsaveis:
-        st.warning("Você não está cadastrado como Professor Responsável em nenhuma equipe. Operações de gestão limitadas.")
-        conn.close()
-        return
+    if not equipes_responsaveis:
+        st.warning("Você não está cadastrado como Professor Responsável em nenhuma equipe. Operações de gestão limitadas.")
+        conn.close()
+        return
 
-    st.success(f"Você é responsável pelas equipes: {', '.join([e[1] for e in equipes_responsaveis])}")
-    
-    equipe_ids = [e[0] for e in equipes_responsaveis]
-    
-    # --- ABA DE PENDÊNCIAS ---
-    st.markdown("## 🔔 Aprovação de Vínculos Pendentes")
+    st.success(f"Você é responsável pelas equipes: {', '.join([e[1] for e in equipes_responsaveis])}")
+    
+    equipe_ids = [e[0] for e in equipes_responsaveis]
+    
+    # --- ABA DE PENDÊNCIAS ---
+    st.markdown("## 🔔 Aprovação de Vínculos Pendentes")
 
-    # 2. 📝 Busca Pendências de Alunos
-    pendencias_alunos = pd.read_sql_query(f"""
-        SELECT 
-            a.id AS aluno_pk_id, u.nome AS Aluno, u.email AS Email, a.faixa_atual AS Faixa, 
-            e.nome AS Equipe, a.data_pedido
-        FROM alunos a
-        JOIN usuarios u ON a.usuario_id = u.id
-        LEFT JOIN equipes e ON a.equipe_id = e.id
-        WHERE a.status_vinculo='pendente' AND a.equipe_id IN ({','.join(['?'] * len(equipe_ids))})
-    """, conn, params=equipe_ids)
+    # 2. 📝 Busca Pendências de Alunos
+    pendencias_alunos = pd.read_sql_query(f"""
+        SELECT 
+            a.id AS aluno_pk_id, u.nome AS Aluno, u.email AS Email, a.faixa_atual AS Faixa, 
+            e.nome AS Equipe, a.data_pedido
+        FROM alunos a
+        JOIN usuarios u ON a.usuario_id = u.id
+        LEFT JOIN equipes e ON a.equipe_id = e.id
+        WHERE a.status_vinculo='pendente' AND a.equipe_id IN ({','.join(['?'] * len(equipe_ids))})
+    """, conn, params=equipe_ids)
 
-    # 3. 👩‍🏫 Busca Pendências de Professores
-    pendencias_professores = pd.read_sql_query(f"""
-        SELECT 
-            p.id AS prof_pk_id, u.nome AS Professor, u.email AS Email, 
-            e.nome AS Equipe, u.data_criacao
-        FROM professores p
-        JOIN usuarios u ON p.usuario_id = u.id
-        LEFT JOIN equipes e ON p.equipe_id = e.id
-        WHERE p.status_vinculo='pendente' AND p.equipe_id IN ({','.join(['?'] * len(equipe_ids))})
-    """, conn, params=equipe_ids)
+    # 3. 👩‍🏫 Busca Pendências de Professores
+    pendencias_professores = pd.read_sql_query(f"""
+        SELECT 
+            p.id AS prof_pk_id, u.nome AS Professor, u.email AS Email, 
+            e.nome AS Equipe, u.data_criacao
+        FROM professores p
+        JOIN usuarios u ON p.usuario_id = u.id
+        LEFT JOIN equipes e ON p.equipe_id = e.id
+        WHERE p.status_vinculo='pendente' AND p.equipe_id IN ({','.join(['?'] * len(equipe_ids))})
+    """, conn, params=equipe_ids)
 
-    if pendencias_alunos.empty and pendencias_professores.empty:
-        st.info("Não há novos pedidos de vínculo pendentes para suas equipes.")
-    else:
-        # --- APROVAR ALUNOS ---
-        if not pendencias_alunos.empty:
-            st.markdown("### Alunos para Aprovação:")
-            st.dataframe(pendencias_alunos, use_container_width=True)
-            
-            aluno_para_aprovar = st.selectbox("Selecione o Aluno para Ação:", pendencias_alunos["Aluno"].tolist(), key="aprov_aluno_sel")
-            aluno_pk_id = pendencias_alunos[pendencias_alunos["Aluno"] == aluno_para_aprovar]["aluno_pk_id"].iloc[0]
-            
-            col_a1, col_a2 = st.columns(2)
-            if col_a1.button(f"✅ Aprovar Vínculo de {aluno_para_aprovar}", key="btn_aprov_aluno"):
-                # Obtém o ID da PK do professor na tabela 'professores'
-                cursor.execute("SELECT id FROM professores WHERE usuario_id=?", (prof_usuario_id,))
-                prof_pk_id_vinculo = cursor.fetchone()[0]
+    if pendencias_alunos.empty and pendencias_professores.empty:
+        st.info("Não há novos pedidos de vínculo pendentes para suas equipes.")
+    else:
+        # --- APROVAR ALUNOS ---
+        if not pendencias_alunos.empty:
+            st.markdown("### Alunos para Aprovação:")
+            st.dataframe(pendencias_alunos, use_container_width=True)
+            
+            aluno_para_aprovar = st.selectbox("Selecione o Aluno para Ação:", pendencias_alunos["Aluno"].tolist(), key="aprov_aluno_sel")
+            aluno_pk_id = pendencias_alunos[pendencias_alunos["Aluno"] == aluno_para_aprovar]["aluno_pk_id"].iloc[0]
+            
+            col_a1, col_a2 = st.columns(2)
+            if col_a1.button(f"✅ Aprovar Vínculo de {aluno_para_aprovar}", key="btn_aprov_aluno"):
+                # Obtém o ID da PK do professor na tabela 'professores'
+                cursor.execute("SELECT id FROM professores WHERE usuario_id=?", (prof_usuario_id,))
+                prof_pk_id_vinculo = cursor.fetchone()[0]
 
-                cursor.execute(
-                    "UPDATE alunos SET status_vinculo='ativo', professor_id=? WHERE id=?", 
-                    (prof_pk_id_vinculo, int(aluno_pk_id))
-                )
-                conn.commit()
-                st.success(f"Vínculo do aluno {aluno_para_aprovar} ATIVADO.")
-                st.rerun()
-            
-            if col_a2.button(f"❌ Rejeitar Vínculo de {aluno_para_aprovar}", key="btn_rejeitar_aluno"):
-                cursor.execute("UPDATE alunos SET status_vinculo='rejeitado' WHERE id=?", (int(aluno_pk_id),))
-                conn.commit()
-                st.warning(f"Vínculo do aluno {aluno_para_aprovar} REJEITADO.")
-                st.rerun()
+                cursor.execute(
+                    "UPDATE alunos SET status_vinculo='ativo', professor_id=? WHERE id=?", 
+                    (prof_pk_id_vinculo, int(aluno_pk_id))
+                )
+                conn.commit()
+                st.success(f"Vínculo do aluno {aluno_para_aprovar} ATIVADO.")
+                st.rerun()
+            
+            if col_a2.button(f"❌ Rejeitar Vínculo de {aluno_para_aprovar}", key="btn_rejeitar_aluno"):
+                cursor.execute("UPDATE alunos SET status_vinculo='rejeitado' WHERE id=?", (int(aluno_pk_id),))
+                conn.commit()
+                st.warning(f"Vínculo do aluno {aluno_para_aprovar} REJEITADO.")
+                st.rerun()
 
-        # --- APROVAR PROFESSORES ---
-        if not pendencias_professores.empty:
-            st.markdown("### Professores para Aprovação:")
-            st.dataframe(pendencias_professores, use_container_width=True)
+        # --- APROVAR PROFESSORES ---
+        if not pendencias_professores.empty:
+            st.markdown("### Professores para Aprovação:")
+            st.dataframe(pendencias_professores, use_container_width=True)
 
-            prof_para_aprovar = st.selectbox("Selecione o Professor para Ação:", pendencias_professores["Professor"].tolist(), key="aprov_prof_sel")
-            prof_pk_id = pendencias_professores[pendencias_professores["Professor"] == prof_para_aprovar]["prof_pk_id"].iloc[0]
-            
-            col_p1, col_p2 = st.columns(2)
-            if col_p1.button(f"✅ Aprovar Vínculo de {prof_para_aprovar}", key="btn_aprov_prof"):
-                cursor.execute(
-                    "UPDATE professores SET status_vinculo='ativo' WHERE id=?", 
-                    (int(prof_pk_id),)
-                )
-                conn.commit()
-                st.success(f"Vínculo do professor {prof_para_aprovar} ATIVADO.")
-                st.rerun()
-                
-            if col_p2.button(f"❌ Rejeitar Vínculo de {prof_para_aprovar}", key="btn_rejeitar_prof"):
-                cursor.execute("UPDATE professores SET status_vinculo='rejeitado' WHERE id=?", (int(prof_pk_id),))
-                conn.commit()
-                st.warning(f"Vínculo do professor {prof_para_aprovar} REJEITADO.")
-                st.rerun()
+            prof_para_aprovar = st.selectbox("Selecione o Professor para Ação:", pendencias_professores["Professor"].tolist(), key="aprov_prof_sel")
+            prof_pk_id = pendencias_professores[pendencias_professores["Professor"] == prof_para_aprovar]["prof_pk_id"].iloc[0]
+            
+            col_p1, col_p2 = st.columns(2)
+            if col_p1.button(f"✅ Aprovar Vínculo de {prof_para_aprovar}", key="btn_aprov_prof"):
+                cursor.execute(
+                    "UPDATE professores SET status_vinculo='ativo' WHERE id=?", 
+                    (int(prof_pk_id),)
+                )
+                conn.commit()
+                st.success(f"Vínculo do professor {prof_para_aprovar} ATIVADO.")
+                st.rerun()
+                
+            if col_p2.button(f"❌ Rejeitar Vínculo de {prof_para_aprovar}", key="btn_rejeitar_prof"):
+                cursor.execute("UPDATE professores SET status_vinculo='rejeitado' WHERE id=?", (int(prof_pk_id),))
+                conn.commit()
+                st.warning(f"Vínculo do professor {prof_para_aprovar} REJEITADO.")
+                st.rerun()
 
-    conn.close()
+    conn.close()
 # =========================================
 # 🏛️ GESTÃO DE EQUIPES (DO SEU PROJETO ORIGINAL)
 # =========================================
@@ -1246,7 +1382,7 @@ def gestao_equipes():
 
     conn.close()
 # =========================================
-# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA 3)
+# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA)
 # =========================================
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários, restrita ao Admin."""
@@ -1260,7 +1396,7 @@ def gestao_usuarios(usuario_logado):
     st.markdown("Edite informações, redefina senhas ou altere o tipo de perfil de um usuário.")
 
     conn = sqlite3.connect(DB_PATH)
-    # 🔎 Seleciona o CPF e o ID para uso na edição
+    # Seleciona o CPF e o ID para uso na edição
     df = pd.read_sql_query(
         "SELECT id, nome, email, cpf, tipo_usuario, auth_provider, perfil_completo FROM usuarios ORDER BY nome", 
         conn
@@ -1309,14 +1445,16 @@ def gestao_usuarios(usuario_logado):
                 novo_nome = col1.text_input("Nome:", value=user_data['nome'])
                 novo_email = col2.text_input("Email:", value=user_data['email'])
                 
-                # 🆕 NOVO CAMPO CPF
+                # NOVO CAMPO CPF
                 novo_cpf_input = st.text_input("CPF:", value=user_data['cpf'] or "")
-           if len(cpf_input) == 11 and cpf_input.isdigit():
-               st.info(f"CPF Formatado: {cpf_input[:3]}.{cpf_input[3:6]}.{cpf_input[6:9]}-{cpf_input[9:]}")
-               senha = st.text_input("Senha:", type="password")
-               confirmar = st.text_input("Confirmar senha:", type="password")
-               opcoes_tipo = ["aluno", "professor", "admin"]
-               tipo_atual_db = user_data['tipo_usuario']
+                
+                # Máscara visual do CPF
+                cpf_display_limpo = formatar_e_validar_cpf(novo_cpf_input)
+                if cpf_display_limpo:
+                    st.info(f"CPF Formatado: {cpf_display_limpo[:3]}.{cpf_display_limpo[3:6]}.{cpf_display_limpo[6:9]}-{cpf_display_limpo[9:]}")
+                
+                opcoes_tipo = ["aluno", "professor", "admin"]
+                tipo_atual_db = user_data['tipo_usuario']
                 
                 index_atual = 0 
                 if tipo_atual_db:
@@ -1348,7 +1486,7 @@ def gestao_usuarios(usuario_logado):
                         # 3. Executa o UPDATE (incluindo o CPF)
                         cursor.execute(
                             "UPDATE usuarios SET nome=?, email=?, cpf=?, tipo_usuario=? WHERE id=?",
-                            (novo_nome, novo_email, cpf_editado, novo_tipo, user_id_selecionado)
+                            (novo_nome.upper(), novo_email.upper(), cpf_editado, novo_tipo, user_id_selecionado)
                         )
                         conn.commit()
                         st.success("Dados do usuário atualizados com sucesso!")
