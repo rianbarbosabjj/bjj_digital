@@ -1730,7 +1730,7 @@ def tela_login():
     # BLOCO DE LOGIN
     # =========================================
     c1, c2, c3 = st.columns([1, 1.5, 1])
-    with c2:
+    with c2: # <--- TUDO DEVE ESTAR DENTRO DESTE BLOCO!
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
@@ -1797,15 +1797,14 @@ def tela_login():
         # =========================================
         # CADASTRO (Corrigido com CPF e Endereço)
         # =========================================
-elif st.session_state["modo_login"] == "cadastro":
+        elif st.session_state["modo_login"] == "cadastro":
             
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>📋 Cadastro de Novo Usuário (Local)</h3>", unsafe_allow_html=True)
                 
                 with st.form(key="form_cadastro_local"):
-                    # Esta lógica de busca de CEP AGORA DEVE USAR st.form_submit_button
+                    # CALLBACK: Função para ser chamada ao clicar no 'Buscar CEP'
                     def handle_cadastro_cep_search_form():
-                        # A validação e lógica de busca é movida para cá
                         cep_digitado = st.session_state.cadastro_cep_input
                         if not cep_digitado:
                             st.warning("Por favor, digite um CEP para buscar.")
@@ -1813,12 +1812,13 @@ elif st.session_state["modo_login"] == "cadastro":
                         
                         endereco = buscar_endereco_por_cep(cep_digitado)
                         if endereco:
+                            # Atualiza o cache da sessão com os dados encontrados
                             endereco["cep_original"] = cep_digitado
                             st.session_state["cadastro_endereco_cache"] = endereco
+                            # Os campos de texto serão preenchidos automaticamente na próxima renderização
                             st.success("Endereço encontrado e campos preenchidos. Complete o restante, se necessário.")
                         else:
                             st.error("CEP não encontrado ou inválido.")
-                        # Não precisa de st.rerun()
 
                     # Dados Pessoais
                     st.markdown("#### Informações de Acesso")
@@ -1844,25 +1844,29 @@ elif st.session_state["modo_login"] == "cadastro":
                     st.markdown("---")
                     st.markdown("#### Endereço (Opcional)")
                     
-                    # Campo CEP
+                    # Campo CEP com o botão auxiliar
                     col_cep, col_btn_cep = st.columns([3, 1])
                     cep_input = col_cep.text_input("CEP:", key="cadastro_cep_input", value=st.session_state["cadastro_endereco_cache"].get("cep_original", ""))
                     
                     # Botão de Busca de CEP AGORA É um form_submit_button
-                    # OBS: form_submit_button secundário pode ter 'type="secondary"'
-                    buscar_cep_clicked = col_btn_cep.form_submit_button("🔍 Buscar", key="buscar_cep_btn", on_click=handle_cadastro_cep_search_form)
+                    # O clique aciona o callback e re-executa o formulário
+                    col_btn_cep.form_submit_button(
+                        "🔍 Buscar", 
+                        key="buscar_cep_btn", 
+                        on_click=handle_cadastro_cep_search_form
+                    )
 
-                    # Se a busca foi clicada, o cache é atualizado no callback, mas precisamos garantir que os campos exibam o valor
+                    # Preenchimento automático ou manual usando o cache
                     cache = st.session_state["cadastro_endereco_cache"]
                     
-                    # Preenchimento automático ou manual
+                    # Usamos o cache para preencher os valores dos campos
                     logradouro = st.text_input("Logradouro (Rua/Av):", value=cache.get('logradouro', ""))
                     bairro = st.text_input("Bairro:", value=cache.get('bairro', ""))
                     col_cid, col_est = st.columns(2)
                     cidade = col_cid.text_input("Cidade:", value=cache.get('cidade', ""))
-                    estado = col_est.text_input("Estado (UF):", value=cache.get('uf', ""))
+                    estado = col_est.text_input("Estado (UF):", value=cache.get('estado', ""))
                     
-                    # Botão Final de Cadastro
+                    # Botão Final de Cadastro (Submit button principal)
                     submitted = st.form_submit_button("Cadastrar", use_container_width=True, type="primary")
 
                     if submitted:
@@ -1877,7 +1881,7 @@ elif st.session_state["modo_login"] == "cadastro":
                             st.error("CPF inválido. Por favor, verifique o número.")
                             st.stop()
                         else:
-                            # CORREÇÃO: Conecta no banco de dados correto
+                            # Lógica de salvar no DB
                             conn = sqlite3.connect(DB_PATH) 
                             cursor = conn.cursor()
                             
@@ -1892,8 +1896,8 @@ elif st.session_state["modo_login"] == "cadastro":
                                     hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
                                     tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
                                     
-                                    # Usa os valores finais dos campos
-                                    cep_final = st.session_state.cadastro_cep_input
+                                    # Usa o valor atual do input do CEP
+                                    cep_final = cep_input 
                                     
                                     # 1. Salva na tabela 'usuarios'
                                     cursor.execute(
@@ -1945,14 +1949,15 @@ elif st.session_state["modo_login"] == "cadastro":
         # RECUPERAÇÃO DE SENHA
         # =========================================
         elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Em breve será implementado o envio de recuperação de senha.")
-            
-            if st.button("⬅️ Voltar para Login", use_container_width=True):
-                st.session_state["modo_login"] = "login"
-                st.rerun()            
+            with st.container(border=True):
+                st.markdown("<h3 style='color:white; text-align:center;'>🔑 Recuperar Senha</h3>", unsafe_allow_html=True)
+                email = st.text_input("Digite o e-mail cadastrado:")
+                if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                    st.info("Em breve será implementado o envio de recuperação de senha.")
+                
+                if st.button("⬅️ Voltar para Login", use_container_width=True):
+                    st.session_state["modo_login"] = "login"
+                    st.rerun()         
 def tela_completar_cadastro(user_data):
     """Exibe o formulário para novos usuários do Google completarem o perfil."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
