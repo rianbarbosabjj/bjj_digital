@@ -1075,7 +1075,7 @@ def tela_login():
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
-                # Login agora aceita Email ou CPF
+                # Linha 577 (aproximadamente): Onde o erro U+00A0 está ocorrendo
                 user_ou_cpf = st.text_input("Email ou CPF para Login:")
                 pwd = st.text_input("Senha:", type="password")
 
@@ -1088,7 +1088,6 @@ def tela_login():
                     else:
                         st.error("Email/CPF ou senha incorretos. Tente novamente.")
 
-                # Botões Criar Conta / Esqueci Senha
                 colx, coly, colz = st.columns([1, 2, 1])
                 with coly:
                     col1, col2 = st.columns(2)
@@ -1254,7 +1253,7 @@ def tela_login():
                                         """,
                                         (novo_id, faixa) 
                                     )
-                                else: # Professor
+                                else: 
                                     status = 'pendente'
                                     cursor.execute(
                                         """
@@ -1295,7 +1294,6 @@ def tela_login():
                 if st.button("⬅️ Voltar para Login", use_container_width=True):
                     st.session_state["modo_login"] = "login"
                     st.rerun()
-
 def app_principal():
     """Função 'main' refatorada - executa o app principal quando logado."""
     usuario_logado = st.session_state.usuario
