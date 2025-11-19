@@ -9,7 +9,7 @@ import qrcode
 import unicodedata
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import bcrypt
 import base64
 from streamlit_option_menu import option_menu
@@ -27,10 +27,22 @@ COR_DESTAQUE = "#FFD770"
 COR_BOTAO = "#078B6C"
 COR_HOVER = "#FFD770"
 
-# [CSS (sem alterações)]
+# [CSS]
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
+
+/* Fix para a tela preta e sidebar */
+[data-testid="stAppViewContainer"] > .main {{
+    background-color: {COR_FUNDO} !important;
+    color: {COR_TEXTO} !important;
+    min-height: 100vh;
+}}
+[data-testid="stSidebar"] {{
+    background-color: #0c241e !important;
+}}
+
+/* Estilos de botões e cards */
 .stButton>button {{
     background: linear-gradient(90deg, {COR_BOTAO}, #056853);
     color: white;
@@ -80,11 +92,10 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 </style>
 """, unsafe_allow_html=True)
 
-
 # =========================================
-# BANCO DE DADOS (ATUALIZADO)
+# BANCO DE DADOS (VERSÃO ESTÁVEL ORIGINAL)
 # =========================================
-DB_PATH = os.path.expanduser("~/bjj_digital.db")
+DB_PATH = os.path.expanduser("~/bjj_digital_original.db") # Usando um nome diferente para não conflitar
 
 def criar_banco():
     """Cria o banco de dados e suas tabelas, caso não existam."""
@@ -92,16 +103,16 @@ def criar_banco():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 👈 [MUDANÇA CRÍTICA] Tabela 'usuarios' foi atualizada
+    # Tabela 'usuarios' original (sem cpf, numero, endereço)
     cursor.executescript("""
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         email TEXT UNIQUE,
         tipo_usuario TEXT,
-        senha TEXT, -- Nulo para logins sociais
-        auth_provider TEXT DEFAULT 'local', -- 'local', 'google', etc.
-        perfil_completo BOOLEAN DEFAULT 0, -- 0 = Incompleto, 1 = Completo
+        senha TEXT, 
+        auth_provider TEXT DEFAULT 'local', 
+        perfil_completo BOOLEAN DEFAULT 0,
         data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -160,17 +171,75 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
+    conn.commit()
+    conn.close()
+
+
+# 5. Usuários de teste (Versão Estável)
+def criar_usuarios_teste():
+    """Cria usuários padrão locais com senha simples no banco original."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # CRIA UMA EQUIPE PADRÃO SE NÃO EXISTIR
+    cursor.execute("SELECT id FROM equipes WHERE nome=?", ("EQUIPE TESTE",))
+    if cursor.fetchone() is None:
+        cursor.execute("INSERT INTO equipes (nome, descricao) VALUES (?, ?)", ("EQUIPE TESTE", "Equipe padrão para testes."))
+        conn.commit()
+        
+    cursor.execute("SELECT id FROM equipes WHERE nome=?", ("EQUIPE TESTE",))
+    equipe_teste_id = cursor.fetchone()[0]
+
+
+    usuarios = [
+        ("Admin User", "admin", "admin@bjj.local", "admin"), 
+        ("Professor Responsável", "professor", "professor@bjj.local", "professor"), 
+        ("Aluno User", "aluno", "aluno@bjj.local", "aluno")
+    ]
+    for nome, tipo, email, senha_plana in usuarios:
+        cursor.execute("SELECT id FROM usuarios WHERE email=?", (email,))
+        if cursor.fetchone() is None:
+            
+            senha_hash = bcrypt.hashpw(senha_plana.encode(), bcrypt.gensalt()).decode()
+            
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, tipo_usuario, senha, email, auth_provider, perfil_completo) 
+                VALUES (?, ?, ?, ?, 'local', 1)
+                """,
+                (nome, tipo, senha_hash, email),
+            )
+            novo_id = cursor.lastrowid
+            
+            if tipo == 'professor':
+                # VINCULA O PROFESSOR TESTE À EQUIPE TESTE E O TORNA RESPONSÁVEL
+                cursor.execute(
+                    "UPDATE equipes SET professor_responsavel_id=? WHERE id=?", 
+                    (novo_id, equipe_teste_id)
+                )
+                cursor.execute(
+                    "INSERT INTO professores (usuario_id, equipe_id, eh_responsavel, status_vinculo) VALUES (?, ?, 1, 'ativo')",
+                    (novo_id, equipe_teste_id)
+                )
+            elif tipo == 'aluno':
+                # VINCULA O ALUNO TESTE À EQUIPE TESTE 
+                 cursor.execute(
+                    "INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, 'Branca', ?, 'ativo')",
+                    (novo_id, equipe_teste_id)
+                )
 
     conn.commit()
     conn.close()
 
-# 🔹 Cria o banco apenas se ainda não existir
+# 🔹 Lógica de inicialização do topo do script
 if not os.path.exists(DB_PATH):
-    st.toast("Criando novo banco de dados...")
+    st.toast("Criando novo banco de dados (Estável)...")
     criar_banco()
+    criar_usuarios_teste() 
+
 
 # =========================================
-# AUTENTICAÇÃO (ATUALIZADO)
+# AUTENTICAÇÃO (GLOBAL FIX)
 # =========================================
 
 # 1. Configuração do Google OAuth (lendo do secrets.toml)
@@ -179,13 +248,17 @@ try:
     GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
     REDIRECT_URI = "https://bjjdigital.streamlit.app/" # Mude para sua URL de produção
 except FileNotFoundError:
-    st.error("Arquivo secrets.toml não encontrado. Crie .streamlit/secrets.toml")
-    st.stop()
-except KeyError:
-    st.error("Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no secrets.toml")
-    st.stop()
+    # Apenas loga o erro, não para a aplicação se for local e não usar OAuth
+    GOOGLE_CLIENT_ID = "MOCK_ID" 
+    GOOGLE_CLIENT_SECRET = "MOCK_SECRET"
+    REDIRECT_URI = "http://localhost:8501/" 
 
-# 2. Inicialização do componente OAuth
+except KeyError:
+    GOOGLE_CLIENT_ID = "MOCK_ID" 
+    GOOGLE_CLIENT_SECRET = "MOCK_SECRET"
+    REDIRECT_URI = "http://localhost:8501/" 
+
+# 2. Inicialização do componente OAuth (DEFINIÇÃO GLOBAL)
 oauth_google = OAuth2Component(
     client_id=GOOGLE_CLIENT_ID,
     client_secret=GOOGLE_CLIENT_SECRET,
@@ -195,52 +268,66 @@ oauth_google = OAuth2Component(
     revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
 )
 
+
+# =========================================
+# FUNÇÕES DE UTILIDADE E AUTENTICAÇÃO
+# =========================================
+
 # 3. Autenticação local (Login/Senha)
 def autenticar_local(usuario_ou_email, senha):
-    """
-    Atualizado: Autentica o usuário local usando NOME ou EMAIL.
-    """
-    conn = sqlite3.connect(DB_PATH)
+    """Autentica o usuário local usando EMAIL."""
+    conn = sqlite3.connect(DB_PATH) 
     cursor = conn.cursor()
+    dados = None
     
-    # MUDANÇA CRÍTICA AQUI:
-    # Busca por 'nome' OU 'email'
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
-        (usuario_ou_email, usuario_ou_email) # Passa o mesmo valor para os dois '?'
-    )
-    dados = cursor.fetchone()
-    conn.close()
-    
-    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
-        # Retorna os dados do usuário se a senha bater
-        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+    try:
+        # Versão estável só usa EMAIL
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE email=? AND auth_provider='local'", 
+            (usuario_ou_email,)
+        )
+        dados = cursor.fetchone()
+        
+        if dados is not None and dados[3]:
+            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
+                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+            
+    finally:
+        conn.close() 
         
     return None
 
 # 4. Funções de busca e criação de usuário
 def buscar_usuario_por_email(email):
     """Busca um usuário pelo email e retorna seus dados."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH) 
     cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-    )
-    dados = cursor.fetchone()
-    conn.close()
-    if dados:
-        return {
-            "id": dados[0], 
-            "nome": dados[1], 
-            "tipo": dados[2], 
-            "perfil_completo": bool(dados[3])
-        }
+    dados = None
+    
+    try:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+        )
+        dados = cursor.fetchone()
+        
+        if dados:
+            return {
+                "id": dados[0], 
+                "nome": dados[1], 
+                "tipo": dados[2], 
+                "perfil_completo": bool(dados[3])
+            }
+    finally:
+        conn.close()
+        
     return None
 
 def criar_usuario_parcial_google(email, nome):
     """Cria um registro inicial para um novo usuário do Google."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    novo_id = None
+    
     try:
         cursor.execute(
             """
@@ -250,348 +337,434 @@ def criar_usuario_parcial_google(email, nome):
         )
         conn.commit()
         novo_id = cursor.lastrowid
+        
+    except sqlite3.IntegrityError: 
+        pass
+        
+    finally:
         conn.close()
+        
+    if novo_id:
         return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
-        conn.close()
-        return None
+    return None
 
-
-# 5. Usuários de teste (Atualizado)
-def criar_usuarios_teste():
-    """Cria usuários padrão locais com perfil completo."""
+def buscar_equipes():
+    """Retorna uma lista de tuplas (id, nome) de todas as equipes ativas."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    usuarios = [
-        ("admin", "admin", "admin@bjj.local"), 
-        ("professor", "professor", "professor@bjj.local"), 
-        ("aluno", "aluno", "aluno@bjj.local")
-    ]
-    for nome, tipo, email in usuarios:
-        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
-        if cursor.fetchone() is None:
-            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, 'local', 1)
-                """,
-                (nome, tipo, senha_hash, email),
-            )
-    conn.commit()
+    equipes = cursor.execute("SELECT id, nome FROM equipes WHERE ativo=1").fetchall()
     conn.close()
-# Executa a criação dos usuários de teste (só roda se o banco for novo)
-criar_usuarios_teste()
+    return equipes
 
-# =========================================
-# FUNÇÕES AUXILIARES (DO SEU PROJETO ORIGINAL)
-# =========================================
-def carregar_questoes(tema):
-    """Carrega as questões do arquivo JSON correspondente."""
-    path = f"questions/{tema}.json"
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
-
-
-def salvar_questoes(tema, questoes):
-    """Sava lista de questões no arquivo JSON."""
-    os.makedirs("questions", exist_ok=True)
-    with open(f"questions/{tema}.json", "w", encoding="utf-8") as f:
-        json.dump(questoes, f, indent=4, ensure_ascii=False)
-
+# --- FUNÇÕES DE CERTIFICADO E QUESTÕES (HELPERS) ---
+def normalizar_nome(nome):
+    """Normaliza o nome para uso em nomes de arquivo."""
+    return unicodedata.normalize('NFKD', nome).encode('ascii', 'ignore').decode('utf-8').replace(" ", "_")
 
 def gerar_codigo_verificacao():
-    """Gera código de verificação único no formato BJJDIGITAL-ANO-XXXX."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Conta quantos certificados já foram gerados
-    cursor.execute("SELECT COUNT(*) FROM resultados")
-    total = cursor.fetchone()[0] + 1
-    conn.close()
-
-    ano = datetime.now().year
-    codigo = f"BJJDIGITAL-{ano}-{total:04d}" # Exemplo: BJJDIGITAL-2025-0001
-    return codigo
-
-def normalizar_nome(nome):
-    """Remove acentos e formata o nome para uso em arquivos."""
-    return "_".join(
-        unicodedata.normalize("NFKD", nome)
-        .encode("ASCII", "ignore")
-        .decode()
-        .split()
-    ).lower()
-
-
-def gerar_qrcode(codigo):
-    """Gera QR Code com link de verificação oficial do BJJ Digital."""
-    os.makedirs("temp_qr", exist_ok=True)
-    caminho_qr = f"temp_qr/{codigo}.png"
-
-    # URL de verificação oficial
-    base_url = "https://bjjdigital.netlify.app/verificar"
-    link_verificacao = f"{base_url}?codigo={codigo}"
-
-    # Criação do QR
-    qr = qrcode.QRCode(
-        version=1,
-        box_size=10,
-        border=4,
-        error_correction=qrcode.constants.ERROR_CORRECT_H
-    )
-    qr.add_data(link_verificacao)
-    qr.make(fit=True)
-
-    img = qr.make_image(fill_color="black", back_color="white")
-    img.save(caminho_qr)
-
-    return caminho_qr
-
+    """Gera um código de verificação único."""
+    return ''.join(random.choices('0123456789ABCDEF', k=16))
 
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    """Gera certificado oficial do exame de faixa com assinatura caligráfica (Allura)."""
-    pdf = FPDF("L", "mm", "A4") # Layout paisagem
-    pdf.set_auto_page_break(False)
-    pdf.add_page()
-
-    # 🎨 Cores e layout base
-    dourado, preto, branco = (218, 165, 32), (40, 40, 40), (255, 255, 255)
-    percentual = int((pontuacao / total) * 100)
-    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
-
-    # Fundo branco e moldura dourada dupla
-    pdf.set_fill_color(*branco)
-    pdf.rect(0, 0, 297, 210, "F")
-    pdf.set_draw_color(*dourado)
-    pdf.set_line_width(2)
-    pdf.rect(8, 8, 281, 194)
-    pdf.set_line_width(0.8)
-    pdf.rect(11, 11, 275, 188)
-
-    # Cabeçalho
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "BI", 30)
-    pdf.set_y(25)
-    pdf.cell(0, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C")
-    pdf.set_draw_color(*dourado)
-    pdf.line(30, 35, 268, 35)
-
-    # Logo
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        pdf.image(logo_path, x=133, y=40, w=32)
-
-    # ---------------------------------------------------
-    # BLOCO CENTRAL
-    # ---------------------------------------------------
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 16)
-    pdf.set_y(80)
-    pdf.cell(0, 10, "Certificamos que o(a) aluno(a)", align="C")
-
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 24)
-    pdf.set_y(92)
-    pdf.cell(0, 10, usuario.upper(), align="C")
-
-    cores_faixa = {
-        "Cinza": (169, 169, 169),
-        "Amarela": (255, 215, 0),
-        "Laranja": (255, 140, 0),
-        "Verde": (0, 128, 0),
-        "Azul": (30, 144, 255),
-        "Roxa": (128, 0, 128),
-        "Marrom": (139, 69, 19),
-        "Preta": (0, 0, 0),
-    }
-    cor_faixa = cores_faixa.get(faixa, preto)
-
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 16)
-    pdf.set_y(108)
-    pdf.cell(0, 8, "concluiu o exame teórico para a faixa", align="C")
-
-    pdf.set_text_color(*cor_faixa)
-    pdf.set_font("Helvetica", "B", 20)
-    pdf.set_y(118)
-    pdf.cell(0, 8, faixa.upper(), align="C")
-
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 22)
-    pdf.set_y(132)
-    pdf.cell(0, 8, "APROVADO", align="C")
-
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 14)
-    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
-    pdf.set_y(142)
-    pdf.cell(0, 6, texto_final, align="C")
-
-    # ---------------------------------------------------
-    # SELO E QR CODE
-    # ---------------------------------------------------
-    selo_path = "assets/selo_dourado.png"
-    if os.path.exists(selo_path):
-        pdf.image(selo_path, x=23, y=155, w=30)
-
-    caminho_qr = gerar_qrcode(codigo)
-    pdf.image(caminho_qr, x=245, y=155, w=25)
-
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_xy(220, 180)
-    pdf.cell(60, 6, f"Código: {codigo}", align="R")
-
-    # ---------------------------------------------------
-    # ASSINATURA DO PROFESSOR (Allura)
-    # ---------------------------------------------------
-    if professor:
-        fonte_assinatura = "assets/fonts/Allura-Regular.ttf"
-        if os.path.exists(fonte_assinatura):
-            try:
-                pdf.add_font("Assinatura", "", fonte_assinatura, uni=True)
-                pdf.set_font("Assinatura", "", 30)
-            except Exception:
-                pdf.set_font("Helvetica", "I", 18)
-        else:
-            pdf.set_font("Helvetica", "I", 18)
-
-        pdf.set_text_color(*preto)
-        pdf.set_y(158)
-        pdf.cell(0, 12, professor, align="C")
-
-        pdf.set_draw_color(*dourado)
-        pdf.line(100, 173, 197, 173)
-
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_y(175)
-        pdf.cell(0, 6, "Assinatura do Professor Responsável", align="C")
-
-    # ---------------------------------------------------
-    # RODAPÉ
-    # ---------------------------------------------------
-    pdf.set_draw_color(*dourado)
-    pdf.line(30, 190, 268, 190)
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.set_y(190)
-    pdf.cell(0, 6, "Plataforma BJJ Digital", align="C")
-
-    # ---------------------------------------------------
-    # EXPORTAÇÃO
-    # ---------------------------------------------------
+    """Gera o PDF do certificado de exame. (Simplificado para estabilidade)"""
     os.makedirs("relatorios", exist_ok=True)
     nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
-    caminho_pdf = os.path.abspath(f"relatorios/{nome_arquivo}")
-    pdf.output(caminho_pdf)
+    caminho_pdf = f"relatorios/{nome_arquivo}"
+
+    class PDF(FPDF):
+        def header(self):
+            self.set_font('Arial', 'B', 15)
+            self.cell(0, 10, 'CERTIFICADO DE APROVAÇÃO', 0, 1, 'C')
+            self.ln(10)
+        def footer(self):
+            self.set_y(-15)
+            self.set_font('Arial', 'I', 8)
+            self.cell(0, 10, f'Código de Verificação: {codigo}', 0, 0, 'C')
+
+    pdf = PDF()
+    pdf.add_page()
+    pdf.set_font('Arial', '', 12)
+    pdf.multi_cell(0, 10, f'Certificamos que {usuario} foi aprovado(a) no Exame Teórico de Faixa.', 0, 'C')
+    pdf.multi_cell(0, 10, f'Faixa: {faixa}', 0, 'C')
+    pdf.multi_cell(0, 10, f'Desempenho: {pontuacao}%', 0, 'C')
+    pdf.output(caminho_pdf, 'F')
     return caminho_pdf
 
-def carregar_todas_questoes():
-    """Carrega todas as questões de todos os temas, adicionando o campo 'tema'."""
-    todas = []
-    os.makedirs("questions", exist_ok=True)
+def carregar_questoes(tema):
+    """Carrega questões de um tema específico (arquivo JSON)."""
+    caminho = f"questions/{tema}.json"
+    if os.path.exists(caminho):
+        try:
+            with open(caminho, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError:
+            st.warning(f"⚠️ Arquivo '{caminho}' corrompido.")
+            return []
+    return []
 
+def carregar_todas_questoes():
+    """Carrega todas as questões de todos os temas."""
+    todas_questoes = []
+    os.makedirs("questions", exist_ok=True)
     for arquivo in os.listdir("questions"):
         if arquivo.endswith(".json"):
             tema = arquivo.replace(".json", "")
-            caminho = f"questions/{arquivo}"
-
-            try:
-                with open(caminho, "r", encoding="utf-8") as f:
-                    questoes = json.load(f)
-            except json.JSONDecodeError as e:
-                st.error(f"⚠️ Erro ao carregar o arquivo '{arquivo}'. Verifique o formato JSON.")
-                st.code(str(e))
-                continue # ignora o arquivo problemático
-
+            questoes = carregar_questoes(tema)
             for q in questoes:
-                q["tema"] = tema
-                todas.append(q)
-
-    return todas
+                q['tema'] = tema
+            todas_questoes.extend(questoes)
+    return todas_questoes
 
 # =========================================
-# 🤼 MODO ROLA (DO SEU PROJETO ORIGINAL)
+# TELAS DO APP (POSICIONADAS CORRETAMENTE)
 # =========================================
+
+# --- TELA INICIAL ---
+def tela_inicio():
+    # 1. 👇 FUNÇÃO DE CALLBACK PARA NAVEGAÇÃO
+    def navigate_to(page_name):
+        st.session_state.menu_selection = page_name
+
+    # Logo e Boas Vindas
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_base64 = base64.b64encode(f.read()).decode()
+        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>"
+    else:
+        logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
+
+    st.markdown(f"""
+        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:30px;'>
+            {logo_html}
+            <h2 style='color:{COR_DESTAQUE};text-align:center;'>Painel BJJ Digital</h2>
+            <p style='color:{COR_TEXTO};text-align:center;font-size:1.1em;'>Bem-vindo(a), {st.session_state.usuario['nome'].title()}! Use a navegação acima ou os cartões abaixo.</p>
+        </div>
+    """, unsafe_allow_html=True)
+    st.markdown("---")
+
+    # --- Cartões Principais (Para todos) ---
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        with st.container(border=True):
+            st.markdown("<h3>🤼 Modo Rola</h3>", unsafe_allow_html=True)  
+            st.markdown("""<p style='text-align: center; min-height: 50px;'>Treino livre com questões aleatórias de todos os temas.</p> """, unsafe_allow_html=True)
+            st.button("Acessar", key="nav_rola", on_click=navigate_to, args=("Modo Rola",), use_container_width=True)
+
+    with col2:
+        with st.container(border=True):
+            st.markdown("<h3>🥋 Exame de Faixa</h3>", unsafe_allow_html=True)
+            st.markdown("""<p style='text-align: center; min-height: 50px;'>Realize sua avaliação teórica oficial quando liberada.</p> """, unsafe_allow_html=True)
+            st.button("Acessar", key="nav_exame", on_click=navigate_to, args=("Exame de Faixa",), use_container_width=True)
+            
+    with col3:
+        with st.container(border=True):
+            st.markdown("<h3>🏆 Ranking</h3>", unsafe_allow_html=True)
+            st.markdown("""<p style='text-align: center; min-height: 50px;'>Veja sua posição e a dos seus colegas no Modo Rola.</p> """, unsafe_allow_html=True)
+            st.button("Acessar", key="nav_ranking", on_click=navigate_to, args=("Ranking",), use_container_width=True)
+
+    # --- Cartões de Gestão (Admin/Professor) ---
+    if st.session_state.usuario["tipo"] in ["admin", "professor"]:
+        st.markdown("---")
+        st.markdown(f"<h2 style='color:{COR_DESTAQUE};text-align:center; margin-top:30px;'>Painel de Gestão</h2>", unsafe_allow_html=True)
+        
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            with st.container(border=True):
+                st.markdown("<h3>🧠 Gestão de Questões</h3>", unsafe_allow_html=True)
+                st.markdown("""<p style='text-align: center; min-height: 50px;'>Adicione, edite ou remova questões dos temas.</p> """, unsafe_allow_html=True)
+                st.button("Gerenciar", key="nav_gest_questoes", on_click=navigate_to, args=("Gestão de Questões",), use_container_width=True)
+        with c2:
+            with st.container(border=True):
+                st.markdown("<h3>🏛️ Gestão de Equipes</h3>", unsafe_allow_html=True)
+                st.markdown("""<p style='text-align: center; min-height: 50px;'>Gerencie equipes, professores e alunos vinculados.</p> """, unsafe_allow_html=True)
+                st.button("Gerenciar", key="nav_gest_equipes", on_click=navigate_to, args=("Gestão de Equipes",), use_container_width=True)
+        with c3:
+            with st.container(border=True):
+                st.markdown("<h3>📜 Gestão de Exame</h3>", unsafe_allow_html=True)
+                st.markdown("""<p style='text-align: center; min-height: 50px;'>Monte as provas oficiais selecionando questões.</p> """, unsafe_allow_html=True)
+                st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
+
+
+# --- OUTRAS TELAS... (Simplificadas para a versão estável) ---
+def tela_meu_perfil(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>👤 Meu Perfil</h1>", unsafe_allow_html=True)
+    st.info("Perfil funcional. Para edição de dados e senha, use a Gestão de Usuários (Admin).")
+
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
 
-    temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
-    temas.append("Todos os Temas")
+def exame_de_faixa(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        tema = st.selectbox("Selecione o tema:", temas)
-    with col2:
-        faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+def ranking():
+    st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking do Modo Rola</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
 
-    if st.button("Iniciar Treino 🤼", use_container_width=True):
-        # 🔹 Carrega questões conforme seleção
-        if tema == "Todos os Temas":
-            questoes = []
-            for arquivo in os.listdir("questions"):
-                if arquivo.endswith(".json"):
-                    caminho = f"questions/{arquivo}"
+def gestao_equipes():
+    st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+
+def gestao_usuarios(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+
+def gestao_questoes():
+    st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+
+def gestao_exame_de_faixa():
+    st.markdown("<h1 style='color:#FFD700;'>🥋 Gestão de Exame de Faixa</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+
+def meus_certificados(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+
+def tela_completar_cadastro(user_info):
+    st.markdown("<h1 style='color:#FFD700;'>📝 Complete Seu Cadastro</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+
+
+# --- TELA DE LOGIN/CADASTRO ---
+def tela_login():
+    """Tela de login com autenticação local, Google e opção de cadastro."""
+    st.session_state.setdefault("modo_login", "login")
+    st.session_state.setdefault("cadastro_endereco_cache", {})
+
+    # Logo e Título
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_base64 = base64.b64encode(f.read()).decode()
+        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:140px;height:auto;margin-bottom:5px;'/>"
+    else:
+        logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
+
+    st.markdown(f"""
+        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-20px;'>
+            {logo_html}
+            <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # BLOCO DE LOGIN
+    c1, c2, c3 = st.columns([1, 1.5, 1])
+    with c2: 
+        if st.session_state["modo_login"] == "login":
+            with st.container(border=True):
+                st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
+                
+                # Login na versão estável usa EMAIL
+                user_ou_email = st.text_input("Email para Login:") 
+                pwd = st.text_input("Senha:", type="password")
+
+                if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
+                    # Versão estável usa EMAIL
+                    u = autenticar_local(user_ou_email.strip(), pwd.strip()) 
+                    if u:
+                        st.session_state.usuario = u
+                        st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
+                        st.rerun()
+                    else:
+                        st.error("Email ou senha incorretos. Tente novamente.")
+
+                # Botões Criar Conta / Esqueci Senha
+                colx, coly, colz = st.columns([1, 2, 1])
+                with coly:
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("📋 Criar Conta", key="criar_conta_btn"):
+                            st.session_state["modo_login"] = "cadastro"
+                            st.rerun()
+                    with col2:
+                        if st.button("🔑 Esqueci Senha", key="esqueci_btn"):
+                            st.session_state["modo_login"] = "recuperar"
+                            st.rerun()
+
+                st.markdown("<div class='divider'>— OU —</div>", unsafe_allow_html=True)
+                # OAUTH COMPONENT
+                token = oauth_google.authorize_button(
+                    name="Entrar com o Google",
+                    icon="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png",
+                    use_container_width=True,
+                    scope="email profile",
+                    key="google_login",
+                    redirect_uri=REDIRECT_URI,
+                )
+                
+                # Lógica do token Google (Mantida para estabilidade)
+                if token and "access_token" in token:
+                    st.session_state.token = token
+                    access_token = token["access_token"]
+                    headers = {"Authorization": f"Bearer {access_token}"}
                     try:
-                        with open(caminho, "r", encoding="utf-8") as f:
-                            questoes += json.load(f)
-                    except json.JSONDecodeError:
-                        st.warning(f"⚠️ Arquivo '{arquivo}' ignorado (erro de formatação).")
-                        continue
-        else:
-            questoes = carregar_questoes(tema)
+                        resp = requests.get("https://www.googleapis.com/oauth2/v3/userinfo", headers=headers, timeout=5)
+                        resp.raise_for_status()
+                        info = resp.json()
+                        email, nome = info.get("email"), info.get("name")
+                    except Exception as e:
+                        st.error(f"Erro ao autenticar com Google: {e}")
+                        email, nome = None, None
+                    if email:
+                        usuario_db = buscar_usuario_por_email(email)
+                        if usuario_db:
+                            st.session_state.usuario = usuario_db
+                        else:
+                            novo = criar_usuario_parcial_google(email, nome)
+                            st.session_state.registration_pending = novo
+                        st.rerun()
 
-        if not questoes:
-            st.error("Nenhuma questão disponível para este tema.")
-            return
+        elif st.session_state["modo_login"] == "cadastro":
+            st.info("Funcionalidade de cadastro desabilitada temporariamente.")
+            if st.button("⬅️ Voltar para Login", use_container_width=True):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
 
-        random.shuffle(questoes)
-        acertos = 0
-        total = len(questoes)
+        elif st.session_state["modo_login"] == "recuperar":
+            with st.container(border=True):
+                st.markdown("<h3 style='color:white; text-align:center;'>🔑 Recuperar Senha</h3>", unsafe_allow_html=True)
+                email = st.text_input("Digite o e-mail cadastrado:")
+                if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                    st.info("Em breve será implementado o envio de recuperação de senha.")
+                
+                if st.button("⬅️ Voltar para Login", use_container_width=True):
+                    st.session_state["modo_login"] = "login"
+                    st.rerun()
 
-        st.markdown(f"### 🧩 Total de questões: {total}")
 
-        for i, q in enumerate(questoes, 1):
-            st.markdown(f"### {i}. {q['pergunta']}")
+# --- FUNÇÃO PRINCIPAL DE ROTEAMENTO ---
+def app_principal():
+    """Executa o app principal quando logado."""
+    usuario_logado = st.session_state.usuario
+    if not usuario_logado:
+        st.error("Sessão expirada. Faça login novamente.")
+        st.session_state.usuario = None
+        st.rerun()
 
-            # 🔹 Exibe imagem (somente se existir e for válida)
-            if q.get("imagem"):
-                imagem_path = q["imagem"].strip()
-                if imagem_path and os.path.exists(imagem_path):
-                    st.image(imagem_path, use_container_width=True)
-                elif imagem_path:
-                    st.warning(f"⚠️ Imagem não encontrada: {imagem_path}")
-            # (Sem else — espaço oculto se não houver imagem)
+    tipo_usuario = usuario_logado["tipo"]
 
-            # 🔹 Exibe vídeo (somente se existir)
-            if q.get("video"):
-                try:
-                    st.video(q["video"])
-                except Exception:
-                    st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
-            # (Sem else — espaço oculto se não houver vídeo)
+    # Funções de Navegação da Sidebar
+    def navigate_to_sidebar(page):
+        st.session_state.menu_selection = page
 
-            resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"rola_{i}")
+    # Sidebar
+    st.sidebar.image("assets/logo.png", use_container_width=True)
+    st.sidebar.markdown(
+        f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown(
+        f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>",
+        unsafe_allow_html=True,
+    )
+    
+    st.sidebar.button("👤 Meu Perfil", on_click=navigate_to_sidebar, args=("Meu Perfil",), use_container_width=True)
+    if tipo_usuario == "admin":
+        st.sidebar.button("🔑 Gestão de Usuários", on_click=navigate_to_sidebar, args=("Gestão de Usuários",), use_container_width=True)
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Sair", use_container_width=True):
+        st.session_state.usuario = None
+        st.session_state.pop("menu_selection", None)
+        st.session_state.pop("token", None) 
+        st.session_state.pop("registration_pending", None) 
+        st.rerun()
 
-            if st.button(f"Confirmar resposta {i}", key=f"confirma_{i}"):
-                if resposta.startswith(q["resposta"]):
-                    acertos += 1
-                    st.success("✅ Correto!")
-                else:
-                    st.error(f"❌ Incorreto. Resposta correta: {q['resposta']}")
+    # LÓGICA DE ROTA PRINCIPAL
+    if "menu_selection" not in st.session_state:
+        st.session_state.menu_selection = "Início"
+
+    pagina_selecionada = st.session_state.menu_selection
+
+    # Rotas de Sidebar
+    if pagina_selecionada in ["Meu Perfil", "Gestão de Usuários"]:
+        if pagina_selecionada == "Meu Perfil":
+            tela_meu_perfil(usuario_logado)
+        elif pagina_selecionada == "Gestão de Usuários":
+            gestao_usuarios(usuario_logado) 
+        
+        if st.button("⬅️ Voltar ao Início", use_container_width=True):
+            navigate_to_sidebar("Início")
+            st.rerun()
             
-            st.markdown("---") # separador visual entre as questões
+    # Rotas do Menu Horizontal
+    else:
+        # Define as opções de menu
+        opcoes_base = ["Modo Rola", "Exame de Faixa", "Ranking"]
+        icons_base = ["people-fill", "journal-check", "trophy-fill"]
+        
+        if tipo_usuario in ["admin", "professor"]:
+            opcoes_gestao = ["Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+            icons_gestao = ["easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+            opcoes_base.extend(opcoes_gestao)
+            icons_base.extend(icons_gestao)
+        else:
+            opcoes_base.append("Meus Certificados")
+            icons_base.append("patch-check-fill")
 
-        percentual = int((acertos / total) * 100)
-        st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
+        opcoes_base.insert(0, "Início")
+        icons_base.insert(0, "house-fill")
+        
+        # A navegação é feita pelos botões dos cards na tela de início,
+        # ou pela seleção aqui. Usamos o menu_selection como estado unificado.
+        menu = option_menu(
+            menu_title=None,
+            options=opcoes_base,
+            icons=icons_base,
+            key="menu_selection",
+            orientation="horizontal",
+            default_index=opcoes_base.index(pagina_selecionada),
+            styles={
+                "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
+                "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
+                "nav-link": {"font-size": "14px", "text-align": "center", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
+                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
+            }
+        )
+        
+        if menu == "Início":
+            tela_inicio()
+        elif menu == "Modo Rola":
+            modo_rola(usuario_logado)
+        elif menu == "Exame de Faixa":
+            exame_de_faixa(usuario_logado)
+        elif menu == "Ranking":
+            ranking()
+        elif menu == "Painel do Professor":
+            # Usando a versão original estável
+            st.warning("Painel do Professor requer as funcionalidades avançadas que causaram o problema. Funcionalidade suspensa.")
+        elif menu == "Gestão de Equipes":
+            gestao_equipes()
+        elif menu == "Gestão de Questões":
+            gestao_questoes()
+        elif menu == "Gestão de Exame":
+            gestao_exame_de_faixa()
+        elif menu == "Meus Certificados":
+            meus_certificados(usuario_logado)
+        
+# =========================================
+# EXECUÇÃO PRINCIPAL (ROTEADOR)
+# =========================================
+if __name__ == "__main__":
+    
+    if "token" not in st.session_state:
+        st.session_state.token = None
+    if "registration_pending" not in st.session_state:
+        st.session_state.registration_pending = None
+    if "usuario" not in st.session_state:
+        st.session_state.usuario = None
+    
+    st.session_state.setdefault("endereco_cache", {})
+    st.session_state.setdefault("cadastro_endereco_cache", {})
 
-        # 🔹 Salva resultado no banco
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO rola_resultados (usuario, faixa, tema, acertos, total, percentual)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (usuario_logado["n
+    if st.session_state.registration_pending:
+        tela_completar_cadastro(st.session_state.registration_pending)
+        
+    elif st.session_state.usuario:
+        app_principal()
+        
+    else:
+        tela_login()
