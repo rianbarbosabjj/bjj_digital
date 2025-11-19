@@ -979,275 +979,1082 @@ def painel_professor():
 # =========================================
 # 🏛️ GESTÃO DE EQUIPES (DO SEU PROJETO ORIGINAL)
 # =========================================
+# =========================================
+# AUTENTICAÇÃO
+# =========================================
+
+# 1. Configuração do Google OAuth (lendo do secrets.toml)
+try:
+    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+    REDIRECT_URI = "https://bjjdigital.streamlit.app/" # Mude para sua URL de produção
+except FileNotFoundError:
+    st.error("Arquivo secrets.toml não encontrado. Crie .streamlit/secrets.toml")
+    st.stop()
+except KeyError:
+    st.error("Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no secrets.toml")
+    st.stop()
+
+# 2. Inicialização do componente OAuth
+oauth_google = OAuth2Component(
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    refresh_token_endpoint="https://oauth2.googleapis.com/token",
+    revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
+)
+
+# 3. Autenticação local (Login/Senha)
+def autenticar_local(usuario_email_ou_cpf, senha):
+    """
+    Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
+    """
+    # 📝 Tenta formatar para CPF para verificar se a entrada é um CPF
+    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf) 
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 1. Tenta autenticar usando NOME ou EMAIL (a entrada original)
+    cursor.execute(
+        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
+        (usuario_email_ou_cpf, usuario_email_ou_cpf) 
+    )
+    dados = cursor.fetchone()
+    
+    # 2. Se a busca por NOME/EMAIL falhar e a entrada for um CPF válido, tenta autenticar por CPF
+    if not dados and cpf_formatado:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE cpf=? AND auth_provider='local'", 
+            (cpf_formatado,) # Busca usando o CPF formatado
+        )
+        dados = cursor.fetchone()
+        
+    conn.close()
+    
+    # 3. Verifica a senha no resultado final
+    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
+        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+        
+    return None
+
+# 4. Funções de busca e criação de usuário
+def buscar_usuario_por_email(email_ou_cpf):
+    """
+    Busca um usuário pelo email (principalmente usado para Auth Social)
+    e retorna seus dados. Também verifica o CPF para garantir unicidade cruzada.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cpf_formatado = formatar_e_validar_cpf(email_ou_cpf)
+
+    # Busca por 'email' (o caso mais comum) ou 'cpf' (se a entrada for um CPF válido)
+    if cpf_formatado:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=? OR cpf=?", 
+            (email_ou_cpf, cpf_formatado)
+        )
+    else:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", 
+            (email_ou_cpf,)
+        )
+        
+    dados = cursor.fetchone()
+    conn.close()
+    
+    if dados:
+        return {
+            "id": dados[0], 
+            "nome": dados[1], 
+            "tipo": dados[2], 
+            "perfil_completo": bool(dados[3])
+        }
+        
+    return None
+
+def criar_usuario_parcial_google(email, nome):
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit()
+        novo_id = cursor.lastrowid
+        conn.close()
+        return {"id": novo_id, "email": email, "nome": nome}
+    except sqlite3.IntegrityError: # Email já existe
+        conn.close()
+        return None
+
+
+# 5. Usuários de teste (Atualizado)
+def criar_usuarios_teste():
+    """Cria usuários padrão locais com perfil completo."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    usuarios = [
+        ("admin", "admin", "admin@bjj.local"), 
+        ("professor", "professor", "professor@bjj.local"), 
+        ("aluno", "aluno", "aluno@bjj.local")
+    ]
+    for nome, tipo, email in usuarios:
+        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
+        if cursor.fetchone() is None:
+            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, tipo_usuario, senha, email, auth_provider, perfil_completo) 
+                VALUES (?, ?, ?, ?, 'local', 1)
+                """,
+                (nome, tipo, senha_hash, email),
+            )
+    conn.commit()
+    conn.close()
+# Executa a criação dos usuários de teste (só roda se o banco for novo)
+criar_usuarios_teste()
+
+# =========================================
+# FUNÇÕES AUXILIARES
+# =========================================
+def carregar_questoes(tema):
+    """Carrega as questões do arquivo JSON correspondente."""
+    path = f"questions/{tema}.json"
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+
+def salvar_questoes(tema, questoes):
+    """Sava lista de questões no arquivo JSON."""
+    os.makedirs("questions", exist_ok=True)
+    with open(f"questions/{tema}.json", "w", encoding="utf-8") as f:
+        json.dump(questoes, f, indent=4, ensure_ascii=False)
+
+
+def gerar_codigo_verificacao():
+    """Gera código de verificação único no formato BJJDIGITAL-ANO-XXXX."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # Conta quantos certificados já foram gerados
+    cursor.execute("SELECT COUNT(*) FROM resultados")
+    total = cursor.fetchone()[0] + 1
+    conn.close()
+
+    ano = datetime.now().year
+    codigo = f"BJJDIGITAL-{ano}-{total:04d}" # Exemplo: BJJDIGITAL-2025-0001
+    return codigo
+
+def normalizar_nome(nome):
+    """Remove acentos e formata o nome para uso em arquivos."""
+    return "_".join(
+        unicodedata.normalize("NFKD", nome)
+        .encode("ASCII", "ignore")
+        .decode()
+        .split()
+    ).lower()
+
+def formatar_e_validar_cpf(cpf):
+    """
+    Remove pontuação e verifica se o CPF tem 11 dígitos.
+    Retorna o CPF formatado (somente números) ou None se inválido.
+    """
+    if not cpf:
+        return None
+    
+    # Remove caracteres não numéricos
+    cpf_limpo = ''.join(filter(str.isdigit, cpf))
+    
+    if len(cpf_limpo) == 11:
+        return cpf_limpo
+    else:
+        return None
+
+def gerar_qrcode(codigo):
+    """Gera QR Code com link de verificação oficial do BJJ Digital."""
+    os.makedirs("temp_qr", exist_ok=True)
+    caminho_qr = f"temp_qr/{codigo}.png"
+
+    # URL de verificação oficial
+    base_url = "https://bjjdigital.netlify.app/verificar"
+    link_verificacao = f"{base_url}?codigo={codigo}"
+
+    # Criação do QR
+    qr = qrcode.QRCode(
+        version=1,
+        box_size=10,
+        border=4,
+        error_correction=qrcode.constants.ERROR_CORRECT_H
+    )
+    qr.add_data(link_verificacao)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    img.save(caminho_qr)
+
+    return caminho_qr
+def buscar_cep(cep):
+    """
+    Busca o endereço completo usando a API ViaCEP.
+    Retorna um dicionário com os dados do endereço ou None em caso de erro.
+    """
+    cep_limpo = ''.join(filter(str.isdigit, cep))
+    if len(cep_limpo) != 8:
+        return None # CEP inválido
+
+    url = f"https://viacep.com.br/ws/{cep_limpo}/json/"
+    
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status() # Lança exceção para códigos de status HTTP 4xx ou 5xx
+        data = response.json()
+        
+        if data.get('erro'):
+            return None # CEP não encontrado
+        
+        return {
+            "logradouro": data.get('logradouro', ''),
+            "bairro": data.get('bairro', ''),
+            "cidade": data.get('localidade', ''),
+            "uf": data.get('uf', ''),
+        }
+    except requests.exceptions.RequestException:
+        return None
+def formatar_cep(cep):
+    """
+    Remove pontuação do CEP e garante 8 dígitos.
+    Retorna o CEP formatado (somente números) ou None.
+    """
+    if not cep:
+        return None
+    
+    cep_limpo = ''.join(filter(str.isdigit, cep))
+    
+    if len(cep_limpo) == 8:
+        return cep_limpo
+    else:
+        return None
+        
+def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
+    """Gera certificado oficial do exame de faixa com assinatura caligráfica (Allura)."""
+    pdf = FPDF("L", "mm", "A4") # Layout paisagem
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+
+    # 🎨 Cores e layout base
+    dourado, preto, branco = (218, 165, 32), (40, 40, 40), (255, 255, 255)
+    percentual = int((pontuacao / total) * 100)
+    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+
+    # Fundo branco e moldura dourada dupla
+    pdf.set_fill_color(*branco)
+    pdf.rect(0, 0, 297, 210, "F")
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(2)
+    pdf.rect(8, 8, 281, 194)
+    pdf.set_line_width(0.8)
+    pdf.rect(11, 11, 275, 188)
+
+    # Cabeçalho
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "BI", 30)
+    pdf.set_y(25)
+    pdf.cell(0, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C")
+    pdf.set_draw_color(*dourado)
+    pdf.line(30, 35, 268, 35)
+
+    # Logo
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        pdf.image(logo_path, x=133, y=40, w=32)
+
+    # ---------------------------------------------------
+    # BLOCO CENTRAL
+    # ---------------------------------------------------
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", 16)
+    pdf.set_y(80)
+    pdf.cell(0, 10, "Certificamos que o(a) aluno(a)", align="C")
+
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_y(92)
+    pdf.cell(0, 10, usuario.upper(), align="C")
+
+    cores_faixa = {
+        "Cinza": (169, 169, 169),
+        "Amarela": (255, 215, 0),
+        "Laranja": (255, 140, 0),
+        "Verde": (0, 128, 0),
+        "Azul": (30, 144, 255),
+        "Roxa": (128, 0, 128),
+        "Marrom": (139, 69, 19),
+        "Preta": (0, 0, 0),
+    }
+    cor_faixa = cores_faixa.get(faixa, preto)
+
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", 16)
+    pdf.set_y(108)
+    pdf.cell(0, 8, "concluiu o exame teórico para a faixa", align="C")
+
+    pdf.set_text_color(*cor_faixa)
+    pdf.set_font("Helvetica", "B", 20)
+    pdf.set_y(118)
+    pdf.cell(0, 8, faixa.upper(), align="C")
+
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_y(132)
+    pdf.cell(0, 8, "APROVADO", align="C")
+
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "", 14)
+    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
+    pdf.set_y(142)
+    pdf.cell(0, 6, texto_final, align="C")
+
+    # ---------------------------------------------------
+    # SELO E QR CODE
+    # ---------------------------------------------------
+    selo_path = "assets/selo_dourado.png"
+    if os.path.exists(selo_path):
+        pdf.image(selo_path, x=23, y=155, w=30)
+
+    caminho_qr = gerar_qrcode(codigo)
+    pdf.image(caminho_qr, x=245, y=155, w=25)
+
+    pdf.set_text_color(*preto)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_xy(220, 180)
+    pdf.cell(60, 6, f"Código: {codigo}", align="R")
+
+    # ---------------------------------------------------
+    # ASSINATURA DO PROFESSOR (Allura)
+    # ---------------------------------------------------
+    if professor:
+        fonte_assinatura = "assets/fonts/Allura-Regular.ttf"
+        if os.path.exists(fonte_assinatura):
+            try:
+                pdf.add_font("Assinatura", "", fonte_assinatura, uni=True)
+                pdf.set_font("Assinatura", "", 30)
+            except Exception:
+                pdf.set_font("Helvetica", "I", 18)
+        else:
+            pdf.set_font("Helvetica", "I", 18)
+
+        pdf.set_text_color(*preto)
+        pdf.set_y(158)
+        pdf.cell(0, 12, professor, align="C")
+
+        pdf.set_draw_color(*dourado)
+        pdf.line(100, 173, 197, 173)
+
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_y(175)
+        pdf.cell(0, 6, "Assinatura do Professor Responsável", align="C")
+
+    # ---------------------------------------------------
+    # RODAPÉ
+    # ---------------------------------------------------
+    pdf.set_draw_color(*dourado)
+    pdf.line(30, 190, 268, 190)
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "I", 9)
+    pdf.set_y(190)
+    pdf.cell(0, 6, "Plataforma BJJ Digital", align="C")
+
+    # ---------------------------------------------------
+    # EXPORTAÇÃO
+    # ---------------------------------------------------
+    os.makedirs("relatorios", exist_ok=True)
+    nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
+    caminho_pdf = os.path.abspath(f"relatorios/{nome_arquivo}")
+    pdf.output(caminho_pdf)
+    return caminho_pdf
+
+def carregar_todas_questoes():
+    """Carrega todas as questões de todos os temas, adicionando o campo 'tema'."""
+    todas = []
+    os.makedirs("questions", exist_ok=True)
+
+    for arquivo in os.listdir("questions"):
+        if arquivo.endswith(".json"):
+            tema = arquivo.replace(".json", "")
+            caminho = f"questions/{arquivo}"
+
+            try:
+                with open(caminho, "r", encoding="utf-8") as f:
+                    questoes = json.load(f)
+            except json.JSONDecodeError as e:
+                st.error(f"⚠️ Erro ao carregar o arquivo '{arquivo}'. Verifique o formato JSON.")
+                st.code(str(e))
+                continue # ignora o arquivo problemático
+
+            for q in questoes:
+                q["tema"] = tema
+                todas.append(q)
+
+    return todas
+# =========================================
+# 🤼 MODO ROLA (DO SEU PROJETO ORIGINAL)
+# =========================================
+def modo_rola(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
+
+    temas = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
+    temas.append("Todos os Temas")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        tema = st.selectbox("Selecione o tema:", temas)
+    with col2:
+        faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+
+    if st.button("Iniciar Treino 🤼", use_container_width=True):
+        # 🔹 Carrega questões conforme seleção
+        if tema == "Todos os Temas":
+            questoes = []
+            for arquivo in os.listdir("questions"):
+                if arquivo.endswith(".json"):
+                    caminho = f"questions/{arquivo}"
+                    try:
+                        with open(caminho, "r", encoding="utf-8") as f:
+                            questoes += json.load(f)
+                    except json.JSONDecodeError:
+                        st.warning(f"⚠️ Arquivo '{arquivo}' ignorado (erro de formatação).")
+                        continue
+        else:
+            questoes = carregar_questoes(tema)
+
+        if not questoes:
+            st.error("Nenhuma questão disponível para este tema.")
+            return
+
+        random.shuffle(questoes)
+        acertos = 0
+        total = len(questoes)
+
+        st.markdown(f"### 🧩 Total de questões: {total}")
+
+        for i, q in enumerate(questoes, 1):
+            st.markdown(f"### {i}. {q['pergunta']}")
+
+            # 🔹 Exibe imagem (somente se existir e for válida)
+            if q.get("imagem"):
+                imagem_path = q["imagem"].strip()
+                if imagem_path and os.path.exists(imagem_path):
+                    st.image(imagem_path, use_container_width=True)
+                elif imagem_path:
+                    st.warning(f"⚠️ Imagem não encontrada: {imagem_path}")
+            # (Sem else — espaço oculto se não houver imagem)
+
+            # 🔹 Exibe vídeo (somente se existir)
+            if q.get("video"):
+                try:
+                    st.video(q["video"])
+                except Exception:
+                    st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
+            # (Sem else — espaço oculto se não houver vídeo)
+
+            resposta = st.radio("Escolha a alternativa:", q["opcoes"], key=f"rola_{i}")
+
+            if st.button(f"Confirmar resposta {i}", key=f"confirma_{i}"):
+                if resposta.startswith(q["resposta"]):
+                    acertos += 1
+                    st.success("✅ Correto!")
+                else:
+                    st.error(f"❌ Incorreto. Resposta correta: {q['resposta']}")
+            
+            st.markdown("---") # separador visual entre as questões
+
+        percentual = int((acertos / total) * 100)
+        st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
+
+        # 🔹 Salva resultado no banco
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO rola_resultados (usuario, faixa, tema, acertos, total, percentual)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (usuario_logado["nome"], faixa, tema, acertos, total, percentual))
+        conn.commit()
+        conn.close()
+
+        st.success("Resultado salvo com sucesso! 🏆")
+
+# =========================================
+# 🥋 EXAME DE FAIXA (DO SEU PROJETO ORIGINAL)
+# =========================================
+def exame_de_faixa(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
+
+    # Verifica se o aluno foi liberado para o exame
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+    dado = cursor.fetchone()
+    conn.close()
+
+    # 🔒 Apenas alunos precisam de liberação
+    if usuario_logado["tipo"] not in ["admin", "professor"]:
+        if not dado or dado[0] == 0:
+            st.warning("🚫 Seu exame de faixa ainda não foi liberado. Aguarde a autorização do professor.")
+            return
+
+    faixa = st.selectbox(
+        "Selecione sua faixa:",
+        ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+    )
+
+    exame_path = f"exames/faixa_{faixa.lower()}.json"
+    if not os.path.exists(exame_path):
+        st.error("Nenhum exame cadastrado para esta faixa ainda.")
+        return
+
+    # 🔍 Tenta carregar o exame
+    try:
+        with open(exame_path, "r", encoding="utf-8") as f:
+            exame = json.load(f)
+    except json.JSONDecodeError:
+        st.error(f"⚠️ O arquivo '{exame_path}' está corrompido. Verifique o formato JSON.")
+        return
+
+    questoes = exame.get("questoes", [])
+    if not questoes:
+        st.info("Ainda não há questões cadastradas para esta faixa.")
+        return
+
+    st.markdown(f"### 🧩 Total de questões: {len(questoes)}")
+
+    respostas = {}
+    for i, q in enumerate(questoes, 1):
+        st.markdown(f"### {i}. {q['pergunta']}")
+
+        # 🔹 Exibe imagem somente se existir e for válida
+        if q.get("imagem"):
+            imagem_path = q["imagem"].strip()
+            if imagem_path and os.path.exists(imagem_path):
+                st.image(imagem_path, use_container_width=True)
+            elif imagem_path:
+                st.warning(f"⚠️ Imagem não encontrada: {imagem_path}")
+
+        # 🔹 Exibe vídeo somente se existir
+        if q.get("video"):
+            try:
+                st.video(q["video"])
+            except Exception:
+                st.warning("⚠️ Não foi possível carregar o vídeo associado a esta questão.")
+
+        # 🔹 Corrigido: nenhuma alternativa vem pré-selecionada
+        respostas[i] = st.radio(
+            "Escolha a alternativa:",
+            q["opcoes"],
+            key=f"exame_{i}",
+            index=None
+        )
+
+        st.markdown("---")
+
+    # 🔘 Botão para finalizar o exame
+    finalizar = st.button("Finalizar Exame 🏁", use_container_width=True)
+
+    if finalizar:
+        acertos = sum(
+            1 for i, q in enumerate(questoes, 1)
+            if respostas.get(i, "") and respostas[i].startswith(q["resposta"])
+        )
+
+        total = len(questoes)
+        percentual = int((acertos / total) * 100)
+        st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
+
+        # 🔹 Reseta variáveis antes de definir novo estado
+        st.session_state["certificado_pronto"] = False
+
+        if percentual >= 70:
+            st.success("🎉 Parabéns! Você foi aprovado(a) no Exame de Faixa! 👏")
+
+            codigo = gerar_codigo_verificacao()
+            st.session_state["certificado_pronto"] = True
+            st.session_state["dados_certificado"] = {
+                "usuario": usuario_logado["nome"],
+                "faixa": faixa,
+                "acertos": acertos,
+                "total": total,
+                "codigo": codigo
+            }
+
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            # [BUGFIX] Salva acertos e total para recriação do PDF
+            cursor.execute("""
+                INSERT INTO resultados (usuario, modo, faixa, pontuacao, acertos, total_questoes, data, codigo_verificacao)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (usuario_logado["nome"], "Exame de Faixa", faixa, percentual, acertos, total, datetime.now(), codigo))
+            conn.commit()
+            conn.close()
+
+        else:
+            st.error("😞 Você não atingiu a pontuação mínima (70%). Continue treinando e tente novamente! 💪")
+
+    # 🔘 Exibição do botão de download — somente após clique e aprovação
+    if st.session_state.get("certificado_pronto") and finalizar:
+        dados = st.session_state["dados_certificado"]
+        caminho_pdf = gerar_pdf(
+            dados["usuario"],
+            dados["faixa"],
+            dados["acertos"],
+            dados["total"],
+            dados["codigo"]
+        )
+
+        st.info("Clique abaixo para gerar e baixar seu certificado.")
+        with open(caminho_pdf, "rb") as f:
+            st.download_button(
+                label="📥 Baixar Certificado de Exame",
+                data=f.read(),
+                file_name=os.path.basename(caminho_pdf),
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+        st.success("Certificado gerado com sucesso! 🥋")
+
+# =========================================
+# 🏆 RANKING (DO SEU PROJETO ORIGINAL)
+# =========================================
+def ranking():
+    st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking do Modo Rola</h1>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM rola_resultados", conn)
+    conn.close()
+
+    if df.empty:
+        st.info("Nenhum resultado disponível no ranking ainda.")
+        return
+
+    filtro_faixa = st.selectbox("Filtrar por faixa:", ["Todas"] + sorted(df["faixa"].unique().tolist()))
+    if filtro_faixa != "Todas":
+        df = df[df["faixa"] == filtro_faixa]
+
+    if df.empty:
+        st.info("Nenhum resultado para esta faixa.")
+        return
+
+    ranking_df = df.groupby("usuario", as_index=False).agg(
+        media_percentual=("percentual", "mean"),
+        total_treinos=("id", "count")
+    ).sort_values(by="media_percentual", ascending=False).reset_index(drop=True)
+
+    ranking_df["Posição"] = range(1, len(ranking_df) + 1)
+    ranking_df["media_percentual"] = ranking_df["media_percentual"].round(2)
+    
+    st.dataframe(
+        ranking_df[["Posição", "usuario", "media_percentual", "total_treinos"]], 
+        use_container_width=True,
+        column_config={"media_percentual": st.column_config.NumberColumn(format="%.2f%%")}
+    )
+
+    fig = px.bar(
+        ranking_df.head(10),
+        x="usuario",
+        y="media_percentual",
+        text_auto=True,
+        title="Top 10 - Modo Rola (% Média de Acertos)",
+        color="media_percentual",
+        color_continuous_scale="YlOrBr",
+    )
+    fig.update_layout(xaxis_title="Usuário", yaxis_title="% Média de Acertos")
+    st.plotly_chart(fig, use_container_width=True)
+
+# =========================================
+# 👩‍🏫 PAINEL DO PROFESSOR (COM APROVAÇÃO)
+# =========================================
+def painel_professor():
+    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+    usuario_logado = st.session_state.usuario
+    prof_usuario_id = usuario_logado["id"]
+    
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 1. 🔍 Identifica a(s) equipe(s) onde o professor é responsável
+    cursor.execute("SELECT id, nome FROM equipes WHERE professor_responsavel_id=?", (prof_usuario_id,))
+    equipes_responsaveis = cursor.fetchall()
+
+    if not equipes_responsaveis:
+        st.warning("Você não está cadastrado como Professor Responsável em nenhuma equipe. Operações de gestão limitadas.")
+        conn.close()
+        return
+
+    st.success(f"Você é responsável pelas equipes: {', '.join([e[1] for e in equipes_responsaveis])}")
+    
+    equipe_ids = [e[0] for e in equipes_responsaveis]
+    
+    # --- ABA DE PENDÊNCIAS ---
+    st.markdown("## 🔔 Aprovação de Vínculos Pendentes")
+
+    # 2. 📝 Busca Pendências de Alunos
+    pendencias_alunos = pd.read_sql_query(f"""
+        SELECT 
+            a.id AS aluno_pk_id, u.nome AS Aluno, u.email AS Email, a.faixa_atual AS Faixa, 
+            e.nome AS Equipe, a.data_pedido
+        FROM alunos a
+        JOIN usuarios u ON a.usuario_id = u.id
+        LEFT JOIN equipes e ON a.equipe_id = e.id
+        WHERE a.status_vinculo='pendente' AND a.equipe_id IN ({','.join(['?'] * len(equipe_ids))})
+    """, conn, params=equipe_ids)
+
+    # 3. 👩‍🏫 Busca Pendências de Professores
+    pendencias_professores = pd.read_sql_query(f"""
+        SELECT 
+            p.id AS prof_pk_id, u.nome AS Professor, u.email AS Email, 
+            e.nome AS Equipe, u.data_criacao
+        FROM professores p
+        JOIN usuarios u ON p.usuario_id = u.id
+        LEFT JOIN equipes e ON p.equipe_id = e.id
+        WHERE p.status_vinculo='pendente' AND p.equipe_id IN ({','.join(['?'] * len(equipe_ids))})
+    """, conn, params=equipe_ids)
+
+    if pendencias_alunos.empty and pendencias_professores.empty:
+        st.info("Não há novos pedidos de vínculo pendentes para suas equipes.")
+    else:
+        # --- APROVAR ALUNOS ---
+        if not pendencias_alunos.empty:
+            st.markdown("### Alunos para Aprovação:")
+            st.dataframe(pendencias_alunos, use_container_width=True)
+            
+            aluno_para_aprovar = st.selectbox("Selecione o Aluno para Ação:", pendencias_alunos["Aluno"].tolist(), key="aprov_aluno_sel")
+            aluno_pk_id = pendencias_alunos[pendencias_alunos["Aluno"] == aluno_para_aprovar]["aluno_pk_id"].iloc[0]
+            
+            col_a1, col_a2 = st.columns(2)
+            if col_a1.button(f"✅ Aprovar Vínculo de {aluno_para_aprovar}", key="btn_aprov_aluno"):
+                # Obtém o ID da PK do professor na tabela 'professores'
+                cursor.execute("SELECT id FROM professores WHERE usuario_id=?", (prof_usuario_id,))
+                prof_pk_id_vinculo = cursor.fetchone()[0]
+
+                cursor.execute(
+                    "UPDATE alunos SET status_vinculo='ativo', professor_id=? WHERE id=?", 
+                    (prof_pk_id_vinculo, int(aluno_pk_id))
+                )
+                conn.commit()
+                st.success(f"Vínculo do aluno {aluno_para_aprovar} ATIVADO.")
+                st.rerun()
+            
+            if col_a2.button(f"❌ Rejeitar Vínculo de {aluno_para_aprovar}", key="btn_rejeitar_aluno"):
+                cursor.execute("UPDATE alunos SET status_vinculo='rejeitado' WHERE id=?", (int(aluno_pk_id),))
+                conn.commit()
+                st.warning(f"Vínculo do aluno {aluno_para_aprovar} REJEITADO.")
+                st.rerun()
+
+        # --- APROVAR PROFESSORES ---
+        if not pendencias_professores.empty:
+            st.markdown("### Professores para Aprovação:")
+            st.dataframe(pendencias_professores, use_container_width=True)
+
+            prof_para_aprovar = st.selectbox("Selecione o Professor para Ação:", pendencias_professores["Professor"].tolist(), key="aprov_prof_sel")
+            prof_pk_id = pendencias_professores[pendencias_professores["Professor"] == prof_para_aprovar]["prof_pk_id"].iloc[0]
+            
+            col_p1, col_p2 = st.columns(2)
+            if col_p1.button(f"✅ Aprovar Vínculo de {prof_para_aprovar}", key="btn_aprov_prof"):
+                cursor.execute(
+                    "UPDATE professores SET status_vinculo='ativo' WHERE id=?", 
+                    (int(prof_pk_id),)
+                )
+                conn.commit()
+                st.success(f"Vínculo do professor {prof_para_aprovar} ATIVADO.")
+                st.rerun()
+                
+            if col_p2.button(f"❌ Rejeitar Vínculo de {prof_para_aprovar}", key="btn_rejeitar_prof"):
+                cursor.execute("UPDATE professores SET status_vinculo='rejeitado' WHERE id=?", (int(prof_pk_id),))
+                conn.commit()
+                st.warning(f"Vínculo do professor {prof_para_aprovar} REJEITADO.")
+                st.rerun()
+
+    conn.close()
+
+# =========================================
+# 🏛️ GESTÃO DE EQUIPES (DO SEU PROJETO ORIGINAL)
+# =========================================
 def gestao_equipes():
-    st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
 
-    # Definição das variáveis de aba
-    aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
+    # Definição das variáveis de aba
+    aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
-    # --- ABA 1 e ABA 2 (Lógica inalterada, mantida por brevidade) ---
-    
-    # === 🏫 ABA 1 - EQUIPES ===
-    with aba1:
-        st.subheader("Cadastrar nova equipe")
-        nome_equipe = st.text_input("Nome da nova equipe:")
-        descricao = st.text_area("Descrição da nova equipe:")
+    # --- ABA 1 e ABA 2 (Lógica inalterada, mantida por brevidade) ---
+    
+    # === 🏫 ABA 1 - EQUIPES ===
+    with aba1:
+        st.subheader("Cadastrar nova equipe")
+        nome_equipe = st.text_input("Nome da nova equipe:")
+        descricao = st.text_area("Descrição da nova equipe:")
 
-        professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
-        professor_responsavel_id = None
-        if not professores_df.empty:
-            prof_resp_nome = st.selectbox(
-                "👩‍🏫 Professor responsável:",
-                ["Nenhum"] + professores_df["nome"].tolist()
-            )
-            if prof_resp_nome != "Nenhum":
-                professor_responsavel_id = int(professores_df.loc[professores_df["nome"] == prof_resp_nome, "id"].values[0])
+        professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
+        professor_responsavel_id = None
+        if not professores_df.empty:
+            prof_resp_nome = st.selectbox(
+                "👩‍🏫 Professor responsável:",
+                ["Nenhum"] + professores_df["nome"].tolist()
+            )
+            if prof_resp_nome != "Nenhum":
+                professor_responsavel_id = int(professores_df.loc[professores_df["nome"] == prof_resp_nome, "id"].values[0])
 
-        if st.button("➕ Criar Equipe"):
-            if nome_equipe.strip():
-                # 1. Cria a equipe
-                cursor.execute(
-                    "INSERT INTO equipes (nome, descricao, professor_responsavel_id) VALUES (?, ?, ?)",
-                    (nome_equipe, descricao, professor_responsavel_id)
-                )
-                novo_equipe_id = cursor.lastrowid
-                
-                # 2. VERIFICA E ATIVA O VÍNCULO DO PROFESSOR RESPONSÁVEL
-                if professor_responsavel_id:
-                    cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", 
-                                   (professor_responsavel_id,))
-                    
-                    if not cursor.fetchone():
-                        cursor.execute("""
-                            INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
-                            VALUES (?, ?, 1, 1, 'ativo')
-                        """, (professor_responsavel_id, novo_equipe_id))
-                
-                conn.commit()
-                st.success(f"Equipe '{nome_equipe}' criada com sucesso! Professor Responsável ativado.")
-                st.rerun()
-            else:
-                st.error("O nome da equipe é obrigatório.")
+        if st.button("➕ Criar Equipe"):
+            if nome_equipe.strip():
+                # 1. Cria a equipe
+                cursor.execute(
+                    "INSERT INTO equipes (nome, descricao, professor_responsavel_id) VALUES (?, ?, ?)",
+                    (nome_equipe, descricao, professor_responsavel_id)
+                )
+                novo_equipe_id = cursor.lastrowid
+                
+                # 2. VERIFICA E ATIVA O VÍNCULO DO PROFESSOR RESPONSÁVEL
+                if professor_responsavel_id:
+                    cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", 
+                                   (professor_responsavel_id,))
+                    
+                    if not cursor.fetchone():
+                        cursor.execute("""
+                            INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
+                            VALUES (?, ?, 1, 1, 'ativo')
+                        """, (professor_responsavel_id, novo_equipe_id))
+                
+                conn.commit()
+                st.success(f"Equipe '{nome_equipe}' criada com sucesso! Professor Responsável ativado.")
+                st.rerun()
+            else:
+                st.error("O nome da equipe é obrigatório.")
 
-        st.markdown("---")
-        st.subheader("Equipes existentes")
-        equipes_df = pd.read_sql_query("""
-            SELECT e.id, e.nome, e.descricao, COALESCE(u.nome, 'Nenhum') AS professor_responsavel
-            FROM equipes e
-            LEFT JOIN usuarios u ON e.professor_responsavel_id = u.id
-        """, conn)
-        if equipes_df.empty:
-            st.info("Nenhuma equipe cadastrada.")
-        else:
-            st.dataframe(equipes_df, use_container_width=True)
-            st.markdown("### ✏️ Editar ou Excluir Equipe")
+        st.markdown("---")
+        st.subheader("Equipes existentes")
+        equipes_df = pd.read_sql_query("""
+            SELECT e.id, e.nome, e.descricao, COALESCE(u.nome, 'Nenhum') AS professor_responsavel
+            FROM equipes e
+            LEFT JOIN usuarios u ON e.professor_responsavel_id = u.id
+        """, conn)
+        if equipes_df.empty:
+            st.info("Nenhuma equipe cadastrada.")
+        else:
+            st.dataframe(equipes_df, use_container_width=True)
+            st.markdown("### ✏️ Editar ou Excluir Equipe")
 
-            equipe_lista = equipes_df["nome"].tolist()
-            equipe_sel = st.selectbox("Selecione a equipe:", equipe_lista)
-            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_sel, "id"].values[0])
-            dados_equipe = equipes_df[equipes_df["id"] == equipe_id].iloc[0]
+            equipe_lista = equipes_df["nome"].tolist()
+            equipe_sel = st.selectbox("Selecione a equipe:", equipe_lista)
+            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_sel, "id"].values[0])
+            dados_equipe = equipes_df[equipes_df["id"] == equipe_id].iloc[0]
 
-            with st.expander(f"Gerenciar {equipe_sel}", expanded=True):
-                novo_nome = st.text_input("Novo nome da equipe:", value=dados_equipe["nome"])
-                nova_desc = st.text_area("Descrição:", value=dados_equipe["descricao"] or "")
+            with st.expander(f"Gerenciar {equipe_sel}", expanded=True):
+                novo_nome = st.text_input("Novo nome da equipe:", value=dados_equipe["nome"])
+                nova_desc = st.text_area("Descrição:", value=dados_equipe["descricao"] or "")
 
-                prof_atual = dados_equipe["professor_responsavel"]
-                prof_opcoes = ["Nenhum"] + professores_df["nome"].tolist()
-                index_atual = prof_opcoes.index(prof_atual) if prof_atual in prof_opcoes else 0
-                novo_prof = st.selectbox("👩‍🏫 Professor responsável:", prof_opcoes, index=index_atual)
-                novo_prof_id = None
-                if novo_prof != "Nenhum":
-                    novo_prof_id = int(professores_df.loc[professores_df["nome"] == novo_prof, "id"].values[0])
+                prof_atual = dados_equipe["professor_responsavel"]
+                prof_opcoes = ["Nenhum"] + professores_df["nome"].tolist()
+                index_atual = prof_opcoes.index(prof_atual) if prof_atual in prof_opcoes else 0
+                novo_prof = st.selectbox("👩‍🏫 Professor responsável:", prof_opcoes, index=index_atual)
+                novo_prof_id = None
+                if novo_prof != "Nenhum":
+                    novo_prof_id = int(professores_df.loc[professores_df["nome"] == novo_prof, "id"].values[0])
 
-                col1, col2 = st.columns(2)
-                if col1.button("💾 Salvar Alterações"):
-                    cursor.execute(
-                        "UPDATE equipes SET nome=?, descricao=?, professor_responsavel_id=? WHERE id=?",
-                        (novo_nome, nova_desc, novo_prof_id, equipe_id)
-                    )
-                    conn.commit()
-                    st.success(f"Equipe '{novo_nome}' atualizada com sucesso! ✅")
-                    st.rerun()
+                col1, col2 = st.columns(2)
+                if col1.button("💾 Salvar Alterações"):
+                    cursor.execute(
+                        "UPDATE equipes SET nome=?, descricao=?, professor_responsavel_id=? WHERE id=?",
+                        (novo_nome, nova_desc, novo_prof_id, equipe_id)
+                    )
+                    conn.commit()
+                    st.success(f"Equipe '{novo_nome}' atualizada com sucesso! ✅")
+                    st.rerun()
 
-                if col2.button("🗑️ Excluir Equipe"):
-                    cursor.execute("DELETE FROM equipes WHERE id=?", (equipe_id,))
-                    conn.commit()
-                    st.warning(f"Equipe '{equipe_sel}' excluída com sucesso.")
-                    st.rerun()
+                if col2.button("🗑️ Excluir Equipe"):
+                    cursor.execute("DELETE FROM equipes WHERE id=?", (equipe_id,))
+                    conn.commit()
+                    st.warning(f"Equipe '{equipe_sel}' excluída com sucesso.")
+                    st.rerun()
 
-    # === 👩‍🏫 ABA 2 - PROFESSORES (Apoio) ===
-    with aba2:
-        st.subheader("Vincular professor de apoio a uma equipe")
+    # === 👩‍🏫 ABA 2 - PROFESSORES (Apoio) ===
+    with aba2:
+        st.subheader("Vincular professor de apoio a uma equipe")
 
-        professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
-        equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
+        professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
+        equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
 
-        if professores_df.empty or equipes_df.empty:
-            st.warning("Cadastre professores e equipes primeiro.")
-        else:
-            prof = st.selectbox("Professor de apoio:", professores_df["nome"])
-            equipe_prof = st.selectbox("Equipe:", equipes_df["nome"])
-            prof_id = int(professores_df.loc[professores_df["nome"] == prof, "id"].values[0])
-            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_prof, "id"].values[0])
+        if professores_df.empty or equipes_df.empty:
+            st.warning("Cadastre professores e equipes primeiro.")
+        else:
+            prof = st.selectbox("Professor de apoio:", professores_df["nome"])
+            equipe_prof = st.selectbox("Equipe:", equipes_df["nome"])
+            prof_id = int(professores_df.loc[professores_df["nome"] == prof, "id"].values[0])
+            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_prof, "id"].values[0])
 
-            if st.button("📎 Vincular Professor de Apoio"):
-                cursor.execute("""
-                    INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, status_vinculo)
-                    VALUES (?, ?, ?, ?)
-                """, (prof_id, equipe_id, 0, "ativo"))
-                conn.commit()
-                st.success(f"Professor {prof} vinculado como apoio à equipe {equipe_prof}.")
-                st.rerun()
+            if st.button("📎 Vincular Professor de Apoio"):
+                cursor.execute("""
+                    INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, status_vinculo)
+                    VALUES (?, ?, ?, ?)
+                """, (prof_id, equipe_id, 0, "ativo"))
+                conn.commit()
+                st.success(f"Professor {prof} vinculado como apoio à equipe {equipe_prof}.")
+                st.rerun()
 
-        st.markdown("---")
-        st.subheader("Professores vinculados")
-        profs_df = pd.read_sql_query("""
-            SELECT p.id, u.nome AS professor, e.nome AS equipe, p.status_vinculo
-            FROM professores p
-            JOIN usuarios u ON p.usuario_id = u.id
-            JOIN equipes e ON p.equipe_id = e.id
-        """, conn)
-        if profs_df.empty:
-            st.info("Nenhum professor vinculado ainda.")
-        else:
-            st.dataframe(profs_df, use_container_width=True)
+        st.markdown("---")
+        st.subheader("Professores vinculados")
+        profs_df = pd.read_sql_query("""
+            SELECT p.id, u.nome AS professor, e.nome AS equipe, p.status_vinculo
+            FROM professores p
+            JOIN usuarios u ON p.usuario_id = u.id
+            JOIN equipes e ON p.equipe_id = e.id
+        """, conn)
+        if profs_df.empty:
+            st.info("Nenhum professor vinculado ainda.")
+        else:
+            st.dataframe(profs_df, use_container_width=True)
 
-    # === 🥋 ABA 3 - ALUNOS (Com Edição de Vínculo Segura) ===
-    with aba3:
-        st.subheader("Vincular aluno a professor e equipe")
+    # === 🥋 ABA 3 - ALUNOS (Com Edição de Vínculo Segura) ===
+    with aba3:
+        st.subheader("Vincular aluno a professor e equipe")
 
-        alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
-        
-        professores_disponiveis_df = pd.read_sql_query("""
-            -- Professores Responsáveis
-            SELECT 
-                u.id AS usuario_id, u.nome AS nome_professor, e.id AS equipe_id
-            FROM usuarios u
-            INNER JOIN equipes e ON u.id = e.professor_responsavel_id
-            
-            UNION
-            
-            -- Professores Auxiliares Ativos
-            SELECT 
-                u.id AS usuario_id, u.nome AS nome_professor, p.equipe_id
-            FROM professores p
-            JOIN usuarios u ON p.usuario_id = u.id
-            WHERE p.status_vinculo='ativo'
-        """, conn)
-        
-        professores_disponiveis_nomes = sorted(professores_disponiveis_df["nome_professor"].unique().tolist())
-        equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
+        alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
+        
+        professores_disponiveis_df = pd.read_sql_query("""
+            -- Professores Responsáveis
+            SELECT 
+                u.id AS usuario_id, u.nome AS nome_professor, e.id AS equipe_id
+            FROM usuarios u
+            INNER JOIN equipes e ON u.id = e.professor_responsavel_id
+            
+            UNION
+            
+            -- Professores Auxiliares Ativos
+            SELECT 
+                u.id AS usuario_id, u.nome AS nome_professor, p.equipe_id
+            FROM professores p
+            JOIN usuarios u ON p.usuario_id = u.id
+            WHERE p.status_vinculo='ativo'
+        """, conn)
+        
+        professores_disponiveis_nomes = sorted(professores_disponiveis_df["nome_professor"].unique().tolist())
+        equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
 
-        if alunos_df.empty or professores_disponiveis_df.empty or equipes_df.empty:
-            st.warning("Cadastre alunos, professores e equipes primeiro.")
-        else:
-            aluno = st.selectbox("🥋 Aluno:", alunos_df["nome"])
-            aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
+        if alunos_df.empty or professores_disponiveis_df.empty or equipes_df.empty:
+            st.warning("Cadastre alunos, professores e equipes primeiro.")
+        else:
+            aluno = st.selectbox("🥋 Aluno:", alunos_df["nome"])
+            aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
 
-            # 🚨 CORREÇÃO CRÍTICA: Busca o vínculo existente de forma segura (LEFT JOIN)
-            vinc_existente_df = pd.read_sql_query(f"""
-                SELECT a.professor_id, a.equipe_id, up.nome as professor_nome, e.nome as equipe_nome
-                FROM alunos a
-                LEFT JOIN professores p ON a.professor_id = p.id
-                LEFT JOIN usuarios up ON p.usuario_id = up.id
-                LEFT JOIN equipes e ON a.equipe_id = e.id
-                WHERE a.usuario_id={aluno_id}
-            """, conn)
-            
-            vinc_existente = vinc_existente_df.iloc[0] if not vinc_existente_df.empty else None
-            
-            default_prof_index = 0
-            default_equipe_index = 0
-            
-            if vinc_existente is not None and vinc_existente['professor_nome']:
-                # 🎯 AGORA USAMOS OS NOMES CORRETOS JÁ BUSCADOS VIA JOIN
-                prof_atual_nome = vinc_existente['professor_nome']
-                equipe_atual_nome = vinc_existente['equipe_nome']
-                
-                if prof_atual_nome in professores_disponiveis_nomes:
-                    default_prof_index = professores_disponiveis_nomes.index(prof_atual_nome)
-                if equipe_atual_nome in equipes_df["nome"].tolist():
-                    default_equipe_index = equipes_df["nome"].tolist().index(equipe_atual_nome)
+            # 🚨 CORREÇÃO CRÍTICA: Busca o vínculo existente de forma segura (LEFT JOIN)
+            vinc_existente_df = pd.read_sql_query(f"""
+                SELECT a.professor_id, a.equipe_id, up.nome as professor_nome, e.nome as equipe_nome
+                FROM alunos a
+                LEFT JOIN professores p ON a.professor_id = p.id
+                LEFT JOIN usuarios up ON p.usuario_id = up.id
+                LEFT JOIN equipes e ON a.equipe_id = e.id
+                WHERE a.usuario_id={aluno_id}
+            """, conn)
+            
+            vinc_existente = vinc_existente_df.iloc[0] if not vinc_existente_df.empty else None
+            
+            default_prof_index = 0
+            default_equipe_index = 0
+            
+            if vinc_existente is not None and vinc_existente['professor_nome']:
+                # 🎯 AGORA USAMOS OS NOMES CORRETOS JÁ BUSCADOS VIA JOIN
+                prof_atual_nome = vinc_existente['professor_nome']
+                equipe_atual_nome = vinc_existente['equipe_nome']
+                
+                if prof_atual_nome in professores_disponiveis_nomes:
+                    default_prof_index = professores_disponiveis_nomes.index(prof_atual_nome)
+                if equipe_atual_nome in equipes_df["nome"].tolist():
+                    default_equipe_index = equipes_df["nome"].tolist().index(equipe_atual_nome)
 
-            # --- Selectboxes re-renderizadas ---
-            professor_nome = st.selectbox("👩‍🏫 Professor vinculado (nome):", professores_disponiveis_nomes, index=default_prof_index)
-            equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"], index=default_equipe_index)
+            # --- Selectboxes re-renderizadas ---
+            professor_nome = st.selectbox("👩‍🏫 Professor vinculado (nome):", professores_disponiveis_nomes, index=default_prof_index)
+            equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"], index=default_equipe_index)
 
-            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
+            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
 
-            # 1. Encontra o usuario_id do professor selecionado
-            prof_usuario_id = professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0]
+            # 1. Encontra o usuario_id do professor selecionado
+            prof_usuario_id = professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0]
 
-            # 2. Encontra a PK na tabela 'professores' (p.id) e garante o vínculo ativo
-            cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (prof_usuario_id,))
-            prof_pk_id_result = cursor.fetchone()
-            professor_id = prof_pk_id_result[0] if prof_pk_id_result else None
+            # 2. Encontra a PK na tabela 'professores' (p.id) e garante o vínculo ativo
+            cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (prof_usuario_id,))
+            prof_pk_id_result = cursor.fetchone()
+            professor_id = prof_pk_id_result[0] if prof_pk_id_result else None
 
-            if not professor_id:
-                # Lógica para criar/ativar o registro na tabela professores
-                cursor.execute("SELECT id FROM professores WHERE usuario_id=?", (prof_usuario_id,))
-                existing_prof_record = cursor.fetchone()
-                
-                if existing_prof_record:
-                    cursor.execute("UPDATE professores SET status_vinculo='ativo', equipe_id=? WHERE usuario_id=?", (equipe_id, prof_usuario_id))
-                    conn.commit()
-                    professor_id = existing_prof_record[0]
-                    st.info(f"O vínculo do professor {professor_nome} foi ATIVADO para prosseguir.")
-                else:
-                    cursor.execute("""
-                        INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
-                        VALUES (?, ?, 1, 0, 'ativo')
-                    """, (prof_usuario_id, equipe_id))
-                    conn.commit()
-                    professor_id = cursor.lastrowid
-                    st.info(f"Vínculo do professor {professor_nome} CRIADO para prosseguir.")
-            
-            # --- Tenta Vincular/Editar o Aluno ---
-            
-            # Verifica se o aluno já tem um registro na tabela 'alunos'
-            cursor.execute("SELECT id FROM alunos WHERE usuario_id=?", (aluno_id,))
-            aluno_registro_id = cursor.fetchone()
-            
-            botao_texto = "✅ Vincular Aluno" if aluno_registro_id is None else "💾 Atualizar Vínculo"
+            if not professor_id:
+                # Lógica para criar/ativar o registro na tabela professores
+                cursor.execute("SELECT id FROM professores WHERE usuario_id=?", (prof_usuario_id,))
+                existing_prof_record = cursor.fetchone()
+                
+                if existing_prof_record:
+                    cursor.execute("UPDATE professores SET status_vinculo='ativo', equipe_id=? WHERE usuario_id=?", (equipe_id, prof_usuario_id))
+                    conn.commit()
+                    professor_id = existing_prof_record[0]
+                    st.info(f"O vínculo do professor {professor_nome} foi ATIVADO para prosseguir.")
+                else:
+                    cursor.execute("""
+                        INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
+                        VALUES (?, ?, 1, 0, 'ativo')
+                    """, (prof_usuario_id, equipe_id))
+                    conn.commit()
+                    professor_id = cursor.lastrowid
+                    st.info(f"Vínculo do professor {professor_nome} CRIADO para prosseguir.")
+            
+            # --- Tenta Vincular/Editar o Aluno ---
+            
+            # Verifica se o aluno já tem um registro na tabela 'alunos'
+            cursor.execute("SELECT id FROM alunos WHERE usuario_id=?", (aluno_id,))
+            aluno_registro_id = cursor.fetchone()
+            
+            botao_texto = "✅ Vincular Aluno" if aluno_registro_id is None else "💾 Atualizar Vínculo"
 
-            if professor_id and st.button(botao_texto):
-                
-                if aluno_registro_id:
-                    # UPDATE: Aluno já existe, atualiza o vínculo
-                    cursor.execute("""
-                        UPDATE alunos SET professor_id=?, equipe_id=?, status_vinculo='ativo'
-                        WHERE usuario_id=?
-                    """, (professor_id, equipe_id, aluno_id))
-                    st.success(f"Vínculo do aluno {aluno} ATUALIZADO (Professor: {professor_nome}, Equipe: {equipe_aluno}).")
-                else:
-                    # INSERT: Aluno não existe, cria o vínculo
-                    cursor.execute("""
-                        INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
-                        VALUES (?, ?, ?, ?, ?, 'ativo')
-                    """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
-                    st.success(f"Aluno {aluno} VINCULADO com sucesso (Professor: {professor_nome}, Equipe: {equipe_aluno}).")
-                
-                conn.commit()
-                st.rerun()
+            if professor_id and st.button(botao_texto):
+                
+                if aluno_registro_id:
+                    # UPDATE: Aluno já existe, atualiza o vínculo
+                    cursor.execute("""
+                        UPDATE alunos SET professor_id=?, equipe_id=?, status_vinculo='ativo'
+                        WHERE usuario_id=?
+                    """, (professor_id, equipe_id, aluno_id))
+                    st.success(f"Vínculo do aluno {aluno} ATUALIZADO (Professor: {professor_nome}, Equipe: {equipe_aluno}).")
+                else:
+                    # INSERT: Aluno não existe, cria o vínculo
+                    cursor.execute("""
+                        INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
+                        VALUES (?, ?, ?, ?, ?, 'ativo')
+                    """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
+                    st.success(f"Aluno {aluno} VINCULADO com sucesso (Professor: {professor_nome}, Equipe: {equipe_aluno}).")
+                
+                conn.commit()
+                st.rerun()
 
-        st.markdown("---")
-        st.subheader("Alunos vinculados")
-        alunos_vinc_df = pd.read_sql_query("""
-            SELECT a.id, u.nome AS aluno, e.nome AS equipe, up.nome AS professor
-            FROM alunos a
-            JOIN usuarios u ON a.usuario_id = u.id
-            JOIN equipes e ON a.equipe_id = e.id
-            JOIN professores p ON a.professor_id = p.id
-            JOIN usuarios up ON p.usuario_id = up.id
-        """, conn)
-        if alunos_vinc_df.empty:
-            st.info("Nenhum aluno vinculado ainda.")
-        else:
-            st.dataframe(alunos_vinc_df, use_container_width=True)
+        st.markdown("---")
+        st.subheader("Alunos vinculados")
+        alunos_vinc_df = pd.read_sql_query("""
+            SELECT a.id, u.nome AS aluno, e.nome AS equipe, up.nome AS professor
+            FROM alunos a
+            JOIN usuarios u ON a.usuario_id = u.id
+            JOIN equipes e ON a.equipe_id = e.id
+            JOIN professores p ON a.professor_id = p.id
+            JOIN usuarios up ON p.usuario_id = up.id
+        """, conn)
+        if alunos_vinc_df.empty:
+            st.info("Nenhum aluno vinculado ainda.")
+        else:
+            st.dataframe(alunos_vinc_df, use_container_width=True)
 
-    conn.close()
+    conn.close()
 # =========================================
 # 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA)
 # =========================================
