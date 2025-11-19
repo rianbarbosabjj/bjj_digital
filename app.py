@@ -207,7 +207,6 @@ else:
         conn.commit()
         st.toast("Campo Número adicionado à tabela 'usuarios'.")
     conn.close()
-
 # =========================================
 # FUNÇÕES DE VALIDAÇÃO E BUSCA (NOVAS)
 # =========================================
