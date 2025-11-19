@@ -79,10 +79,75 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 }}
 </style>
 """, unsafe_allow_html=True)
+def get_professor_team_id(usuario_id):
+    """Busca o ID da equipe principal do professor ativo."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    team_id = None
+    try:
+        # Busca a equipe onde o professor está ativo
+        cursor.execute(
+            "SELECT equipe_id FROM professores WHERE usuario_id=? AND status_vinculo='ativo' LIMIT 1",
+            (usuario_id,)
+        )
+        result = cursor.fetchone()
+        if result:
+            team_id = result[0]
+    finally:
+        conn.close()
+    return team_id
 
+def get_alunos_by_equipe(equipe_id):
+    """Busca todos os alunos (e seus status de exame) de uma equipe."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    alunos = []
+    try:
+        cursor.execute(
+            """
+            SELECT 
+                a.id as aluno_id, 
+                u.nome as nome_aluno, 
+                u.email, 
+                a.faixa_atual, 
+                a.status_vinculo,
+                a.exame_habilitado,
+                a.data_inicio_exame, 
+                a.data_fim_exame 
+            FROM alunos a
+            JOIN usuarios u ON a.usuario_id = u.id
+            WHERE a.equipe_id=?
+            """,
+            (equipe_id,)
+        )
+        alunos = cursor.fetchall()
+    finally:
+        conn.close()
+    return alunos
 
+def habilitar_exame_aluno(aluno_id, data_inicio_str, data_fim_str):
+    """Habilita o exame e define o período na tabela alunos."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE alunos 
+            SET exame_habilitado=1, data_inicio_exame=?, data_fim_exame=?
+            WHERE id=?
+            """,
+            (data_inicio_str, data_fim_str, aluno_id)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erro ao habilitar exame: {e}")
+        return False
+    finally:
+        conn.close()
 # =========================================
-# BANCO DE DADOS (ATUALIZADO COM CPF E ENDEREÇO)
+# BANCO DE DADOS (ATUALIZADO COM CPF, ENDEREÇO E NÚMERO)
 # =========================================
 DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
@@ -92,8 +157,7 @@ def criar_banco():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 👈 [MUDANÇA CRÍTICA] Tabela 'usuarios' foi atualizada com CPF e Endereço
-    # Nota: O 'senha' deve ser NULO para logins sociais.
+    # Tabela 'usuarios' ATUALIZADA com NOVO CAMPO 'numero'
     cursor.executescript("""
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,11 +168,12 @@ def criar_banco():
         senha TEXT, -- Nulo para logins sociais
         auth_provider TEXT DEFAULT 'local', -- 'local', 'google', etc.
         perfil_completo BOOLEAN DEFAULT 0, -- 0 = Incompleto, 1 = Completo
-        cep TEXT, -- NOVO: Endereço
-        logradouro TEXT, -- NOVO: Endereço
-        bairro TEXT, -- NOVO: Endereço
-        cidade TEXT, -- NOVO: Endereço
-        estado TEXT, -- NOVO: Endereço
+        cep TEXT, -- Endereço
+        logradouro TEXT, -- Endereço
+        numero TEXT, -- NOVO: Número do endereço
+        bairro TEXT, -- Endereço
+        cidade TEXT, -- Endereço
+        estado TEXT, -- Endereço
         data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -167,27 +232,89 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
-
     conn.commit()
     conn.close()
 
-# 🔹 Cria o banco apenas se ainda não existir
+
+# 🔹 LÓGICA DE INICIALIZAÇÃO E MIGRAÇÃO DE DB (USANDO get_db_connection para simplificar)
+def migrar_db():
+    """Garante que todas as colunas existam, adicionando se necessário."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    colunas_novas = {
+        'cpf': 'TEXT UNIQUE', 
+        'cep': 'TEXT', 
+        'logradouro': 'TEXT', 
+        'bairro': 'TEXT', 
+        'cidade': 'TEXT', 
+        'estado': 'TEXT', 
+        'numero': 'TEXT'
+    }
+    
+    for coluna, tipo in colunas_novas.items():
+        try:
+        cursor.execute("SELECT data_inicio_exame FROM alunos LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE alunos ADD COLUMN data_inicio_exame TEXT")
+        cursor.execute("ALTER TABLE alunos ADD COLUMN data_fim_exame TEXT")
+        conn.commit()
+        st.toast("Campos de Data de Exame adicionados à tabela 'alunos'.")
+            
+    conn.close()
+
+# 5. Usuários de teste (Atualizado)
+def criar_usuarios_teste():
+    """Cria usuários padrão locais com perfil completo."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    usuarios = [
+        ("Admin User", "admin", "admin@bjj.local", "00000000000"), 
+        ("Professor User", "professor", "professor@bjj.local", "11111111111"), 
+        ("Aluno User", "aluno", "aluno@bjj.local", "22222222222")
+    ]
+    for nome, tipo, email, cpf in usuarios:
+        cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
+        if cursor.fetchone() is None:
+            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
+                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                """,
+                (nome, tipo, senha_hash, email, cpf),
+            )
+    conn.commit()
+    conn.close()
+
+# 🔹 Lógica de inicialização do topo do script
 if not os.path.exists(DB_PATH):
     st.toast("Criando novo banco de dados...")
     criar_banco()
-# Se o banco já existe, podemos tentar adicionar as colunas do CPF e Endereço
-# para garantir compatibilidade com versões antigas do banco.
-else:
+    criar_usuarios_teste() # Cria usuários logo após criar o DB
+
+# Sempre execute a migração se o DB existir
+migrar_db()
+
+# 🔹 Cria o banco e realiza migrações APENAS UMA VEZ
+@st.cache_resource
+def get_db_connection():
+    """Garante que a conexão seja singleton e faz migrações iniciais."""
+    if not os.path.exists(DB_PATH):
+        st.toast("Criando novo banco de dados...")
+        criar_banco()
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    # Adicionar CPF se não existir
+
+    # Lógica de migração (apenas será executada na primeira vez que o Streamlit rodar)
     try:
         cursor.execute("SELECT cpf FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN cpf TEXT UNIQUE")
         conn.commit()
         st.toast("Campo CPF adicionado à tabela 'usuarios'.")
-    # Adicionar campos de Endereço se não existirem
+
     try:
         cursor.execute("SELECT cep FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
@@ -198,9 +325,15 @@ else:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN estado TEXT")
         conn.commit()
         st.toast("Campos de Endereço adicionados à tabela 'usuarios'.")
-    conn.close()
-
-
+    
+    try:
+        cursor.execute("SELECT numero FROM usuarios LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN numero TEXT")
+        conn.commit()
+        st.toast("Campo Número adicionado à tabela 'usuarios'.")
+        
+    return conn
 # =========================================
 # FUNÇÕES DE VALIDAÇÃO E BUSCA (NOVAS)
 # =========================================
@@ -293,24 +426,186 @@ oauth_google = OAuth2Component(
 # 3. Autenticação local (Login/Senha)
 def autenticar_local(usuario_ou_email, senha):
     """
-    Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
+    Autentica o usuário local usando EMAIL ou CPF.
+    (Conexão fechada após a operação)
     """
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH) 
     cursor = conn.cursor()
     
-    # Busca por 'nome' OU 'email' OU 'cpf'
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=? OR cpf=?) AND auth_provider='local'", 
-        (usuario_ou_email, usuario_ou_email, usuario_ou_email) # Passa o mesmo valor para os três '?'
-    )
-    dados = cursor.fetchone()
-    conn.close()
-    
-    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
-        # Retorna os dados do usuário se a senha bater
-        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+    try:
+        # Busca por 'email' OU 'cpf' (O nome completo não é mais usado para login)
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (email=? OR cpf=?) AND auth_provider='local'", 
+            (usuario_ou_email, usuario_ou_email)
+        )
+        dados = cursor.fetchone()
+        
+        if dados is not None and dados[3]: # dados[3] é 'senha'
+            # Se a senha existe e é válida
+            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
+                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+            
+    except Exception as e:
+        # Erro de banco (ex: ProgrammingError)
+        st.error(f"Erro de autenticação no DB: {e}")
+        
+    finally:
+        # Garante que a conexão seja fechada SEMPRE
+        conn.close() 
         
     return None
+
+# [Substitua o código na função `buscar_usuario_por_email`]
+def buscar_usuario_por_email(email):
+    """Busca um usuário pelo email e retorna seus dados."""
+    conn = sqlite3.connect(DB_PATH) 
+    cursor = conn.cursor()
+    dados = None
+    
+    try:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+        )
+        dados = cursor.fetchone()
+        
+        if dados:
+            return {
+                "id": dados[0], 
+                "nome": dados[1], 
+                "tipo": dados[2], 
+                "perfil_completo": bool(dados[3])
+            }
+    finally:
+        conn.close()
+        
+    return None
+
+# [Substitua o código na função `criar_usuario_parcial_google`]
+def criar_usuario_parcial_google(email, nome):
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    novo_id = None
+    
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit()
+        novo_id = cursor.lastrowid
+        
+    except sqlite3.IntegrityError: # Email já existe
+        pass
+        
+    finally:
+        conn.close()
+        
+    if novo_id:
+        return {"id": novo_id, "email": email, "nome": nome}
+    return None
+
+# 4. Funções de busca e criação de usuário
+def buscar_usuario_por_email(email):
+    """Busca um usuário pelo email e retorna seus dados."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+    )
+    dados = cursor.fetchone()
+    # NÃO FECHAR A CONEXÃO
+    if dados:
+        return {
+            "id": dados['id'], 
+            "nome": dados['nome'], 
+            "tipo": dados['tipo_usuario'], 
+            "perfil_completo": bool(dados['perfil_completo'])
+        }
+    return None
+
+def criar_usuario_parcial_google(email, nome):
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit() # COMMIT AQUI É CRUCIAL
+        novo_id = cursor.lastrowid
+        # NÃO FECHAR A CONEXÃO
+        return {"id": novo_id, "email": email, "nome": nome}
+    except sqlite3.IntegrityError: # Email já existe
+        # NÃO FECHAR A CONEXÃO
+        return None
+# [Substitua o código na função `buscar_usuario_por_email`]
+def buscar_usuario_por_email(email):
+    """Busca um usuário pelo email e retorna seus dados."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+    )
+    dados = cursor.fetchone()
+    # NÃO FECHAR A CONEXÃO
+    if dados:
+        return {
+            "id": dados[0], 
+            "nome": dados[1], 
+            "tipo": dados[2], 
+            "perfil_completo": bool(dados[3])
+        }
+    return None
+
+# [Substitua o código na função `criar_usuario_parcial_google`]
+def criar_usuario_parcial_google(email, nome):
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit() # COMMIT AQUI É CRUCIAL
+        novo_id = cursor.lastrowid
+        # NÃO FECHAR A CONEXÃO
+        return {"id": novo_id, "email": email, "nome": nome}
+    except sqlite3.IntegrityError: # Email já existe
+        # NÃO FECHAR A CONEXÃO
+        return None
+
+# [Substitua o código na função `criar_usuarios_teste`]
+def criar_usuarios_teste():
+    """Cria usuários padrão locais com perfil completo."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    # ... (o resto da lógica permanece a mesma) ...
+    usuarios = [
+        ("admin", "admin", "admin@bjj.local", "00000000000"), 
+        ("professor", "professor", "professor@bjj.local", "11111111111"), 
+        ("aluno", "aluno", "aluno@bjj.local", "22222222222")
+    ]
+    for nome, tipo, email, cpf in usuarios:
+        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
+        if cursor.fetchone() is None:
+            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
+                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                """,
+                (nome, tipo, senha_hash, email, cpf),
+            )
+    conn.commit()
 
 # 4. Funções de busca e criação de usuário
 def buscar_usuario_por_email(email):
@@ -883,9 +1178,140 @@ def ranking():
 # 👩‍🏫 PAINEL DO PROFESSOR (DO SEU PROJETO ORIGINAL)
 # =========================================
 def painel_professor():
-    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
-    st.info("Esta área está em desenvolvimento. Use a 'Gestão de Equipes' e 'Gestão de Exames'.")
-    # Aqui entraria a lógica de aprovar alunos, liberar exames, etc.
+    st.title("🥋 Painel do Professor")
+    
+    professor_id = st.session_state.user['id']
+    equipe_id = get_professor_team_id(professor_id)
+
+    if not equipe_id:
+        st.warning("Você ainda não está vinculado a uma equipe ativa. Peça a um administrador para te vincular.")
+        return
+
+    # 1. VISÃO GERAL DE ALUNOS
+    st.header("Lista de Alunos da Equipe")
+    df_alunos = pd.DataFrame(get_alunos_by_equipe(equipe_id))
+
+    if df_alunos.empty:
+        st.info("Nenhum aluno ativo encontrado para sua equipe.")
+        # Pode haver alunos pendentes, você pode adicionar a lógica para eles aqui.
+        return
+        
+    
+    # 2. HABILITAR PERÍODO DE EXAME
+    st.header("Liberar Período de Exame de Faixa")
+    
+    # Prepara lista de alunos ativos para o selectbox
+    alunos_ativos = df_alunos[df_alunos['status_vinculo'] == 'ativo']
+    if alunos_ativos.empty:
+        st.info("Não há alunos ativos para habilitar exames.")
+        
+        # Exibição da tabela, mesmo que vazia, para manter a consistência
+        df_display = df_alunos.copy() 
+        df_display['Data Início'] = df_display['data_inicio_exame'].fillna('N/A')
+        df_display['Data Limite'] = df_display['data_fim_exame'].fillna('N/A')
+        df_display['Habilitado'] = df_display['exame_habilitado'].apply(lambda x: '✅ Sim' if x else '❌ Não')
+        
+        st.dataframe(
+            df_display[['nome_aluno', 'faixa_atual', 'status_vinculo', 'Habilitado', 'Data Início', 'Data Limite']],
+            column_config={"nome_aluno": "Aluno","faixa_atual": "Faixa","status_vinculo": "Status",},
+            hide_index=True
+        )
+        return
+
+
+    alunos_para_selecao = {
+        f"{row['nome_aluno']} ({row['faixa_atual']})": row['aluno_id'] 
+        for index, row in alunos_ativos.iterrows()
+    }
+    
+    with st.form("form_habilitar_exame", clear_on_submit=True):
+        
+        col1, col2 = st.columns(2)
+        
+        # Selectbox do aluno
+        aluno_selecionado_str = col1.selectbox(
+            "Selecione o Aluno",
+            list(alunos_para_selecao.keys()),
+            key="aluno_select"
+        )
+        aluno_id_selecionado = alunos_para_selecao.get(aluno_selecionado_str)
+        aluno_email = alunos_ativos[alunos_ativos['aluno_id'] == aluno_id_selecionado]['email'].iloc[0]
+
+        # Datas
+        hoje = datetime.date.today()
+        data_inicio = col1.date_input("Data de Início do Exame", hoje)
+        data_fim = col2.date_input("Data Limite para o Exame", hoje + datetime.timedelta(days=14))
+        
+        # Validação de Datas
+        if data_fim <= data_inicio:
+            st.error("A Data Limite deve ser posterior à Data de Início.")
+            submetido = False
+        else:
+            submetido = st.form_submit_button("Habilitar Exame e Agendar Alerta")
+        
+        if submetido:
+            data_inicio_str = data_inicio.strftime('%Y-%m-%d')
+            data_fim_str = data_fim.strftime('%Y-%m-%d')
+            
+            if habilitar_exame_aluno(aluno_id_selecionado, data_inicio_str, data_fim_str):
+                
+                # --- LÓGICA DE AGENDAMENTO DE ALERTA ---
+                
+                # Definimos o alerta para 3 dias antes da data limite
+                data_alerta = data_fim - datetime.timedelta(days=3)
+                
+                # Se o alerta já deveria ter sido enviado, agendamos para amanhã para evitar falha no agendador
+                if data_alerta <= hoje:
+                    data_alerta = hoje + datetime.timedelta(days=1)
+                
+                start_date_str = data_alerta.strftime('%Y-%m-%d')
+                
+                st.success(f"Exame habilitado para {aluno_selecionado_str} até {data_fim_str}!")
+                st.info(f"Um alerta automático (e-mail e notificação) foi agendado para {start_date_str} às 09:00, para notificar o aluno sobre o prazo final do exame.")
+                
+                # A VERIFICAÇÃO EM SEGUNDO PLANO (A ser executada pelo Agendador)
+                # Esta é uma simulação da ação que será agendada.
+                # A ação real envolveria verificar o status do exame e enviar um e-mail.
+                
+                # O agendador garante que a ação de verificação e notificação seja executada
+                # na data especificada (3 dias antes do prazo).
+                # O código do agendador é apenas para referência de como o sistema final funcionaria:
+                # 
+                # scheduler.schedule(
+                #     query=f"Enviar email de alerta de prazo de exame de faixa para {aluno_email}. Prazo final: {data_fim_str}.",
+                #     notification_text=f"Alerta de Prazo para {aluno_selecionado_str}",
+                #     start_date=start_date_str,
+                #     time_of_day=["09:00"],
+                #     occurrence_count=1,
+                #     every_n_days=1 
+                # )
+                
+                # Forçar recarregamento do painel
+                st.session_state["refresh_professor_panel"] = True 
+            
+            else:
+                st.error("Erro ao salvar no banco de dados. Tente novamente.")
+
+    # Show the table again with updated status
+    if "refresh_professor_panel" in st.session_state:
+        st.session_state["refresh_professor_panel"] = False
+        df_alunos = pd.DataFrame(get_alunos_by_equipe(equipe_id))
+        
+    # Exibição final da tabela
+    df_display = df_alunos.copy()
+    df_display['Data Início'] = df_display['data_inicio_exame'].fillna('N/A')
+    df_display['Data Limite'] = df_display['data_fim_exame'].fillna('N/A')
+    df_display['Habilitado'] = df_display['exame_habilitado'].apply(lambda x: '✅ Sim' if x else '❌ Não')
+    
+    st.dataframe(
+        df_display[['nome_aluno', 'faixa_atual', 'status_vinculo', 'Habilitado', 'Data Início', 'Data Limite']],
+        column_config={
+            "nome_aluno": "Aluno",
+            "faixa_atual": "Faixa",
+            "status_vinculo": "Status",
+        },
+        hide_index=True
+    )
 
 # =========================================
 # 🏛️ GESTÃO DE EQUIPES (DO SEU PROJETO ORIGINAL)
@@ -1323,7 +1749,7 @@ def tela_inicio():
                 st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
 
 # =========================================
-# 👤 MEU PERFIL (NOVO)
+# 👤 MEU PERFIL (ATUALIZADO COM NÚMERO)
 # =========================================
 def tela_meu_perfil(usuario_logado):
     """Página para o usuário editar seu próprio perfil e senha."""
@@ -1351,7 +1777,7 @@ def tela_meu_perfil(usuario_logado):
         with st.form(key="form_edit_perfil"):
             st.markdown("#### Editar Informações")
             
-            novo_nome = st.text_input("Nome de Usuário:", value=user_data['nome'])
+            novo_nome = st.text_input("Nome Completo:", value=user_data['nome'])
             novo_email = st.text_input("Email:", value=user_data['email'])
             
             if user_data['auth_provider'] == 'local':
@@ -1437,6 +1863,8 @@ def tela_meu_perfil(usuario_logado):
                     st.session_state.bairro_val = endereco.get('bairro', '')
                     st.session_state.cidade_val = endereco.get('cidade', '')
                     st.session_state.estado_val = endereco.get('estado', '')
+                    # Reinicializa o número com o valor do DB, a busca não muda o número
+                    st.session_state.numero_val = user_data['numero'] or "" 
                     st.success("Endereço encontrado! Lembre-se de clicar em 'Salvar Endereço' no final.")
                 else:
                     st.error("CEP não encontrado ou inválido.")
@@ -1446,6 +1874,8 @@ def tela_meu_perfil(usuario_logado):
             # Inicializa estados de sessão para campos de edição (usado para persistir o resultado do CEP)
             if 'logradouro_val' not in st.session_state:
                 st.session_state.logradouro_val = user_data['logradouro'] or ""
+            if 'numero_val' not in st.session_state: # NOVO CAMPO
+                st.session_state.numero_val = user_data['numero'] or ""
             if 'bairro_val' not in st.session_state:
                 st.session_state.bairro_val = user_data['bairro'] or ""
             if 'cidade_val' not in st.session_state:
@@ -1456,8 +1886,9 @@ def tela_meu_perfil(usuario_logado):
             
             novo_logradouro = st.text_input("Logradouro (Rua/Av):", value=st.session_state.logradouro_val)
             col_num, col_comp = st.columns(2)
-            novo_numero = col_num.text_input("Número:", value="") # Não armazena o número, precisa de campo específico
-            novo_complemento = col_comp.text_input("Complemento:", value="")
+            # NOVO CAMPO: Número do endereço
+            novo_numero = col_num.text_input("Número:", value=st.session_state.numero_val) 
+            novo_complemento = col_comp.text_input("Complemento:", value="") # Não salvo no DB atualmente
 
             novo_bairro = st.text_input("Bairro:", value=st.session_state.bairro_val)
             col_cid, col_est = st.columns(2)
@@ -1468,14 +1899,15 @@ def tela_meu_perfil(usuario_logado):
             if st.form_submit_button("💾 Salvar Endereço", type="primary"):
                 cep_final = st.session_state.edit_cep_input.strip()
                 cursor.execute(
-                    "UPDATE usuarios SET cep=?, logradouro=?, bairro=?, cidade=?, estado=? WHERE id=?",
-                    (cep_final, novo_logradouro, novo_bairro, novo_cidade, novo_estado, user_id_logado)
+                    "UPDATE usuarios SET cep=?, logradouro=?, numero=?, bairro=?, cidade=?, estado=? WHERE id=?",
+                    (cep_final, novo_logradouro, novo_numero, novo_bairro, novo_cidade, novo_estado, user_id_logado)
                 )
                 conn.commit()
                 # Limpa o cache após salvar
                 if "endereco_cache" in st.session_state: del st.session_state["endereco_cache"]
                 # Força a atualização dos estados para refletir o DB
                 st.session_state.logradouro_val = novo_logradouro
+                st.session_state.numero_val = novo_numero # Atualiza o estado
                 st.session_state.bairro_val = novo_bairro
                 st.session_state.cidade_val = novo_cidade
                 st.session_state.estado_val = novo_estado
@@ -1660,6 +2092,7 @@ def tela_login():
 
     # =========================================
     # CSS
+    # ... (o CSS permanece o mesmo) ...
     # =========================================
     st.markdown("""
     <style>
@@ -1710,6 +2143,7 @@ def tela_login():
 
     # =========================================
     # LOGO CENTRALIZADA
+    # ... (o código da logo permanece o mesmo) ...
     # =========================================
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
@@ -1730,23 +2164,23 @@ def tela_login():
     # BLOCO DE LOGIN
     # =========================================
     c1, c2, c3 = st.columns([1, 1.5, 1])
-    with c2:
+    with c2: # <--- TUDO DEVE ESTAR DENTRO DESTE BLOCO!
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
-                # Campo de login que aceita usuário, email ou CPF
-                user_ou_email = st.text_input("Nome de Usuário, Email ou CPF:")
+                # Login agora aceita Email ou CPF
+                user_ou_cpf = st.text_input("Email ou CPF para Login:")
                 pwd = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    u = autenticar_local(user_ou_email.strip(), pwd.strip()) 
+                    u = autenticar_local(user_ou_cpf.strip(), pwd.strip()) 
                     if u:
                         st.session_state.usuario = u
                         st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
                         st.rerun()
                     else:
-                        st.error("Usuário/Email/CPF ou senha incorretos. Tente novamente.")
+                        st.error("Email/CPF ou senha incorretos. Tente novamente.")
 
                 # Botões Criar Conta / Esqueci Senha
                 colx, coly, colz = st.columns([1, 2, 1])
@@ -1795,17 +2229,16 @@ def tela_login():
                         st.rerun()
 
         # =========================================
-        # CADASTRO (Corrigido com CPF e Endereço)
+        # CADASTRO (Nome Completo, Email e CPF para Login)
         # =========================================
-elif st.session_state["modo_login"] == "cadastro":
+        elif st.session_state["modo_login"] == "cadastro":
             
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>📋 Cadastro de Novo Usuário (Local)</h3>", unsafe_allow_html=True)
                 
                 with st.form(key="form_cadastro_local"):
-                    # Esta lógica de busca de CEP AGORA DEVE USAR st.form_submit_button
+                    
                     def handle_cadastro_cep_search_form():
-                        # A validação e lógica de busca é movida para cá
                         cep_digitado = st.session_state.cadastro_cep_input
                         if not cep_digitado:
                             st.warning("Por favor, digite um CEP para buscar.")
@@ -1818,15 +2251,14 @@ elif st.session_state["modo_login"] == "cadastro":
                             st.success("Endereço encontrado e campos preenchidos. Complete o restante, se necessário.")
                         else:
                             st.error("CEP não encontrado ou inválido.")
-                        # Não precisa de st.rerun()
 
                     # Dados Pessoais
                     st.markdown("#### Informações de Acesso")
-                    nome = st.text_input("Nome de Usuário (login):") 
+                    nome = st.text_input("Nome Completo:") 
                     email = st.text_input("E-mail:")
+                    cpf = st.text_input("CPF:", help="Apenas números. Será usado para login e identificação única.")
                     senha = st.text_input("Senha:", type="password")
                     confirmar = st.text_input("Confirmar senha:", type="password")
-                    cpf = st.text_input("CPF:", help="Apenas números. Campo único e obrigatório.")
                     
                     st.markdown("---")
                     st.markdown("#### Classificação")
@@ -1844,31 +2276,38 @@ elif st.session_state["modo_login"] == "cadastro":
                     st.markdown("---")
                     st.markdown("#### Endereço (Opcional)")
                     
-                    # Campo CEP
+                    # Campo CEP com o botão auxiliar
                     col_cep, col_btn_cep = st.columns([3, 1])
                     cep_input = col_cep.text_input("CEP:", key="cadastro_cep_input", value=st.session_state["cadastro_endereco_cache"].get("cep_original", ""))
                     
                     # Botão de Busca de CEP AGORA É um form_submit_button
-                    # OBS: form_submit_button secundário pode ter 'type="secondary"'
-                    buscar_cep_clicked = col_btn_cep.form_submit_button("🔍 Buscar", key="buscar_cep_btn", on_click=handle_cadastro_cep_search_form)
+                    col_btn_cep.form_submit_button(
+                        "🔍 Buscar", 
+                        key="buscar_cep_btn", 
+                        on_click=handle_cadastro_cep_search_form
+                    )
 
-                    # Se a busca foi clicada, o cache é atualizado no callback, mas precisamos garantir que os campos exibam o valor
+                    # Preenchimento automático ou manual usando o cache
                     cache = st.session_state["cadastro_endereco_cache"]
                     
-                    # Preenchimento automático ou manual
                     logradouro = st.text_input("Logradouro (Rua/Av):", value=cache.get('logradouro', ""))
+                    col_num, col_comp = st.columns(2) # Colunas para Número e Complemento
+                    # NOVO CAMPO: Número
+                    numero = col_num.text_input("Número:", value="", help="O número do endereço.") 
+                    col_comp.text_input("Complemento:", value="") 
+
                     bairro = st.text_input("Bairro:", value=cache.get('bairro', ""))
                     col_cid, col_est = st.columns(2)
                     cidade = col_cid.text_input("Cidade:", value=cache.get('cidade', ""))
                     estado = col_est.text_input("Estado (UF):", value=cache.get('uf', ""))
                     
-                    # Botão Final de Cadastro
+                    # Botão Final de Cadastro (Submit button principal)
                     submitted = st.form_submit_button("Cadastrar", use_container_width=True, type="primary")
 
                     if submitted:
                         # Validações
                         if not (nome and email and senha and confirmar and cpf):
-                            st.error("Preencha todos os campos obrigatórios: Nome, Email, Senha e CPF.")
+                            st.error("Preencha todos os campos obrigatórios: Nome Completo, Email, Senha e CPF.")
                             st.stop()
                         elif senha != confirmar:
                             st.error("As senhas não coincidem.")
@@ -1877,31 +2316,32 @@ elif st.session_state["modo_login"] == "cadastro":
                             st.error("CPF inválido. Por favor, verifique o número.")
                             st.stop()
                         else:
-                            # CORREÇÃO: Conecta no banco de dados correto
-                            conn = sqlite3.connect(DB_PATH) 
+                            # Lógica de salvar no DB
+                            conn = get_db_connection() # USANDO O CACHE
                             cursor = conn.cursor()
                             
-                            # Verifica duplicidade de Nome, Email ou CPF
-                            cursor.execute("SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", (nome, email, cpf))
+                            # Verifica duplicidade de Email ou CPF (Nome completo pode ser duplicado)
+                            cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
                             if cursor.fetchone():
-                                st.error("Nome de usuário, e-mail ou CPF já cadastrado.")
-                                conn.close()
+                                st.error("Email ou CPF já cadastrado. Use outro ou faça login.")
+                                # conn.close() # NÃO FECHAR A CONEXÃO
                                 st.stop()
                             else:
                                 try:
                                     hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
                                     tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
                                     
-                                    # Usa os valores finais dos campos
-                                    cep_final = st.session_state.cadastro_cep_input
+                                    # Usa o valor atual do input do CEP
+                                    cep_final = cep_input 
                                     
                                     # 1. Salva na tabela 'usuarios'
                                     cursor.execute(
                                         """
-                                        INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo, cep, logradouro, bairro, cidade, estado)
-                                        VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?)
+                                        INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo, cep, logradouro, numero, bairro, cidade, estado)
+                                        VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?, ?)
                                         """,
-                                        (nome, email, cpf, tipo_db, hashed, cep_final, logradouro, bairro, cidade, estado)
+                                        # Os valores devem vir na mesma ordem dos placeholders
+                                        (nome, email, cpf, tipo_db, hashed, cep_final, logradouro, numero, bairro, cidade, estado)
                                     )
                                     novo_id = cursor.lastrowid
                                     
@@ -1923,8 +2363,8 @@ elif st.session_state["modo_login"] == "cadastro":
                                             (novo_id,)
                                         )
                                     
-                                    conn.commit()
-                                    conn.close()
+                                    conn.commit() # COMMIT AQUI É CRUCIAL
+                                    # conn.close() # NÃO FECHAR A CONEXÃO
                                     st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
                                     st.session_state["modo_login"] = "login"
                                     # Limpa o cache após o cadastro
@@ -1933,7 +2373,7 @@ elif st.session_state["modo_login"] == "cadastro":
                                     
                                 except Exception as e:
                                     conn.rollback() 
-                                    conn.close()
+                                    # conn.close() # NÃO FECHAR A CONEXÃO
                                     st.error(f"Erro ao cadastrar: {e}")
 
             if st.button("⬅️ Voltar para Login", use_container_width=True):
@@ -1945,14 +2385,16 @@ elif st.session_state["modo_login"] == "cadastro":
         # RECUPERAÇÃO DE SENHA
         # =========================================
         elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Em breve será implementado o envio de recuperação de senha.")
-            
-            if st.button("⬅️ Voltar para Login", use_container_width=True):
-                st.session_state["modo_login"] = "login"
-                st.rerun()            
+            with st.container(border=True):
+                st.markdown("<h3 style='color:white; text-align:center;'>🔑 Recuperar Senha</h3>", unsafe_allow_html=True)
+                email = st.text_input("Digite o e-mail cadastrado:")
+                if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                    st.info("Em breve será implementado o envio de recuperação de senha.")
+                
+                if st.button("⬅️ Voltar para Login", use_container_width=True):
+                    st.session_state["modo_login"] = "login"
+                    st.rerun()
+                    
 def tela_completar_cadastro(user_data):
     """Exibe o formulário para novos usuários do Google completarem o perfil."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
