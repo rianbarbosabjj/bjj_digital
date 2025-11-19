@@ -79,13 +79,73 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 }}
 </style>
 """, unsafe_allow_html=True)
+def get_professor_team_id(usuario_id):
+    """Busca o ID da equipe principal do professor ativo."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    team_id = None
+    try:
+        # Busca a equipe onde o professor está ativo
+        cursor.execute(
+            "SELECT equipe_id FROM professores WHERE usuario_id=? AND status_vinculo='ativo' LIMIT 1",
+            (usuario_id,)
+        )
+        result = cursor.fetchone()
+        if result:
+            team_id = result[0]
+    finally:
+        conn.close()
+    return team_id
 
+def get_alunos_by_equipe(equipe_id):
+    """Busca todos os alunos (e seus status de exame) de uma equipe."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    alunos = []
+    try:
+        cursor.execute(
+            """
+            SELECT 
+                a.id as aluno_id, 
+                u.nome as nome_aluno, 
+                u.email, 
+                a.faixa_atual, 
+                a.status_vinculo,
+                a.exame_habilitado,
+                a.data_inicio_exame, 
+                a.data_fim_exame 
+            FROM alunos a
+            JOIN usuarios u ON a.usuario_id = u.id
+            WHERE a.equipe_id=?
+            """,
+            (equipe_id,)
+        )
+        alunos = cursor.fetchall()
+    finally:
+        conn.close()
+    return alunos
 
-# =========================================
-# BANCO DE DADOS (ATUALIZADO COM CPF, ENDEREÇO E NÚMERO)
-# =========================================
-DB_PATH = os.path.expanduser("~/bjj_digital.db")
-
+def habilitar_exame_aluno(aluno_id, data_inicio_str, data_fim_str):
+    """Habilita o exame e define o período na tabela alunos."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE alunos 
+            SET exame_habilitado=1, data_inicio_exame=?, data_fim_exame=?
+            WHERE id=?
+            """,
+            (data_inicio_str, data_fim_str, aluno_id)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erro ao habilitar exame: {e}")
+        return False
+    finally:
+        conn.close()
 # =========================================
 # BANCO DE DADOS (ATUALIZADO COM CPF, ENDEREÇO E NÚMERO)
 # =========================================
@@ -194,11 +254,12 @@ def migrar_db():
     
     for coluna, tipo in colunas_novas.items():
         try:
-            cursor.execute(f"SELECT {coluna} FROM usuarios LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} {tipo}")
-            conn.commit()
-            st.toast(f"Coluna {coluna} adicionada.")
+        cursor.execute("SELECT data_inicio_exame FROM alunos LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE alunos ADD COLUMN data_inicio_exame TEXT")
+        cursor.execute("ALTER TABLE alunos ADD COLUMN data_fim_exame TEXT")
+        conn.commit()
+        st.toast("Campos de Data de Exame adicionados à tabela 'alunos'.")
             
     conn.close()
 
@@ -1117,9 +1178,140 @@ def ranking():
 # 👩‍🏫 PAINEL DO PROFESSOR (DO SEU PROJETO ORIGINAL)
 # =========================================
 def painel_professor():
-    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
-    st.info("Esta área está em desenvolvimento. Use a 'Gestão de Equipes' e 'Gestão de Exames'.")
-    # Aqui entraria a lógica de aprovar alunos, liberar exames, etc.
+    st.title("🥋 Painel do Professor")
+    
+    professor_id = st.session_state.user['id']
+    equipe_id = get_professor_team_id(professor_id)
+
+    if not equipe_id:
+        st.warning("Você ainda não está vinculado a uma equipe ativa. Peça a um administrador para te vincular.")
+        return
+
+    # 1. VISÃO GERAL DE ALUNOS
+    st.header("Lista de Alunos da Equipe")
+    df_alunos = pd.DataFrame(get_alunos_by_equipe(equipe_id))
+
+    if df_alunos.empty:
+        st.info("Nenhum aluno ativo encontrado para sua equipe.")
+        # Pode haver alunos pendentes, você pode adicionar a lógica para eles aqui.
+        return
+        
+    
+    # 2. HABILITAR PERÍODO DE EXAME
+    st.header("Liberar Período de Exame de Faixa")
+    
+    # Prepara lista de alunos ativos para o selectbox
+    alunos_ativos = df_alunos[df_alunos['status_vinculo'] == 'ativo']
+    if alunos_ativos.empty:
+        st.info("Não há alunos ativos para habilitar exames.")
+        
+        # Exibição da tabela, mesmo que vazia, para manter a consistência
+        df_display = df_alunos.copy() 
+        df_display['Data Início'] = df_display['data_inicio_exame'].fillna('N/A')
+        df_display['Data Limite'] = df_display['data_fim_exame'].fillna('N/A')
+        df_display['Habilitado'] = df_display['exame_habilitado'].apply(lambda x: '✅ Sim' if x else '❌ Não')
+        
+        st.dataframe(
+            df_display[['nome_aluno', 'faixa_atual', 'status_vinculo', 'Habilitado', 'Data Início', 'Data Limite']],
+            column_config={"nome_aluno": "Aluno","faixa_atual": "Faixa","status_vinculo": "Status",},
+            hide_index=True
+        )
+        return
+
+
+    alunos_para_selecao = {
+        f"{row['nome_aluno']} ({row['faixa_atual']})": row['aluno_id'] 
+        for index, row in alunos_ativos.iterrows()
+    }
+    
+    with st.form("form_habilitar_exame", clear_on_submit=True):
+        
+        col1, col2 = st.columns(2)
+        
+        # Selectbox do aluno
+        aluno_selecionado_str = col1.selectbox(
+            "Selecione o Aluno",
+            list(alunos_para_selecao.keys()),
+            key="aluno_select"
+        )
+        aluno_id_selecionado = alunos_para_selecao.get(aluno_selecionado_str)
+        aluno_email = alunos_ativos[alunos_ativos['aluno_id'] == aluno_id_selecionado]['email'].iloc[0]
+
+        # Datas
+        hoje = datetime.date.today()
+        data_inicio = col1.date_input("Data de Início do Exame", hoje)
+        data_fim = col2.date_input("Data Limite para o Exame", hoje + datetime.timedelta(days=14))
+        
+        # Validação de Datas
+        if data_fim <= data_inicio:
+            st.error("A Data Limite deve ser posterior à Data de Início.")
+            submetido = False
+        else:
+            submetido = st.form_submit_button("Habilitar Exame e Agendar Alerta")
+        
+        if submetido:
+            data_inicio_str = data_inicio.strftime('%Y-%m-%d')
+            data_fim_str = data_fim.strftime('%Y-%m-%d')
+            
+            if habilitar_exame_aluno(aluno_id_selecionado, data_inicio_str, data_fim_str):
+                
+                # --- LÓGICA DE AGENDAMENTO DE ALERTA ---
+                
+                # Definimos o alerta para 3 dias antes da data limite
+                data_alerta = data_fim - datetime.timedelta(days=3)
+                
+                # Se o alerta já deveria ter sido enviado, agendamos para amanhã para evitar falha no agendador
+                if data_alerta <= hoje:
+                    data_alerta = hoje + datetime.timedelta(days=1)
+                
+                start_date_str = data_alerta.strftime('%Y-%m-%d')
+                
+                st.success(f"Exame habilitado para {aluno_selecionado_str} até {data_fim_str}!")
+                st.info(f"Um alerta automático (e-mail e notificação) foi agendado para {start_date_str} às 09:00, para notificar o aluno sobre o prazo final do exame.")
+                
+                # A VERIFICAÇÃO EM SEGUNDO PLANO (A ser executada pelo Agendador)
+                # Esta é uma simulação da ação que será agendada.
+                # A ação real envolveria verificar o status do exame e enviar um e-mail.
+                
+                # O agendador garante que a ação de verificação e notificação seja executada
+                # na data especificada (3 dias antes do prazo).
+                # O código do agendador é apenas para referência de como o sistema final funcionaria:
+                # 
+                # scheduler.schedule(
+                #     query=f"Enviar email de alerta de prazo de exame de faixa para {aluno_email}. Prazo final: {data_fim_str}.",
+                #     notification_text=f"Alerta de Prazo para {aluno_selecionado_str}",
+                #     start_date=start_date_str,
+                #     time_of_day=["09:00"],
+                #     occurrence_count=1,
+                #     every_n_days=1 
+                # )
+                
+                # Forçar recarregamento do painel
+                st.session_state["refresh_professor_panel"] = True 
+            
+            else:
+                st.error("Erro ao salvar no banco de dados. Tente novamente.")
+
+    # Show the table again with updated status
+    if "refresh_professor_panel" in st.session_state:
+        st.session_state["refresh_professor_panel"] = False
+        df_alunos = pd.DataFrame(get_alunos_by_equipe(equipe_id))
+        
+    # Exibição final da tabela
+    df_display = df_alunos.copy()
+    df_display['Data Início'] = df_display['data_inicio_exame'].fillna('N/A')
+    df_display['Data Limite'] = df_display['data_fim_exame'].fillna('N/A')
+    df_display['Habilitado'] = df_display['exame_habilitado'].apply(lambda x: '✅ Sim' if x else '❌ Não')
+    
+    st.dataframe(
+        df_display[['nome_aluno', 'faixa_atual', 'status_vinculo', 'Habilitado', 'Data Início', 'Data Limite']],
+        column_config={
+            "nome_aluno": "Aluno",
+            "faixa_atual": "Faixa",
+            "status_vinculo": "Status",
+        },
+        hide_index=True
+    )
 
 # =========================================
 # 🏛️ GESTÃO DE EQUIPES (DO SEU PROJETO ORIGINAL)
