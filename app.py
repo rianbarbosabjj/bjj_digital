@@ -197,10 +197,12 @@ else:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN estado TEXT")
         conn.commit()
         st.toast("Campos de Endereço adicionados à tabela 'usuarios'.")
-    # Adicionar campo NUMERO se não existir (NOVO)
+    # Adicionar campo NUMERO se não existir (CORREÇÃO: o erro ocorreu aqui)
     try:
+        # Verifica a existência da coluna numero
         cursor.execute("SELECT numero FROM usuarios LIMIT 1")
     except sqlite3.OperationalError:
+        # Se a coluna não existe, adicione-a
         cursor.execute("ALTER TABLE usuarios ADD COLUMN numero TEXT")
         conn.commit()
         st.toast("Campo Número adicionado à tabela 'usuarios'.")
