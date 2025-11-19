@@ -82,7 +82,7 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 
 
 # =========================================
-# BANCO DE DADOS (ATUALIZADO COM CPF, ENDEREÇO E NÚMERO)
+# BANCO DE DADOS (ATUALIZADO COM CPF E ENDEREÇO)
 # =========================================
 DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
@@ -92,7 +92,8 @@ def criar_banco():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Tabela 'usuarios' ATUALIZADA com NOVO CAMPO 'numero'
+    # 👈 [MUDANÇA CRÍTICA] Tabela 'usuarios' foi atualizada com CPF e Endereço
+    # Nota: O 'senha' deve ser NULO para logins sociais.
     cursor.executescript("""
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,12 +104,11 @@ def criar_banco():
         senha TEXT, -- Nulo para logins sociais
         auth_provider TEXT DEFAULT 'local', -- 'local', 'google', etc.
         perfil_completo BOOLEAN DEFAULT 0, -- 0 = Incompleto, 1 = Completo
-        cep TEXT, -- Endereço
-        logradouro TEXT, -- Endereço
-        numero TEXT, -- NOVO: Número do endereço
-        bairro TEXT, -- Endereço
-        cidade TEXT, -- Endereço
-        estado TEXT, -- Endereço
+        cep TEXT, -- NOVO: Endereço
+        logradouro TEXT, -- NOVO: Endereço
+        bairro TEXT, -- NOVO: Endereço
+        cidade TEXT, -- NOVO: Endereço
+        estado TEXT, -- NOVO: Endereço
         data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -175,7 +175,8 @@ def criar_banco():
 if not os.path.exists(DB_PATH):
     st.toast("Criando novo banco de dados...")
     criar_banco()
-# Se o banco já existe, adicionamos as novas colunas
+# Se o banco já existe, podemos tentar adicionar as colunas do CPF e Endereço
+# para garantir compatibilidade com versões antigas do banco.
 else:
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
@@ -197,16 +198,8 @@ else:
         cursor.execute("ALTER TABLE usuarios ADD COLUMN estado TEXT")
         conn.commit()
         st.toast("Campos de Endereço adicionados à tabela 'usuarios'.")
-    # Adicionar campo NUMERO se não existir (CORREÇÃO: o erro ocorreu aqui)
-    try:
-        # Verifica a existência da coluna numero
-        cursor.execute("SELECT numero FROM usuarios LIMIT 1")
-    except sqlite3.OperationalError:
-        # Se a coluna não existe, adicione-a
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN numero TEXT")
-        conn.commit()
-        st.toast("Campo Número adicionado à tabela 'usuarios'.")
     conn.close()
+
 
 # =========================================
 # FUNÇÕES DE VALIDAÇÃO E BUSCA (NOVAS)
@@ -1330,7 +1323,7 @@ def tela_inicio():
                 st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
 
 # =========================================
-# 👤 MEU PERFIL (ATUALIZADO COM NÚMERO)
+# 👤 MEU PERFIL (NOVO)
 # =========================================
 def tela_meu_perfil(usuario_logado):
     """Página para o usuário editar seu próprio perfil e senha."""
@@ -1358,7 +1351,7 @@ def tela_meu_perfil(usuario_logado):
         with st.form(key="form_edit_perfil"):
             st.markdown("#### Editar Informações")
             
-            novo_nome = st.text_input("Nome Completo:", value=user_data['nome'])
+            novo_nome = st.text_input("Nome de Usuário:", value=user_data['nome'])
             novo_email = st.text_input("Email:", value=user_data['email'])
             
             if user_data['auth_provider'] == 'local':
@@ -1444,8 +1437,6 @@ def tela_meu_perfil(usuario_logado):
                     st.session_state.bairro_val = endereco.get('bairro', '')
                     st.session_state.cidade_val = endereco.get('cidade', '')
                     st.session_state.estado_val = endereco.get('estado', '')
-                    # Reinicializa o número com o valor do DB, a busca não muda o número
-                    st.session_state.numero_val = user_data['numero'] or "" 
                     st.success("Endereço encontrado! Lembre-se de clicar em 'Salvar Endereço' no final.")
                 else:
                     st.error("CEP não encontrado ou inválido.")
@@ -1455,8 +1446,6 @@ def tela_meu_perfil(usuario_logado):
             # Inicializa estados de sessão para campos de edição (usado para persistir o resultado do CEP)
             if 'logradouro_val' not in st.session_state:
                 st.session_state.logradouro_val = user_data['logradouro'] or ""
-            if 'numero_val' not in st.session_state: # NOVO CAMPO
-                st.session_state.numero_val = user_data['numero'] or ""
             if 'bairro_val' not in st.session_state:
                 st.session_state.bairro_val = user_data['bairro'] or ""
             if 'cidade_val' not in st.session_state:
@@ -1467,9 +1456,8 @@ def tela_meu_perfil(usuario_logado):
             
             novo_logradouro = st.text_input("Logradouro (Rua/Av):", value=st.session_state.logradouro_val)
             col_num, col_comp = st.columns(2)
-            # NOVO CAMPO: Número do endereço
-            novo_numero = col_num.text_input("Número:", value=st.session_state.numero_val) 
-            novo_complemento = col_comp.text_input("Complemento:", value="") # Não salvo no DB atualmente
+            novo_numero = col_num.text_input("Número:", value="") # Não armazena o número, precisa de campo específico
+            novo_complemento = col_comp.text_input("Complemento:", value="")
 
             novo_bairro = st.text_input("Bairro:", value=st.session_state.bairro_val)
             col_cid, col_est = st.columns(2)
@@ -1480,15 +1468,14 @@ def tela_meu_perfil(usuario_logado):
             if st.form_submit_button("💾 Salvar Endereço", type="primary"):
                 cep_final = st.session_state.edit_cep_input.strip()
                 cursor.execute(
-                    "UPDATE usuarios SET cep=?, logradouro=?, numero=?, bairro=?, cidade=?, estado=? WHERE id=?",
-                    (cep_final, novo_logradouro, novo_numero, novo_bairro, novo_cidade, novo_estado, user_id_logado)
+                    "UPDATE usuarios SET cep=?, logradouro=?, bairro=?, cidade=?, estado=? WHERE id=?",
+                    (cep_final, novo_logradouro, novo_bairro, novo_cidade, novo_estado, user_id_logado)
                 )
                 conn.commit()
                 # Limpa o cache após salvar
                 if "endereco_cache" in st.session_state: del st.session_state["endereco_cache"]
                 # Força a atualização dos estados para refletir o DB
                 st.session_state.logradouro_val = novo_logradouro
-                st.session_state.numero_val = novo_numero # Atualiza o estado
                 st.session_state.bairro_val = novo_bairro
                 st.session_state.cidade_val = novo_cidade
                 st.session_state.estado_val = novo_estado
@@ -1673,7 +1660,6 @@ def tela_login():
 
     # =========================================
     # CSS
-    # ... (o CSS permanece o mesmo) ...
     # =========================================
     st.markdown("""
     <style>
@@ -1724,7 +1710,6 @@ def tela_login():
 
     # =========================================
     # LOGO CENTRALIZADA
-    # ... (o código da logo permanece o mesmo) ...
     # =========================================
     logo_path = "assets/logo.png"
     if os.path.exists(logo_path):
@@ -1745,23 +1730,23 @@ def tela_login():
     # BLOCO DE LOGIN
     # =========================================
     c1, c2, c3 = st.columns([1, 1.5, 1])
-    with c2: # <--- TUDO DEVE ESTAR DENTRO DESTE BLOCO!
+    with c2:
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
-                # Login agora aceita Email ou CPF
-                user_ou_cpf = st.text_input("Email ou CPF para Login:")
+                # Campo de login que aceita usuário, email ou CPF
+                user_ou_email = st.text_input("Nome de Usuário, Email ou CPF:")
                 pwd = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    u = autenticar_local(user_ou_cpf.strip(), pwd.strip()) 
+                    u = autenticar_local(user_ou_email.strip(), pwd.strip()) 
                     if u:
                         st.session_state.usuario = u
                         st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
                         st.rerun()
                     else:
-                        st.error("Email/CPF ou senha incorretos. Tente novamente.")
+                        st.error("Usuário/Email/CPF ou senha incorretos. Tente novamente.")
 
                 # Botões Criar Conta / Esqueci Senha
                 colx, coly, colz = st.columns([1, 2, 1])
@@ -1810,16 +1795,17 @@ def tela_login():
                         st.rerun()
 
         # =========================================
-        # CADASTRO (Nome Completo, Email e CPF para Login)
+        # CADASTRO (Corrigido com CPF e Endereço)
         # =========================================
-        elif st.session_state["modo_login"] == "cadastro":
+elif st.session_state["modo_login"] == "cadastro":
             
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>📋 Cadastro de Novo Usuário (Local)</h3>", unsafe_allow_html=True)
                 
                 with st.form(key="form_cadastro_local"):
-                    
+                    # Esta lógica de busca de CEP AGORA DEVE USAR st.form_submit_button
                     def handle_cadastro_cep_search_form():
+                        # A validação e lógica de busca é movida para cá
                         cep_digitado = st.session_state.cadastro_cep_input
                         if not cep_digitado:
                             st.warning("Por favor, digite um CEP para buscar.")
@@ -1832,14 +1818,15 @@ def tela_login():
                             st.success("Endereço encontrado e campos preenchidos. Complete o restante, se necessário.")
                         else:
                             st.error("CEP não encontrado ou inválido.")
+                        # Não precisa de st.rerun()
 
                     # Dados Pessoais
                     st.markdown("#### Informações de Acesso")
-                    nome = st.text_input("Nome Completo:") 
+                    nome = st.text_input("Nome de Usuário (login):") 
                     email = st.text_input("E-mail:")
-                    cpf = st.text_input("CPF:", help="Apenas números. Será usado para login e identificação única.")
                     senha = st.text_input("Senha:", type="password")
                     confirmar = st.text_input("Confirmar senha:", type="password")
+                    cpf = st.text_input("CPF:", help="Apenas números. Campo único e obrigatório.")
                     
                     st.markdown("---")
                     st.markdown("#### Classificação")
@@ -1857,38 +1844,31 @@ def tela_login():
                     st.markdown("---")
                     st.markdown("#### Endereço (Opcional)")
                     
-                    # Campo CEP com o botão auxiliar
+                    # Campo CEP
                     col_cep, col_btn_cep = st.columns([3, 1])
                     cep_input = col_cep.text_input("CEP:", key="cadastro_cep_input", value=st.session_state["cadastro_endereco_cache"].get("cep_original", ""))
                     
                     # Botão de Busca de CEP AGORA É um form_submit_button
-                    col_btn_cep.form_submit_button(
-                        "🔍 Buscar", 
-                        key="buscar_cep_btn", 
-                        on_click=handle_cadastro_cep_search_form
-                    )
+                    # OBS: form_submit_button secundário pode ter 'type="secondary"'
+                    buscar_cep_clicked = col_btn_cep.form_submit_button("🔍 Buscar", key="buscar_cep_btn", on_click=handle_cadastro_cep_search_form)
 
-                    # Preenchimento automático ou manual usando o cache
+                    # Se a busca foi clicada, o cache é atualizado no callback, mas precisamos garantir que os campos exibam o valor
                     cache = st.session_state["cadastro_endereco_cache"]
                     
+                    # Preenchimento automático ou manual
                     logradouro = st.text_input("Logradouro (Rua/Av):", value=cache.get('logradouro', ""))
-                    col_num, col_comp = st.columns(2) # Colunas para Número e Complemento
-                    # NOVO CAMPO: Número
-                    numero = col_num.text_input("Número:", value="", help="O número do endereço.") 
-                    col_comp.text_input("Complemento:", value="") 
-
                     bairro = st.text_input("Bairro:", value=cache.get('bairro', ""))
                     col_cid, col_est = st.columns(2)
                     cidade = col_cid.text_input("Cidade:", value=cache.get('cidade', ""))
                     estado = col_est.text_input("Estado (UF):", value=cache.get('uf', ""))
                     
-                    # Botão Final de Cadastro (Submit button principal)
+                    # Botão Final de Cadastro
                     submitted = st.form_submit_button("Cadastrar", use_container_width=True, type="primary")
 
                     if submitted:
                         # Validações
                         if not (nome and email and senha and confirmar and cpf):
-                            st.error("Preencha todos os campos obrigatórios: Nome Completo, Email, Senha e CPF.")
+                            st.error("Preencha todos os campos obrigatórios: Nome, Email, Senha e CPF.")
                             st.stop()
                         elif senha != confirmar:
                             st.error("As senhas não coincidem.")
@@ -1897,14 +1877,14 @@ def tela_login():
                             st.error("CPF inválido. Por favor, verifique o número.")
                             st.stop()
                         else:
-                            # Lógica de salvar no DB
+                            # CORREÇÃO: Conecta no banco de dados correto
                             conn = sqlite3.connect(DB_PATH) 
                             cursor = conn.cursor()
                             
-                            # Verifica duplicidade de Email ou CPF (Nome completo pode ser duplicado)
-                            cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
+                            # Verifica duplicidade de Nome, Email ou CPF
+                            cursor.execute("SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", (nome, email, cpf))
                             if cursor.fetchone():
-                                st.error("Email ou CPF já cadastrado. Use outro ou faça login.")
+                                st.error("Nome de usuário, e-mail ou CPF já cadastrado.")
                                 conn.close()
                                 st.stop()
                             else:
@@ -1912,17 +1892,16 @@ def tela_login():
                                     hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
                                     tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
                                     
-                                    # Usa o valor atual do input do CEP
-                                    cep_final = cep_input 
+                                    # Usa os valores finais dos campos
+                                    cep_final = st.session_state.cadastro_cep_input
                                     
                                     # 1. Salva na tabela 'usuarios'
                                     cursor.execute(
                                         """
-                                        INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo, cep, logradouro, numero, bairro, cidade, estado)
-                                        VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?, ?)
+                                        INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo, cep, logradouro, bairro, cidade, estado)
+                                        VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?)
                                         """,
-                                        # Os valores devem vir na mesma ordem dos placeholders
-                                        (nome, email, cpf, tipo_db, hashed, cep_final, logradouro, numero, bairro, cidade, estado)
+                                        (nome, email, cpf, tipo_db, hashed, cep_final, logradouro, bairro, cidade, estado)
                                     )
                                     novo_id = cursor.lastrowid
                                     
@@ -1966,16 +1945,14 @@ def tela_login():
         # RECUPERAÇÃO DE SENHA
         # =========================================
         elif st.session_state["modo_login"] == "recuperar":
-            with st.container(border=True):
-                st.markdown("<h3 style='color:white; text-align:center;'>🔑 Recuperar Senha</h3>", unsafe_allow_html=True)
-                email = st.text_input("Digite o e-mail cadastrado:")
-                if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                    st.info("Em breve será implementado o envio de recuperação de senha.")
-                
-                if st.button("⬅️ Voltar para Login", use_container_width=True):
-                    st.session_state["modo_login"] = "login"
-                    st.rerun()
-                    
+            st.subheader("🔑 Recuperar Senha")
+            email = st.text_input("Digite o e-mail cadastrado:")
+            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                st.info("Em breve será implementado o envio de recuperação de senha.")
+            
+            if st.button("⬅️ Voltar para Login", use_container_width=True):
+                st.session_state["modo_login"] = "login"
+                st.rerun()            
 def tela_completar_cadastro(user_data):
     """Exibe o formulário para novos usuários do Google completarem o perfil."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
