@@ -217,7 +217,7 @@ def migrar_db():
             
     conn.close()
 
-# 5. Usuários de teste (CORRIGIDO: Senha é literal 'admin', 'professor', 'aluno')
+# 5. Usuários de teste (Versão Corrigida: Senha é literal e inclui CPF)
 def criar_usuarios_teste():
     """Cria usuários padrão locais com perfil completo."""
     conn = sqlite3.connect(DB_PATH)
@@ -232,44 +232,56 @@ def criar_usuarios_teste():
     cursor.execute("SELECT id FROM equipes WHERE nome=?", ("EQUIPE TESTE",))
     equipe_teste_id = cursor.fetchone()[0]
 
+
     usuarios = [
         ("Admin User", "admin", "admin@bjj.local", "00000000000"), 
         ("Professor Responsável", "professor", "professor@bjj.local", "11111111111"), 
         ("Aluno User", "aluno", "aluno@bjj.local", "22222222222")
     ]
     for nome, tipo, email, cpf in usuarios:
+        # Verifica se o usuário já existe
         cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
         if cursor.fetchone() is None:
             
-            # CORREÇÃO: Usa o tipo do usuário como senha plana
             senha_plana = tipo 
             senha_hash = bcrypt.hashpw(senha_plana.encode(), bcrypt.gensalt()).decode()
             
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, ?, 'local', 1, ?)
-                """,
-                (nome, tipo, senha_hash, email, cpf),
-            )
-            novo_id = cursor.lastrowid
-            
-            if tipo == 'professor':
+            try:
                 cursor.execute(
-                    "UPDATE equipes SET professor_responsavel_id=? WHERE id=?", 
-                    (novo_id, equipe_teste_id)
+                    """
+                    INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
+                    VALUES (?, ?, ?, ?, ?, 'local', 1, ?)
+                    """,
+                    (nome, tipo, senha_hash, email, cpf),
                 )
-                cursor.execute(
-                    "INSERT INTO professores (usuario_id, equipe_id, eh_responsavel, status_vinculo) VALUES (?, ?, 1, 'ativo')",
-                    (novo_id, equipe_teste_id)
-                )
-            elif tipo == 'aluno':
-                 cursor.execute(
-                    "INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, 'Branca', ?, 'ativo')",
-                    (novo_id, equipe_teste_id)
-                )
+                novo_id = cursor.lastrowid
+                
+                if tipo == 'professor':
+                    cursor.execute(
+                        "UPDATE equipes SET professor_responsavel_id=? WHERE id=?", 
+                        (novo_id, equipe_teste_id)
+                    )
+                    cursor.execute(
+                        "INSERT INTO professores (usuario_id, equipe_id, eh_responsavel, status_vinculo) VALUES (?, ?, 1, 'ativo')",
+                        (novo_id, equipe_teste_id)
+                    )
+                elif tipo == 'aluno':
+                     cursor.execute(
+                        "INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, 'Branca', ?, 'ativo')",
+                        (novo_id, equipe_teste_id)
+                    )
+                
+                conn.commit() # Commit individual após o sucesso
+                
+            except sqlite3.OperationalError as e:
+                # Se o banco estiver bloqueado durante o teste (concorrência), ele apenas avisa e continua
+                st.warning(f"Aviso de concorrência: Não foi possível inserir o usuário {nome}. O DB pode estar bloqueado.")
+                conn.rollback()
+            except Exception as e:
+                st.error(f"Erro ao criar usuário de teste {nome}: {e}")
+                conn.rollback()
 
-    conn.commit()
+
     conn.close()
 
 # 🔹 Lógica de inicialização do topo do script
