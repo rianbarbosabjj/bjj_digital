@@ -31,58 +31,51 @@ COR_HOVER = "#FFD770"
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
-
-/* --- Estilo Base dos Botões (Incluindo todos os botões padrão) --- */
-/* Usando o seletor de atributo para ser mais robusto */
-.stButton button {{
-    background: linear-gradient(90deg, {COR_BOTAO}, #056853) !important;
-    color: white !important;
-    font-weight: bold !important;
-    border: none !important;
-    padding: 0.6em 1.2em !important;
-    border-radius: 10px !important;
-    transition: 0.3s;
+.stButton>button {{
+    background: linear-gradient(90deg, {COR_BOTAO}, #056853);
+    color: white;
+    font-weight: bold;
+    border: none;
+    padding: 0.6em 1.2em;
+    border-radius: 10px;
+    transition: 0.3s;
 }}
-
-/* --- Estilo de Hover --- */
-.stButton button:hover {{
-    background: {COR_HOVER} !important;
-    color: {COR_FUNDO} !important;
-    transform: scale(1.02);
+.stButton>button:hover {{
+    background: {COR_HOVER};
+    color: {COR_FUNDO};
+    transform: scale(1.02);
 }}
-
-/* --- Cores de Texto e Títulos (Mantido) --- */
 h1, h2, h3 {{
-    color: {COR_DESTAQUE};
-    text-align: center;
-    font-weight: 700;
+    color: {COR_DESTAQUE};
+    text-align: center;
+    font-weight: 700;
 }}
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{
-    background-color: #0c241e; 
-    border: 1px solid #078B6C;
-    border-radius: 10px;
-    padding: 1rem;
-    text-align: center;
-    transition: 0.3s;
-    height: 190px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    background-color: #0c241e; 
+    border: 1px solid #078B6C;
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    transition: 0.3s;
+    height: 190px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }}
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"]:hover {{
-    transform: scale(1.03); 
-    border-color: {COR_DESTAQUE};
-    background-color: #1a4d40;
+    transform: scale(1.03); 
+    border-color: {COR_DESTAQUE};
+    background-color: #1a4d40;
 }}
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] h3 {{
-     color: {COR_DESTAQUE};
-     margin-bottom: 10px;
-     font-size: 1.8rem;
+     color: {COR_DESTAQUE};
+     margin-bottom: 10px;
+     font-size: 1.8rem;
 }}
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] p {{
-     color: {COR_TEXTO};
-     font-size: 0.95rem;
+     color: {COR_TEXTO};
+     font-size: 0.95rem;
 }}
 </style>
 """, unsafe_allow_html=True)
