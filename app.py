@@ -1083,7 +1083,7 @@ def gestao_equipes():
             st.dataframe(profs_df, use_container_width=True)
 
     # === 🥋 ABA 3 - ALUNOS ===
-    with aba3:
+with aba3:
     st.subheader("Vincular aluno a professor e equipe")
 
     alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
@@ -1138,14 +1138,11 @@ def gestao_equipes():
         equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
 
         # 🎯 MUDANÇA CRÍTICA AQUI: Encontrar a PK da tabela 'professores' (p.id)
-        # O Admin deve escolher o Professor de uma equipe que ele está gerenciando.
         
         # 1. Encontra o usuario_id do professor selecionado
         prof_usuario_id = int(professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0])
 
         # 2. Encontra a PK na tabela 'professores' (p.id) que corresponde a esse usuário e (opcionalmente) equipe
-        # Como o vínculo de aluno não depende da equipe do professor, buscamos o ID ativo do professor.
-        # Se for professor responsável, a PK na tabela 'professores' é o seu próprio registro, que deve existir.
         
         cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (prof_usuario_id,))
         prof_pk_id_result = cursor.fetchone()
@@ -1172,7 +1169,6 @@ def gestao_equipes():
 
     st.markdown("---")
     st.subheader("Alunos vinculados")
-    # ... (Restante da exibição de alunos vinculados)
     
     alunos_vinc_df = pd.read_sql_query("""
         SELECT a.id, u.nome AS aluno, e.nome AS equipe, up.nome AS professor
