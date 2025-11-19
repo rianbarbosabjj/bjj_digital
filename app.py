@@ -1797,12 +1797,28 @@ def tela_login():
         # =========================================
         # CADASTRO (Corrigido com CPF e Endereço)
         # =========================================
-        elif st.session_state["modo_login"] == "cadastro":
+elif st.session_state["modo_login"] == "cadastro":
             
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>📋 Cadastro de Novo Usuário (Local)</h3>", unsafe_allow_html=True)
                 
                 with st.form(key="form_cadastro_local"):
+                    # Esta lógica de busca de CEP AGORA DEVE USAR st.form_submit_button
+                    def handle_cadastro_cep_search_form():
+                        # A validação e lógica de busca é movida para cá
+                        cep_digitado = st.session_state.cadastro_cep_input
+                        if not cep_digitado:
+                            st.warning("Por favor, digite um CEP para buscar.")
+                            return
+                        
+                        endereco = buscar_endereco_por_cep(cep_digitado)
+                        if endereco:
+                            endereco["cep_original"] = cep_digitado
+                            st.session_state["cadastro_endereco_cache"] = endereco
+                            st.success("Endereço encontrado e campos preenchidos. Complete o restante, se necessário.")
+                        else:
+                            st.error("CEP não encontrado ou inválido.")
+                        # Não precisa de st.rerun()
 
                     # Dados Pessoais
                     st.markdown("#### Informações de Acesso")
@@ -1828,31 +1844,28 @@ def tela_login():
                     st.markdown("---")
                     st.markdown("#### Endereço (Opcional)")
                     
-                    # Campo CEP e botão de busca
+                    # Campo CEP
                     col_cep, col_btn_cep = st.columns([3, 1])
                     cep_input = col_cep.text_input("CEP:", key="cadastro_cep_input", value=st.session_state["cadastro_endereco_cache"].get("cep_original", ""))
                     
-                    def handle_cadastro_cep_search():
-                        endereco = buscar_endereco_por_cep(st.session_state.cadastro_cep_input)
-                        if endereco:
-                            endereco["cep_original"] = st.session_state.cadastro_cep_input
-                            st.session_state["cadastro_endereco_cache"] = endereco
-                            st.success("Endereço encontrado e campos preenchidos. Complete o restante, se necessário.")
-                        else:
-                            st.error("CEP não encontrado ou inválido.")
+                    # Botão de Busca de CEP AGORA É um form_submit_button
+                    # OBS: form_submit_button secundário pode ter 'type="secondary"'
+                    buscar_cep_clicked = col_btn_cep.form_submit_button("🔍 Buscar", key="buscar_cep_btn", on_click=handle_cadastro_cep_search_form)
 
-                    col_btn_cep.button("🔍 Buscar", key="buscar_cep_btn", on_click=handle_cadastro_cep_search)
-
-                    # Preenchimento automático ou manual
+                    # Se a busca foi clicada, o cache é atualizado no callback, mas precisamos garantir que os campos exibam o valor
                     cache = st.session_state["cadastro_endereco_cache"]
                     
+                    # Preenchimento automático ou manual
                     logradouro = st.text_input("Logradouro (Rua/Av):", value=cache.get('logradouro', ""))
                     bairro = st.text_input("Bairro:", value=cache.get('bairro', ""))
                     col_cid, col_est = st.columns(2)
-                    cidade = col_cid.text_input("Cidade:", value=cache.get('localidade', ""))
+                    cidade = col_cid.text_input("Cidade:", value=cache.get('cidade', ""))
                     estado = col_est.text_input("Estado (UF):", value=cache.get('uf', ""))
                     
-                    if st.form_submit_button("Cadastrar", use_container_width=True, type="primary"):
+                    # Botão Final de Cadastro
+                    submitted = st.form_submit_button("Cadastrar", use_container_width=True, type="primary")
+
+                    if submitted:
                         # Validações
                         if not (nome and email and senha and confirmar and cpf):
                             st.error("Preencha todos os campos obrigatórios: Nome, Email, Senha e CPF.")
@@ -1878,14 +1891,17 @@ def tela_login():
                                 try:
                                     hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
                                     tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
-
+                                    
+                                    # Usa os valores finais dos campos
+                                    cep_final = st.session_state.cadastro_cep_input
+                                    
                                     # 1. Salva na tabela 'usuarios'
                                     cursor.execute(
                                         """
                                         INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo, cep, logradouro, bairro, cidade, estado)
                                         VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?)
                                         """,
-                                        (nome, email, cpf, tipo_db, hashed, cep_input, logradouro, bairro, cidade, estado)
+                                        (nome, email, cpf, tipo_db, hashed, cep_final, logradouro, bairro, cidade, estado)
                                     )
                                     novo_id = cursor.lastrowid
                                     
