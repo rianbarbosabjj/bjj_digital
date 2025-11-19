@@ -1878,7 +1878,9 @@ def tela_login():
             
             if st.button("⬅️ Voltar para Login", use_container_width=True):
                 st.session_state["modo_login"] = "login"
-                st.rerun()def tela_completar_cadastro(user_data):
+                st.rerun()
+                
+def tela_completar_cadastro(user_data):
     """Exibe o formulário para novos usuários do Google completarem o perfil."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
     st.markdown("### Precisamos de mais algumas informações para criar seu perfil.")
