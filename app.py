@@ -32,57 +32,57 @@ st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
 .stButton>button {{
-    background: linear-gradient(90deg, {COR_BOTAO}, #056853);
-    color: white;
-    font-weight: bold;
-    border: none;
-    padding: 0.6em 1.2em;
-    border-radius: 10px;
-    transition: 0.3s;
+    background: linear-gradient(90deg, {COR_BOTAO}, #056853);
+    color: white;
+    font-weight: bold;
+    border: none;
+    padding: 0.6em 1.2em;
+    border-radius: 10px;
+    transition: 0.3s;
 }}
 .stButton>button:hover {{
-    background: {COR_HOVER};
-    color: {COR_FUNDO};
-    transform: scale(1.02);
+    background: {COR_HOVER};
+    color: {COR_FUNDO};
+    transform: scale(1.02);
 }}
 h1, h2, h3 {{
-    color: {COR_DESTAQUE};
-    text-align: center;
-    font-weight: 700;
+    color: {COR_DESTAQUE};
+    text-align: center;
+    font-weight: 700;
 }}
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{
-    background-color: #0c241e; 
-    border: 1px solid #078B6C;
-    border-radius: 10px;
-    padding: 1rem;
-    text-align: center;
-    transition: 0.3s;
-    height: 190px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
+    background-color: #0c241e; 
+    border: 1px solid #078B6C;
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    transition: 0.3s;
+    height: 190px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }}
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"]:hover {{
-    transform: scale(1.03); 
-    border-color: {COR_DESTAQUE};
-    background-color: #1a4d40;
+    transform: scale(1.03); 
+    border-color: {COR_DESTAQUE};
+    background-color: #1a4d40;
 }}
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] h3 {{
-     color: {COR_DESTAQUE};
-     margin-bottom: 10px;
-     font-size: 1.8rem;
+     color: {COR_DESTAQUE};
+     margin-bottom: 10px;
+     font-size: 1.8rem;
 }}
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] p {{
-     color: {COR_TEXTO};
-     font-size: 0.95rem;
+     color: {COR_TEXTO};
+     font-size: 0.95rem;
 }}
 </style>
 """, unsafe_allow_html=True)
 
 
 # =========================================
-# BANCO DE DADOS (ATUALIZADO)
+# BANCO DE DADOS (ATUALIZADO E CORRIGIDO)
 # =========================================
 DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
@@ -92,19 +92,19 @@ def criar_banco():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 👈 [MUDANÇA CRÍTICA] Tabela 'usuarios' foi atualizada
-cursor.executescript("""
-CREATE TABLE IF NOT EXISTS usuarios (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    nome TEXT,
-    email TEXT UNIQUE,
-    cpf TEXT UNIQUE, -- 👈 Adição da coluna CPF com restrição UNIQUE
-    tipo_usuario TEXT,
-    senha TEXT, -- Nulo para logins sociais
-    auth_provider TEXT DEFAULT 'local',
-    perfil_completo BOOLEAN DEFAULT 0,
-    data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
-);
+    # 🚨 CORREÇÃO 1: Este bloco deve estar DENTRO da função criar_banco()
+    cursor.executescript("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        email TEXT UNIQUE,
+        cpf TEXT UNIQUE, -- Adição da coluna CPF com restrição UNIQUE
+        tipo_usuario TEXT,
+        senha TEXT, -- Nulo para logins sociais
+        auth_provider TEXT DEFAULT 'local',
+        perfil_completo BOOLEAN DEFAULT 0,
+        data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
 
     CREATE TABLE IF NOT EXISTS equipes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -171,7 +171,7 @@ if not os.path.exists(DB_PATH):
     criar_banco()
 
 # =========================================
-# AUTENTICAÇÃO (ATUALIZADO)
+# AUTENTICAÇÃO
 # =========================================
 
 # 1. Configuração do Google OAuth (lendo do secrets.toml)
@@ -201,21 +201,21 @@ def autenticar_local(usuario_email_ou_cpf, senha):
     """
     Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
     """
-    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf) # Tenta validar como CPF
+    # 📝 Tenta formatar para CPF para verificar se a entrada é um CPF
+    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf) 
 
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
-    # MUDANÇA CRÍTICA AQUI:
     # Busca por 'nome' OU 'email' OU 'cpf'
     if cpf_formatado:
-        # Se for um CPF válido, prioriza a busca exata por ele
+        # Se for um CPF válido, usa o CPF formatado na busca
         cursor.execute(
             "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=? OR cpf=?) AND auth_provider='local'", 
             (usuario_email_ou_cpf, usuario_email_ou_cpf, cpf_formatado) 
         )
     else:
-         # Caso contrário (usuário ou email), busca nos dois primeiros campos
+         # Se não for CPF ou se for nome/email, busca nos dois primeiros campos
         cursor.execute(
             "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
             (usuario_email_ou_cpf, usuario_email_ou_cpf) 
@@ -225,7 +225,6 @@ def autenticar_local(usuario_email_ou_cpf, senha):
     conn.close()
     
     if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
-        # Retorna os dados do usuário se a senha bater
         return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
         
     return None
@@ -254,25 +253,19 @@ def criar_usuario_parcial_google(email, nome):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     try:
-        # 8 espaços
         cursor.execute(
             """
             INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
             VALUES (?, ?, 'google', 0)
             """, (email, nome)
         )
-        # 8 espaços (aqui estava o problema)
         conn.commit()
-        # 8 espaços
         novo_id = cursor.lastrowid
-        # 8 espaços
         conn.close()
-        # 8 espaços
         return {"id": novo_id, "email": email, "nome": nome}
-      except sqlite3.IntegrityError: # Email já existe
-        # 4 espaços
+    # 🚨 CORREÇÃO 2: Indentação incorreta do bloco except
+    except sqlite3.IntegrityError: # Email já existe
         conn.close()
-        # 4 espaços
         return None
 
 
@@ -343,6 +336,7 @@ def normalizar_nome(nome):
         .decode()
         .split()
     ).lower()
+
 def formatar_e_validar_cpf(cpf):
     """
     Remove pontuação e verifica se o CPF tem 11 dígitos.
@@ -356,6 +350,7 @@ def formatar_e_validar_cpf(cpf):
     
     # ⚠️ [Simplificado] Verifica se tem 11 dígitos
     if len(cpf_limpo) == 11:
+        # Poderia ser adicionada aqui uma validação mais robusta (dígitos verificadores)
         return cpf_limpo
     else:
         return None
@@ -1267,7 +1262,7 @@ def tela_inicio():
                 st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
 
 # =========================================
-# 👤 MEU PERFIL (ATUALIZADA com CPF)
+# 👤 MEU PERFIL (CORRIGIDA E ATUALIZADA com CPF)
 # =========================================
 def tela_meu_perfil(usuario_logado):
     """Página para o usuário editar seu próprio perfil e senha, incluindo o CPF."""
@@ -1681,16 +1676,16 @@ def tela_login():
         # =========================================
         # CADASTRO (Corrigido)
         # =========================================
-        elif st.session_state["modo_login"] == "cadastro":
+elif st.session_state["modo_login"] == "cadastro":
             
             st.subheader("📋 Cadastro de Novo Usuário")
 
             # Este é o campo "Usuário (login)" que você quer
-            nome = st.text_input("Nome de Usuário (login):") 
-            email = st.text_input("E-mail:")
-            cpf = st.text_input("CPF (somente números ou formato padrão):") # 👈 NOVO CAMPO
-            senha = st.text_input("Senha:", type="password")
-            confirmar = st.text_input("Confirmar senha:", type="password")
+            nome = st.text_input("Nome de Usuário (login):") 
+            email = st.text_input("E-mail:")
+            cpf = st.text_input("CPF (somente números ou formato padrão):") # 👈 NOVO CAMPO
+            senha = st.text_input("Senha:", type="password")
+            confirmar = st.text_input("Confirmar senha:", type="password")
             
             st.markdown("---")
             
@@ -1705,46 +1700,47 @@ def tela_login():
                 faixa = "Preta" 
                 st.info("Professores são cadastrados com faixa preta. Vínculos de equipe são feitos pelo Admin.")
 
+            # 🚨 CORREÇÃO 3: O bloco 'if st.button("Cadastrar")' estava com a indentação errada
+            if st.button("Cadastrar", use_container_width=True, type="primary"):
+                if not (nome and email and cpf and senha and confirmar):
+                    st.warning("Preencha todos os campos obrigatórios.")
+                elif senha != confirmar:
+                    st.error("As senhas não coincidem.")
+                else:
+                    
+                    # ⚠️ NOVO: Validação do CPF
+                    cpf_formatado = formatar_e_validar_cpf(cpf)
+                    if not cpf_formatado:
+                        st.error("CPF inválido. Por favor, digite um CPF válido (11 dígitos).")
+                        return # Sai da função de cadastro
+                    # --------------------------
 
-if st.button("Cadastrar", use_container_width=True, type="primary"):
-                # ...
-                elif senha != confirmar:
-                    st.error("As senhas não coincidem.")
-                else:
-                    
-                    # ⚠️ NOVO: Validação do CPF
-                    cpf_formatado = formatar_e_validar_cpf(cpf)
-                    if not cpf_formatado:
-                        st.error("CPF inválido. Por favor, digite um CPF válido (11 dígitos).")
-                        return # Sai da função de cadastro
-                    # --------------------------
+                    # CORREÇÃO: Conecta no banco de dados correto
+                    conn = sqlite3.connect(DB_PATH) 
+                    cursor = conn.cursor()
+                    
+                    # ⚠️ NOVO: Verifica se nome, email ou cpf já existem
+                    cursor.execute(
+                        "SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", 
+                        (nome, email, cpf_formatado)
+                    )
+                    if cursor.fetchone():
+                        st.error("Nome de usuário, e-mail ou CPF já cadastrado.")
+                        conn.close()
+                    else:
+                        try:
+                            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                            tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
 
-                    # CORREÇÃO: Conecta no banco de dados correto
-                    conn = sqlite3.connect(DB_PATH) 
-                    cursor = conn.cursor()
-                    
-                    # ⚠️ NOVO: Verifica se nome, email ou cpf já existem
-                    cursor.execute(
-                        "SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", 
-                        (nome, email, cpf_formatado)
-                    )
-                    if cursor.fetchone():
-                        st.error("Nome de usuário, e-mail ou CPF já cadastrado.")
-                        conn.close()
-                    else:
-                        try:
-                            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                            tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
-
-                            # 1. Salva na tabela 'usuarios' (agora com CPF)
-                            cursor.execute(
-                                """
-                                INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo)
-                                VALUES (?, ?, ?, ?, ?, 'local', 1)
-                                """,
-                                (nome, email, cpf_formatado, tipo_db, hashed) # 👈 NOVO CAMPO INSERIDO
-                            )
-                            novo_id = cursor.lastrowid
+                            # 1. Salva na tabela 'usuarios' (agora com CPF)
+                            cursor.execute(
+                                """
+                                INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo)
+                                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                                """,
+                                (nome, email, cpf_formatado, tipo_db, hashed) # 👈 NOVO CAMPO INSERIDO
+                            )
+                            novo_id = cursor.lastrowid
                             
                             # 2. Salva na tabela 'alunos' ou 'professores'
                             if tipo_db == "aluno":
@@ -1769,7 +1765,7 @@ if st.button("Cadastrar", use_container_width=True, type="primary"):
                             st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
                             st.session_state["modo_login"] = "login"
                             st.rerun()
-                        
+                            
                         except Exception as e:
                             conn.rollback() 
                             conn.close()
@@ -1778,7 +1774,6 @@ if st.button("Cadastrar", use_container_width=True, type="primary"):
             if st.button("⬅️ Voltar para Login", use_container_width=True):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
-
         # =========================================
         # RECUPERAÇÃO DE SENHA
         # =========================================
