@@ -303,7 +303,7 @@ def autenticar_local(usuario_ou_email, senha):
     """
     Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
     """
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_db_connection() # USANDO O CACHE
     cursor = conn.cursor()
     
     # Busca por 'nome' OU 'email' OU 'cpf'
@@ -312,13 +312,76 @@ def autenticar_local(usuario_ou_email, senha):
         (usuario_ou_email, usuario_ou_email, usuario_ou_email) # Passa o mesmo valor para os três '?'
     )
     dados = cursor.fetchone()
-    conn.close()
+    # NÃO FECHAR A CONEXÃO
     
     if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
         # Retorna os dados do usuário se a senha bater
         return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
         
     return None
+
+# [Substitua o código na função `buscar_usuario_por_email`]
+def buscar_usuario_por_email(email):
+    """Busca um usuário pelo email e retorna seus dados."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+    )
+    dados = cursor.fetchone()
+    # NÃO FECHAR A CONEXÃO
+    if dados:
+        return {
+            "id": dados[0], 
+            "nome": dados[1], 
+            "tipo": dados[2], 
+            "perfil_completo": bool(dados[3])
+        }
+    return None
+
+# [Substitua o código na função `criar_usuario_parcial_google`]
+def criar_usuario_parcial_google(email, nome):
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit() # COMMIT AQUI É CRUCIAL
+        novo_id = cursor.lastrowid
+        # NÃO FECHAR A CONEXÃO
+        return {"id": novo_id, "email": email, "nome": nome}
+    except sqlite3.IntegrityError: # Email já existe
+        # NÃO FECHAR A CONEXÃO
+        return None
+
+# [Substitua o código na função `criar_usuarios_teste`]
+def criar_usuarios_teste():
+    """Cria usuários padrão locais com perfil completo."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    # ... (o resto da lógica permanece a mesma) ...
+    usuarios = [
+        ("admin", "admin", "admin@bjj.local", "00000000000"), 
+        ("professor", "professor", "professor@bjj.local", "11111111111"), 
+        ("aluno", "aluno", "aluno@bjj.local", "22222222222")
+    ]
+    for nome, tipo, email, cpf in usuarios:
+        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
+        if cursor.fetchone() is None:
+            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
+                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                """,
+                (nome, tipo, senha_hash, email, cpf),
+            )
+    conn.commit()
 
 # 4. Funções de busca e criação de usuário
 def buscar_usuario_por_email(email):
@@ -1899,14 +1962,14 @@ def tela_login():
                             st.stop()
                         else:
                             # Lógica de salvar no DB
-                            conn = sqlite3.connect(DB_PATH) 
+                            conn = get_db_connection() # USANDO O CACHE
                             cursor = conn.cursor()
                             
                             # Verifica duplicidade de Email ou CPF (Nome completo pode ser duplicado)
                             cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
                             if cursor.fetchone():
                                 st.error("Email ou CPF já cadastrado. Use outro ou faça login.")
-                                conn.close()
+                                # conn.close() # NÃO FECHAR A CONEXÃO
                                 st.stop()
                             else:
                                 try:
@@ -1945,8 +2008,8 @@ def tela_login():
                                             (novo_id,)
                                         )
                                     
-                                    conn.commit()
-                                    conn.close()
+                                    conn.commit() # COMMIT AQUI É CRUCIAL
+                                    # conn.close() # NÃO FECHAR A CONEXÃO
                                     st.success("Usuário cadastrado com sucesso! Faça login para continuar.")
                                     st.session_state["modo_login"] = "login"
                                     # Limpa o cache após o cadastro
@@ -1955,7 +2018,7 @@ def tela_login():
                                     
                                 except Exception as e:
                                     conn.rollback() 
-                                    conn.close()
+                                    # conn.close() # NÃO FECHAR A CONEXÃO
                                     st.error(f"Erro ao cadastrar: {e}")
 
             if st.button("⬅️ Voltar para Login", use_container_width=True):
