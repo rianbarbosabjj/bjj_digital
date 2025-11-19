@@ -86,6 +86,11 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 # =========================================
 DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
+# =========================================
+# BANCO DE DADOS (ATUALIZADO COM CPF, ENDEREÇO E NÚMERO)
+# =========================================
+DB_PATH = os.path.expanduser("~/bjj_digital.db")
+
 def criar_banco():
     """Cria o banco de dados e suas tabelas, caso não existam."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
@@ -111,7 +116,7 @@ def criar_banco():
         estado TEXT, -- Endereço
         data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
     );
-
+    -- ... (resto das tabelas) ...
     CREATE TABLE IF NOT EXISTS equipes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
@@ -167,9 +172,72 @@ def criar_banco():
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
-
     conn.commit()
     conn.close()
+
+
+# 🔹 Conexão Única e Lógica de Migração (Cachê de Recurso)
+@st.cache_resource
+def get_db_connection():
+    """Garante que a conexão seja singleton e faz migrações iniciais."""
+    if not os.path.exists(DB_PATH):
+        st.toast("Criando novo banco de dados...")
+        criar_banco() # Cria o arquivo .db
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row # Permite acesso por nome de coluna
+    cursor = conn.cursor()
+
+    # --- Lógica de migração de colunas (Se o DB já existia) ---
+    try:
+        cursor.execute("SELECT cpf FROM usuarios LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN cpf TEXT UNIQUE")
+        conn.commit()
+        st.toast("Campo CPF adicionado à tabela 'usuarios'.")
+
+    try:
+        cursor.execute("SELECT cep FROM usuarios LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN cep TEXT")
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN logradouro TEXT")
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN bairro TEXT")
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN cidade TEXT")
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN estado TEXT")
+        conn.commit()
+        st.toast("Campos de Endereço adicionados à tabela 'usuarios'.")
+    
+    try:
+        cursor.execute("SELECT numero FROM usuarios LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE usuarios ADD COLUMN numero TEXT")
+        conn.commit()
+        st.toast("Campo Número adicionado à tabela 'usuarios'.")
+        
+    return conn
+
+# 5. Usuários de teste (Atualizado)
+def criar_usuarios_teste():
+    """Cria usuários padrão locais com perfil completo."""
+    conn = get_db_connection() # USANDO O CACHE AGORA
+    cursor = conn.cursor()
+    usuarios = [
+        ("Admin User", "admin", "admin@bjj.local", "00000000000"), 
+        ("Professor User", "professor", "professor@bjj.local", "11111111111"), 
+        ("Aluno User", "aluno", "aluno@bjj.local", "22222222222")
+    ]
+    for nome, tipo, email, cpf in usuarios:
+        cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
+        if cursor.fetchone() is None:
+            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
+                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                """,
+                (nome, tipo, senha_hash, email, cpf),
+            )
+    conn.commit()
 
 # 🔹 Cria o banco e realiza migrações APENAS UMA VEZ
 @st.cache_resource
@@ -301,25 +369,62 @@ oauth_google = OAuth2Component(
 # 3. Autenticação local (Login/Senha)
 def autenticar_local(usuario_ou_email, senha):
     """
-    Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
+    Atualizado: Autentica o usuário local usando EMAIL ou CPF.
     """
     conn = get_db_connection() # USANDO O CACHE
     cursor = conn.cursor()
     
-    # Busca por 'nome' OU 'email' OU 'cpf'
+    # Busca por 'email' OU 'cpf' (O nome completo não é mais usado para login)
     cursor.execute(
-        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=? OR cpf=?) AND auth_provider='local'", 
-        (usuario_ou_email, usuario_ou_email, usuario_ou_email) # Passa o mesmo valor para os três '?'
+        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (email=? OR cpf=?) AND auth_provider='local'", 
+        (usuario_ou_email, usuario_ou_email) # Passa o valor para os dois '?'
     )
     dados = cursor.fetchone()
     # NÃO FECHAR A CONEXÃO
     
-    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
+    if dados and dados['senha'] and bcrypt.checkpw(senha.encode(), dados['senha'].encode()):
         # Retorna os dados do usuário se a senha bater
-        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+        return {"id": dados['id'], "nome": dados['nome'], "tipo": dados['tipo_usuario']}
         
     return None
 
+# 4. Funções de busca e criação de usuário
+def buscar_usuario_por_email(email):
+    """Busca um usuário pelo email e retorna seus dados."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+    )
+    dados = cursor.fetchone()
+    # NÃO FECHAR A CONEXÃO
+    if dados:
+        return {
+            "id": dados['id'], 
+            "nome": dados['nome'], 
+            "tipo": dados['tipo_usuario'], 
+            "perfil_completo": bool(dados['perfil_completo'])
+        }
+    return None
+
+def criar_usuario_parcial_google(email, nome):
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = get_db_connection() # USANDO O CACHE
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit() # COMMIT AQUI É CRUCIAL
+        novo_id = cursor.lastrowid
+        # NÃO FECHAR A CONEXÃO
+        return {"id": novo_id, "email": email, "nome": nome}
+    except sqlite3.IntegrityError: # Email já existe
+        # NÃO FECHAR A CONEXÃO
+        return None
 # [Substitua o código na função `buscar_usuario_por_email`]
 def buscar_usuario_por_email(email):
     """Busca um usuário pelo email e retorna seus dados."""
