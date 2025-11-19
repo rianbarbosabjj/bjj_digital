@@ -380,11 +380,12 @@ def autenticar_local(usuario_ou_email, senha):
         (usuario_ou_email, usuario_ou_email) # Passa o valor para os dois '?'
     )
     dados = cursor.fetchone()
-    # NÃO FECHAR A CONEXÃO
     
-    if dados and dados['senha'] and bcrypt.checkpw(senha.encode(), dados['senha'].encode()):
-        # Retorna os dados do usuário se a senha bater
-        return {"id": dados['id'], "nome": dados['nome'], "tipo": dados['tipo_usuario']}
+    # 👈 CORREÇÃO: Verifica se dados NÃO é None e se a senha existe antes de descriptografar
+    if dados is not None and dados['senha']: 
+        # Acessa a senha apenas se o objeto não for None
+        if bcrypt.checkpw(senha.encode(), dados['senha'].encode()):
+            return {"id": dados['id'], "nome": dados['nome'], "tipo": dados['tipo_usuario']}
         
     return None
 
