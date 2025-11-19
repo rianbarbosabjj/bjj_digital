@@ -167,9 +167,8 @@ CREATE TABLE IF NOT EXISTS usuarios (
         data DATETIME DEFAULT CURRENT_TIMESTAMP
     );
     """)
-
-    conn.commit()
-    conn.close()
+conn.commit()
+conn.close()
 
 # 🔹 Cria o banco apenas se ainda não existir
 if not os.path.exists(DB_PATH):
