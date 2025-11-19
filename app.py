@@ -260,7 +260,7 @@ def criar_usuario_parcial_google(email, nome):
             VALUES (?, ?, 'google', 0)
             """, (email, nome)
         )
-        conn.commit()
+        conn.commit()  # <-- Certifique-se que o alinhamento aqui é o correto
         novo_id = cursor.lastrowid
         conn.close()
         return {"id": novo_id, "email": email, "nome": nome}
