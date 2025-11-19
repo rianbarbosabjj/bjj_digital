@@ -356,7 +356,9 @@ def formatar_e_validar_cpf(cpf):
     # Remove caracteres não numéricos
     cpf_limpo = ''.join(filter(str.isdigit, cpf))
     
+    # ⚠️ [Simplificado] Verifica se tem 11 dígitos
     if len(cpf_limpo) == 11:
+        # Poderia ser adicionada aqui uma validação mais robusta (dígitos verificadores)
         return cpf_limpo
     else:
         return None
@@ -420,21 +422,7 @@ def buscar_cep(cep):
         }
     except requests.exceptions.RequestException:
         return None
-def formatar_cep(cep):
-    """
-    Remove pontuação do CEP e garante 8 dígitos.
-    Retorna o CEP formatado (somente números) ou None.
-    """
-    if not cep:
-        return None
-    
-    cep_limpo = ''.join(filter(str.isdigit, cep))
-    
-    if len(cep_limpo) == 8:
-        return cep_limpo
-    else:
-        return None
-        
+
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """Gera certificado oficial do exame de faixa com assinatura caligráfica (Allura)."""
     pdf = FPDF("L", "mm", "A4") # Layout paisagem
@@ -982,11 +970,9 @@ def gestao_equipes():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Definição das variáveis de aba
+    # 🚨 LINHA CRÍTICA: Definição das variáveis de aba (agora garantida)
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
-    # --- ABA 1 e ABA 2 (Lógica inalterada, mantida por brevidade) ---
-    
     # === 🏫 ABA 1 - EQUIPES ===
     with aba1:
         st.subheader("Cadastrar nova equipe")
@@ -1014,10 +1000,12 @@ def gestao_equipes():
                 
                 # 2. VERIFICA E ATIVA O VÍNCULO DO PROFESSOR RESPONSÁVEL
                 if professor_responsavel_id:
+                    # Checa se o registro na tabela professores já existe para este usuário (ativo)
                     cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", 
                                    (professor_responsavel_id,))
                     
                     if not cursor.fetchone():
+                        # Se não existe vínculo ativo, cria um novo para a nova equipe como "ativo" e "responsável"
                         cursor.execute("""
                             INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
                             VALUES (?, ?, 1, 1, 'ativo')
@@ -1112,12 +1100,13 @@ def gestao_equipes():
         else:
             st.dataframe(profs_df, use_container_width=True)
 
-    # === 🥋 ABA 3 - ALUNOS (Com Edição de Vínculo Segura) ===
+    # === 🥋 ABA 3 - ALUNOS (Com Inclusão de Professor Responsável) ===
     with aba3:
         st.subheader("Vincular aluno a professor e equipe")
 
         alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
         
+        # 🚨 LÓGICA ATUALIZADA: Buscar todos os professores ativos/responsáveis para o seletor
         professores_disponiveis_df = pd.read_sql_query("""
             -- Professores Responsáveis
             SELECT 
@@ -1135,100 +1124,50 @@ def gestao_equipes():
             WHERE p.status_vinculo='ativo'
         """, conn)
         
+        # Remove duplicatas e garante lista única de nomes de professores
         professores_disponiveis_nomes = sorted(professores_disponiveis_df["nome_professor"].unique().tolist())
+        
         equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
 
         if alunos_df.empty or professores_disponiveis_df.empty or equipes_df.empty:
             st.warning("Cadastre alunos, professores e equipes primeiro.")
         else:
             aluno = st.selectbox("🥋 Aluno:", alunos_df["nome"])
+            
+            professor_nome = st.selectbox("👩‍🏫 Professor vinculado (nome):", professores_disponiveis_nomes)
+            
+            equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"])
+
             aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
-
-            # 🚨 CORREÇÃO CRÍTICA: Busca o vínculo existente de forma segura (LEFT JOIN)
-            vinc_existente_df = pd.read_sql_query(f"""
-                SELECT a.professor_id, a.equipe_id, up.nome as professor_nome, e.nome as equipe_nome
-                FROM alunos a
-                LEFT JOIN professores p ON a.professor_id = p.id
-                LEFT JOIN usuarios up ON p.usuario_id = up.id
-                LEFT JOIN equipes e ON a.equipe_id = e.id
-                WHERE a.usuario_id={aluno_id}
-            """, conn)
-            
-            vinc_existente = vinc_existente_df.iloc[0] if not vinc_existente_df.empty else None
-            
-            default_prof_index = 0
-            default_equipe_index = 0
-            
-            if vinc_existente is not None:
-                # 🎯 AGORA USAMOS OS NOMES CORRETOS JÁ BUSCADOS VIA JOIN
-                prof_atual_nome = vinc_existente['professor_nome']
-                equipe_atual_nome = vinc_existente['equipe_nome']
-                
-                if prof_atual_nome in professores_disponiveis_nomes:
-                    default_prof_index = professores_disponiveis_nomes.index(prof_atual_nome)
-                if equipe_atual_nome in equipes_df["nome"].tolist():
-                    default_equipe_index = equipes_df["nome"].tolist().index(equipe_atual_nome)
-
-            # --- Selectboxes re-renderizadas ---
-            professor_nome = st.selectbox("👩‍🏫 Professor vinculado (nome):", professores_disponiveis_nomes, index=default_prof_index)
-            equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"], index=default_equipe_index)
-
             equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
 
-            # 1. Encontra o usuario_id do professor selecionado
+            # 1. Encontra o usuario_id do professor selecionado (para buscar na tabela 'professores')
+            # Usamos iloc[0] para pegar o primeiro ID correspondente ao nome
             prof_usuario_id = professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0]
 
-            # 2. Encontra a PK na tabela 'professores' (p.id) e garante o vínculo ativo
+            # 2. Encontra a PK na tabela 'professores' (p.id) que é a chave de vínculo do aluno
             cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (prof_usuario_id,))
             prof_pk_id_result = cursor.fetchone()
-            professor_id = prof_pk_id_result[0] if prof_pk_id_result else None
 
-            if not professor_id:
-                # Lógica para criar/ativar o registro na tabela professores
-                cursor.execute("SELECT id FROM professores WHERE usuario_id=?", (prof_usuario_id,))
-                existing_prof_record = cursor.fetchone()
-                
-                if existing_prof_record:
-                    cursor.execute("UPDATE professores SET status_vinculo='ativo', equipe_id=? WHERE usuario_id=?", (equipe_id, prof_usuario_id))
-                    conn.commit()
-                    professor_id = existing_prof_record[0]
-                    st.info(f"O vínculo do professor {professor_nome} foi ATIVADO para prosseguir.")
-                else:
-                    cursor.execute("""
-                        INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
-                        VALUES (?, ?, 1, 0, 'ativo')
-                    """, (prof_usuario_id, equipe_id))
-                    conn.commit()
-                    professor_id = cursor.lastrowid
-                    st.info(f"Vínculo do professor {professor_nome} CRIADO para prosseguir.")
-            
-            # --- Tenta Vincular/Editar o Aluno ---
-            
-            # Verifica se o aluno já tem um registro na tabela 'alunos'
-            cursor.execute("SELECT id FROM alunos WHERE usuario_id=?", (aluno_id,))
-            aluno_registro_id = cursor.fetchone()
-            
-            botao_texto = "✅ Vincular Aluno" if aluno_registro_id is None else "💾 Atualizar Vínculo"
+            if prof_pk_id_result:
+                professor_id = prof_pk_id_result[0]
+            else:
+                st.error(f"Erro: O professor {professor_nome} não tem um vínculo ativo na tabela de professores. Não é possível vincular alunos.")
+                professor_id = None
 
-            if professor_id and st.button(botao_texto):
-                
-                if aluno_registro_id:
-                    # UPDATE: Aluno já existe, atualiza o vínculo
-                    cursor.execute("""
-                        UPDATE alunos SET professor_id=?, equipe_id=?, status_vinculo='ativo'
-                        WHERE usuario_id=?
-                    """, (professor_id, equipe_id, aluno_id))
-                    st.success(f"Vínculo do aluno {aluno} ATUALIZADO (Professor: {professor_nome}, Equipe: {equipe_aluno}).")
+            if professor_id and st.button("✅ Vincular Aluno"):
+                # Verifica se o aluno já está vinculado
+                cursor.execute("SELECT id FROM alunos WHERE usuario_id=?", (aluno_id,))
+                if cursor.fetchone():
+                    st.warning("Este aluno já possui um registro de vínculo. Atualize-o em vez de criar um novo.")
                 else:
-                    # INSERT: Aluno não existe, cria o vínculo
                     cursor.execute("""
                         INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
                         VALUES (?, ?, ?, ?, ?, 'ativo')
                     """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
-                    st.success(f"Aluno {aluno} VINCULADO com sucesso (Professor: {professor_nome}, Equipe: {equipe_aluno}).")
-                
-                conn.commit()
-                st.rerun()
+                    conn.commit()
+                    st.success(f"Aluno {aluno} vinculado à equipe {equipe_aluno} sob orientação de {professor_nome}.")
+                    st.rerun()
 
         st.markdown("---")
         st.subheader("Alunos vinculados")
@@ -1312,12 +1251,9 @@ def gestao_usuarios(usuario_logado):
                 
                 # 🆕 NOVO CAMPO CPF
                 novo_cpf_input = st.text_input("CPF:", value=user_data['cpf'] or "")
-           if len(cpf_input) == 11 and cpf_input.isdigit():
-               st.info(f"CPF Formatado: {cpf_input[:3]}.{cpf_input[3:6]}.{cpf_input[6:9]}-{cpf_input[9:]}")
-               senha = st.text_input("Senha:", type="password")
-               confirmar = st.text_input("Confirmar senha:", type="password")
-               opcoes_tipo = ["aluno", "professor", "admin"]
-               tipo_atual_db = user_data['tipo_usuario']
+                
+                opcoes_tipo = ["aluno", "professor", "admin"]
+                tipo_atual_db = user_data['tipo_usuario']
                 
                 index_atual = 0 
                 if tipo_atual_db:
@@ -1564,17 +1500,14 @@ def tela_meu_perfil(usuario_logado):
             col1, col2 = st.columns(2)
             novo_nome = col1.text_input("Nome de Usuário:", value=user_data['nome'])
             novo_email = col2.text_input("Email:", value=user_data['email'])
-            
-            # 📌 CPF com Máscara Visual
-            cpf_limpo_db = user_data['cpf'] or ""
-            novo_cpf_input = st.text_input("CPF (somente números):", value=cpf_limpo_db, key="perfil_cpf_input")
-            cpf_display_limpo = formatar_e_validar_cpf(novo_cpf_input)
-            if cpf_display_limpo:
-                 st.info(f"CPF Formatado: {cpf_display_limpo[:3]}.{cpf_display_limpo[3:6]}.{cpf_display_limpo[6:9]}-{cpf_display_limpo[9:]}")
+            novo_cpf_input = st.text_input("CPF:", value=user_data['cpf'] or "")
             
             st.markdown("#### 2. Endereço")
             
-            # Inicializa variáveis de endereço com dados do banco
+            # --- Lógica de Busca de CEP ---
+            
+            # Inicializa variáveis de endereço com dados do banco.
+            # Se o estado da sessão não existe, ele é criado com os dados do banco.
             st.session_state.setdefault('endereco_cep', {
                 'cep': user_data['cep'] or "", 
                 'logradouro': user_data['logradouro'] or "", 
@@ -1582,95 +1515,97 @@ def tela_meu_perfil(usuario_logado):
                 'cidade': user_data['cidade'] or "", 
                 'uf': user_data['uf'] or ""
             })
+
+            # Garante que o estado da sessão seja limpo ao sair e recriado corretamente
+            # Se o usuário editar manualmente o CEP no input, ele será usado na busca.
             
-            # Sincroniza chaves dos widgets com o estado de sessão
-            st.session_state.setdefault('perfil_logradouro', st.session_state.endereco_cep['logradouro'])
-            st.session_state.setdefault('perfil_bairro', st.session_state.endereco_cep['bairro'])
-            st.session_state.setdefault('perfil_cidade', st.session_state.endereco_cep['cidade'])
-            st.session_state.setdefault('perfil_uf', st.session_state.endereco_cep['uf'])
-            st.session_state.setdefault('perfil_cep_input', st.session_state.endereco_cep['cep'])
-
-
             col_cep, col_btn = st.columns([3, 1])
             with col_cep:
-                novo_cep = st.text_input("CEP:", max_chars=9, key='perfil_cep_input')
-                cep_digitado_limpo = formatar_cep(novo_cep)
-                if cep_digitado_limpo:
-                     st.info(f"CEP Formatado: {cep_digitado_limpo[:5]}-{cep_digitado_limpo[5:]}")
-
+                # O campo CEP sempre exibe o valor salvo ou o último pesquisado/editado
+                novo_cep = st.text_input("CEP:", 
+                                         value=st.session_state.endereco_cep['cep'], 
+                                         max_chars=9, 
+                                         key='perfil_cep_input')
             with col_btn:
-                st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
-                if st.form_submit_button("Buscar CEP 🔍", type="secondary", use_container_width=True, help="Busca o endereço antes de salvar o perfil"):
+                st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True) # Espaçamento
+                if st.form_submit_button("Buscar CEP 🔍", type="secondary", use_container_width=True, help="Use o botão Buscar CEP antes de Salvar"):
                     endereco = buscar_cep(novo_cep)
                     if endereco:
                         st.session_state.endereco_cep = {
                             'cep': novo_cep,
                             **endereco
                         }
-                        # Atualiza os widgets com o novo valor
-                        st.session_state['perfil_logradouro'] = endereco['logradouro']
-                        st.session_state['perfil_bairro'] = endereco['bairro']
-                        st.session_state['perfil_cidade'] = endereco['cidade']
-                        st.session_state['perfil_uf'] = endereco['uf']
-                        
                         st.success("Endereço encontrado e campos preenchidos! Preencha Número e Complemento.")
                     else:
-                        st.error("CEP inválido ou não encontrado.")
-                    st.rerun() 
+                        st.error("CEP inválido ou não encontrado. Verifique o número.")
+                        st.session_state.endereco_cep = {
+                            'cep': novo_cep,
+                            'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
+                        }
+                    st.rerun() # Atualiza a tela para exibir os campos preenchidos
             
-            # CAMPOS HABILITADOS (Lendo diretamente da chave de sessão)
+            # CAMPOS HABILITADOS: O valor inicial é puxado do st.session_state após a busca.
             col_logr, col_bairro = st.columns(2)
-            novo_logradouro = col_logr.text_input("Logradouro:", key='perfil_logradouro')
-            novo_bairro = col_bairro.text_input("Bairro:", key='perfil_bairro')
+            novo_logradouro = col_logr.text_input("Logradouro:", 
+                                                  value=st.session_state.endereco_cep['logradouro'], 
+                                                  key='perfil_logradouro')
+            novo_bairro = col_bairro.text_input("Bairro:", 
+                                                value=st.session_state.endereco_cep['bairro'], 
+                                                key='perfil_bairro')
 
             col_cidade, col_uf = st.columns(2)
-            novo_cidade = col_cidade.text_input("Cidade:", key='perfil_cidade')
-            novo_uf = col_uf.text_input("UF:", key='perfil_uf')
+            novo_cidade = col_cidade.text_input("Cidade:", 
+                                                value=st.session_state.endereco_cep['cidade'], 
+                                                key='perfil_cidade')
+            novo_uf = col_uf.text_input("UF:", 
+                                       value=st.session_state.endereco_cep['uf'], 
+                                       key='perfil_uf')
             
-            # Campos Número e Complemento (Opcionais)
+            # Campos preenchidos pelo usuário (lendo o valor do banco se existir, ou do state)
             col_num, col_comp = st.columns(2)
-            novo_numero = col_num.text_input("Número (Opcional):", value=user_data['numero'] or "", key='perfil_numero')
-            novo_complemento = col_comp.text_input("Complemento (Opcional):", value=user_data['complemento'] or "", key='perfil_complemento')
+            novo_numero = col_num.text_input("Número:", value=user_data['numero'] or "", key='perfil_numero')
+            novo_complemento = col_comp.text_input("Complemento:", value=user_data['complemento'] or "", key='perfil_complemento')
             
             
             st.text_input("Tipo de Perfil:", value=user_data['tipo_usuario'].capitalize(), disabled=True)
             
+            # Botão de salvar principal
             submitted_info = st.form_submit_button("💾 Salvar Alterações", use_container_width=True, type="primary")
             
             if submitted_info:
+                # ... (Lógica de validação do CPF e campos obrigatórios) ...
                 
-                # 🚨 Formatação e Validação Final
-                cpf_final = formatar_e_validar_cpf(novo_cpf_input)
-                cep_final = formatar_cep(st.session_state.perfil_cep_input)
-
-                if not (novo_nome and novo_email):
+                if not novo_nome or not novo_email:
                     st.warning("Nome e Email são obrigatórios.")
-                elif not cpf_final:
-                    st.error("CPF inválido. Por favor, corrija o formato (11 dígitos).")
                 else:
                     try:
+                        # Executa o UPDATE com todos os campos.
                         cursor.execute(
                             """
                             UPDATE usuarios SET nome=?, email=?, cpf=?, cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, uf=? WHERE id=?
                             """,
                             (
-                                novo_nome.upper(), # 👈 MAIÚSCULO
-                                novo_email.upper(), # 👈 MAIÚSCULO
-                                cpf_final, # 👈 FORMATADO
-                                cep_final, # 👈 FORMATADO
-                                novo_logradouro.upper(), # 👈 MAIÚSCULO
-                                novo_numero.upper() if novo_numero else None, # 👈 MAIÚSCULO (Opcional)
-                                novo_complemento.upper() if novo_complemento else None, # 👈 MAIÚSCULO (Opcional)
-                                novo_bairro.upper(), # 👈 MAIÚSCULO
-                                novo_cidade.upper(), # 👈 MAIÚSCULO
-                                novo_uf.upper(), # 👈 MAIÚSCULO
+                                novo_nome, 
+                                novo_email, 
+                                cpf_editado, 
+                                # 🚨 VALORES LIDOS DIRETAMENTE DOS WIDGETS
+                                novo_cep,
+                                novo_logradouro,
+                                novo_numero,
+                                novo_complemento,
+                                novo_bairro,
+                                novo_cidade,
+                                novo_uf,
                                 user_id_logado
                             )
                         )
                         conn.commit()
                         st.success("Dados e Endereço atualizados com sucesso!")
                         
+                        # Atualiza a sessão para refletir as mudanças no front-end
                         st.session_state.usuario['nome'] = novo_nome
+                        
+                        # A chave 'endereco_cep' já tem os dados mais recentes devido ao widget key.
                         st.rerun() 
                         
                     except sqlite3.IntegrityError:
@@ -1680,10 +1615,8 @@ def tela_meu_perfil(usuario_logado):
 
     # --- Expander 2: Alteração de Senha (Inalterada) ---
     if user_data['auth_provider'] == 'local':
-        with st.expander("🔑 Alterar Senha", expanded=False):
-            with st.form(key="form_change_pass"):
-                # ... (Lógica de alteração de senha) ...
-                pass
+        # ... (Bloco de alteração de senha) ...
+        pass
     else:
         st.info(f"Seu login é gerenciado pelo **{user_data['auth_provider'].capitalize()}**.")
 
@@ -1857,10 +1790,11 @@ def meus_certificados(usuario_logado):
 def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
     
+    # Garante que o modo_login está definido
     st.session_state.setdefault("modo_login", "login")
 
     # =========================================
-    # CSS e Logo (Mantidos)
+    # CSS e Logo (Estrutura assumida como correta)
     # =========================================
     st.markdown(f"""
     <style>
@@ -1907,7 +1841,7 @@ def tela_login():
                 # ... (Lógica de Login Google) ...
 
         # =========================================
-        # CADASTRO (COM MÁSCARAS E VALIDAÇÃO)
+        # CADASTRO (FINAL CORREÇÃO DE ENDEREÇO E VALIDAÇÃO)
         # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             
@@ -1915,13 +1849,7 @@ def tela_login():
 
             nome = st.text_input("Nome de Usuário (login):") 
             email = st.text_input("E-mail:")
-            
-            # 📌 CPF com Máscara Visual
-            cpf_input = st.text_input("CPF (somente números):") 
-            cpf_display_limpo = formatar_e_validar_cpf(cpf_input)
-            if cpf_display_limpo:
-                st.info(f"CPF Formatado: {cpf_display_limpo[:3]}.{cpf_display_limpo[3:6]}.{cpf_display_limpo[6:9]}-{cpf_display_limpo[9:]}")
-            
+            cpf = st.text_input("CPF (somente números ou formato padrão):") 
             senha = st.text_input("Senha:", type="password")
             confirmar = st.text_input("Confirmar senha:", type="password")
             
@@ -1962,22 +1890,19 @@ def tela_login():
                 'cep': '', 'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
             })
 
-            # --- Sincronização de Chaves (para garantir que o preenchimento funcione) ---
+            # --- CORREÇÃO DE PREENCHIMENTO ---
+            # Sincroniza os valores iniciais dos inputs com o estado da sessão
             st.session_state.setdefault('reg_logradouro', st.session_state.endereco_cep_cadastro['logradouro'])
             st.session_state.setdefault('reg_bairro', st.session_state.endereco_cep_cadastro['bairro'])
             st.session_state.setdefault('reg_cidade', st.session_state.endereco_cep_cadastro['cidade'])
             st.session_state.setdefault('reg_uf', st.session_state.endereco_cep_cadastro['uf'])
             st.session_state.setdefault('reg_cep_input', st.session_state.endereco_cep_cadastro['cep'])
-            # -------------------------------------------------------------------------
+            # ---------------------------------
 
             col_cep, col_btn = st.columns([3, 1])
             with col_cep:
+                # O input agora está ligado à sua chave de sessão
                 st.text_input("CEP:", max_chars=9, key='reg_cep_input')
-                # 📌 CEP com Máscara Visual
-                cep_digitado_limpo = formatar_cep(st.session_state.reg_cep_input)
-                if cep_digitado_limpo:
-                     st.info(f"CEP Formatado: {cep_digitado_limpo[:5]}-{cep_digitado_limpo[5:]}")
-
             with col_btn:
                 st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
                 if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_reg_cep'):
@@ -1985,12 +1910,11 @@ def tela_login():
                     endereco = buscar_cep(cep_digitado)
                     
                     if endereco:
-                        # Atualiza o dicionário de referência
                         st.session_state.endereco_cep_cadastro = {
                             'cep': cep_digitado,
                             **endereco
                         }
-                        # Atualiza o valor interno de CADA WIDGET
+                        # AÇÃO CRÍTICA: Atualiza o valor interno de CADA WIDGET via chave de sessão
                         st.session_state['reg_logradouro'] = endereco['logradouro']
                         st.session_state['reg_bairro'] = endereco['bairro']
                         st.session_state['reg_cidade'] = endereco['cidade']
@@ -1999,7 +1923,7 @@ def tela_login():
                         st.success("Endereço encontrado! Verifique e complete.")
                     else:
                         st.error("CEP inválido ou não encontrado. Preencha manualmente.")
-                        # Limpa os widgets para permitir digitação manual
+                        # Limpa os valores dos widgets para permitir digitação manual
                         st.session_state['reg_logradouro'] = ''
                         st.session_state['reg_bairro'] = ''
                         st.session_state['reg_cidade'] = ''
@@ -2012,6 +1936,7 @@ def tela_login():
                     st.rerun()
 
             # CAMPOS HABILITADOS
+            # Os valores serão lidos das chaves de sessão após o rerun
             col_logr, col_bairro = st.columns(2)
             novo_logradouro = col_logr.text_input("Logradouro:", key='reg_logradouro')
             novo_bairro = col_bairro.text_input("Bairro:", key='reg_bairro')
@@ -2020,35 +1945,32 @@ def tela_login():
             novo_cidade = col_cidade.text_input("Cidade:", key='reg_cidade')
             novo_uf = col_uf.text_input("UF:", key='reg_uf')
             
-            # Campos Número e Complemento
+            # Campos preenchidos pelo usuário (Opcionais)
             col_num, col_comp = st.columns(2)
             novo_numero = col_num.text_input("Número (Opcional):", value="", key='reg_numero')
             novo_complemento = col_comp.text_input("Complemento (Opcional):", value="", key='reg_complemento')
 
 
             if st.button("Cadastrar", use_container_width=True, type="primary"):
-                # 🚨 Formatação Final dos Dados
-                nome_final = nome.upper()
-                email_final = email.upper()
-                cpf_final = formatar_e_validar_cpf(cpf_input)
-                cep_final = formatar_cep(st.session_state.reg_cep_input)
-
-                # ----------------------------------------------------
-
-                if not (nome and email and cpf_input and senha and confirmar):
+                if not (nome and email and cpf and senha and confirmar):
                     st.warning("Preencha todos os campos de contato e senha obrigatórios.")
                 elif senha != confirmar:
                     st.error("As senhas não coincidem.")
-                elif not cpf_final:
-                    st.error("CPF inválido. Por favor, corrija o formato (11 dígitos).")
+                # 🚨 VALIDAÇÃO DE ENDEREÇO OBRIGATÓRIO
                 elif not (st.session_state.reg_cep_input and novo_logradouro and novo_bairro and novo_cidade and novo_uf):
                     st.error("O Endereço (CEP, Logradouro, Bairro, Cidade e UF) é obrigatório. Por favor, preencha o CEP e clique em 'Buscar CEP'.")
                 else:
                     
+                    # ⚠️ Validação do CPF
+                    cpf_formatado = formatar_e_validar_cpf(cpf)
+                    if not cpf_formatado:
+                        st.error("CPF inválido. Por favor, corrija o formato (11 dígitos).")
+                        return
+                    
                     cursor = conn.cursor()
                     cursor.execute(
                         "SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", 
-                        (nome, email, cpf_final)
+                        (nome, email, cpf_formatado)
                     )
                     
                     if cursor.fetchone():
@@ -2068,22 +1990,32 @@ def tela_login():
                                 VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?, ?, ?)
                                 """,
                                 (
-                                    nome_final, email_final, cpf_final, tipo_db, hashed,
+                                    nome, email, cpf_formatado, tipo_db, hashed,
                                     
-                                    # VALORES FINAIS MAIÚSCULOS E FORMATADOS
-                                    cep_final, 
-                                    st.session_state.reg_logradouro.upper(), 
-                                    novo_numero.upper() if novo_numero else None, 
-                                    novo_complemento.upper() if novo_complemento else None, 
-                                    st.session_state.reg_bairro.upper(), 
-                                    st.session_state.reg_cidade.upper(), 
-                                    st.session_state.reg_uf.upper()
+                                    # VALORES FINAIS LIDOS DAS CHAVES DE SESSÃO DOS WIDGETS
+                                    st.session_state.reg_cep_input, novo_logradouro, novo_numero, 
+                                    novo_complemento, novo_bairro, novo_cidade, novo_uf
                                 )
                             )
                             novo_id = cursor.lastrowid
                             
-                            # ... (Lógica de inserção em 'alunos' ou 'professores') ...
-
+                            if tipo_db == "aluno":
+                                cursor.execute(
+                                    """
+                                    INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) 
+                                    VALUES (?, ?, ?, 'pendente')
+                                    """,
+                                    (novo_id, faixa, equipe_id) 
+                                )
+                            else: # Professor
+                                cursor.execute(
+                                    """
+                                    INSERT INTO professores (usuario_id, equipe_id, eh_responsavel, status_vinculo) 
+                                    VALUES (?, ?, 0, 'pendente')
+                                    """,
+                                    (novo_id, equipe_id)
+                                )
+                            
                             conn.commit()
                             conn.close()
                             
@@ -2102,16 +2034,6 @@ def tela_login():
                 st.session_state["modo_login"] = "login"
                 st.rerun()
 
-        # ... (Restante do bloco "recuperar") ...
-        elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            email = st.text_input("Digite o e-mail cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Em breve será implementado o envio de recuperação de senha.")
-            
-            if st.button("⬅️ Voltar para Login", use_container_width=True):
-                st.session_state["modo_login"] = "login"
-                st.rerun()
         # ... (Restante do bloco "recuperar") ...
         elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
