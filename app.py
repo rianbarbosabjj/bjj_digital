@@ -1733,16 +1733,6 @@ def meus_certificados(usuario_logado):
 
 # Esta seção foi refatorada.
 # O login não fica mais no topo, ele é gerenciado por este roteador.
-
-Com certeza! Para garantir que o preenchimento automático por CEP funcione corretamente, que os campos permaneçam editáveis e que as novas regras de validação (Número condicional) sejam aplicadas, estou fornecendo a função tela_login completa e atualizada.
-
-Esta versão final do tela_login incorpora todas as correções de estado, lógica e validação solicitadas.
-
-🛠️ Função tela_login (Completa e Finalizada)
-Substitua sua função def tela_login(): inteira por este bloco:
-
-Python
-
 def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
     
