@@ -236,23 +236,40 @@ def autenticar_local(usuario_email_ou_cpf, senha):
     return None
 
 # 4. Funções de busca e criação de usuário
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-    )
-    dados = cursor.fetchone()
-    conn.close()
-    if dados:
-        return {
-            "id": dados[0], 
-            "nome": dados[1], 
-            "tipo": dados[2], 
-            "perfil_completo": bool(dados[3])
-        }
-    return None
+def buscar_usuario_por_email(email_ou_cpf):
+    """
+    Busca um usuário pelo email (principalmente usado para Auth Social)
+    e retorna seus dados. Também verifica o CPF para garantir unicidade cruzada.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    cpf_formatado = formatar_e_validar_cpf(email_ou_cpf)
+
+    # Busca por 'email' (o caso mais comum) ou 'cpf' (se a entrada for um CPF válido)
+    if cpf_formatado:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=? OR cpf=?", 
+            (email_ou_cpf, cpf_formatado)
+        )
+    else:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", 
+            (email_ou_cpf,)
+        )
+        
+    dados = cursor.fetchone()
+    conn.close()
+    
+    if dados:
+        return {
+            "id": dados[0], 
+            "nome": dados[1], 
+            "tipo": dados[2], 
+            "perfil_completo": bool(dados[3])
+        }
+        
+    return None
 
 def criar_usuario_parcial_google(email, nome):
     """Cria um registro inicial para um novo usuário do Google."""
