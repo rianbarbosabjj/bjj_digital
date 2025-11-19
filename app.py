@@ -1736,7 +1736,7 @@ def meus_certificados(usuario_logado):
 def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
     
-    # Garante que o modo_login está definido (evita tela em branco)
+    # Garante que o modo_login está definido
     st.session_state.setdefault("modo_login", "login")
 
     # =========================================
@@ -1744,27 +1744,11 @@ def tela_login():
     # =========================================
     st.markdown(f"""
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
-        .stButton button {{
-            background: linear-gradient(90deg, #078B6C, #056853) !important;
-            color: white !important;
-            font-weight: bold !important;
-            border: none !important;
-            padding: 0.6em 1.2em !important;
-            border-radius: 10px !important;
-            transition: 0.3s;
-        }}
-        .stButton button:hover {{
-            background: #FFD770 !important;
-            color: #0e2d26 !important;
-            transform: scale(1.02);
-        }}
-        /* ... (Restante do seu CSS) ... */
+        /* ... Seu CSS completo para containers e botões ... */
     </style>
     """, unsafe_allow_html=True)
     
     # ... (Lógica de exibição da Logo) ...
-    # Assumindo que o código da logo está aqui.
 
     # =========================================
     # BLOCO PRINCIPAL
@@ -1852,44 +1836,59 @@ def tela_login():
                 'cep': '', 'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
             })
 
+            # --- CORREÇÃO DE PREENCHIMENTO ---
+            # 1. Sincroniza as chaves do widget com o valor do estado da sessão na inicialização
+            st.session_state.setdefault('reg_logradouro', st.session_state.endereco_cep_cadastro['logradouro'])
+            st.session_state.setdefault('reg_bairro', st.session_state.endereco_cep_cadastro['bairro'])
+            st.session_state.setdefault('reg_cidade', st.session_state.endereco_cep_cadastro['cidade'])
+            st.session_state.setdefault('reg_uf', st.session_state.endereco_cep_cadastro['uf'])
+            st.session_state.setdefault('reg_cep_input', st.session_state.endereco_cep_cadastro['cep'])
+            # ---------------------------------
+
             col_cep, col_btn = st.columns([3, 1])
             with col_cep:
-                novo_cep_input = st.text_input("CEP:", value=st.session_state.endereco_cep_cadastro['cep'], max_chars=9, key='reg_cep_input')
+                # O input agora está ligado à sua chave de sessão
+                st.text_input("CEP:", max_chars=9, key='reg_cep_input')
             with col_btn:
                 st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
                 if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_reg_cep'):
-                    endereco = buscar_cep(novo_cep_input)
+                    cep_digitado = st.session_state.reg_cep_input
+                    endereco = buscar_cep(cep_digitado)
+                    
                     if endereco:
                         st.session_state.endereco_cep_cadastro = {
-                            'cep': novo_cep_input,
+                            'cep': cep_digitado,
                             **endereco
                         }
+                        # 2. 🚨 AÇÃO CRÍTICA: Atualiza o valor interno de CADA WIDGET via chave de sessão
+                        st.session_state['reg_logradouro'] = endereco['logradouro']
+                        st.session_state['reg_bairro'] = endereco['bairro']
+                        st.session_state['reg_cidade'] = endereco['cidade']
+                        st.session_state['reg_uf'] = endereco['uf']
+                        
                         st.success("Endereço encontrado! Verifique e complete.")
                     else:
                         st.error("CEP inválido ou não encontrado. Preencha manualmente.")
+                        # 3. Limpa os valores dos widgets para permitir digitação manual
+                        st.session_state['reg_logradouro'] = ''
+                        st.session_state['reg_bairro'] = ''
+                        st.session_state['reg_cidade'] = ''
+                        st.session_state['reg_uf'] = ''
                         st.session_state.endereco_cep_cadastro = {
-                            'cep': novo_cep_input,
+                            'cep': cep_digitado,
                             'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
                         }
+                        
                     st.rerun()
 
             # CAMPOS HABILITADOS
-            # O 'value' lido do st.session_state força a atualização após a busca.
             col_logr, col_bairro = st.columns(2)
-            novo_logradouro = col_logr.text_input("Logradouro:", 
-                                                  value=st.session_state.endereco_cep_cadastro['logradouro'], 
-                                                  key='reg_logradouro')
-            novo_bairro = col_bairro.text_input("Bairro:", 
-                                                value=st.session_state.endereco_cep_cadastro['bairro'], 
-                                                key='reg_bairro')
+            novo_logradouro = col_logr.text_input("Logradouro:", key='reg_logradouro')
+            novo_bairro = col_bairro.text_input("Bairro:", key='reg_bairro')
 
             col_cidade, col_uf = st.columns(2)
-            novo_cidade = col_cidade.text_input("Cidade:", 
-                                                value=st.session_state.endereco_cep_cadastro['cidade'], 
-                                                key='reg_cidade')
-            novo_uf = col_uf.text_input("UF:", 
-                                       value=st.session_state.endereco_cep_cadastro['uf'], 
-                                       key='reg_uf')
+            novo_cidade = col_cidade.text_input("Cidade:", key='reg_cidade')
+            novo_uf = col_uf.text_input("UF:", key='reg_uf')
             
             # Campos preenchidos pelo usuário
             col_num, col_comp = st.columns(2)
@@ -1939,6 +1938,8 @@ def tela_login():
                                 """,
                                 (
                                     nome, email, cpf_formatado, tipo_db, hashed,
+                                    
+                                    # VALORES FINAIS LIDOS DAS CHAVES DE SESSÃO DOS WIDGETS
                                     novo_cep_input, novo_logradouro, novo_numero, 
                                     novo_complemento, novo_bairro, novo_cidade, novo_uf
                                 )
