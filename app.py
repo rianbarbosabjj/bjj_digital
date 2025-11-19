@@ -11,10 +11,10 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, date, timedelta
 import bcrypt
-import base64
 from streamlit_option_menu import option_menu
 from streamlit_oauth import OAuth2Component
 import requests
+import base64
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -27,22 +27,25 @@ COR_DESTAQUE = "#FFD770"
 COR_BOTAO = "#078B6C"
 COR_HOVER = "#FFD770"
 
-# [CSS]
+# [CSS (Corrigido para forçar a renderização do conteúdo principal)]
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
 
-/* Fix para a tela preta e sidebar */
+/* --- CORREÇÃO CRÍTICA: GARANTE QUE O BACKGROUND E O CONTEÚDO APAREÇAM --- */
+
 [data-testid="stAppViewContainer"] > .main {{
     background-color: {COR_FUNDO} !important;
     color: {COR_TEXTO} !important;
     min-height: 100vh;
 }}
+
 [data-testid="stSidebar"] {{
     background-color: #0c241e !important;
 }}
 
-/* Estilos de botões e cards */
+/* --- ESTILOS ORIGINAIS --- */
+
 .stButton>button {{
     background: linear-gradient(90deg, {COR_BOTAO}, #056853);
     color: white;
@@ -62,6 +65,7 @@ h1, h2, h3 {{
     text-align: center;
     font-weight: 700;
 }}
+/* Estilo para os cards de navegação */
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{
     background-color: #0c241e; 
     border: 1px solid #078B6C;
@@ -93,9 +97,9 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 """, unsafe_allow_html=True)
 
 # =========================================
-# BANCO DE DADOS (VERSÃO ESTÁVEL ORIGINAL)
+# BANCO DE DADOS E MIGRAÇÃO
 # =========================================
-DB_PATH = os.path.expanduser("~/bjj_digital_original.db") # Usando um nome diferente para não conflitar
+DB_PATH = os.path.expanduser("~/bjj_digital_original.db") 
 
 def criar_banco():
     """Cria o banco de dados e suas tabelas, caso não existam."""
@@ -103,16 +107,23 @@ def criar_banco():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # Tabela 'usuarios' original (sem cpf, numero, endereço)
+    # Tabela 'usuarios' AGORA COM CPF/ENDEREÇO
     cursor.executescript("""
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
         email TEXT UNIQUE,
+        cpf TEXT UNIQUE, -- NOVO
         tipo_usuario TEXT,
         senha TEXT, 
         auth_provider TEXT DEFAULT 'local', 
         perfil_completo BOOLEAN DEFAULT 0,
+        cep TEXT, -- NOVO
+        logradouro TEXT, -- NOVO
+        numero TEXT, -- NOVO
+        bairro TEXT, -- NOVO
+        cidade TEXT, -- NOVO
+        estado TEXT, -- NOVO
         data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -143,7 +154,9 @@ def criar_banco():
         equipe_id INTEGER,
         status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
         data_pedido DATETIME DEFAULT CURRENT_TIMESTAMP,
-        exame_habilitado BOOLEAN DEFAULT 0
+        exame_habilitado BOOLEAN DEFAULT 0,
+        data_inicio_exame TEXT, 
+        data_fim_exame TEXT 
     );
 
     CREATE TABLE IF NOT EXISTS resultados (
@@ -175,7 +188,36 @@ def criar_banco():
     conn.close()
 
 
-# 5. Usuários de teste (Versão Estável)
+def migrar_db():
+    """Garante que todas as colunas existam nas tabelas, adicionando se necessário."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 1. MIGRAÇÃO DA TABELA USUARIOS (CPF/ENDEREÇO)
+    colunas_novas_usuarios = {
+        'cpf': 'TEXT UNIQUE', 'cep': 'TEXT', 'logradouro': 'TEXT', 'bairro': 'TEXT', 
+        'cidade': 'TEXT', 'estado': 'TEXT', 'numero': 'TEXT'
+    }
+    for coluna, tipo in colunas_novas_usuarios.items():
+        try:
+            cursor.execute(f"SELECT {coluna} FROM usuarios LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} {tipo}")
+            conn.commit()
+            st.toast(f"Coluna {coluna} (usuarios) adicionada.")
+            
+    # 2. MIGRAÇÃO DA TABELA ALUNOS (Datas de exame)
+    try:
+        cursor.execute("SELECT data_inicio_exame FROM alunos LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE alunos ADD COLUMN data_inicio_exame TEXT")
+        cursor.execute("ALTER TABLE alunos ADD COLUMN data_fim_exame TEXT")
+        conn.commit()
+        st.toast("Campos de Data de Exame adicionados à tabela 'alunos'.")
+            
+    conn.close()
+
+# 5. Usuários de teste (Versão Corrigida: Senha é literal)
 def criar_usuarios_teste():
     """Cria usuários padrão locais com senha simples no banco original."""
     conn = sqlite3.connect(DB_PATH)
@@ -192,11 +234,11 @@ def criar_usuarios_teste():
 
 
     usuarios = [
-        ("Admin User", "admin", "admin@bjj.local", "admin"), 
-        ("Professor Responsável", "professor", "professor@bjj.local", "professor"), 
-        ("Aluno User", "aluno", "aluno@bjj.local", "aluno")
+        ("Admin User", "admin", "admin@bjj.local", "admin", "00000000000"), 
+        ("Professor Responsável", "professor", "professor@bjj.local", "professor", "11111111111"), 
+        ("Aluno User", "aluno", "aluno@bjj.local", "aluno", "22222222222")
     ]
-    for nome, tipo, email, senha_plana in usuarios:
+    for nome, tipo, email, senha_plana, cpf in usuarios:
         cursor.execute("SELECT id FROM usuarios WHERE email=?", (email,))
         if cursor.fetchone() is None:
             
@@ -204,10 +246,10 @@ def criar_usuarios_teste():
             
             cursor.execute(
                 """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, 'local', 1)
+                INSERT INTO usuarios (nome, tipo_usuario, senha, email, auth_provider, perfil_completo, cpf) 
+                VALUES (?, ?, ?, ?, 'local', 1, ?)
                 """,
-                (nome, tipo, senha_hash, email),
+                (nome, tipo, senha_hash, email, cpf),
             )
             novo_id = cursor.lastrowid
             
@@ -233,9 +275,12 @@ def criar_usuarios_teste():
 
 # 🔹 Lógica de inicialização do topo do script
 if not os.path.exists(DB_PATH):
-    st.toast("Criando novo banco de dados (Estável)...")
+    st.toast("Criando novo banco de dados (Com CPF)...")
     criar_banco()
     criar_usuarios_teste() 
+
+# Sempre execute a migração se o DB existir
+migrar_db()
 
 
 # =========================================
@@ -248,7 +293,6 @@ try:
     GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
     REDIRECT_URI = "https://bjjdigital.streamlit.app/" # Mude para sua URL de produção
 except FileNotFoundError:
-    # Apenas loga o erro, não para a aplicação se for local e não usar OAuth
     GOOGLE_CLIENT_ID = "MOCK_ID" 
     GOOGLE_CLIENT_SECRET = "MOCK_SECRET"
     REDIRECT_URI = "http://localhost:8501/" 
@@ -258,7 +302,7 @@ except KeyError:
     GOOGLE_CLIENT_SECRET = "MOCK_SECRET"
     REDIRECT_URI = "http://localhost:8501/" 
 
-# 2. Inicialização do componente OAuth (DEFINIÇÃO GLOBAL)
+# 2. Inicialização do componente OAuth (DEFINIÇÃO GLOBAL - FIX)
 oauth_google = OAuth2Component(
     client_id=GOOGLE_CLIENT_ID,
     client_secret=GOOGLE_CLIENT_SECRET,
@@ -273,18 +317,62 @@ oauth_google = OAuth2Component(
 # FUNÇÕES DE UTILIDADE E AUTENTICAÇÃO
 # =========================================
 
+def validar_cpf(cpf):
+    """Verifica se o CPF tem 11 dígitos e se os dígitos verificadores são válidos."""
+    cpf = ''.join(filter(str.isdigit, cpf))
+    if len(cpf) != 11 or len(set(cpf)) == 1:
+        return False
+    soma = 0
+    for i in range(9):
+        soma += int(cpf[i]) * (10 - i)
+    resto = soma % 11
+    digito_1 = 0 if resto < 2 else 11 - resto
+    if int(cpf[9]) != digito_1:
+        return False
+    soma = 0
+    for i in range(10):
+        soma += int(cpf[i]) * (11 - i)
+    resto = soma % 11
+    digito_2 = 0 if resto < 2 else 11 - resto
+    if int(cpf[10]) != digito_2:
+        return False
+    return True
+
+def buscar_endereco_por_cep(cep):
+    """Busca endereço usando a API ViaCEP."""
+    cep = ''.join(filter(str.isdigit, cep))
+    if len(cep) != 8:
+        return None
+    url = f"https://viacep.com.br/ws/{cep}/json/"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status() 
+        data = response.json()
+        if data.get('erro'):
+            return None
+        return {
+            "logradouro": data.get("logradouro", ""),
+            "bairro": data.get("bairro", ""),
+            "cidade": data.get("localidade", ""),
+            "estado": data.get("uf", "")
+        }
+    except requests.exceptions.RequestException as e:
+        return None
+    except Exception as e:
+        return None
+
 # 3. Autenticação local (Login/Senha)
 def autenticar_local(usuario_ou_email, senha):
-    """Autentica o usuário local usando EMAIL."""
+    """Atualizado: Autentica o usuário local usando EMAIL ou CPF."""
     conn = sqlite3.connect(DB_PATH) 
     cursor = conn.cursor()
     dados = None
     
     try:
-        # Versão estável só usa EMAIL
+        # Busca por 'email' OU 'cpf'
         cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE email=? AND auth_provider='local'", 
-            (usuario_ou_email,)
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (email=? OR cpf=?) AND auth_provider='local'", 
+            (usuario_ou_email, usuario_ou_email)
         )
         dados = cursor.fetchone()
         
@@ -292,6 +380,9 @@ def autenticar_local(usuario_ou_email, senha):
             if bcrypt.checkpw(senha.encode(), dados[3].encode()):
                 return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
             
+    except Exception as e:
+        st.error(f"Erro de autenticação no DB: {e}")
+        
     finally:
         conn.close() 
         
@@ -356,6 +447,23 @@ def buscar_equipes():
     conn.close()
     return equipes
 
+# --- FUNÇÕES DE GESTÃO DO PROFESSOR (PLACEHOLDERS) ---
+
+def get_professor_team_id(usuario_id):
+    """Busca o ID da equipe principal do professor ativo."""
+    # Apenas MOCK para evitar erros de Painel do Professor antes da implementação completa
+    return 1 if usuario_id == 2 else None 
+
+def get_alunos_by_equipe(equipe_id):
+    """Busca todos os alunos (e seus status de exame) de uma equipe."""
+    # MOCK
+    return []
+
+def habilitar_exame_aluno(aluno_id, data_inicio_str, data_fim_str):
+    """Habilita o exame e define o período na tabela alunos."""
+    # MOCK
+    return True
+
 # --- FUNÇÕES DE CERTIFICADO E QUESTÕES (HELPERS) ---
 def normalizar_nome(nome):
     """Normaliza o nome para uso em nomes de arquivo."""
@@ -414,6 +522,7 @@ def carregar_todas_questoes():
                 q['tema'] = tema
             todas_questoes.extend(questoes)
     return todas_questoes
+
 
 # =========================================
 # TELAS DO APP (POSICIONADAS CORRETAMENTE)
@@ -494,39 +603,43 @@ def tela_meu_perfil(usuario_logado):
 
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking do Modo Rola</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
+
+def painel_professor():
+    st.markdown("<h1 style='color:#FFD700;'>👨‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 def gestao_equipes():
     st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 def gestao_usuarios(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>🥋 Gestão de Exame de Faixa</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 def meus_certificados(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 def tela_completar_cadastro(user_info):
     st.markdown("<h1 style='color:#FFD700;'>📝 Complete Seu Cadastro</h1>", unsafe_allow_html=True)
-    st.warning("Funcionalidade temporariamente suspensa para garantir a estabilidade do sistema.")
+    st.warning("Funcionalidade temporariamente suspensa.")
 
 
 # --- TELA DE LOGIN/CADASTRO ---
@@ -558,12 +671,13 @@ def tela_login():
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
-                # Login na versão estável usa EMAIL
+                # Login na versão estável usa EMAIL (ou CPF, mas a função autenticar_local só está ajustada para email na base estável)
+                # NOTA: Para logar com CPF/Email, a função autenticar_local deve ser corrigida. 
+                # USANDO EMAIL APENAS AQUI PARA MANTER A ESTABILIDADE.
                 user_ou_email = st.text_input("Email para Login:") 
                 pwd = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    # Versão estável usa EMAIL
                     u = autenticar_local(user_ou_email.strip(), pwd.strip()) 
                     if u:
                         st.session_state.usuario = u
@@ -708,13 +822,11 @@ def app_principal():
         opcoes_base.insert(0, "Início")
         icons_base.insert(0, "house-fill")
         
-        # A navegação é feita pelos botões dos cards na tela de início,
-        # ou pela seleção aqui. Usamos o menu_selection como estado unificado.
         menu = option_menu(
             menu_title=None,
             options=opcoes_base,
             icons=icons_base,
-            key="menu_selection",
+            key="menu_selection", 
             orientation="horizontal",
             default_index=opcoes_base.index(pagina_selecionada),
             styles={
@@ -734,8 +846,7 @@ def app_principal():
         elif menu == "Ranking":
             ranking()
         elif menu == "Painel do Professor":
-            # Usando a versão original estável
-            st.warning("Painel do Professor requer as funcionalidades avançadas que causaram o problema. Funcionalidade suspensa.")
+            painel_professor()
         elif menu == "Gestão de Equipes":
             gestao_equipes()
         elif menu == "Gestão de Questões":
