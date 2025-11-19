@@ -31,6 +31,23 @@ COR_HOVER = "#FFD770"
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
+
+/* --- CORREÇÃO CRÍTICA: GARANTE QUE O BACKGROUND E O CONTEÚDO APAREÇAM --- */
+
+/* Aplica cor de fundo ao corpo principal do Streamlit (resolve tela preta) */
+[data-testid="stAppViewContainer"] > .main {{
+    background-color: {COR_FUNDO} !important;
+    color: {COR_TEXTO} !important;
+    min-height: 100vh; /* Garante que a tela tenha altura total */
+}}
+
+/* Força a barra lateral a ter a mesma cor de fundo */
+[data-testid="stSidebar"] {{
+    background-color: #0c241e !important;
+}}
+
+/* --- ESTILOS ORIGINAIS --- */
+
 .stButton>button {{
     background: linear-gradient(90deg, {COR_BOTAO}, #056853);
     color: white;
@@ -79,7 +96,6 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 }}
 </style>
 """, unsafe_allow_html=True)
-
 
 # =========================================
 # BANCO DE DADOS E MIGRAÇÃO
