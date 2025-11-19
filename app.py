@@ -1892,49 +1892,72 @@ def tela_login():
                         hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
                         tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
 
-                        cursor = conn.cursor() # Usando a conexão aberta anteriormente
                         cursor.execute(
-                            """
-                            INSERT INTO usuarios (
-                                nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo,
-                                cep, logradouro, numero, complemento, bairro, cidade, uf
-                            )
-                            VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                nome, email, cpf_formatado, tipo_db, hashed,
-                                
-                                # 🚨 VALORES LIDOS DIRETAMENTE DOS WIDGETS
-                                novo_cep_input, novo_logradouro, novo_numero, 
-                                novo_complemento, novo_bairro, novo_cidade, novo_uf
-                            )
-                        )
-                        novo_id = cursor.lastrowid
-                        
-                        # ... (Lógica de inserção em 'alunos' ou 'professores') ...
+                        "SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", 
+                        (nome, email, cpf_formatado)
+                    )
+                    
+                    # 🚨 GARANTINDO O ALINHAMENTO DO IF/ELSE AQUI
+                    if cursor.fetchone():
+                        st.error("Nome de usuário, e-mail ou CPF já cadastrado.")
+                        conn.close()
+                    else: # Se a validação e unicidade estiverem OK
+                        try:
+                            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                            tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
 
-                        conn.commit()
-                        conn.close()
-                        
-                        st.session_state.pop('endereco_cep_cadastro', None)
-                        st.success("Cadastro realizado! Seu vínculo está **PENDENTE**...")
-                        st.session_state["modo_login"] = "login"
-                        st.rerun()
-                        
-                    except Exception as e:
-                        conn.rollback() 
-                        conn.close()
-                        st.error(f"Erro ao cadastrar: {e}")
+                            # 1. Salva na tabela 'usuarios' (com Endereço)
+                            # ... (resto do código de inserção)
+
+                            cursor.execute(
+                                """
+                                INSERT INTO usuarios (
+                                    nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo,
+                                    cep, logradouro, numero, complemento, bairro, cidade, uf
+                                )
+                                VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?, ?, ?)
+                                """,
+                                (
+                                    nome, email, cpf_formatado, tipo_db, hashed,
+                                    novo_cep_input, novo_logradouro, novo_numero, 
+                                    novo_complemento, novo_bairro, novo_cidade, novo_uf
+                                )
+                            )
+                            novo_id = cursor.lastrowid
+                            
+                            # 2. Salva na tabela 'alunos' ou 'professores' com status PENDENTE
+                            if tipo_db == "aluno":
+                                cursor.execute(
+                                    """
+                                    INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) 
+                                    VALUES (?, ?, ?, 'pendente')
+                                    """,
+                                    (novo_id, faixa, equipe_id) 
+                                )
+                            else: # Professor
+                                cursor.execute(
+                                    """
+                                    INSERT INTO professores (usuario_id, equipe_id, eh_responsavel, status_vinculo) 
+                                    VALUES (?, ?, 0, 'pendente')
+                                    """,
+                                    (novo_id, equipe_id)
+                                )
+                            
+                            conn.commit()
+                            conn.close()
+                            
+                            st.session_state.pop('endereco_cep_cadastro', None)
+                            st.success("Cadastro realizado! Seu vínculo está **PENDENTE**...")
+                            st.session_state["modo_login"] = "login"
+                            st.rerun()
+                            
+                        except Exception as e:
+                            conn.rollback() 
+                            conn.close()
+                            st.error(f"Erro ao cadastrar: {e}")
 
             if st.button("⬅️ Voltar para Login", use_container_width=True):
                 st.session_state.pop('endereco_cep_cadastro', None)
-                st.session_state["modo_login"] = "login"
-                st.rerun()
-
-        # ... (Restante do bloco "recuperar") ...
-        elif st.session_state["modo_login"] == "recuperar":
-            # ... (Lógica de recuperação de senha) ...
-            if st.button("⬅️ Voltar para Login", use_container_width=True):
                 st.session_state["modo_login"] = "login"
                 st.rerun()                
 def tela_completar_cadastro(user_data):
