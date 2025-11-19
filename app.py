@@ -1168,7 +1168,7 @@ def tela_inicio():
         <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:30px;'>
             {logo_html}
             <h2 style='color:{COR_DESTAQUE};text-align:center;'>Painel BJJ Digital</h2>
-            <p style='color:{COR_TEXTO};text-align:center;font-size:1.1em;'>Bem-vindo(a), {st.session_state.usuario['nome'].title()}! Use a navegação acima ou os cartões abaixo.</p>
+            <p style='color:{COR_TEXTO};text-align:center;font-size:1.1em;'>Bem-vindo(a), {st.session_state.usuario['nome'].title()}!</p>
         </div>
     """, unsafe_allow_html=True)
 
