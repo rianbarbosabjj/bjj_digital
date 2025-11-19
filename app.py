@@ -181,15 +181,15 @@ criar_banco()
 
 # 1. Configuração do Google OAuth (lendo do secrets.toml)
 try:
-    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
-    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
-    REDIRECT_URI = "https://bjjdigital.streamlit.app/" # Mude para sua URL de produção
+    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+    REDIRECT_URI = "https://bjjdigital.streamlit.app/" # Mude para sua URL de produção
 except FileNotFoundError:
-    st.error("Arquivo secrets.toml não encontrado. Crie .streamlit/secrets.toml")
-    st.stop()
+    st.error("Arquivo secrets.toml não encontrado. Crie .streamlit/secrets.toml")
+    st.stop()
 except KeyError:
-    st.error("Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no secrets.toml")
-    st.stop()
+    st.error("Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no secrets.toml")
+    st.stop()
 
 # 2. Inicialização do componente OAuth
 oauth_google = OAuth2Component(
