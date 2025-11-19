@@ -1788,9 +1788,9 @@ def tela_login():
                             st.session_state.registration_pending = novo
                         st.rerun()
 
-        # =========================================
-        # CADASTRO
-        # =========================================
+# =========================================
+# CADASTRO
+# =========================================
 elif st.session_state["modo_login"] == "cadastro":
             
             st.subheader("📋 Cadastro de Novo Usuário")
