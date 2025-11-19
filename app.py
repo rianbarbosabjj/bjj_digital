@@ -27,19 +27,21 @@ COR_DESTAQUE = "#FFD770"
 COR_BOTAO = "#078B6C"
 COR_HOVER = "#FFD770"
 
-# [CSS (Corrigido)]
+# [CSS (Corrigido para forçar a renderização do conteúdo principal)]
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
 
 /* --- CORREÇÃO CRÍTICA: GARANTE QUE O BACKGROUND E O CONTEÚDO APAREÇAM --- */
 
+/* Aplica cor de fundo ao corpo principal do Streamlit (resolve tela preta) */
 [data-testid="stAppViewContainer"] > .main {{
     background-color: {COR_FUNDO} !important;
     color: {COR_TEXTO} !important;
-    min-height: 100vh;
+    min-height: 100vh; /* Garante que a tela tenha altura total */
 }}
 
+/* Força a barra lateral a ter a mesma cor de fundo */
 [data-testid="stSidebar"] {{
     background-color: #0c241e !important;
 }}
@@ -65,6 +67,7 @@ h1, h2, h3 {{
     text-align: center;
     font-weight: 700;
 }}
+/* Estilo para os cards de navegação */
 div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{
     background-color: #0c241e; 
     border: 1px solid #078B6C;
@@ -901,7 +904,7 @@ def painel_professor():
             # 2.1 Buscar solicitações pendentes (USANDO conn ABERTO)
             query = """
                 SELECT 
-                    p.id, u.nome, u.email, e.nome AS equipe_nome
+                    p.id, u.nome, u.email, e.nome AS equipe_nome, p.usuario_id
                 FROM professores p
                 JOIN usuarios u ON p.usuario_id = u.id
                 JOIN equipes e ON p.equipe_id = e.id
@@ -926,6 +929,7 @@ def painel_professor():
                 
                 for index, row in professores_pendentes.iterrows():
                     prof_id = row['id'] # ID da linha na tabela 'professores'
+                    usuario_id_prof = row['usuario_id']
                     
                     with st.container(border=True):
                         st.markdown(f"**Professor:** {row['nome']} ({row['email']})")
@@ -934,7 +938,10 @@ def painel_professor():
                         col_aprov, col_rejeita = st.columns(2)
                         
                         if col_aprov.button("✅ Aprovar Ingresso", key=f"aprov_{prof_id}"):
+                            # 1. Atualiza status do vínculo
                             cursor.execute("UPDATE professores SET status_vinculo='ativo' WHERE id=?", (prof_id,))
+                            # 2. Atualiza o tipo de usuário na tabela 'usuarios'
+                            cursor.execute("UPDATE usuarios SET tipo_usuario='professor' WHERE id=?", (usuario_id_prof,))
                             conn.commit()
                             st.success(f"Professor {row['nome']} aprovado com sucesso! ✅")
                             st.rerun()
@@ -1724,3 +1731,169 @@ def tela_login():
                 if st.button("⬅️ Voltar para Login", use_container_width=True):
                     st.session_state["modo_login"] = "login"
                     st.rerun()
+
+def app_principal():
+    """Função 'main' refatorada - executa o app principal quando logado."""
+    usuario_logado = st.session_state.usuario
+    if not usuario_logado:
+        st.error("Sessão expirada. Faça login novamente.")
+        st.session_state.usuario = None
+        st.rerun()
+
+    tipo_usuario = usuario_logado["tipo"]
+
+    # --- 1. Callback para os botões da Sidebar ---
+    def navigate_to_sidebar(page):
+        st.session_state.menu_selection = page
+
+    # --- Sidebar (Com 'Meu Perfil' e 'Gestão de Usuários') ---
+    st.sidebar.image("assets/logo.png", use_container_width=True)
+    st.sidebar.markdown(
+        f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
+        unsafe_allow_html=True,
+    )
+    st.sidebar.markdown(
+        f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>",
+        unsafe_allow_html=True,
+    )
+    
+    st.sidebar.button(
+        "👤 Meu Perfil", 
+        on_click=navigate_to_sidebar, 
+        args=("Meu Perfil",), 
+        use_container_width=True
+    )
+
+    if tipo_usuario == "admin":
+        st.sidebar.button(
+            "🔑 Gestão de Usuários", 
+            on_click=navigate_to_sidebar, 
+            args=("Gestão de Usuários",), 
+            use_container_width=True
+        )
+
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Sair", use_container_width=True):
+        st.session_state.usuario = None
+        st.session_state.pop("menu_selection", None)
+        st.session_state.pop("token", None) 
+        st.session_state.pop("registration_pending", None) 
+        if "endereco_cache" in st.session_state: del st.session_state["endereco_cache"]
+        st.rerun()
+
+    # =========================================
+    # LÓGICA DE ROTA (ATUALIZADA)
+    # =========================================
+    
+    if "menu_selection" not in st.session_state:
+        st.session_state.menu_selection = "Início"
+
+    pagina_selecionada = st.session_state.menu_selection
+
+    # --- ROTA 1: Telas da Sidebar (Sem menu horizontal) ---
+    if pagina_selecionada in ["Meu Perfil", "Gestão de Usuários"]:
+        
+        if pagina_selecionada == "Meu Perfil":
+            tela_meu_perfil(usuario_logado)
+        elif pagina_selecionada == "Gestão de Usuários":
+            gestao_usuarios(usuario_logado) 
+        
+        if st.button("⬅️ Voltar ao Início", use_container_width=True):
+            navigate_to_sidebar("Início")
+            st.rerun()
+
+    # --- ROTA 2: Tela "Início" (Sem menu horizontal) ---
+    elif pagina_selecionada == "Início":
+        # Chama a tela inicial diretamente, sem desenhar o menu
+        tela_inicio()
+
+    # --- ROTA 3: Telas do Menu Horizontal (Desenha o menu) ---
+    else:
+        # Define as opções de menu (sem "Início", "Meu Perfil" ou "Gestão")
+        if tipo_usuario in ["admin", "professor"]:
+            opcoes = ["Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+            icons = ["people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+        
+        else: # aluno
+            opcoes = ["Modo Rola", "Ranking", "Meus Certificados"]
+            icons = ["people-fill", "trophy-fill", "patch-check-fill"]
+            
+            # Lógica para adicionar Exame (se habilitado)
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+            dado = cursor.fetchone()
+            conn.close()
+            if dado and dado[0] == 1:
+                opcoes.insert(1, "Exame de Faixa") # Insere na posição 1 (depois de Modo Rola)
+                icons.insert(1, "journal-check")
+        
+        # Adiciona "Início" de volta ao começo das listas
+        opcoes.insert(0, "Início")
+        icons.insert(0, "house-fill")
+
+        # Desenha o menu horizontal
+        menu = option_menu(
+            menu_title=None,
+            options=opcoes,
+            icons=icons,
+            key="menu_selection",
+            orientation="horizontal",
+            default_index=opcoes.index(pagina_selecionada), # Garante que a aba correta esteja selecionada
+            styles={
+                "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
+                "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
+                "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
+                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
+            }
+        )
+
+        # Roteamento das telas do menu horizontal
+        if menu == "Início":
+            tela_inicio()
+        elif menu == "Modo Rola":
+            modo_rola(usuario_logado)
+        elif menu == "Exame de Faixa":
+            exame_de_faixa(usuario_logado)
+        elif menu == "Ranking":
+            ranking()
+        elif menu == "Painel do Professor":
+            painel_professor()
+        elif menu == "Gestão de Equipes":
+            gestao_equipes()
+        elif menu == "Gestão de Questões":
+            gestao_questoes()
+        elif menu == "Gestão de Exame":
+            gestao_exame_de_faixa()
+        elif menu == "Meus Certificados":
+            meus_certificados(usuario_logado)
+        
+# =========================================
+# EXECUÇÃO PRINCIPAL (ROTEADOR)
+# =========================================
+if __name__ == "__main__":
+    
+    # 1. Inicializa o estado de 'token' e 'registration' se não existirem
+    if "token" not in st.session_state:
+        st.session_state.token = None
+    if "registration_pending" not in st.session_state:
+        st.session_state.registration_pending = None
+    if "usuario" not in st.session_state:
+        st.session_state.usuario = None
+    
+    # Garante que os caches de endereço existam na sessão
+    st.session_state.setdefault("endereco_cache", {})
+    st.session_state.setdefault("cadastro_endereco_cache", {})
+
+    # 2. Lógica de Roteamento Principal
+    if st.session_state.registration_pending:
+        # ROTA 1: Usuário precisa completar o cadastro (após Google Login)
+        tela_completar_cadastro(st.session_state.registration_pending)
+        
+    elif st.session_state.usuario:
+        # ROTA 2: Usuário está logado
+        app_principal()
+        
+    else:
+        # ROTA 3: Usuário está deslogado (mostra tela de login)
+        tela_login()
