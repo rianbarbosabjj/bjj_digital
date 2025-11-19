@@ -11,10 +11,10 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime, date, timedelta
 import bcrypt
-import base64
 from streamlit_option_menu import option_menu
 from streamlit_oauth import OAuth2Component
 import requests
+import base64
 
 # =========================================
 # CONFIGURAÇÕES GERAIS
@@ -27,21 +27,19 @@ COR_DESTAQUE = "#FFD770"
 COR_BOTAO = "#078B6C"
 COR_HOVER = "#FFD770"
 
-# [CSS (sem alterações)]
+# [CSS (Corrigido)]
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
 
 /* --- CORREÇÃO CRÍTICA: GARANTE QUE O BACKGROUND E O CONTEÚDO APAREÇAM --- */
 
-/* Aplica cor de fundo ao corpo principal do Streamlit (resolve tela preta) */
 [data-testid="stAppViewContainer"] > .main {{
     background-color: {COR_FUNDO} !important;
     color: {COR_TEXTO} !important;
-    min-height: 100vh; /* Garante que a tela tenha altura total */
+    min-height: 100vh;
 }}
 
-/* Força a barra lateral a ter a mesma cor de fundo */
 [data-testid="stSidebar"] {{
     background-color: #0c241e !important;
 }}
@@ -223,9 +221,19 @@ def criar_usuarios_teste():
     """Cria usuários padrão locais com perfil completo."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
+    
+    # CRIA UMA EQUIPE PADRÃO SE NÃO EXISTIR
+    cursor.execute("SELECT id FROM equipes WHERE nome=?", ("EQUIPE TESTE",))
+    if cursor.fetchone() is None:
+        cursor.execute("INSERT INTO equipes (nome, descricao) VALUES (?, ?)", ("EQUIPE TESTE", "Equipe padrão para testes."))
+        conn.commit()
+        
+    cursor.execute("SELECT id FROM equipes WHERE nome=?", ("EQUIPE TESTE",))
+    equipe_teste_id = cursor.fetchone()[0]
+
     usuarios = [
         ("Admin User", "admin", "admin@bjj.local", "00000000000"), 
-        ("Professor User", "professor", "professor@bjj.local", "11111111111"), 
+        ("Professor Responsável", "professor", "professor@bjj.local", "11111111111"), 
         ("Aluno User", "aluno", "aluno@bjj.local", "22222222222")
     ]
     for nome, tipo, email, cpf in usuarios:
@@ -239,6 +247,25 @@ def criar_usuarios_teste():
                 """,
                 (nome, tipo, senha_hash, email, cpf),
             )
+            novo_id = cursor.lastrowid
+            
+            if tipo == 'professor':
+                # VINCULA O PROFESSOR TESTE À EQUIPE TESTE E O TORNA RESPONSÁVEL
+                cursor.execute(
+                    "UPDATE equipes SET professor_responsavel_id=? WHERE id=?", 
+                    (novo_id, equipe_teste_id)
+                )
+                cursor.execute(
+                    "INSERT INTO professores (usuario_id, equipe_id, eh_responsavel, status_vinculo) VALUES (?, ?, 1, 'ativo')",
+                    (novo_id, equipe_teste_id)
+                )
+            elif tipo == 'aluno':
+                # VINCULA O ALUNO TESTE À EQUIPE TESTE (Vínculo pendente para simular o fluxo)
+                 cursor.execute(
+                    "INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, 'Branca', ?, 'ativo')",
+                    (novo_id, equipe_teste_id)
+                )
+
     conn.commit()
     conn.close()
 
@@ -311,400 +338,6 @@ def buscar_endereco_por_cep(cep):
 def autenticar_local(usuario_ou_email, senha):
     """
     Atualizado: Autentica o usuário local usando EMAIL ou CPF.
-    """
-    conn = sqlite3.connect(DB_PATH) 
-    cursor = conn.cursor()
-    dados = None
-    
-    try:
-        # Busca por 'email' OU 'cpf' (O nome completo não é mais usado para login)
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (email=? OR cpf=?) AND auth_provider='local'", 
-            (usuario_ou_email, usuario_ou_email)
-        )
-        dados = cursor.fetchone()
-        
-        if dados is not None and dados[3]: # dados[3] é 'senha'
-            # Se a senha existe e é válida
-            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
-                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
-            
-    except Exception as e:
-        st.error(f"Erro de autenticação no DB: {e}")
-        
-    finally:
-        conn.close() 
-        
-    return None
-
-# 4. Funções de busca e criação de usuário
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = sqlite3.connect(DB_PATH) 
-    cursor = conn.cursor()
-    dados = None
-    
-    try:
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-        )
-        dados = cursor.fetchone()
-        
-        if dados:
-            return {
-                "id": dados[0], 
-                "nome": dados[1], 
-                "tipo": dados[2], 
-                "perfil_completo": bool(dados[3])
-            }
-    finally:
-        conn.close()
-        
-    return None
-
-def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    novo_id = None
-    
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit()
-        novo_id = cursor.lastrowid
-        
-    except sqlite3.IntegrityError: # Email já existe
-        pass
-        
-    finally:
-        conn.close()
-        
-    if novo_id:
-        return {"id": novo_id, "email": email, "nome": nome}
-    return None
-
-def buscar_equipes():
-    """Retorna uma lista de tuplas (id, nome) de todas as equipes ativas."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    equipes = cursor.execute("SELECT id, nome FROM equipes WHERE ativo=1").fetchall()
-    conn.close()
-    return equipes
-
-# --- FUNÇÕES DE GESTÃO DO PROFESSOR ---
-
-def get_professor_team_id(usuario_id):
-    """Busca o ID da equipe principal do professor ativo."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    team_id = None
-    try:
-        # Busca a equipe onde o professor está ativo
-        cursor.execute(
-            "SELECT equipe_id FROM professores WHERE usuario_id=? AND status_vinculo='ativo' LIMIT 1",
-            (usuario_id,)
-        )
-        result = cursor.fetchone()
-        if result:
-            team_id = result[0]
-    finally:
-        conn.close()
-    return team_id
-
-def get_alunos_by_equipe(equipe_id):
-    """Busca todos os alunos (e seus status de exame) de uma equipe."""
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    alunos = []
-    try:
-        cursor.execute(
-            """
-            SELECT 
-                a.id as aluno_id, 
-                u.nome as nome_aluno, 
-                u.email, 
-                a.faixa_atual, 
-                a.status_vinculo,
-                a.exame_habilitado,
-                a.data_inicio_exame, 
-                a.data_fim_exame 
-            FROM alunos a
-            JOIN usuarios u ON a.usuario_id = u.id
-            WHERE a.equipe_id=?
-            """,
-            (equipe_id,)
-        )
-        alunos = cursor.fetchall()
-    finally:
-        conn.close()
-    return alunos
-
-def habilitar_exame_aluno(aluno_id, data_inicio_str, data_fim_str):
-    """Habilita o exame e define o período na tabela alunos."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            UPDATE alunos 
-            SET exame_habilitado=1, data_inicio_exame=?, data_fim_exame=?
-            WHERE id=?
-            """,
-            (data_inicio_str, data_fim_str, aluno_id)
-        )
-        conn.commit()
-        return True
-    except Exception as e:
-        print(f"Erro ao habilitar exame: {e}")
-        return False
-    finally:
-        conn.close()
-
-
-# =========================================
-# FUNÇÕES DE TELA E ROTEAMENTO
-# =========================================
-
-def carregar_questoes(tema):
-    """Carrega as questões do arquivo JSON correspondente."""
-    path = f"questions/{tema}.json"
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
-
-
-def salvar_questoes(tema, questoes):
-    """Sava lista de questões no arquivo JSON."""
-    os.makedirs("questions", exist_ok=True)
-    with open(f"questions/{tema}.json", "w", encoding="utf-8") as f:
-        json.dump(questoes, f, indent=4, ensure_ascii=False)
-
-
-def gerar_codigo_verificacao():
-    """Gera código de verificação único no formato BJJDIGITAL-ANO-XXXX."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    # Conta quantos certificados já foram gerados
-    cursor.execute("SELECT COUNT(*) FROM resultados")
-    total = cursor.fetchone()[0] + 1
-    conn.close()
-
-    ano = datetime.now().year
-    codigo = f"BJJDIGITAL-{ano}-{total:04d}" # Exemplo: BJJDIGITAL-2025-0001
-    return codigo
-
-def normalizar_nome(nome):
-    """Remove acentos e formata o nome para uso em arquivos."""
-    return "_".join(
-        unicodedata.normalize("NFKD", nome)
-        .encode("ASCII", "ignore")
-        .decode()
-        .split()
-    ).lower()
-
-
-def gerar_qrcode(codigo):
-    """Gera QR Code com link de verificação oficial do BJJ Digital."""
-    os.makedirs("temp_qr", exist_ok=True)
-    caminho_qr = f"temp_qr/{codigo}.png"
-
-    # URL de verificação oficial
-    base_url = "https://bjjdigital.netlify.app/verificar"
-    link_verificacao = f"{base_url}?codigo={codigo}"
-
-    # Criação do QR
-    qr = qrcode.QRCode(
-        version=1,
-        box_size=10,
-        border=4,
-        error_correction=qrcode.constants.ERROR_CORRECT_H
-    )
-    qr.add_data(link_verificacao)
-    qr.make(fit=True)
-
-    img = qr.make_image(fill_color="black", back_color="white")
-    img.save(caminho_qr)
-
-    return caminho_qr
-
-
-def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    """Gera certificado oficial do exame de faixa com assinatura caligráfica (Allura)."""
-    pdf = FPDF("L", "mm", "A4") # Layout paisagem
-    pdf.set_auto_page_break(False)
-    pdf.add_page()
-
-    # 🎨 Cores e layout base
-    dourado, preto, branco = (218, 165, 32), (40, 40, 40), (255, 255, 255)
-    percentual = int((pontuacao / total) * 100)
-    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
-
-    # Fundo branco e moldura dourada dupla
-    pdf.set_fill_color(*branco)
-    pdf.rect(0, 0, 297, 210, "F")
-    pdf.set_draw_color(*dourado)
-    pdf.set_line_width(2)
-    pdf.rect(8, 8, 281, 194)
-    pdf.set_line_width(0.8)
-    pdf.rect(11, 11, 275, 188)
-
-    # Cabeçalho
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "BI", 30)
-    pdf.set_y(25)
-    pdf.cell(0, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C")
-    pdf.set_draw_color(*dourado)
-    pdf.line(30, 35, 268, 35)
-
-    # Logo
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        pdf.image(logo_path, x=133, y=40, w=32)
-
-    # ---------------------------------------------------
-    # BLOCO CENTRAL
-    # ---------------------------------------------------
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 16)
-    pdf.set_y(80)
-    pdf.cell(0, 10, "Certificamos que o(a) aluno(a)", align="C")
-
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 24)
-    pdf.set_y(92)
-    pdf.cell(0, 10, usuario.upper(), align="C")
-
-    cores_faixa = {
-        "Cinza": (169, 169, 169),
-        "Amarela": (255, 215, 0),
-        "Laranja": (255, 140, 0),
-        "Verde": (0, 128, 0),
-        "Azul": (30, 144, 255),
-        "Roxa": (128, 0, 128),
-        "Marrom": (139, 69, 19),
-        "Preta": (0, 0, 0),
-    }
-    cor_faixa = cores_faixa.get(faixa, preto)
-
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 16)
-    pdf.set_y(108)
-    pdf.cell(0, 8, "concluiu o exame teórico para a faixa", align="C")
-
-    pdf.set_text_color(*cor_faixa)
-    pdf.set_font("Helvetica", "B", 20)
-    pdf.set_y(118)
-    pdf.cell(0, 8, faixa.upper(), align="C")
-
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 22)
-    pdf.set_y(132)
-    pdf.cell(0, 8, "APROVADO", align="C")
-
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 14)
-    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
-    pdf.set_y(142)
-    pdf.cell(0, 6, texto_final, align="C")
-
-    # ---------------------------------------------------
-    # SELO E QR CODE
-    # ---------------------------------------------------
-    selo_path = "assets/selo_dourado.png"
-    if os.path.exists(selo_path):
-        pdf.image(selo_path, x=23, y=155, w=30)
-
-    caminho_qr = gerar_qrcode(codigo)
-    pdf.image(caminho_qr, x=245, y=155, w=25)
-
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_xy(220, 180)
-    pdf.cell(60, 6, f"Código: {codigo}", align="R")
-
-    # ---------------------------------------------------
-    # ASSINATURA DO PROFESSOR (Allura)
-    # ---------------------------------------------------
-    if professor:
-        fonte_assinatura = "assets/fonts/Allura-Regular.ttf"
-        if os.path.exists(fonte_assinatura):
-            try:
-                pdf.add_font("Assinatura", "", fonte_assinatura, uni=True)
-                pdf.set_font("Assinatura", "", 30)
-            except Exception:
-                pdf.set_font("Helvetica", "I", 18)
-        else:
-            pdf.set_font("Helvetica", "I", 18)
-
-        pdf.set_text_color(*preto)
-        pdf.set_y(158)
-        pdf.cell(0, 12, professor, align="C")
-
-        pdf.set_draw_color(*dourado)
-        pdf.line(100, 173, 197, 173)
-
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_y(175)
-        pdf.cell(0, 6, "Assinatura do Professor Responsável", align="C")
-
-    # ---------------------------------------------------
-    # RODAPÉ
-    # ---------------------------------------------------
-    pdf.set_draw_color(*dourado)
-    pdf.line(30, 190, 268, 190)
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.set_y(190)
-    pdf.cell(0, 6, "Plataforma BJJ Digital", align="C")
-
-    # ---------------------------------------------------
-    # EXPORTAÇÃO
-    # ---------------------------------------------------
-    os.makedirs("relatorios", exist_ok=True)
-    nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
-    caminho_pdf = os.path.abspath(f"relatorios/{nome_arquivo}")
-    pdf.output(caminho_pdf)
-    return caminho_pdf
-
-def carregar_todas_questoes():
-    """Carrega todas as questões de todos os temas, adicionando o campo 'tema'."""
-    todas = []
-    os.makedirs("questions", exist_ok=True)
-
-    for arquivo in os.listdir("questions"):
-        if arquivo.endswith(".json"):
-            tema = arquivo.replace(".json", "")
-            caminho = f"questions/{arquivo}"
-
-            try:
-                with open(caminho, "r", encoding="utf-8") as f:
-                    questoes = json.load(f)
-            except json.JSONDecodeError as e:
-                st.error(f"⚠️ Erro ao carregar o arquivo '{arquivo}'. Verifique o formato JSON.")
-                st.code(str(e))
-                continue # ignora o arquivo problemático
-
-            for q in questoes:
-                q["tema"] = tema
-                todas.append(q)
-
-    return todas
-
-# ------------------------------------
-
-# 3. Autenticação local (Login/Senha)
-def autenticar_local(usuario_ou_email, senha):
-    """
-    Atualizado: Autentica o usuário local usando EMAIL ou CPF.
-    (Conexão fechada após a operação)
     """
     conn = sqlite3.connect(DB_PATH) 
     cursor = conn.cursor()
@@ -1313,7 +946,6 @@ def painel_professor():
                             st.rerun()
 
     # 3. FECHAMENTO DA CONEXÃO
-    # 🚨 PONTO CRÍTICO: Fechar a conexão apenas no final, após todas as operações de banco.
     conn.close() 
 
 def gestao_equipes():
@@ -1606,299 +1238,6 @@ def gestao_usuarios(usuario_logado):
                 st.info(f"Não é possível redefinir a senha de usuários via '{user_data['auth_provider']}'.")
     
     conn.close()
-
-def gestao_questoes():
-    st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
-
-    temas_existentes = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
-    tema_selecionado = st.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
-
-    if tema_selecionado == "Novo Tema":
-        tema = st.text_input("Digite o nome do novo tema:")
-    else:
-        tema = tema_selecionado
-
-    questoes = carregar_questoes(tema) if tema else []
-
-    st.markdown("### ✍️ Adicionar nova questão")
-    with st.expander("Expandir para adicionar questão", expanded=False):
-        pergunta = st.text_area("Pergunta:")
-        opcoes = [st.text_input(f"Alternativa {letra}:", key=f"opt_{letra}") for letra in ["A", "B", "C", "D", "E"]]
-        resposta = st.selectbox("Resposta correta:", ["A", "B", "C", "D", "E"])
-        imagem = st.text_input("Caminho da imagem (opcional):")
-        video = st.text_input("URL do vídeo (opcional):")
-
-        if st.button("💾 Salvar Questão"):
-            if pergunta.strip() and tema.strip():
-                nova = {
-                    "pergunta": pergunta.strip(),
-                    "opcoes": [f"{letra}) {txt}" for letra, txt in zip(["A", "B", "C", "D", "E"], opcoes) if txt.strip()],
-                    "resposta": resposta,
-                    "imagem": imagem.strip(),
-                    "video": video.strip(),
-                }
-                questoes.append(nova)
-                salvar_questoes(tema, questoes)
-                st.success("Questão adicionada com sucesso! ✅")
-                st.rerun()
-            else:
-                st.error("A pergunta e o nome do tema não podem estar vazios.")
-
-    st.markdown("### 📚 Questões cadastradas")
-    if not questoes:
-        st.info("Nenhuma questão cadastrada para este tema ainda.")
-    else:
-        for i, q in enumerate(questoes, 1):
-            st.markdown(f"**{i}. {q['pergunta']}**")
-            for alt in q["opcoes"]:
-                st.markdown(f"- {alt}")
-            st.markdown(f"**Resposta:** {q['resposta']}")
-            if st.button(f"🗑️ Excluir questão {i}", key=f"del_{i}"):
-                questoes.pop(i - 1)
-                salvar_questoes(tema, questoes)
-                st.warning("Questão removida.")
-                st.rerun()
-
-def tela_inicio():
-    
-    # 1. 👇 FUNÇÃO DE CALLBACK PARA NAVEGAÇÃO
-    def navigate_to(page_name):
-        st.session_state.menu_selection = page_name
-
-    # Logo centralizado
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        with open(logo_path, "rb") as f:
-            logo_base64 = base64.b64encode(f.read()).decode()
-        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>"
-    else:
-        logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
-
-    st.markdown(f"""
-        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:30px;'>
-            {logo_html}
-            <h2 style='color:{COR_DESTAQUE};text-align:center;'>Painel BJJ Digital</h2>
-            <p style='color:{COR_TEXTO};text-align:center;font-size:1.1em;'>Bem-vindo(a), {st.session_state.usuario['nome'].title()}! Use a navegação acima ou os cartões abaixo.</p>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # --- Cartões Principais (Para todos) ---
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        with st.container(border=True):
-            st.markdown("<h3>🤼 Modo Rola</h3>", unsafe_allow_html=True) 
-            st.markdown("""<p style='text-align: center; min-height: 50px;'>Treino livre com questões aleatórias de todos os temas.</p> """, unsafe_allow_html=True)
-            # 2. 👇 BOTÃO DE NAVEGAÇÃO
-            st.button("Acessar", key="nav_rola", on_click=navigate_to, args=("Modo Rola",), use_container_width=True)
-
-    with col2:
-        with st.container(border=True):
-            st.markdown("<h3>🥋 Exame de Faixa</h3>", unsafe_allow_html=True)
-            st.markdown("""<p style='text-align: center; min-height: 50px;'>Realize sua avaliação teórica oficial quando liberada.</p> """, unsafe_allow_html=True)
-            # 2. 👇 BOTÃO DE NAVEGAÇÃO
-            st.button("Acessar", key="nav_exame", on_click=navigate_to, args=("Exame de Faixa",), use_container_width=True)
-            
-    with col3:
-        with st.container(border=True):
-            st.markdown("<h3>🏆 Ranking</h3>", unsafe_allow_html=True)
-            st.markdown("""<p style='text-align: center; min-height: 50px;'>Veja sua posição e a dos seus colegas no Modo Rola.</p> """, unsafe_allow_html=True)
-            # 2. 👇 BOTÃO DE NAVEGAÇÃO
-            st.button("Acessar", key="nav_ranking", on_click=navigate_to, args=("Ranking",), use_container_width=True)
-
-    # --- Cartões de Gestão (Admin/Professor) ---
-    if st.session_state.usuario["tipo"] in ["admin", "professor"]:
-        st.markdown("---")
-        st.markdown(f"<h2 style='color:{COR_DESTAQUE};text-align:center; margin-top:30px;'>Painel de Gestão</h2>", unsafe_allow_html=True)
-        
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            with st.container(border=True):
-                st.markdown("<h3>🧠 Gestão de Questões</h3>", unsafe_allow_html=True)
-                st.markdown("""<p style='text-align: center; min-height: 50px;'>Adicione, edite ou remova questões dos temas.</p> """, unsafe_allow_html=True)
-                # 2. 👇 BOTÃO DE NAVEGAÇÃO
-                st.button("Gerenciar", key="nav_gest_questoes", on_click=navigate_to, args=("Gestão de Questões",), use_container_width=True)
-        with c2:
-            with st.container(border=True):
-                st.markdown("<h3>🏛️ Gestão de Equipes</h3>", unsafe_allow_html=True)
-                st.markdown("""<p style='text-align: center; min-height: 50px;'>Gerencie equipes, professores e alunos vinculados.</p> """, unsafe_allow_html=True)
-                # 2. 👇 BOTÃO DE NAVEGAÇÃO
-                st.button("Gerenciar", key="nav_gest_equipes", on_click=navigate_to, args=("Gestão de Equipes",), use_container_width=True)
-        with c3:
-            with st.container(border=True):
-                st.markdown("<h3>📜 Gestão de Exame</h3>", unsafe_allow_html=True)
-                st.markdown("""<p style='text-align: center; min-height: 50px;'>Monte as provas oficiais selecionando questões.</p> """, unsafe_allow_html=True)
-                # 2. 👇 BOTÃO DE NAVEGAÇÃO
-                st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
-
-def tela_meu_perfil(usuario_logado):
-    """Página para o usuário editar seu próprio perfil e senha."""
-    
-    st.markdown("<h1 style='color:#FFD700;'>👤 Meu Perfil</h1>", unsafe_allow_html=True)
-    st.markdown("Atualize suas informações pessoais e gerencie sua senha de acesso.")
-
-    user_id_logado = usuario_logado["id"]
-    
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    
-    # 1. Busca os dados mais recentes do usuário no banco
-    cursor.execute("SELECT * FROM usuarios WHERE id=?", (user_id_logado,))
-    user_data = cursor.fetchone()
-    
-    if not user_data:
-        st.error("Erro: Não foi possível carregar os dados do seu perfil.")
-        conn.close()
-        return
-
-    # --- Expander 1: Informações Pessoais ---
-    with st.expander("📝 Informações Pessoais", expanded=True):
-        with st.form(key="form_edit_perfil"):
-            st.markdown("#### Editar Informações")
-            
-            novo_nome = st.text_input("Nome Completo:", value=user_data['nome'])
-            novo_email = st.text_input("Email:", value=user_data['email'])
-            
-            if user_data['auth_provider'] == 'local':
-                novo_cpf = st.text_input("CPF:", value=user_data['cpf'] or "", help="Obrigatório para usuários de login local.")
-            else:
-                novo_cpf = user_data['cpf'] # Mantém o valor
-                st.text_input("CPF:", value=user_data['cpf'] or "Não aplicável (Login Google)", disabled=True)
-            
-            st.text_input("Tipo de Perfil:", value=user_data['tipo_usuario'].capitalize(), disabled=True)
-            
-            submitted_info = st.form_submit_button("💾 Salvar Alterações", use_container_width=True)
-            
-            if submitted_info:
-                if not novo_nome or not novo_email:
-                    st.warning("Nome e Email são obrigatórios.")
-                elif user_data['auth_provider'] == 'local' and not validar_cpf(novo_cpf):
-                    st.error("CPF inválido. Por favor, corrija.")
-                else:
-                    try:
-                        cursor.execute(
-                            "UPDATE usuarios SET nome=?, email=?, cpf=? WHERE id=?",
-                            (novo_nome, novo_email, novo_cpf, user_id_logado)
-                        )
-                        conn.commit()
-                        st.success("Dados atualizados com sucesso!")
-                        
-                        # ATUALIZA A SESSÃO para refletir o novo nome
-                        st.session_state.usuario['nome'] = novo_nome
-                        st.rerun() # Recarrega a página
-                        
-                    except sqlite3.IntegrityError:
-                        st.error(f"Erro: O email '{novo_email}' ou CPF '{novo_cpf}' já está em uso por outro usuário.")
-                    except Exception as e:
-                        st.error(f"Ocorreu um erro: {e}")
-
-    # --- Expander 2: Alteração de Senha (Somente para 'local') ---
-    if user_data['auth_provider'] == 'local':
-        with st.expander("🔑 Alterar Senha", expanded=False):
-            with st.form(key="form_change_pass"):
-                st.markdown("#### Redefinir Senha")
-                
-                senha_atual = st.text_input("Senha Atual:", type="password")
-                nova_senha = st.text_input("Nova Senha:", type="password")
-                confirmar_senha = st.text_input("Confirmar Nova Senha:", type="password")
-                
-                submitted_pass = st.form_submit_button("🔑 Alterar Senha", use_container_width=True)
-                
-                if submitted_pass:
-                    if not senha_atual or not nova_senha or not confirmar_senha:
-                        st.warning("Por favor, preencha todos os campos de senha.")
-                    elif nova_senha != confirmar_senha:
-                        st.error("As novas senhas não coincidem.")
-                    else:
-                        # Verifica a senha atual
-                        hash_atual_db = user_data['senha']
-                        if bcrypt.checkpw(senha_atual.encode(), hash_atual_db.encode()):
-                            # Se a senha atual estiver correta, atualiza
-                            novo_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
-                            cursor.execute(
-                                "UPDATE usuarios SET senha=? WHERE id=?",
-                                (novo_hash, user_id_logado)
-                            )
-                            conn.commit()
-                            st.success("Senha alterada com sucesso!")
-                        else:
-                            st.error("A 'Senha Atual' está incorreta.")
-    else:
-        # Mostra esta mensagem para usuários do Google
-        st.info(f"Seu login é gerenciado pelo **{user_data['auth_provider'].capitalize()}**. Para alterar sua senha, você deve fazê-lo diretamente na sua conta Google.")
-
-    # --- Expander 3: Endereço ---
-    with st.expander("📍 Endereço (Opcional)", expanded=False):
-        with st.form(key="form_edit_endereco"):
-            # Preenche com dados da sessão para edição
-            cep_val = st.text_input("CEP:", value=user_data['cep'] or "", key="edit_cep_input")
-            
-            # Botão de busca de CEP com callback para atualizar o cache e o estado da aplicação
-            def handle_cep_search():
-                endereco = buscar_endereco_por_cep(st.session_state.edit_cep_input)
-                if endereco:
-                    st.session_state["endereco_cache"] = endereco
-                    st.session_state.logradouro_val = endereco.get('logradouro', '')
-                    st.session_state.bairro_val = endereco.get('bairro', '')
-                    st.session_state.cidade_val = endereco.get('localidade', '')
-                    st.session_state.estado_val = endereco.get('uf', '')
-                    # Reinicializa o número com o valor do DB, a busca não muda o número
-                    st.session_state.numero_val = user_data['numero'] or "" 
-                    st.success("Endereço encontrado! Lembre-se de clicar em 'Salvar Endereço' no final.")
-                else:
-                    st.error("CEP não encontrado ou inválido.")
-
-            st.button("🔍 Buscar CEP", type="secondary", on_click=handle_cep_search)
-
-            # Inicializa estados de sessão para campos de edição (usado para persistir o resultado do CEP)
-            if 'logradouro_val' not in st.session_state:
-                st.session_state.logradouro_val = user_data['logradouro'] or ""
-            if 'numero_val' not in st.session_state: # NOVO CAMPO
-                st.session_state.numero_val = user_data['numero'] or ""
-            if 'bairro_val' not in st.session_state:
-                st.session_state.bairro_val = user_data['bairro'] or ""
-            if 'cidade_val' not in st.session_state:
-                st.session_state.cidade_val = user_data['cidade'] or ""
-            if 'estado_val' not in st.session_state:
-                st.session_state.estado_val = user_data['estado'] or ""
-
-            
-            novo_logradouro = st.text_input("Logradouro (Rua/Av):", value=st.session_state.logradouro_val)
-            col_num, col_comp = st.columns(2)
-            # NOVO CAMPO: Número do endereço
-            novo_numero = col_num.text_input("Número:", value=st.session_state.numero_val) 
-            novo_complemento = col_comp.text_input("Complemento:", value="") # Não salvo no DB atualmente
-
-            novo_bairro = st.text_input("Bairro:", value=st.session_state.bairro_val)
-            col_cid, col_est = st.columns(2)
-            novo_cidade = col_cid.text_input("Cidade:", value=st.session_state.cidade_val)
-            novo_estado = col_est.text_input("Estado (UF):", value=st.session_state.estado_val)
-
-
-            if st.form_submit_button("💾 Salvar Endereço", type="primary"):
-                cep_final = st.session_state.edit_cep_input.strip()
-                cursor.execute(
-                    "UPDATE usuarios SET cep=?, logradouro=?, numero=?, bairro=?, cidade=?, estado=? WHERE id=?",
-                    (cep_final, novo_logradouro, novo_numero, novo_bairro, novo_cidade, novo_estado, user_id_logado)
-                )
-                conn.commit()
-                # Limpa o cache após salvar
-                if "endereco_cache" in st.session_state: del st.session_state["endereco_cache"]
-                # Força a atualização dos estados para refletir o DB
-                st.session_state.logradouro_val = novo_logradouro
-                st.session_state.numero_val = novo_numero # Atualiza o estado
-                st.session_state.bairro_val = novo_bairro
-                st.session_state.cidade_val = novo_cidade
-                st.session_state.estado_val = novo_estado
-
-                st.success("Endereço salvo com sucesso!")
-                st.rerun()
-
-    conn.close()
-
 
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>🥋 Gestão de Exame de Faixa</h1>", unsafe_allow_html=True)
