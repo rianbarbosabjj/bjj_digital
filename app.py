@@ -272,25 +272,23 @@ def buscar_usuario_por_email(email_ou_cpf):
     return None
 
 def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit()
-        novo_id = cursor.lastrowid
-        conn.close()
-        return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
-        conn.close()
-        return None
-
-
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit()
+        novo_id = cursor.lastrowid
+        conn.close()
+        return {"id": novo_id, "email": email, "nome": nome}
+    except sqlite3.IntegrityError: # Email já existe
+        conn.close()
+        return None
 # 5. Usuários de teste (Atualizado)
 def criar_usuarios_teste():
     """Cria usuários padrão locais com perfil completo."""
