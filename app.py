@@ -1084,51 +1084,108 @@ def gestao_equipes():
 
     # === 🥋 ABA 3 - ALUNOS ===
     with aba3:
-        st.subheader("Vincular aluno a professor e equipe")
+    st.subheader("Vincular aluno a professor e equipe")
 
-        alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
-        professores_df = pd.read_sql_query("""
-            SELECT p.id, u.nome AS nome_professor, p.equipe_id 
-            FROM professores p 
-            JOIN usuarios u ON p.usuario_id = u.id 
-            WHERE p.status_vinculo='ativo'
-        """, conn)
-        equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
+    alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
+    
+    # 🚨 CORREÇÃO: Nova consulta que inclui Professores Responsáveis e Professores Auxiliares
+    professores_disponiveis_df = pd.read_sql_query("""
+        SELECT 
+            u.id AS usuario_id, 
+            u.nome AS nome_professor, 
+            e.nome AS nome_equipe,
+            e.id AS equipe_id
+        FROM usuarios u
+        -- Junta com a tabela 'equipes' onde ele é responsável
+        LEFT JOIN equipes e ON u.id = e.professor_responsavel_id
+        WHERE u.tipo_usuario = 'professor'
+        
+        UNION 
+        
+        SELECT 
+            u.id AS usuario_id, 
+            u.nome AS nome_professor, 
+            e.nome AS nome_equipe,
+            e.id AS equipe_id
+        FROM professores p
+        JOIN usuarios u ON p.usuario_id = u.id
+        JOIN equipes e ON p.equipe_id = e.id
+        WHERE p.status_vinculo='ativo' AND u.tipo_usuario = 'professor'
+    """, conn)
+    
+    # Remove duplicatas (professores que são responsáveis e auxiliares) e formata a lista
+    professores_disponiveis_df = professores_disponiveis_df.drop_duplicates(subset=['usuario_id', 'equipe_id'])
+    
+    # Converte o ID do usuário para o ID do registro na tabela 'professores'
+    # Isto é necessário porque a tabela 'alunos' armazena a PK da tabela 'professores'.
+    professores_df = pd.read_sql_query("SELECT id, usuario_id FROM professores WHERE status_vinculo='ativo'", conn)
+    
+    # Garante que a lista de equipes está correta
+    equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
 
-        if alunos_df.empty or professores_df.empty or equipes_df.empty:
-            st.warning("Cadastre alunos, professores e equipes antes de vincular.")
+    if alunos_df.empty or professores_disponiveis_df.empty or equipes_df.empty:
+        st.warning("Cadastre alunos, professores e equipes primeiro.")
+    else:
+        aluno = st.selectbox("🥋 Aluno:", alunos_df["nome"])
+        
+        # Filtra professores apenas para as equipes ativas
+        professores_ativos = sorted(professores_disponiveis_df["nome_professor"].unique().tolist())
+        professor_nome = st.selectbox("👩‍🏫 Professor vinculado (nome):", professores_ativos)
+        
+        equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"])
+
+        aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
+        equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
+
+        # 🎯 MUDANÇA CRÍTICA AQUI: Encontrar a PK da tabela 'professores' (p.id)
+        # O Admin deve escolher o Professor de uma equipe que ele está gerenciando.
+        
+        # 1. Encontra o usuario_id do professor selecionado
+        prof_usuario_id = int(professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0])
+
+        # 2. Encontra a PK na tabela 'professores' (p.id) que corresponde a esse usuário e (opcionalmente) equipe
+        # Como o vínculo de aluno não depende da equipe do professor, buscamos o ID ativo do professor.
+        # Se for professor responsável, a PK na tabela 'professores' é o seu próprio registro, que deve existir.
+        
+        cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (prof_usuario_id,))
+        prof_pk_id_result = cursor.fetchone()
+
+        if prof_pk_id_result:
+             professor_id = prof_pk_id_result[0]
         else:
-            aluno = st.selectbox("🥋 Aluno:", alunos_df["nome"])
-            professor_nome = st.selectbox("👩‍🏫 Professor vinculado (nome):", professores_df["nome_professor"])
-            equipe_aluno = st.selectbox("🏫 Equipe do aluno:", equipes_df["nome"])
+             st.error(f"Erro: O professor {professor_nome} não tem um vínculo ativo na tabela de professores. Não é possível vincular alunos.")
+             professor_id = None # Impede a inserção
 
-            aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
-            professor_id = int(professores_df.loc[professores_df["nome_professor"] == professor_nome, "id"].values[0])
-            equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
-
-            if st.button("✅ Vincular Aluno"):
+        if professor_id and st.button("✅ Vincular Aluno"):
+            # Verifica se o aluno já está vinculado
+            cursor.execute("SELECT id FROM alunos WHERE usuario_id=?", (aluno_id,))
+            if cursor.fetchone():
+                st.warning("Este aluno já possui um registro de vínculo. Atualize-o em vez de criar um novo.")
+            else:
                 cursor.execute("""
                     INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
                     VALUES (?, ?, ?, ?, ?, 'ativo')
-                """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
+                """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id)) # Status 'ativo' pois o Admin está forçando o vínculo
                 conn.commit()
                 st.success(f"Aluno {aluno} vinculado à equipe {equipe_aluno} sob orientação de {professor_nome}.")
                 st.rerun()
 
-        st.markdown("---")
-        st.subheader("Alunos vinculados")
-        alunos_vinc_df = pd.read_sql_query("""
-            SELECT a.id, u.nome AS aluno, e.nome AS equipe, up.nome AS professor
-            FROM alunos a
-            JOIN usuarios u ON a.usuario_id = u.id
-            JOIN equipes e ON a.equipe_id = e.id
-            JOIN professores p ON a.professor_id = p.id
-            JOIN usuarios up ON p.usuario_id = up.id
-        """, conn)
-        if alunos_vinc_df.empty:
-            st.info("Nenhum aluno vinculado ainda.")
-        else:
-            st.dataframe(alunos_vinc_df, use_container_width=True)
+    st.markdown("---")
+    st.subheader("Alunos vinculados")
+    # ... (Restante da exibição de alunos vinculados)
+    
+    alunos_vinc_df = pd.read_sql_query("""
+        SELECT a.id, u.nome AS aluno, e.nome AS equipe, up.nome AS professor
+        FROM alunos a
+        JOIN usuarios u ON a.usuario_id = u.id
+        JOIN equipes e ON a.equipe_id = e.id
+        JOIN professores p ON a.professor_id = p.id
+        JOIN usuarios up ON p.usuario_id = up.id
+    """, conn)
+    if alunos_vinc_df.empty:
+        st.info("Nenhum aluno vinculado ainda.")
+    else:
+        st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
 # =========================================
