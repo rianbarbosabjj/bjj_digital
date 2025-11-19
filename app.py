@@ -89,8 +89,10 @@ DB_PATH = os.path.expanduser("~/bjj_digital.db")
 def criar_banco():
     """Cria o banco de dados e suas tabelas, caso não existam."""
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
     cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
 
     # Tabela 'usuarios' ATUALIZADA com NOVO CAMPO 'numero'
     cursor.executescript("""
@@ -177,8 +179,10 @@ if not os.path.exists(DB_PATH):
     criar_banco()
 # Se o banco já existe, adicionamos as novas colunas
 else:
-    conn = sqlite3.connect(DB_PATH)
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
     cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
     # Adicionar CPF se não existir
     try:
         cursor.execute("SELECT cpf FROM usuarios LIMIT 1")
@@ -301,8 +305,10 @@ def autenticar_local(usuario_ou_email, senha):
     """
     Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
     """
-    conn = sqlite3.connect(DB_PATH)
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
     cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
     
     # Busca por 'nome' OU 'email' OU 'cpf'
     cursor.execute(
@@ -321,8 +327,10 @@ def autenticar_local(usuario_ou_email, senha):
 # 4. Funções de busca e criação de usuário
 def buscar_usuario_por_email(email):
     """Busca um usuário pelo email e retorna seus dados."""
-    conn = sqlite3.connect(DB_PATH)
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
     cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
     cursor.execute(
         "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
     )
@@ -339,8 +347,10 @@ def buscar_usuario_por_email(email):
 
 def criar_usuario_parcial_google(email, nome):
     """Cria um registro inicial para um novo usuário do Google."""
-    conn = sqlite3.connect(DB_PATH)
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
     cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
     try:
         cursor.execute(
             """
@@ -360,8 +370,10 @@ def criar_usuario_parcial_google(email, nome):
 # 5. Usuários de teste (Atualizado)
 def criar_usuarios_teste():
     """Cria usuários padrão locais com perfil completo."""
-    conn = sqlite3.connect(DB_PATH)
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
     cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
     usuarios = [
         ("admin", "admin", "admin@bjj.local", "00000000000"), 
         ("professor", "professor", "professor@bjj.local", "11111111111"), 
@@ -404,9 +416,10 @@ def salvar_questoes(tema, questoes):
 
 def gerar_codigo_verificacao():
     """Gera código de verificação único no formato BJJDIGITAL-ANO-XXXX."""
-    conn = sqlite3.connect(DB_PATH)
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
     cursor = conn.cursor()
-    
+    cursor.execute(...)
+    conn.commit()
     # Conta quantos certificados já foram gerados
     cursor.execute("SELECT COUNT(*) FROM resultados")
     total = cursor.fetchone()[0] + 1
@@ -689,7 +702,7 @@ def modo_rola(usuario_logado):
         st.markdown(f"## Resultado Final: {percentual}% de acertos ({acertos}/{total})")
 
         # 🔹 Salva resultado no banco
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(DB_PATH, timeout=10)
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO rola_resultados (usuario, faixa, tema, acertos, total, percentual)
@@ -707,7 +720,7 @@ def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
 
     # Verifica se o aluno foi liberado para o exame
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     cursor = conn.cursor()
     cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
     dado = cursor.fetchone()
@@ -802,7 +815,7 @@ def exame_de_faixa(usuario_logado):
                 "codigo": codigo
             }
 
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, timeout=10)
             cursor = conn.cursor()
             # [BUGFIX] Salva acertos e total para recriação do PDF
             cursor.execute("""
@@ -843,7 +856,7 @@ def exame_de_faixa(usuario_logado):
 # =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking do Modo Rola</h1>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     df = pd.read_sql_query("SELECT * FROM rola_resultados", conn)
     conn.close()
 
@@ -898,7 +911,7 @@ def painel_professor():
 # =========================================
 def gestao_equipes():
     st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     cursor = conn.cursor()
 
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
@@ -1076,7 +1089,7 @@ def gestao_usuarios(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
     st.markdown("Edite informações, redefina senhas ou altere o tipo de perfil de um usuário.")
 
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     df = pd.read_sql_query(
         "SELECT id, nome, email, cpf, tipo_usuario, auth_provider, perfil_completo FROM usuarios ORDER BY nome", 
         conn
@@ -1339,7 +1352,7 @@ def tela_meu_perfil(usuario_logado):
 
     user_id_logado = usuario_logado["id"]
     
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     
@@ -1601,8 +1614,10 @@ def gestao_exame_de_faixa():
 def meus_certificados(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
 
-    conn = sqlite3.connect(DB_PATH)
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
     cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
     # [BUGFIX] Seleciona acertos e total_questoes
     cursor.execute("""
         SELECT faixa, pontuacao, data, codigo_verificacao, acertos, total_questoes
@@ -1897,8 +1912,10 @@ def tela_login():
                             st.stop()
                         else:
                             # Lógica de salvar no DB
-                            conn = sqlite3.connect(DB_PATH) 
-                            cursor = conn.cursor()
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
                             
                             # Verifica duplicidade de Email ou CPF (Nome completo pode ser duplicado)
                             cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
@@ -2007,8 +2024,10 @@ def tela_completar_cadastro(user_data):
         novo_nome = st.session_state.cadastro_nome
         novo_tipo = "aluno" if st.session_state.cadastro_tipo == "🥋 Sou Aluno" else "professor"
         
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+with sqlite3.connect(DB_PATH, timeout=10) as conn:
+    cursor = conn.cursor()
+    cursor.execute(...)
+    conn.commit()
         
         # 1. Atualiza a tabela 'usuarios'
         try:
@@ -2139,7 +2158,7 @@ def app_principal():
             icons = ["people-fill", "trophy-fill", "patch-check-fill"]
             
             # Lógica para adicionar Exame (se habilitado)
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(DB_PATH, timeout=10)
             cursor = conn.cursor()
             cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
             dado = cursor.fetchone()
