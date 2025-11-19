@@ -319,12 +319,12 @@ def criar_usuario_parcial_google(email, nome):
 # FUNÇÕES AUXILIARES
 # =========================================
 def carregar_questoes(tema):
-    """Carrega as questões do arquivo JSON correspondente."""
-    path = f"questions/{tema}.json"
-    if os.path.exists(path):
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
+    """Carrega as questões do arquivo JSON correspondente.""" # <--- A LINHA 322 CORRIGIDA
+    path = f"questions/{tema}.json"
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
 
 
 def salvar_questoes(tema, questoes):
