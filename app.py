@@ -1192,13 +1192,14 @@ def ranking():
 def painel_professor():
     st.title("🥋 Painel do Professor")
     
+    # 1. ABRIR CONEXÃO ÚNICA NO INÍCIO
+    conn = sqlite3.connect(DB_PATH) 
+    cursor = conn.cursor()
+    
     professor_id = st.session_state.usuario['id']
     usuario_tipo = st.session_state.usuario['tipo']
     
     # Busca a equipe onde o professor LOGADO é o RESPONSÁVEL
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
     equipe_responsavel = cursor.execute(
         "SELECT id, nome FROM equipes WHERE professor_responsavel_id=?", 
         (professor_id,)
@@ -1206,41 +1207,43 @@ def painel_professor():
     
     equipe_id_responsavel = equipe_responsavel[0] if equipe_responsavel else None
     
-    conn.close()
+    # REMOVIDO: conn.close()
+    # A conexão ficará aberta até o final da função.
 
     if not equipe_id_responsavel and usuario_tipo != 'admin':
         st.warning("Você ainda não é o Professor Responsável por uma equipe. Esta seção não está disponível.")
+        # Garante o fechamento da conexão no caso de retorno precoce
+        conn.close()
         return
 
     # --- TABS DE GESTÃO ---
     tab_alunos, tab_aprovacao = st.tabs(["Alunos da Equipe", "Solicitações Pendentes (Professores)"])
 
-    # 1. GESTÃO DE ALUNOS (Mantida)
+    # 1. GESTÃO DE ALUNOS (Listagem e Habilitação de Exame)
     with tab_alunos:
-        st.header(f"Lista de Alunos da Equipe: {equipe_responsavel[1] if equipe_responsavel else 'N/A'}")
-        # (Insira aqui o código completo da listagem de alunos e habilitação de exame que você já tem)
-        # -------------------------------------------------------------
+        equipe_nome = equipe_responsavel[1] if equipe_responsavel else 'N/A'
+        st.header(f"Lista de Alunos da Equipe: {equipe_nome}")
         
         equipe_id = equipe_id_responsavel if equipe_id_responsavel else 0 # Use o ID da equipe
 
         if equipe_id == 0:
-             st.info("Você não é responsável por nenhuma equipe, mas pode usar a 'Gestão de Equipes' no menu superior para visualizar todas as equipes (Apenas Admin).")
-             # Retorna aqui ou mostra uma lista limitada se for Admin
-             if usuario_tipo == 'admin':
-                st.subheader("Administrador: Use a Gestão de Equipes para visualização completa.")
-                # Código para listar todas as equipes do admin
-
+             st.info("Você não é responsável por nenhuma equipe.")
         else:
-            # Lógica de listagem e habilitação de exame que você já tem:
+            # Reutiliza o conn ABERTO para obter os alunos
             dados_alunos = get_alunos_by_equipe(equipe_id)
             df_alunos = pd.DataFrame(dados_alunos)
-
-            # Resto do código da listagem e habilitação de exame...
-            # (Para manter a resposta concisa, assumimos que o restante do código
-            # que habilita o exame e lista os alunos está aqui e usa o `equipe_id` correto)
+            
+            # (O resto da lógica de exibição e habilitação de exame deve estar aqui,
+            # utilizando a variável 'conn' para qualquer query necessária.)
+            
             st.info("A listagem e habilitação de exames para os alunos ficaria aqui.")
+            
+            # Simulação do painel de alunos (para ter algo visível)
+            if not df_alunos.empty:
+                df_display = df_alunos.copy()
+                df_display['Habilitado'] = df_display['exame_habilitado'].apply(lambda x: '✅ Sim' if x else '❌ Não')
+                st.dataframe(df_display[['nome_aluno', 'faixa_atual', 'Habilitado']], hide_index=True)
 
-        # -------------------------------------------------------------
 
     # 2. APROVAÇÃO DE PROFESSORES (NOVA LÓGICA)
     with tab_aprovacao:
@@ -1250,7 +1253,7 @@ def painel_professor():
         else:
             st.header("Solicitações de Ingresso de Professores")
             
-            # 2.1 Buscar solicitações pendentes para a equipe responsável (ou todas para o Admin)
+            # 2.1 Buscar solicitações pendentes (USANDO conn ABERTO)
             query = """
                 SELECT 
                     p.id, u.nome, u.email, e.nome AS equipe_nome
@@ -1265,6 +1268,7 @@ def painel_professor():
                 query += " AND p.equipe_id = ?"
                 params = (equipe_id_responsavel,)
             
+            # USANDO O 'conn' ABERTO AQUI
             professores_pendentes = pd.read_sql_query(query, conn, params=params)
             
             if professores_pendentes.empty:
@@ -1296,6 +1300,8 @@ def painel_professor():
                             st.warning(f"Professor {row['nome']} rejeitado.")
                             st.rerun()
 
+    # 3. FECHAMENTO DA CONEXÃO
+    # 🚨 PONTO CRÍTICO: Fechar a conexão apenas no final, após todas as operações de banco.
     conn.close()
 # =========================================
 # 🏛️ GESTÃO DE EQUIPES (DO SEU PROJETO ORIGINAL)
