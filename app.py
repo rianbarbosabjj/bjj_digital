@@ -93,17 +93,18 @@ def criar_banco():
     cursor = conn.cursor()
 
     # 👈 [MUDANÇA CRÍTICA] Tabela 'usuarios' foi atualizada
-    cursor.executescript("""
-    CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        email TEXT UNIQUE,
-        tipo_usuario TEXT,
-        senha TEXT, -- Nulo para logins sociais
-        auth_provider TEXT DEFAULT 'local', -- 'local', 'google', etc.
-        perfil_completo BOOLEAN DEFAULT 0, -- 0 = Incompleto, 1 = Completo
-        data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
+cursor.executescript("""
+CREATE TABLE IF NOT EXISTS usuarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT,
+    email TEXT UNIQUE,
+    cpf TEXT UNIQUE, -- 👈 Adição da coluna CPF com restrição UNIQUE
+    tipo_usuario TEXT,
+    senha TEXT, -- Nulo para logins sociais
+    auth_provider TEXT DEFAULT 'local',
+    perfil_completo BOOLEAN DEFAULT 0,
+    data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 
     CREATE TABLE IF NOT EXISTS equipes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -196,19 +197,30 @@ oauth_google = OAuth2Component(
 )
 
 # 3. Autenticação local (Login/Senha)
-def autenticar_local(usuario_ou_email, senha):
+def autenticar_local(usuario_email_ou_cpf, senha):
     """
-    Atualizado: Autentica o usuário local usando NOME ou EMAIL.
+    Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
     """
+    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf) # Tenta validar como CPF
+
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     # MUDANÇA CRÍTICA AQUI:
-    # Busca por 'nome' OU 'email'
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
-        (usuario_ou_email, usuario_ou_email) # Passa o mesmo valor para os dois '?'
-    )
+    # Busca por 'nome' OU 'email' OU 'cpf'
+    if cpf_formatado:
+        # Se for um CPF válido, prioriza a busca exata por ele
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=? OR cpf=?) AND auth_provider='local'", 
+            (usuario_email_ou_cpf, usuario_email_ou_cpf, cpf_formatado) 
+        )
+    else:
+         # Caso contrário (usuário ou email), busca nos dois primeiros campos
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
+            (usuario_email_ou_cpf, usuario_email_ou_cpf) 
+        )
+
     dados = cursor.fetchone()
     conn.close()
     
@@ -324,7 +336,22 @@ def normalizar_nome(nome):
         .decode()
         .split()
     ).lower()
-
+def formatar_e_validar_cpf(cpf):
+    """
+    Remove pontuação e verifica se o CPF tem 11 dígitos.
+    Retorna o CPF formatado (somente números) ou None se inválido.
+    """
+    if not cpf:
+        return None
+    
+    # Remove caracteres não numéricos
+    cpf_limpo = ''.join(filter(str.isdigit, cpf))
+    
+    # ⚠️ [Simplificado] Verifica se tem 11 dígitos
+    if len(cpf_limpo) == 11:
+        return cpf_limpo
+    else:
+        return None
 
 def gerar_qrcode(codigo):
     """Gera QR Code com link de verificação oficial do BJJ Digital."""
@@ -969,6 +996,7 @@ def gestao_equipes():
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários, restrita ao Admin."""
     
+    # 🔒 Restrição de Acesso
     if usuario_logado["tipo"] != "admin":
         st.error("Acesso negado. Esta página é restrita aos administradores.")
         return
@@ -977,8 +1005,9 @@ def gestao_usuarios(usuario_logado):
     st.markdown("Edite informações, redefina senhas ou altere o tipo de perfil de um usuário.")
 
     conn = sqlite3.connect(DB_PATH)
+    # 🔎 Seleciona o CPF e o ID para uso na edição
     df = pd.read_sql_query(
-        "SELECT id, nome, email, tipo_usuario, auth_provider, perfil_completo FROM usuarios ORDER BY nome", 
+        "SELECT id, nome, email, cpf, tipo_usuario, auth_provider, perfil_completo FROM usuarios ORDER BY nome", 
         conn
     )
 
@@ -997,13 +1026,8 @@ def gestao_usuarios(usuario_logado):
 
     if nome_selecionado:
         try:
-            # ==========================================================
-            # 👈 [CORREÇÃO APLICADA AQUI]
-            # Forçamos o ID a ser um 'int' padrão do Python.
-            # ==========================================================
+            # 1. Recupera o ID
             user_id_selecionado = int(df[df["nome"] == nome_selecionado]["id"].values[0])
-            # ==========================================================
-
         except IndexError:
             st.error("Usuário não encontrado no DataFrame. Tente recarregar a página.")
             conn.close()
@@ -1012,12 +1036,11 @@ def gestao_usuarios(usuario_logado):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Esta consulta agora usará o 'int' correto
+        # 2. Busca dados completos
         cursor.execute("SELECT * FROM usuarios WHERE id=?", (user_id_selecionado,))
         user_data = cursor.fetchone()
         
         if not user_data:
-            # Se ainda der erro aqui, o problema é mais complexo, mas a chance é mínima.
             st.error("Usuário não encontrado no banco de dados. (ID não correspondeu)")
             conn.close()
             return
@@ -1030,6 +1053,9 @@ def gestao_usuarios(usuario_logado):
                 col1, col2 = st.columns(2)
                 novo_nome = col1.text_input("Nome:", value=user_data['nome'])
                 novo_email = col2.text_input("Email:", value=user_data['email'])
+                
+                # 🆕 NOVO CAMPO CPF
+                novo_cpf_input = st.text_input("CPF:", value=user_data['cpf'] or "")
                 
                 opcoes_tipo = ["aluno", "professor", "admin"]
                 tipo_atual_db = user_data['tipo_usuario']
@@ -1052,15 +1078,25 @@ def gestao_usuarios(usuario_logado):
                 submitted_info = st.form_submit_button("💾 Salvar Alterações", use_container_width=True)
                 
                 if submitted_info:
+                    # ⚠️ VALIDAÇÃO DO CPF (se não estiver vazio)
+                    cpf_editado = formatar_e_validar_cpf(novo_cpf_input) if novo_cpf_input else None
+
+                    if novo_cpf_input and not cpf_editado:
+                        st.error("CPF inválido na edição. Por favor, corrija o formato (11 dígitos).")
+                        conn.close()
+                        return
+                        
                     try:
+                        # 3. Executa o UPDATE (incluindo o CPF)
                         cursor.execute(
-                            "UPDATE usuarios SET nome=?, email=?, tipo_usuario=? WHERE id=?",
-                            (novo_nome, novo_email, novo_tipo, user_id_selecionado)
+                            "UPDATE usuarios SET nome=?, email=?, cpf=?, tipo_usuario=? WHERE id=?",
+                            (novo_nome, novo_email, cpf_editado, novo_tipo, user_id_selecionado)
                         )
                         conn.commit()
                         st.success("Dados do usuário atualizados com sucesso!")
+                        st.rerun() # Recarrega para refletir a mudança no DataFrame
                     except sqlite3.IntegrityError:
-                        st.error(f"Erro: O email '{novo_email}' já está em uso por outro usuário.")
+                        st.error(f"Erro: O email '{novo_email}' ou o CPF já está em uso por outro usuário.")
                     except Exception as e:
                         st.error(f"Ocorreu um erro: {e}")
 
@@ -1224,16 +1260,13 @@ def tela_inicio():
                 st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
 
 # =========================================
-# 🥋 GESTÃO DE EXAME DE FAIXA (DO SEU PROJETO ORIGINAL)
-# =========================================
-# =========================================
-# 👤 MEU PERFIL (NOVO)
+# 👤 MEU PERFIL (ATUALIZADA com CPF)
 # =========================================
 def tela_meu_perfil(usuario_logado):
-    """Página para o usuário editar seu próprio perfil e senha."""
+    """Página para o usuário editar seu próprio perfil e senha, incluindo o CPF."""
     
     st.markdown("<h1 style='color:#FFD700;'>👤 Meu Perfil</h1>", unsafe_allow_html=True)
-    st.markdown("Atualize suas informações pessoais e gerencie sua senha de acesso.")
+    st.markdown("Atualize suas informações pessoais, **CPF** e gerencie sua senha de acesso.")
 
     user_id_logado = usuario_logado["id"]
     
@@ -1258,18 +1291,30 @@ def tela_meu_perfil(usuario_logado):
             novo_nome = st.text_input("Nome de Usuário:", value=user_data['nome'])
             novo_email = st.text_input("Email:", value=user_data['email'])
             
+            # 🆕 NOVO CAMPO CPF
+            novo_cpf_input = st.text_input("CPF:", value=user_data['cpf'] or "")
+            
             st.text_input("Tipo de Perfil:", value=user_data['tipo_usuario'].capitalize(), disabled=True)
             
             submitted_info = st.form_submit_button("💾 Salvar Alterações", use_container_width=True)
             
             if submitted_info:
+                # ⚠️ VALIDAÇÃO DO CPF (se não estiver vazio)
+                cpf_editado = formatar_e_validar_cpf(novo_cpf_input) if novo_cpf_input else None
+
+                if novo_cpf_input and not cpf_editado:
+                    st.error("CPF inválido. Por favor, corrija o formato (11 dígitos).")
+                    conn.close()
+                    return
+                
                 if not novo_nome or not novo_email:
                     st.warning("Nome e Email são obrigatórios.")
                 else:
                     try:
+                        # Executa o UPDATE (incluindo o CPF)
                         cursor.execute(
-                            "UPDATE usuarios SET nome=?, email=? WHERE id=?",
-                            (novo_nome, novo_email, user_id_logado)
+                            "UPDATE usuarios SET nome=?, email=?, cpf=? WHERE id=?",
+                            (novo_nome, novo_email, cpf_editado, user_id_logado)
                         )
                         conn.commit()
                         st.success("Dados atualizados com sucesso!")
@@ -1279,7 +1324,7 @@ def tela_meu_perfil(usuario_logado):
                         st.rerun() # Recarrega a página
                         
                     except sqlite3.IntegrityError:
-                        st.error(f"Erro: O email '{novo_email}' já está em uso por outro usuário.")
+                        st.error(f"Erro: O email '{novo_email}' ou o CPF já está em uso por outro usuário.")
                     except Exception as e:
                         st.error(f"Ocorreu um erro: {e}")
 
@@ -1634,10 +1679,11 @@ def tela_login():
             st.subheader("📋 Cadastro de Novo Usuário")
 
             # Este é o campo "Usuário (login)" que você quer
-            nome = st.text_input("Nome de Usuário (login):") 
-            email = st.text_input("E-mail:")
-            senha = st.text_input("Senha:", type="password")
-            confirmar = st.text_input("Confirmar senha:", type="password")
+            nome = st.text_input("Nome de Usuário (login):") 
+            email = st.text_input("E-mail:")
+            cpf = st.text_input("CPF (somente números ou formato padrão):") # 👈 NOVO CAMPO
+            senha = st.text_input("Senha:", type="password")
+            confirmar = st.text_input("Confirmar senha:", type="password")
             
             st.markdown("---")
             
@@ -1653,34 +1699,45 @@ def tela_login():
                 st.info("Professores são cadastrados com faixa preta. Vínculos de equipe são feitos pelo Admin.")
 
 
-            if st.button("Cadastrar", use_container_width=True, type="primary"):
-                if not (nome and email and senha and confirmar):
-                    st.warning("Preencha todos os campos obrigatórios.")
-                elif senha != confirmar:
-                    st.error("As senhas não coincidem.")
-                else:
-                    # CORREÇÃO: Conecta no banco de dados correto
-                    conn = sqlite3.connect(DB_PATH) 
-                    cursor = conn.cursor()
-                    
-                    cursor.execute("SELECT id FROM usuarios WHERE nome=? OR email=?", (nome, email))
-                    if cursor.fetchone():
-                        st.error("Nome de usuário ou e-mail já cadastrado.")
-                        conn.close()
-                    else:
-                        try:
-                            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                            tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
+if st.button("Cadastrar", use_container_width=True, type="primary"):
+                # ...
+                elif senha != confirmar:
+                    st.error("As senhas não coincidem.")
+                else:
+                    
+                    # ⚠️ NOVO: Validação do CPF
+                    cpf_formatado = formatar_e_validar_cpf(cpf)
+                    if not cpf_formatado:
+                        st.error("CPF inválido. Por favor, digite um CPF válido (11 dígitos).")
+                        return # Sai da função de cadastro
+                    # --------------------------
 
-                            # 1. Salva na tabela 'usuarios'
-                            cursor.execute(
-                                """
-                                INSERT INTO usuarios (nome, email, tipo_usuario, senha, auth_provider, perfil_completo)
-                                VALUES (?, ?, ?, ?, 'local', 1)
-                                """,
-                                (nome, email, tipo_db, hashed)
-                            )
-                            novo_id = cursor.lastrowid
+                    # CORREÇÃO: Conecta no banco de dados correto
+                    conn = sqlite3.connect(DB_PATH) 
+                    cursor = conn.cursor()
+                    
+                    # ⚠️ NOVO: Verifica se nome, email ou cpf já existem
+                    cursor.execute(
+                        "SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", 
+                        (nome, email, cpf_formatado)
+                    )
+                    if cursor.fetchone():
+                        st.error("Nome de usuário, e-mail ou CPF já cadastrado.")
+                        conn.close()
+                    else:
+                        try:
+                            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                            tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
+
+                            # 1. Salva na tabela 'usuarios' (agora com CPF)
+                            cursor.execute(
+                                """
+                                INSERT INTO usuarios (nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo)
+                                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                                """,
+                                (nome, email, cpf_formatado, tipo_db, hashed) # 👈 NOVO CAMPO INSERIDO
+                            )
+                            novo_id = cursor.lastrowid
                             
                             # 2. Salva na tabela 'alunos' ou 'professores'
                             if tipo_db == "aluno":
