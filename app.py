@@ -241,21 +241,20 @@ def criar_usuarios_teste():
         cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
         if cursor.fetchone() is None:
             
-            # CORREÇÃO: Usa o tipo do usuário como senha plana, mais fácil de lembrar
+            # CORREÇÃO: Usa o tipo do usuário como senha plana
             senha_plana = tipo 
             senha_hash = bcrypt.hashpw(senha_plana.encode(), bcrypt.gensalt()).decode()
             
             cursor.execute(
                 """
                 INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                VALUES (?, ?, ?, ?, ?, 'local', 1, ?)
                 """,
                 (nome, tipo, senha_hash, email, cpf),
             )
             novo_id = cursor.lastrowid
             
             if tipo == 'professor':
-                # VINCULA O PROFESSOR TESTE À EQUIPE TESTE E O TORNA RESPONSÁVEL
                 cursor.execute(
                     "UPDATE equipes SET professor_responsavel_id=? WHERE id=?", 
                     (novo_id, equipe_teste_id)
@@ -265,7 +264,6 @@ def criar_usuarios_teste():
                     (novo_id, equipe_teste_id)
                 )
             elif tipo == 'aluno':
-                # VINCULA O ALUNO TESTE À EQUIPE TESTE 
                  cursor.execute(
                     "INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, 'Branca', ?, 'ativo')",
                     (novo_id, equipe_teste_id)
@@ -1053,12 +1051,30 @@ def tela_login():
     st.session_state.setdefault("modo_login", "login")
     st.session_state.setdefault("cadastro_endereco_cache", {})
 
+    # Logo e Título
+    logo_path = "assets/logo.png"
+    if os.path.exists(logo_path):
+        with open(logo_path, "rb") as f:
+            logo_base64 = base64.b64encode(f.read()).decode()
+        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:140px;height:auto;margin-bottom:5px;'/>"
+    else:
+        logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
+
+    st.markdown(f"""
+        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-20px;'>
+            {logo_html}
+            <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # BLOCO DE LOGIN
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2: 
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
+                # Login agora aceita Email ou CPF
                 user_ou_cpf = st.text_input("Email ou CPF para Login:")
                 pwd = st.text_input("Senha:", type="password")
 
@@ -1071,6 +1087,7 @@ def tela_login():
                     else:
                         st.error("Email/CPF ou senha incorretos. Tente novamente.")
 
+                # Botões Criar Conta / Esqueci Senha
                 colx, coly, colz = st.columns([1, 2, 1])
                 with coly:
                     col1, col2 = st.columns(2)
@@ -1094,6 +1111,7 @@ def tela_login():
                     redirect_uri=REDIRECT_URI,
                 )
                 
+                # Lógica do token Google
                 if token and "access_token" in token:
                     st.session_state.token = token
                     access_token = token["access_token"]
@@ -1170,17 +1188,15 @@ def tela_login():
                     st.markdown("#### Endereço (Opcional)")
                     
                     col_cep, col_btn_cep = st.columns([3, 1])
-                    cep_input = col_cep.text_input("CEP:", key="cadastro_cep_input", value=st.session_state["cadastro_endereco_cache"].get("cep_original", ""))
+                    cep_input = col_cep.text_input("CEP:", key="cadastro_cep_input", value=st.session_state.get("cadastro_endereco_cache", {}).get("cep_original", ""))
                     
-                    # BUGFIX: Corrigido o erro Missing Submit Button
-                    if col_btn_cep.form_submit_button(
+                    col_btn_cep.form_submit_button(
                         "🔍 Buscar", 
                         key="buscar_cep_btn", 
                         on_click=handle_cadastro_cep_search_form
-                    ):
-                        pass # Ação é executada na função de callback
+                    )
 
-                    cache = st.session_state["cadastro_endereco_cache"]
+                    cache = st.session_state.get("cadastro_endereco_cache", {})
                     
                     logradouro = st.text_input("Logradouro (Rua/Av):", value=cache.get('logradouro', ""))
                     col_num, col_comp = st.columns(2)
@@ -1190,7 +1206,7 @@ def tela_login():
                     bairro = st.text_input("Bairro:", value=cache.get('bairro', ""))
                     col_cid, col_est = st.columns(2)
                     cidade = col_cid.text_input("Cidade:", value=cache.get('cidade', ""))
-                    estado = col_est.text_input("Estado (UF):", value=cache.get('estado', ""))
+                    estado = col_est.text_input("Estado (UF):", value=cache.get('uf', ""))
                     
                     submitted = st.form_submit_button("Cadastrar", use_container_width=True, type="primary")
 
@@ -1217,6 +1233,7 @@ def tela_login():
                             try:
                                 hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
                                 tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
+                                
                                 cep_final = cep_input 
                                 
                                 cursor.execute(
@@ -1231,18 +1248,19 @@ def tela_login():
                                 if tipo_db == "aluno":
                                     cursor.execute(
                                         """
-                                        INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) 
-                                        VALUES (?, ?, ?, 'pendente')
+                                        INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo) 
+                                        VALUES (?, ?, 'pendente')
                                         """,
-                                        (novo_id, faixa, equipe_sel) 
+                                        (novo_id, faixa) 
                                     )
-                                else: 
+                                else: # Professor
+                                    status = 'pendente'
                                     cursor.execute(
                                         """
                                         INSERT INTO professores (usuario_id, equipe_id, status_vinculo) 
                                         VALUES (?, ?, ?)
                                         """,
-                                        (novo_id, equipe_sel, 'pendente') 
+                                        (novo_id, equipe_sel, status) 
                                     )
                                 
                                 conn.commit()
@@ -1300,28 +1318,15 @@ def app_principal():
         unsafe_allow_html=True,
     )
     
-    st.sidebar.button(
-        "👤 Meu Perfil", 
-        on_click=navigate_to_sidebar, 
-        args=("Meu Perfil",), 
-        use_container_width=True
-    )
-
+    st.sidebar.button("👤 Meu Perfil", on_click=navigate_to_sidebar, args=("Meu Perfil",), use_container_width=True)
     if tipo_usuario == "admin":
-        st.sidebar.button(
-            "🔑 Gestão de Usuários", 
-            on_click=navigate_to_sidebar, 
-            args=("Gestão de Usuários",), 
-            use_container_width=True
-        )
-
+        st.sidebar.button("🔑 Gestão de Usuários", on_click=navigate_to_sidebar, args=("Gestão de Usuários",), use_container_width=True)
     st.sidebar.markdown("---")
     if st.sidebar.button("🚪 Sair", use_container_width=True):
         st.session_state.usuario = None
         st.session_state.pop("menu_selection", None)
         st.session_state.pop("token", None) 
         st.session_state.pop("registration_pending", None) 
-        if "endereco_cache" in st.session_state: del st.session_state["endereco_cache"]
         st.rerun()
 
     
@@ -1331,7 +1336,6 @@ def app_principal():
     pagina_selecionada = st.session_state.menu_selection
 
     if pagina_selecionada in ["Meu Perfil", "Gestão de Usuários"]:
-        
         if pagina_selecionada == "Meu Perfil":
             tela_meu_perfil(usuario_logado)
         elif pagina_selecionada == "Gestão de Usuários":
@@ -1342,8 +1346,6 @@ def app_principal():
             st.rerun()
 
     elif pagina_selecionada == "Início":
-        # A tela de início não precisa de menu de navegação por si só,
-        # mas os botões internos disparam a navegação.
         tela_inicio()
 
     else:
@@ -1371,10 +1373,9 @@ def app_principal():
             menu_title=None,
             options=opcoes,
             icons=icons,
-            key="menu_horizontal_selection", # Chave diferente para evitar conflito com a sidebar
+            key="menu_selection",
             orientation="horizontal",
-            default_index=opcoes.index(pagina_selecionada) if pagina_selecionada in opcoes else 0,
-            on_change=lambda: st.session_state.update(menu_selection=st.session_state.menu_horizontal_selection),
+            default_index=opcoes.index(pagina_selecionada),
             styles={
                 "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
                 "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
@@ -1382,9 +1383,6 @@ def app_principal():
                 "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
             }
         )
-        
-        # A navegação é feita pelo st.session_state.menu_selection (atualizado pelo on_change)
-        # Se a seleção mudar, o rerun ocorrerá e o roteamento será feito abaixo.
         
         if menu == "Início":
             tela_inicio()
