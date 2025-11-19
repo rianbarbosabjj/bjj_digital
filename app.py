@@ -172,7 +172,7 @@ conn.close()
 
 # 🔹 Cria o banco apenas se ainda não existir
 if not os.path.exists(DB_PATH):
-    st.toast("Criando novo banco de dados...")
+st.toast("Criando novo banco de dados...")
     criar_banco()
 
 # =========================================
