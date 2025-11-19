@@ -1046,6 +1046,7 @@ def tela_completar_cadastro(user_info):
                 conn.close()
                 st.error(f"Erro ao finalizar cadastro: {e}")
 
+# --- TELA DE LOGIN/CADASTRO (COM CPF E ENDEREÇO) ---
 def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
     st.session_state.setdefault("modo_login", "login")
@@ -1199,7 +1200,7 @@ def tela_login():
                     cache = st.session_state.get("cadastro_endereco_cache", {})
                     
                     logradouro = st.text_input("Logradouro (Rua/Av):", value=cache.get('logradouro', ""))
-                    col_num, col_comp = st.columns(2)
+                    col_num, col_comp = st.columns(2) 
                     numero = col_num.text_input("Número:", value="", help="O número do endereço.") 
                     col_comp.text_input("Complemento:", value="") 
 
