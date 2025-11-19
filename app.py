@@ -290,30 +290,30 @@ def criar_usuario_parcial_google(email, nome):
         conn.close()
         return None
 # 5. Usuários de teste (Atualizado)
-def criar_usuarios_teste():
-    """Cria usuários padrão locais com perfil completo."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    usuarios = [
-        ("admin", "admin", "admin@bjj.local"), 
-        ("professor", "professor", "professor@bjj.local"), 
-        ("aluno", "aluno", "aluno@bjj.local")
-    ]
-    for nome, tipo, email in usuarios:
-        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
-        if cursor.fetchone() is None:
-            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, 'local', 1)
-                """,
-                (nome, tipo, senha_hash, email),
-            )
-    conn.commit()
-    conn.close()
+#def criar_usuarios_teste():
+#    """Cria usuários padrão locais com perfil completo."""
+#    conn = sqlite3.connect(DB_PATH)
+#    cursor = conn.cursor()
+#    usuarios = [
+#        ("admin", "admin", "admin@bjj.local"), 
+#        ("professor", "professor", "professor@bjj.local"), 
+#        ("aluno", "aluno", "aluno@bjj.local")
+#    ]
+#    for nome, tipo, email in usuarios:
+#        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
+#        if cursor.fetchone() is None:
+#            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+#            cursor.execute(
+#                """
+#                INSERT INTO usuarios (nome, tipo_usuario, senha, email, auth_provider, perfil_completo) 
+#                VALUES (?, ?, ?, ?, 'local', 1)
+#                """,
+#                (nome, tipo, senha_hash, email),
+#            )
+#    conn.commit()
+#    conn.close()
 # Executa a criação dos usuários de teste (só roda se o banco for novo)
-criar_usuarios_teste()
+#criar_usuarios_teste()
 
 # =========================================
 # FUNÇÕES AUXILIARES
