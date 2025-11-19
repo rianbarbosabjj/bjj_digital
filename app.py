@@ -1831,7 +1831,7 @@ def tela_login():
         # =========================================
         # CADASTRO (CORRIGIDO E ATUALIZADO)
         # =========================================
-elif st.session_state["modo_login"] == "cadastro":
+        elif st.session_state["modo_login"] == "cadastro":
             
             st.subheader("📋 Cadastro de Novo Usuário")
 
