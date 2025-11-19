@@ -1733,6 +1733,15 @@ def meus_certificados(usuario_logado):
 
 # Esta seção foi refatorada.
 # O login não fica mais no topo, ele é gerenciado por este roteador.
+Com certeza! Para resolver o erro NameError e garantir o funcionamento correto do preenchimento de endereço e das validações, aqui está a função tela_login completa e corrigida.
+
+A correção principal garante que o valor do CEP seja lido de forma estável através de sua chave de sessão (st.session_state['reg_cep_input']) na lógica de salvamento e validação.
+
+🛠️ Função tela_login (Completa e Finalizada)
+Substitua sua função def tela_login(): inteira por este bloco:
+
+Python
+
 def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
     
@@ -1787,7 +1796,7 @@ def tela_login():
                 # ... (Lógica de Login Google) ...
 
         # =========================================
-        # CADASTRO
+        # CADASTRO (FINAL CORREÇÃO DE ENDEREÇO E VALIDAÇÃO)
         # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             
@@ -1829,7 +1838,6 @@ def tela_login():
 
             
             st.markdown("---")
-            # 🚨 MUDANÇA VISUAL: Endereço sem (Opcional)
             st.markdown("#### 3. Endereço") 
 
             # Inicializa estado para busca de CEP no cadastro
@@ -1838,6 +1846,7 @@ def tela_login():
             })
 
             # --- CORREÇÃO DE PREENCHIMENTO ---
+            # Sincroniza os valores iniciais dos inputs com o estado da sessão
             st.session_state.setdefault('reg_logradouro', st.session_state.endereco_cep_cadastro['logradouro'])
             st.session_state.setdefault('reg_bairro', st.session_state.endereco_cep_cadastro['bairro'])
             st.session_state.setdefault('reg_cidade', st.session_state.endereco_cep_cadastro['cidade'])
@@ -1847,6 +1856,7 @@ def tela_login():
 
             col_cep, col_btn = st.columns([3, 1])
             with col_cep:
+                # O input agora está ligado à sua chave de sessão
                 st.text_input("CEP:", max_chars=9, key='reg_cep_input')
             with col_btn:
                 st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
@@ -1859,16 +1869,16 @@ def tela_login():
                             'cep': cep_digitado,
                             **endereco
                         }
-                        # 🚨 AÇÃO CRÍTICA: Atualiza o valor interno de CADA WIDGET
+                        # AÇÃO CRÍTICA: Atualiza o valor interno de CADA WIDGET via chave de sessão
                         st.session_state['reg_logradouro'] = endereco['logradouro']
                         st.session_state['reg_bairro'] = endereco['bairro']
                         st.session_state['reg_cidade'] = endereco['cidade']
                         st.session_state['reg_uf'] = endereco['uf']
                         
-                        st.success("Endereço encontrado! Complete o Número/Complemento.")
+                        st.success("Endereço encontrado! Verifique e complete.")
                     else:
-                        st.error("CEP inválido ou não encontrado. Preencha manualmente ou use outro CEP.")
-                        # Limpa os campos para o usuário digitar
+                        st.error("CEP inválido ou não encontrado. Preencha manualmente.")
+                        # Limpa os valores dos widgets para permitir digitação manual
                         st.session_state['reg_logradouro'] = ''
                         st.session_state['reg_bairro'] = ''
                         st.session_state['reg_cidade'] = ''
@@ -1881,6 +1891,7 @@ def tela_login():
                     st.rerun()
 
             # CAMPOS HABILITADOS
+            # Os valores serão lidos das chaves de sessão após o rerun
             col_logr, col_bairro = st.columns(2)
             novo_logradouro = col_logr.text_input("Logradouro:", key='reg_logradouro')
             novo_bairro = col_bairro.text_input("Bairro:", key='reg_bairro')
@@ -1900,7 +1911,7 @@ def tela_login():
                     st.warning("Preencha todos os campos de contato e senha obrigatórios.")
                 elif senha != confirmar:
                     st.error("As senhas não coincidem.")
-                # 🚨 NOVA VALIDAÇÃO: CEP e dados de endereço são obrigatórios
+                # 🚨 VALIDAÇÃO DE ENDEREÇO OBRIGATÓRIO
                 elif not (st.session_state.reg_cep_input and novo_logradouro and novo_bairro and novo_cidade and novo_uf):
                     st.error("O Endereço (CEP, Logradouro, Bairro, Cidade e UF) é obrigatório. Por favor, preencha o CEP e clique em 'Buscar CEP'.")
                 else:
@@ -1935,7 +1946,9 @@ def tela_login():
                                 """,
                                 (
                                     nome, email, cpf_formatado, tipo_db, hashed,
-                                    novo_cep_input, novo_logradouro, novo_numero, 
+                                    
+                                    # VALORES FINAIS LIDOS DAS CHAVES DE SESSÃO DOS WIDGETS
+                                    st.session_state.reg_cep_input, novo_logradouro, novo_numero, 
                                     novo_complemento, novo_bairro, novo_cidade, novo_uf
                                 )
                             )
