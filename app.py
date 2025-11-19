@@ -1940,7 +1940,7 @@ c1, c2, c3 = st.columns([1, 1.5, 1])
                 # ... (Lógica de Login Google) ...
 
         # =========================================
-        # CADASTRO (COM MÁSCARAS E VALIDAÇÃO)
+        # CADASTRO (FINAL CORREÇÃO DE ENDEREÇO E VALIDAÇÃO)
         # =========================================
         elif st.session_state["modo_login"] == "cadastro":
             
@@ -1948,15 +1948,7 @@ c1, c2, c3 = st.columns([1, 1.5, 1])
 
             nome = st.text_input("Nome de Usuário (login):") 
             email = st.text_input("E-mail:")
-            
-            # CPF com Máscara Visual
-            cpf_input = st.text_input("CPF (somente números):") 
-            
-            # 🚨 MÁSCARA VISUAL CPF
-            cpf_display_limpo = formatar_e_validar_cpf(cpf_input)
-            if cpf_display_limpo: 
-                st.info(f"CPF Formatado: {cpf_display_limpo[:3]}.{cpf_display_limpo[3:6]}.{cpf_display_limpo[6:9]}-{cpf_display_limpo[9:]}")
-            
+            cpf = st.text_input("CPF (somente números ou formato padrão):") 
             senha = st.text_input("Senha:", type="password")
             confirmar = st.text_input("Confirmar senha:", type="password")
             
