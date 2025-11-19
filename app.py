@@ -9,7 +9,7 @@ import qrcode
 import unicodedata
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import bcrypt
 import base64
 from streamlit_option_menu import option_menu
@@ -79,6 +79,309 @@ div[data-testid="stVerticalBlock"] div[data-testid="stHorizontalBlock"] div[data
 }}
 </style>
 """, unsafe_allow_html=True)
+
+
+# =========================================
+# BANCO DE DADOS E MIGRAÇÃO
+# =========================================
+DB_PATH = os.path.expanduser("~/bjj_digital.db")
+
+def criar_banco():
+    """Cria o banco de dados e suas tabelas, caso não existam."""
+    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Tabela 'usuarios' COMPLETA
+    cursor.executescript("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        email TEXT UNIQUE,
+        cpf TEXT UNIQUE, -- NOVO: CPF, único e obrigatório para login local
+        tipo_usuario TEXT,
+        senha TEXT, -- Nulo para logins sociais
+        auth_provider TEXT DEFAULT 'local', -- 'local', 'google', etc.
+        perfil_completo BOOLEAN DEFAULT 0, -- 0 = Incompleto, 1 = Completo
+        cep TEXT, -- Endereço
+        logradouro TEXT, -- Endereço
+        numero TEXT, -- NOVO: Número do endereço
+        bairro TEXT, -- Endereço
+        cidade TEXT, -- Endereço
+        estado TEXT, -- Endereço
+        data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS equipes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        descricao TEXT,
+        professor_responsavel_id INTEGER,
+        ativo BOOLEAN DEFAULT 1
+    );
+
+    CREATE TABLE IF NOT EXISTS professores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER,
+        equipe_id INTEGER,
+        pode_aprovar BOOLEAN DEFAULT 0,
+        eh_responsavel BOOLEAN DEFAULT 0,
+        status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
+        data_vinculo DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS alunos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER,
+        faixa_atual TEXT,
+        turma TEXT,
+        professor_id INTEGER,
+        equipe_id INTEGER,
+        status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
+        data_pedido DATETIME DEFAULT CURRENT_TIMESTAMP,
+        exame_habilitado BOOLEAN DEFAULT 0,
+        data_inicio_exame TEXT, -- NOVO: Período de exame
+        data_fim_exame TEXT -- NOVO: Período de exame
+    );
+
+    CREATE TABLE IF NOT EXISTS resultados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT,
+        modo TEXT,
+        tema TEXT,
+        faixa TEXT,
+        pontuacao INTEGER,
+        tempo TEXT,
+        data DATETIME DEFAULT CURRENT_TIMESTAMP,
+        codigo_verificacao TEXT,
+        acertos INTEGER,
+        total_questoes INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS rola_resultados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT,
+        faixa TEXT,
+        tema TEXT,
+        acertos INTEGER,
+        total INTEGER,
+        percentual REAL,
+        data DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    conn.commit()
+    conn.close()
+
+
+def migrar_db():
+    """Garante que todas as colunas existam nas tabelas, adicionando se necessário."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    # 1. MIGRAÇÃO DA TABELA USUARIOS
+    colunas_novas_usuarios = {
+        'cpf': 'TEXT UNIQUE', 'cep': 'TEXT', 'logradouro': 'TEXT', 'bairro': 'TEXT', 
+        'cidade': 'TEXT', 'estado': 'TEXT', 'numero': 'TEXT'
+    }
+    for coluna, tipo in colunas_novas_usuarios.items():
+        try:
+            cursor.execute(f"SELECT {coluna} FROM usuarios LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} {tipo}")
+            conn.commit()
+            st.toast(f"Coluna {coluna} (usuarios) adicionada.")
+            
+    # 2. MIGRAÇÃO DA TABELA ALUNOS (Datas de exame)
+    try:
+        cursor.execute("SELECT data_inicio_exame FROM alunos LIMIT 1")
+    except sqlite3.OperationalError:
+        cursor.execute("ALTER TABLE alunos ADD COLUMN data_inicio_exame TEXT")
+        cursor.execute("ALTER TABLE alunos ADD COLUMN data_fim_exame TEXT")
+        conn.commit()
+        st.toast("Campos de Data de Exame adicionados à tabela 'alunos'.")
+            
+    conn.close()
+
+# 5. Usuários de teste (Atualizado)
+def criar_usuarios_teste():
+    """Cria usuários padrão locais com perfil completo."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    usuarios = [
+        ("Admin User", "admin", "admin@bjj.local", "00000000000"), 
+        ("Professor User", "professor", "professor@bjj.local", "11111111111"), 
+        ("Aluno User", "aluno", "aluno@bjj.local", "22222222222")
+    ]
+    for nome, tipo, email, cpf in usuarios:
+        cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
+        if cursor.fetchone() is None:
+            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
+            cursor.execute(
+                """
+                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
+                VALUES (?, ?, ?, ?, ?, 'local', 1)
+                """,
+                (nome, tipo, senha_hash, email, cpf),
+            )
+    conn.commit()
+    conn.close()
+
+# 🔹 Lógica de inicialização do topo do script
+if not os.path.exists(DB_PATH):
+    st.toast("Criando novo banco de dados...")
+    criar_banco()
+    criar_usuarios_teste() 
+
+# Sempre execute a migração se o DB existir
+migrar_db()
+
+# =========================================
+# FUNÇÕES DE UTILIDADE E AUTENTICAÇÃO
+# =========================================
+
+def validar_cpf(cpf):
+    """Verifica se o CPF tem 11 dígitos e se os dígitos verificadores são válidos."""
+    # 1. Limpar e verificar o tamanho
+    cpf = ''.join(filter(str.isdigit, cpf))
+    if len(cpf) != 11:
+        return False
+    # 2. Verificar CPFs com todos os dígitos iguais
+    if len(set(cpf)) == 1:
+        return False
+    # 3. Cálculo e validação do 1º dígito verificador
+    soma = 0
+    for i in range(9):
+        soma += int(cpf[i]) * (10 - i)
+    resto = soma % 11
+    digito_1 = 0 if resto < 2 else 11 - resto
+    if int(cpf[9]) != digito_1:
+        return False
+    # 4. Cálculo e validação do 2º dígito verificador
+    soma = 0
+    for i in range(10):
+        soma += int(cpf[i]) * (11 - i)
+    resto = soma % 11
+    digito_2 = 0 if resto < 2 else 11 - resto
+    if int(cpf[10]) != digito_2:
+        return False
+    return True
+
+def buscar_endereco_por_cep(cep):
+    """Busca endereço usando a API ViaCEP."""
+    cep = ''.join(filter(str.isdigit, cep))
+    if len(cep) != 8:
+        return None
+    url = f"https://viacep.com.br/ws/{cep}/json/"
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status() 
+        data = response.json()
+        if data.get('erro'):
+            return None
+        return {
+            "logradouro": data.get("logradouro", ""),
+            "bairro": data.get("bairro", ""),
+            "cidade": data.get("localidade", ""),
+            "estado": data.get("uf", "")
+        }
+    except requests.exceptions.RequestException as e:
+        st.error(f"Erro na comunicação com a API de CEP: {e}")
+        return None
+    except Exception as e:
+        st.error(f"Erro desconhecido ao buscar CEP: {e}")
+        return None
+
+# 3. Autenticação local (Login/Senha)
+def autenticar_local(usuario_ou_email, senha):
+    """
+    Atualizado: Autentica o usuário local usando EMAIL ou CPF.
+    """
+    conn = sqlite3.connect(DB_PATH) 
+    cursor = conn.cursor()
+    dados = None
+    
+    try:
+        # Busca por 'email' OU 'cpf' (O nome completo não é mais usado para login)
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (email=? OR cpf=?) AND auth_provider='local'", 
+            (usuario_ou_email, usuario_ou_email)
+        )
+        dados = cursor.fetchone()
+        
+        if dados is not None and dados[3]: # dados[3] é 'senha'
+            # Se a senha existe e é válida
+            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
+                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+            
+    except Exception as e:
+        st.error(f"Erro de autenticação no DB: {e}")
+        
+    finally:
+        conn.close() 
+        
+    return None
+
+# 4. Funções de busca e criação de usuário
+def buscar_usuario_por_email(email):
+    """Busca um usuário pelo email e retorna seus dados."""
+    conn = sqlite3.connect(DB_PATH) 
+    cursor = conn.cursor()
+    dados = None
+    
+    try:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+        )
+        dados = cursor.fetchone()
+        
+        if dados:
+            return {
+                "id": dados[0], 
+                "nome": dados[1], 
+                "tipo": dados[2], 
+                "perfil_completo": bool(dados[3])
+            }
+    finally:
+        conn.close()
+        
+    return None
+
+def criar_usuario_parcial_google(email, nome):
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    novo_id = None
+    
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit()
+        novo_id = cursor.lastrowid
+        
+    except sqlite3.IntegrityError: # Email já existe
+        pass
+        
+    finally:
+        conn.close()
+        
+    if novo_id:
+        return {"id": novo_id, "email": email, "nome": nome}
+    return None
+
+def buscar_equipes():
+    """Retorna uma lista de tuplas (id, nome) de todas as equipes ativas."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    equipes = cursor.execute("SELECT id, nome FROM equipes WHERE ativo=1").fetchall()
+    conn.close()
+    return equipes
+
+# --- FUNÇÕES DE GESTÃO DO PROFESSOR ---
+
 def get_professor_team_id(usuario_id):
     """Busca o ID da equipe principal do professor ativo."""
     conn = sqlite3.connect(DB_PATH)
@@ -146,547 +449,12 @@ def habilitar_exame_aluno(aluno_id, data_inicio_str, data_fim_str):
         return False
     finally:
         conn.close()
-# =========================================
-# BANCO DE DADOS (ATUALIZADO COM CPF, ENDEREÇO E NÚMERO)
-# =========================================
-DB_PATH = os.path.expanduser("~/bjj_digital.db")
 
-def criar_banco():
-    """Cria o banco de dados e suas tabelas, caso não existam."""
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    # Tabela 'usuarios' ATUALIZADA com NOVO CAMPO 'numero'
-    cursor.executescript("""
-    CREATE TABLE IF NOT EXISTS usuarios (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT,
-        email TEXT UNIQUE,
-        cpf TEXT UNIQUE, -- NOVO: CPF, único e obrigatório para login local
-        tipo_usuario TEXT,
-        senha TEXT, -- Nulo para logins sociais
-        auth_provider TEXT DEFAULT 'local', -- 'local', 'google', etc.
-        perfil_completo BOOLEAN DEFAULT 0, -- 0 = Incompleto, 1 = Completo
-        cep TEXT, -- Endereço
-        logradouro TEXT, -- Endereço
-        numero TEXT, -- NOVO: Número do endereço
-        bairro TEXT, -- Endereço
-        cidade TEXT, -- Endereço
-        estado TEXT, -- Endereço
-        data_criacao DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS equipes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nome TEXT NOT NULL,
-        descricao TEXT,
-        professor_responsavel_id INTEGER,
-        ativo BOOLEAN DEFAULT 1
-    );
-
-    CREATE TABLE IF NOT EXISTS professores (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER,
-        equipe_id INTEGER,
-        pode_aprovar BOOLEAN DEFAULT 0,
-        eh_responsavel BOOLEAN DEFAULT 0,
-        status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
-        data_vinculo DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS alunos (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario_id INTEGER,
-        faixa_atual TEXT,
-        turma TEXT,
-        professor_id INTEGER,
-        equipe_id INTEGER,
-        status_vinculo TEXT CHECK(status_vinculo IN ('pendente','ativo','rejeitado')) DEFAULT 'pendente',
-        data_pedido DATETIME DEFAULT CURRENT_TIMESTAMP,
-        exame_habilitado BOOLEAN DEFAULT 0
-    );
-
-    CREATE TABLE IF NOT EXISTS resultados (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario TEXT,
-        modo TEXT,
-        tema TEXT,
-        faixa TEXT,
-        pontuacao INTEGER,
-        tempo TEXT,
-        data DATETIME DEFAULT CURRENT_TIMESTAMP,
-        codigo_verificacao TEXT,
-        acertos INTEGER,
-        total_questoes INTEGER
-    );
-
-    CREATE TABLE IF NOT EXISTS rola_resultados (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        usuario TEXT,
-        faixa TEXT,
-        tema TEXT,
-        acertos INTEGER,
-        total INTEGER,
-        percentual REAL,
-        data DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-    """)
-    conn.commit()
-    conn.close()
-
-
-# 🔹 LÓGICA DE INICIALIZAÇÃO E MIGRAÇÃO DE DB (USANDO get_db_connection para simplificar)
-def migrar_db():
-    """Garante que todas as colunas existam, adicionando se necessário."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    colunas_novas = {
-        'cpf': 'TEXT UNIQUE', 
-        'cep': 'TEXT', 
-        'logradouro': 'TEXT', 
-        'bairro': 'TEXT', 
-        'cidade': 'TEXT', 
-        'estado': 'TEXT', 
-        'numero': 'TEXT'
-    }
-    
-    # 1. MIGRAÇÃO DA TABELA USUARIOS
-    for coluna, tipo in colunas_novas.items():
-        try:
-            # 👈 Correção: ESTA LINHA DEVE SER INDENTADA
-            cursor.execute(f"SELECT {coluna} FROM usuarios LIMIT 1")
-        except sqlite3.OperationalError:
-            # 👈 E ESTE BLOCO DEVE ESTAR NO NÍVEL CORRETO
-            cursor.execute(f"ALTER TABLE usuarios ADD COLUMN {coluna} {tipo}")
-            conn.commit()
-            st.toast(f"Coluna {coluna} adicionada.")
-            
-    # 2. MIGRAÇÃO DA TABELA ALUNOS (Adição das datas de exame)
-    try:
-        # 👈 TENTATIVA DE LER UMA COLUNA DA TABELA ALUNOS
-        cursor.execute("SELECT data_inicio_exame FROM alunos LIMIT 1")
-    except sqlite3.OperationalError:
-        # 👈 SE FALHAR, AS COLUNAS ESTÃO FALTANDO
-        cursor.execute("ALTER TABLE alunos ADD COLUMN data_inicio_exame TEXT")
-        cursor.execute("ALTER TABLE alunos ADD COLUMN data_fim_exame TEXT")
-        conn.commit()
-        st.toast("Campos de Data de Exame adicionados à tabela 'alunos'.")
-            
-    conn.close()
-# 5. Usuários de teste (Atualizado)
-def criar_usuarios_teste():
-    """Cria usuários padrão locais com perfil completo."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    usuarios = [
-        ("Admin User", "admin", "admin@bjj.local", "00000000000"), 
-        ("Professor User", "professor", "professor@bjj.local", "11111111111"), 
-        ("Aluno User", "aluno", "aluno@bjj.local", "22222222222")
-    ]
-    for nome, tipo, email, cpf in usuarios:
-        cursor.execute("SELECT id FROM usuarios WHERE email=? OR cpf=?", (email, cpf))
-        if cursor.fetchone() is None:
-            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, ?, 'local', 1)
-                """,
-                (nome, tipo, senha_hash, email, cpf),
-            )
-    conn.commit()
-    conn.close()
-
-# 🔹 Lógica de inicialização do topo do script
-if not os.path.exists(DB_PATH):
-    st.toast("Criando novo banco de dados...")
-    criar_banco()
-    criar_usuarios_teste() # Cria usuários logo após criar o DB
-
-# Sempre execute a migração se o DB existir
-migrar_db()
-
-# 🔹 Cria o banco e realiza migrações APENAS UMA VEZ
-@st.cache_resource
-def get_db_connection():
-    """Garante que a conexão seja singleton e faz migrações iniciais."""
-    if not os.path.exists(DB_PATH):
-        st.toast("Criando novo banco de dados...")
-        criar_banco()
-
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-
-    # Lógica de migração (apenas será executada na primeira vez que o Streamlit rodar)
-    try:
-        cursor.execute("SELECT cpf FROM usuarios LIMIT 1")
-    except sqlite3.OperationalError:
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN cpf TEXT UNIQUE")
-        conn.commit()
-        st.toast("Campo CPF adicionado à tabela 'usuarios'.")
-
-    try:
-        cursor.execute("SELECT cep FROM usuarios LIMIT 1")
-    except sqlite3.OperationalError:
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN cep TEXT")
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN logradouro TEXT")
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN bairro TEXT")
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN cidade TEXT")
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN estado TEXT")
-        conn.commit()
-        st.toast("Campos de Endereço adicionados à tabela 'usuarios'.")
-    
-    try:
-        cursor.execute("SELECT numero FROM usuarios LIMIT 1")
-    except sqlite3.OperationalError:
-        cursor.execute("ALTER TABLE usuarios ADD COLUMN numero TEXT")
-        conn.commit()
-        st.toast("Campo Número adicionado à tabela 'usuarios'.")
-        
-    return conn
-# =========================================
-# FUNÇÕES DE VALIDAÇÃO E BUSCA (NOVAS)
-# =========================================
-
-def validar_cpf(cpf):
-    """Verifica se o CPF tem 11 dígitos e se os dígitos verificadores são válidos."""
-    # 1. Limpar e verificar o tamanho
-    cpf = ''.join(filter(str.isdigit, cpf))
-    if len(cpf) != 11:
-        return False
-
-    # 2. Verificar CPFs com todos os dígitos iguais
-    if len(set(cpf)) == 1:
-        return False
-
-    # 3. Cálculo e validação do 1º dígito verificador
-    soma = 0
-    for i in range(9):
-        soma += int(cpf[i]) * (10 - i)
-    resto = soma % 11
-    digito_1 = 0 if resto < 2 else 11 - resto
-    if int(cpf[9]) != digito_1:
-        return False
-
-    # 4. Cálculo e validação do 2º dígito verificador
-    soma = 0
-    for i in range(10):
-        soma += int(cpf[i]) * (11 - i)
-    resto = soma % 11
-    digito_2 = 0 if resto < 2 else 11 - resto
-    if int(cpf[10]) != digito_2:
-        return False
-
-    return True
-
-def buscar_endereco_por_cep(cep):
-    """Busca endereço usando a API ViaCEP."""
-    cep = ''.join(filter(str.isdigit, cep))
-    if len(cep) != 8:
-        return None
-    
-    url = f"https://viacep.com.br/ws/{cep}/json/"
-    try:
-        response = requests.get(url, timeout=5)
-        response.raise_for_status() # Lança exceção para códigos de erro HTTP
-        data = response.json()
-        
-        if data.get('erro'):
-            return None
-        
-        return {
-            "logradouro": data.get("logradouro", ""),
-            "bairro": data.get("bairro", ""),
-            "cidade": data.get("localidade", ""),
-            "estado": data.get("uf", "")
-        }
-    except requests.exceptions.RequestException as e:
-        st.error(f"Erro na comunicação com a API de CEP: {e}")
-        return None
-    except Exception as e:
-        st.error(f"Erro desconhecido ao buscar CEP: {e}")
-        return None
 
 # =========================================
-# AUTENTICAÇÃO (ATUALIZADO)
+# FUNÇÕES DE TELA E ROTEAMENTO
 # =========================================
 
-# 1. Configuração do Google OAuth (lendo do secrets.toml)
-try:
-    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
-    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
-    REDIRECT_URI = "https://bjjdigital.streamlit.app/" # Mude para sua URL de produção
-except FileNotFoundError:
-    st.error("Arquivo secrets.toml não encontrado. Crie .streamlit/secrets.toml")
-    st.stop()
-except KeyError:
-    st.error("Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no secrets.toml")
-    st.stop()
-
-# 2. Inicialização do componente OAuth
-oauth_google = OAuth2Component(
-    client_id=GOOGLE_CLIENT_ID,
-    client_secret=GOOGLE_CLIENT_SECRET,
-    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-    token_endpoint="https://oauth2.googleapis.com/token",
-    refresh_token_endpoint="https://oauth2.googleapis.com/token",
-    revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
-)
-
-# 3. Autenticação local (Login/Senha)
-def autenticar_local(usuario_ou_email, senha):
-    """
-    Autentica o usuário local usando EMAIL ou CPF.
-    (Conexão fechada após a operação)
-    """
-    conn = sqlite3.connect(DB_PATH) 
-    cursor = conn.cursor()
-    
-    try:
-        # Busca por 'email' OU 'cpf' (O nome completo não é mais usado para login)
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (email=? OR cpf=?) AND auth_provider='local'", 
-            (usuario_ou_email, usuario_ou_email)
-        )
-        dados = cursor.fetchone()
-        
-        if dados is not None and dados[3]: # dados[3] é 'senha'
-            # Se a senha existe e é válida
-            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
-                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
-            
-    except Exception as e:
-        # Erro de banco (ex: ProgrammingError)
-        st.error(f"Erro de autenticação no DB: {e}")
-        
-    finally:
-        # Garante que a conexão seja fechada SEMPRE
-        conn.close() 
-        
-    return None
-
-# [Substitua o código na função `buscar_usuario_por_email`]
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = sqlite3.connect(DB_PATH) 
-    cursor = conn.cursor()
-    dados = None
-    
-    try:
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-        )
-        dados = cursor.fetchone()
-        
-        if dados:
-            return {
-                "id": dados[0], 
-                "nome": dados[1], 
-                "tipo": dados[2], 
-                "perfil_completo": bool(dados[3])
-            }
-    finally:
-        conn.close()
-        
-    return None
-
-# [Substitua o código na função `criar_usuario_parcial_google`]
-def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    novo_id = None
-    
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit()
-        novo_id = cursor.lastrowid
-        
-    except sqlite3.IntegrityError: # Email já existe
-        pass
-        
-    finally:
-        conn.close()
-        
-    if novo_id:
-        return {"id": novo_id, "email": email, "nome": nome}
-    return None
-
-# 4. Funções de busca e criação de usuário
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-    )
-    dados = cursor.fetchone()
-    # NÃO FECHAR A CONEXÃO
-    if dados:
-        return {
-            "id": dados['id'], 
-            "nome": dados['nome'], 
-            "tipo": dados['tipo_usuario'], 
-            "perfil_completo": bool(dados['perfil_completo'])
-        }
-    return None
-
-def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit() # COMMIT AQUI É CRUCIAL
-        novo_id = cursor.lastrowid
-        # NÃO FECHAR A CONEXÃO
-        return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
-        # NÃO FECHAR A CONEXÃO
-        return None
-# [Substitua o código na função `buscar_usuario_por_email`]
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-    )
-    dados = cursor.fetchone()
-    # NÃO FECHAR A CONEXÃO
-    if dados:
-        return {
-            "id": dados[0], 
-            "nome": dados[1], 
-            "tipo": dados[2], 
-            "perfil_completo": bool(dados[3])
-        }
-    return None
-
-# [Substitua o código na função `criar_usuario_parcial_google`]
-def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit() # COMMIT AQUI É CRUCIAL
-        novo_id = cursor.lastrowid
-        # NÃO FECHAR A CONEXÃO
-        return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
-        # NÃO FECHAR A CONEXÃO
-        return None
-
-# [Substitua o código na função `criar_usuarios_teste`]
-def criar_usuarios_teste():
-    """Cria usuários padrão locais com perfil completo."""
-    conn = get_db_connection() # USANDO O CACHE
-    cursor = conn.cursor()
-    # ... (o resto da lógica permanece a mesma) ...
-    usuarios = [
-        ("admin", "admin", "admin@bjj.local", "00000000000"), 
-        ("professor", "professor", "professor@bjj.local", "11111111111"), 
-        ("aluno", "aluno", "aluno@bjj.local", "22222222222")
-    ]
-    for nome, tipo, email, cpf in usuarios:
-        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
-        if cursor.fetchone() is None:
-            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, ?, 'local', 1)
-                """,
-                (nome, tipo, senha_hash, email, cpf),
-            )
-    conn.commit()
-
-# 4. Funções de busca e criação de usuário
-def buscar_usuario_por_email(email):
-    """Busca um usuário pelo email e retorna seus dados."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
-    )
-    dados = cursor.fetchone()
-    conn.close()
-    if dados:
-        return {
-            "id": dados[0], 
-            "nome": dados[1], 
-            "tipo": dados[2], 
-            "perfil_completo": bool(dados[3])
-        }
-    return None
-
-def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit()
-        novo_id = cursor.lastrowid
-        conn.close()
-        return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
-        conn.close()
-        return None
-
-
-# 5. Usuários de teste (Atualizado)
-def criar_usuarios_teste():
-    """Cria usuários padrão locais com perfil completo."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    usuarios = [
-        ("admin", "admin", "admin@bjj.local", "00000000000"), 
-        ("professor", "professor", "professor@bjj.local", "11111111111"), 
-        ("aluno", "aluno", "aluno@bjj.local", "22222222222")
-    ]
-    for nome, tipo, email, cpf in usuarios:
-        cursor.execute("SELECT id FROM usuarios WHERE nome=?", (nome,))
-        if cursor.fetchone() is None:
-            senha_hash = bcrypt.hashpw(nome.encode(), bcrypt.gensalt()).decode()
-            cursor.execute(
-                """
-                INSERT INTO usuarios (nome, tipo_usuario, senha, email, cpf, auth_provider, perfil_completo) 
-                VALUES (?, ?, ?, ?, ?, 'local', 1)
-                """,
-                (nome, tipo, senha_hash, email, cpf),
-            )
-    conn.commit()
-    conn.close()
-# Executa a criação dos usuários de teste (só roda se o banco for novo)
-criar_usuarios_teste()
-
-# =========================================
-# FUNÇÕES AUXILIARES (DO SEU PROJETO ORIGINAL)
-# =========================================
 def carregar_questoes(tema):
     """Carrega as questões do arquivo JSON correspondente."""
     path = f"questions/{tema}.json"
@@ -914,9 +682,173 @@ def carregar_todas_questoes():
 
     return todas
 
+# ------------------------------------
+
+# 3. Autenticação local (Login/Senha)
+def autenticar_local(usuario_ou_email, senha):
+    """
+    Atualizado: Autentica o usuário local usando EMAIL ou CPF.
+    (Conexão fechada após a operação)
+    """
+    conn = sqlite3.connect(DB_PATH) 
+    cursor = conn.cursor()
+    dados = None
+    
+    try:
+        # Busca por 'email' OU 'cpf' (O nome completo não é mais usado para login)
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (email=? OR cpf=?) AND auth_provider='local'", 
+            (usuario_ou_email, usuario_ou_email)
+        )
+        dados = cursor.fetchone()
+        
+        if dados is not None and dados[3]: # dados[3] é 'senha'
+            # Se a senha existe e é válida
+            if bcrypt.checkpw(senha.encode(), dados[3].encode()):
+                return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+            
+    except Exception as e:
+        st.error(f"Erro de autenticação no DB: {e}")
+        
+    finally:
+        conn.close() 
+        
+    return None
+
+# 4. Funções de busca e criação de usuário
+def buscar_usuario_por_email(email):
+    """Busca um usuário pelo email e retorna seus dados."""
+    conn = sqlite3.connect(DB_PATH) 
+    cursor = conn.cursor()
+    dados = None
+    
+    try:
+        cursor.execute(
+            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", (email,)
+        )
+        dados = cursor.fetchone()
+        
+        if dados:
+            return {
+                "id": dados[0], 
+                "nome": dados[1], 
+                "tipo": dados[2], 
+                "perfil_completo": bool(dados[3])
+            }
+    finally:
+        conn.close()
+        
+    return None
+
+def criar_usuario_parcial_google(email, nome):
+    """Cria um registro inicial para um novo usuário do Google."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    novo_id = None
+    
+    try:
+        cursor.execute(
+            """
+            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
+            VALUES (?, ?, 'google', 0)
+            """, (email, nome)
+        )
+        conn.commit()
+        novo_id = cursor.lastrowid
+        
+    except sqlite3.IntegrityError: # Email já existe
+        pass
+        
+    finally:
+        conn.close()
+        
+    if novo_id:
+        return {"id": novo_id, "email": email, "nome": nome}
+    return None
+
+def buscar_equipes():
+    """Retorna uma lista de tuplas (id, nome) de todas as equipes ativas."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    equipes = cursor.execute("SELECT id, nome FROM equipes WHERE ativo=1").fetchall()
+    conn.close()
+    return equipes
+
+# --- FUNÇÕES DE GESTÃO DO PROFESSOR (INCLUÍDAS) ---
+
+def get_professor_team_id(usuario_id):
+    """Busca o ID da equipe principal do professor ativo."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    team_id = None
+    try:
+        # Busca a equipe onde o professor está ativo
+        cursor.execute(
+            "SELECT equipe_id FROM professores WHERE usuario_id=? AND status_vinculo='ativo' LIMIT 1",
+            (usuario_id,)
+        )
+        result = cursor.fetchone()
+        if result:
+            team_id = result[0]
+    finally:
+        conn.close()
+    return team_id
+
+def get_alunos_by_equipe(equipe_id):
+    """Busca todos os alunos (e seus status de exame) de uma equipe."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    alunos = []
+    try:
+        cursor.execute(
+            """
+            SELECT 
+                a.id as aluno_id, 
+                u.nome as nome_aluno, 
+                u.email, 
+                a.faixa_atual, 
+                a.status_vinculo,
+                a.exame_habilitado,
+                a.data_inicio_exame, 
+                a.data_fim_exame 
+            FROM alunos a
+            JOIN usuarios u ON a.usuario_id = u.id
+            WHERE a.equipe_id=?
+            """,
+            (equipe_id,)
+        )
+        alunos = cursor.fetchall()
+    finally:
+        conn.close()
+    return alunos
+
+def habilitar_exame_aluno(aluno_id, data_inicio_str, data_fim_str):
+    """Habilita o exame e define o período na tabela alunos."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            """
+            UPDATE alunos 
+            SET exame_habilitado=1, data_inicio_exame=?, data_fim_exame=?
+            WHERE id=?
+            """,
+            (data_inicio_str, data_fim_str, aluno_id)
+        )
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"Erro ao habilitar exame: {e}")
+        return False
+    finally:
+        conn.close()
+
+
 # =========================================
-# 🤼 MODO ROLA (DO SEU PROJETO ORIGINAL)
+# TELAS DO APP
 # =========================================
+
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
 
@@ -1001,16 +933,13 @@ def modo_rola(usuario_logado):
 
         st.success("Resultado salvo com sucesso! 🏆")
 
-# =========================================
-# 🥋 EXAME DE FAIXA (DO SEU PROJETO ORIGINAL)
-# =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
 
     # Verifica se o aluno foi liberado para o exame
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
-    cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
+    cursor.execute("SELECT exame_habilitado, data_inicio_exame, data_fim_exame FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
     dado = cursor.fetchone()
     conn.close()
 
@@ -1019,6 +948,20 @@ def exame_de_faixa(usuario_logado):
         if not dado or dado[0] == 0:
             st.warning("🚫 Seu exame de faixa ainda não foi liberado. Aguarde a autorização do professor.")
             return
+        
+        # Verifica o período do exame
+        if dado[0] == 1:
+            data_inicio = datetime.strptime(dado[1], '%Y-%m-%d').date() if dado[1] else date.min
+            data_fim = datetime.strptime(dado[2], '%Y-%m-%d').date() if dado[2] else date.max
+            hoje = date.today()
+            
+            if hoje < data_inicio:
+                st.info(f"O período do seu exame começa em **{data_inicio.strftime('%d/%m/%Y')}**. Aguarde a data de início.")
+                return
+            if hoje > data_fim:
+                st.error(f"Seu prazo para realizar o exame terminou em **{data_fim.strftime('%d/%m/%Y')}**. Contate seu professor para solicitar uma nova liberação.")
+                return
+
 
     faixa = st.selectbox(
         "Selecione sua faixa:",
@@ -1139,9 +1082,6 @@ def exame_de_faixa(usuario_logado):
 
         st.success("Certificado gerado com sucesso! 🥋")
 
-# =========================================
-# 🏆 RANKING (DO SEU PROJETO ORIGINAL)
-# =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking do Modo Rola</h1>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_PATH)
@@ -1186,9 +1126,6 @@ def ranking():
     fig.update_layout(xaxis_title="Usuário", yaxis_title="% Média de Acertos")
     st.plotly_chart(fig, use_container_width=True)
 
-# =========================================
-# 👩‍🏫 PAINEL DO PROFESSOR (ATUALIZADO E FUNCIONAL)
-# =========================================
 def painel_professor():
     st.title("🥋 Painel do Professor")
     
@@ -1206,13 +1143,10 @@ def painel_professor():
     ).fetchone()
     
     equipe_id_responsavel = equipe_responsavel[0] if equipe_responsavel else None
+    equipe_nome_responsavel = equipe_responsavel[1] if equipe_responsavel else 'N/A'
     
-    # REMOVIDO: conn.close()
-    # A conexão ficará aberta até o final da função.
-
     if not equipe_id_responsavel and usuario_tipo != 'admin':
         st.warning("Você ainda não é o Professor Responsável por uma equipe. Esta seção não está disponível.")
-        # Garante o fechamento da conexão no caso de retorno precoce
         conn.close()
         return
 
@@ -1221,28 +1155,90 @@ def painel_professor():
 
     # 1. GESTÃO DE ALUNOS (Listagem e Habilitação de Exame)
     with tab_alunos:
-        equipe_nome = equipe_responsavel[1] if equipe_responsavel else 'N/A'
-        st.header(f"Lista de Alunos da Equipe: {equipe_nome}")
-        
         equipe_id = equipe_id_responsavel if equipe_id_responsavel else 0 # Use o ID da equipe
 
         if equipe_id == 0:
-             st.info("Você não é responsável por nenhuma equipe.")
+             st.info("Você não é responsável por nenhuma equipe. Use a Gestão de Equipes para visualização completa.")
         else:
-            # Reutiliza o conn ABERTO para obter os alunos
+            st.header(f"Lista de Alunos da Equipe: {equipe_nome_responsavel}")
+            
             dados_alunos = get_alunos_by_equipe(equipe_id)
             df_alunos = pd.DataFrame(dados_alunos)
             
-            # (O resto da lógica de exibição e habilitação de exame deve estar aqui,
-            # utilizando a variável 'conn' para qualquer query necessária.)
-            
-            st.info("A listagem e habilitação de exames para os alunos ficaria aqui.")
-            
-            # Simulação do painel de alunos (para ter algo visível)
-            if not df_alunos.empty:
+            if df_alunos.empty:
+                st.info("Nenhum aluno ativo ou pendente encontrado para sua equipe.")
+            else:
+                # 3. HABILITAR PERÍODO DE EXAME
+                st.subheader("Liberar Período de Exame de Faixa")
+                
+                alunos_ativos = df_alunos[df_alunos['status_vinculo'] == 'ativo'].copy()
+                
+                if alunos_ativos.empty:
+                    st.info("Não há alunos ativos para habilitar exames.")
+                else:
+                    alunos_para_selecao = {
+                        f"{row['nome_aluno']} ({row['faixa_atual']})": row['aluno_id'] 
+                        for index, row in alunos_ativos.iterrows()
+                    }
+                    
+                    with st.form("form_habilitar_exame", clear_on_submit=True):
+                        col1, col2 = st.columns(2)
+                        aluno_selecionado_str = col1.selectbox("Selecione o Aluno",list(alunos_para_selecao.keys()),key="aluno_select")
+                        aluno_id_selecionado = alunos_para_selecao.get(aluno_selecionado_str)
+                        aluno_info = alunos_ativos[alunos_ativos['aluno_id'] == aluno_id_selecionado]
+                        aluno_email = aluno_info['email'].iloc[0] if not aluno_info.empty else "Email não encontrado"
+
+                        hoje = date.today()
+                        data_inicio = col1.date_input("Data de Início do Exame", hoje)
+                        data_fim = col2.date_input("Data Limite para o Exame", hoje + timedelta(days=14))
+                        
+                        if data_fim <= data_inicio:
+                            st.error("A Data Limite deve ser posterior ou igual à Data de Início.")
+                            submetido = False
+                        else:
+                            submetido = st.form_submit_button("Habilitar Exame e Agendar Alerta")
+                        
+                        if submetido:
+                            data_inicio_str = data_inicio.strftime('%Y-%m-%d')
+                            data_fim_str = data_fim.strftime('%Y-%m-%d')
+                            
+                            if habilitar_exame_aluno(aluno_id_selecionado, data_inicio_str, data_fim_str):
+                                # Lógica de Notificação Simulada
+                                data_alerta = data_fim - timedelta(days=3)
+                                if data_alerta <= hoje:
+                                    data_alerta = hoje + timedelta(days=1)
+                                start_date_str = data_alerta.strftime('%Y-%m-%d')
+                                
+                                st.success(f"Exame habilitado para **{aluno_selecionado_str}** de **{data_inicio_str}** até **{data_fim_str}**!")
+                                st.info(f"O Alerta de Prazo Final será verificado e enviado automaticamente em: **{start_date_str}**.")
+                                st.session_state["refresh_professor_panel"] = True 
+                            else:
+                                st.error("Erro ao salvar no banco de dados. Tente novamente.")
+
+                # Exibição Final da Tabela
+                if "refresh_professor_panel" in st.session_state and st.session_state["refresh_professor_panel"]:
+                    st.session_state["refresh_professor_panel"] = False
+                    dados_alunos = get_alunos_by_equipe(equipe_id)
+                    df_alunos = pd.DataFrame(dados_alunos)
+                    
                 df_display = df_alunos.copy()
+                df_display['Data Início'] = df_display['data_inicio_exame'].fillna('N/A')
+                df_display['Data Limite'] = df_display['data_fim_exame'].fillna('N/A')
                 df_display['Habilitado'] = df_display['exame_habilitado'].apply(lambda x: '✅ Sim' if x else '❌ Não')
-                st.dataframe(df_display[['nome_aluno', 'faixa_atual', 'Habilitado']], hide_index=True)
+                
+                st.markdown("---")
+                st.subheader("Situação dos Exames")
+                
+                st.dataframe(
+                    df_display[['nome_aluno', 'faixa_atual', 'status_vinculo', 'Habilitado', 'Data Início', 'Data Limite']],
+                    column_config={
+                        "nome_aluno": "Aluno",
+                        "faixa_atual": "Faixa",
+                        "status_vinculo": "Status Vínculo",
+                        "Habilitado": "Exame Habilitado",
+                    },
+                    hide_index=True
+                )
 
 
     # 2. APROVAÇÃO DE PROFESSORES (NOVA LÓGICA)
@@ -1302,10 +1298,8 @@ def painel_professor():
 
     # 3. FECHAMENTO DA CONEXÃO
     # 🚨 PONTO CRÍTICO: Fechar a conexão apenas no final, após todas as operações de banco.
-    conn.close()
-# =========================================
-# 🏛️ GESTÃO DE EQUIPES (DO SEU PROJETO ORIGINAL)
-# =========================================
+    conn.close() 
+
 def gestao_equipes():
     st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
     conn = sqlite3.connect(DB_PATH)
@@ -1473,9 +1467,7 @@ def gestao_equipes():
             st.dataframe(alunos_vinc_df, use_container_width=True)
 
     conn.close()
-# =========================================
-# 🔑 GESTÃO DE USUÁRIOS (VERSÃO CORRIGIDA 3)
-# =========================================
+
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários, restrita ao Admin."""
     
@@ -1507,13 +1499,7 @@ def gestao_usuarios(usuario_logado):
 
     if nome_selecionado:
         try:
-            # ==========================================================
-            # 👈 [CORREÇÃO APLICADA AQUI]
-            # Forçamos o ID a ser um 'int' padrão do Python.
-            # ==========================================================
             user_id_selecionado = int(df[df["nome"] == nome_selecionado]["id"].values[0])
-            # ==========================================================
-
         except IndexError:
             st.error("Usuário não encontrado no DataFrame. Tente recarregar a página.")
             conn.close()
@@ -1522,12 +1508,10 @@ def gestao_usuarios(usuario_logado):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        # Esta consulta agora usará o 'int' correto
         cursor.execute("SELECT * FROM usuarios WHERE id=?", (user_id_selecionado,))
         user_data = cursor.fetchone()
         
         if not user_data:
-            # Se ainda der erro aqui, o problema é mais complexo, mas a chance é mínima.
             st.error("Usuário não encontrado no banco de dados. (ID não correspondeu)")
             conn.close()
             return
@@ -1606,9 +1590,7 @@ def gestao_usuarios(usuario_logado):
                 st.info(f"Não é possível redefinir a senha de usuários via '{user_data['auth_provider']}'.")
     
     conn.close()
-# =========================================
-# 🧩 GESTÃO DE QUESTÕES (DO SEU PROJETO ORIGINAL)
-# =========================================
+
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
 
@@ -1661,9 +1643,6 @@ def gestao_questoes():
                 st.warning("Questão removida.")
                 st.rerun()
 
-# =========================================
-# 🏠 TELA INÍCIO (DO SEU PROJETO ORIGINAL)
-# =========================================
 def tela_inicio():
     
     # 1. 👇 FUNÇÃO DE CALLBACK PARA NAVEGAÇÃO
@@ -1738,9 +1717,6 @@ def tela_inicio():
                 # 2. 👇 BOTÃO DE NAVEGAÇÃO
                 st.button("Gerenciar", key="nav_gest_exame", on_click=navigate_to, args=("Gestão de Exame",), use_container_width=True)
 
-# =========================================
-# 👤 MEU PERFIL (ATUALIZADO COM NÚMERO)
-# =========================================
 def tela_meu_perfil(usuario_logado):
     """Página para o usuário editar seu próprio perfil e senha."""
     
@@ -1851,8 +1827,8 @@ def tela_meu_perfil(usuario_logado):
                     st.session_state["endereco_cache"] = endereco
                     st.session_state.logradouro_val = endereco.get('logradouro', '')
                     st.session_state.bairro_val = endereco.get('bairro', '')
-                    st.session_state.cidade_val = endereco.get('cidade', '')
-                    st.session_state.estado_val = endereco.get('estado', '')
+                    st.session_state.cidade_val = endereco.get('localidade', '')
+                    st.session_state.estado_val = endereco.get('uf', '')
                     # Reinicializa o número com o valor do DB, a busca não muda o número
                     st.session_state.numero_val = user_data['numero'] or "" 
                     st.success("Endereço encontrado! Lembre-se de clicar em 'Salvar Endereço' no final.")
@@ -2005,9 +1981,6 @@ def gestao_exame_de_faixa():
         else:
             st.error("O arquivo de exame não existe.")
 
-# =========================================
-# 📜 MEUS CERTIFICADOS (DO SEU PROJETO ORIGINAL)
-# =========================================
 def meus_certificados(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
 
@@ -2069,9 +2042,6 @@ def meus_certificados(usuario_logado):
             st.error(f"Erro ao tentar recarregar o certificado '{nome_arquivo}'. Tente novamente.")
             
         st.markdown("---")
-
-# Esta seção foi refatorada.
-# O login não fica mais no topo, ele é gerenciado por este roteador.
 
 def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
@@ -2221,7 +2191,6 @@ def tela_login():
         # =========================================
         # CADASTRO (Professor se vincula à equipe)
         # =========================================
-        # ESTA LINHA DEVE ESTAR ALINHADA COM O 'if' ACIMA (DENTRO DE 'with c2:')
         elif st.session_state["modo_login"] == "cadastro":
             
             # --- Buscar equipes para o selectbox ---
@@ -2390,7 +2359,6 @@ def tela_login():
         # =========================================
         # RECUPERAÇÃO DE SENHA
         # =========================================
-        # ESTA LINHA DEVE ESTAR ALINHADA COM O 'if' e 'elif' ACIMA (DENTRO DE 'with c2:')
         elif st.session_state["modo_login"] == "recuperar":
             with st.container(border=True):
                 st.markdown("<h3 style='color:white; text-align:center;'>🔑 Recuperar Senha</h3>", unsafe_allow_html=True)
@@ -2401,250 +2369,3 @@ def tela_login():
                 if st.button("⬅️ Voltar para Login", use_container_width=True):
                     st.session_state["modo_login"] = "login"
                     st.rerun()
-                    
-def tela_completar_cadastro(user_data):
-    """Exibe o formulário para novos usuários do Google completarem o perfil."""
-    st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
-    st.markdown("### Precisamos de mais algumas informações para criar seu perfil.")
-    st.warning("Usuários do Google não precisam fornecer CPF.")
-
-    with st.form(key="form_completar_cadastro"):
-        st.text_input("Seu nome:", value=user_data['nome'], key="cadastro_nome")
-        st.text_input("Seu Email (não pode ser alterado):", value=user_data['email'], disabled=True)
-        
-        st.markdown("---")
-        tipo_usuario = st.radio(
-            "Qual o seu tipo de perfil?",
-            ["🥋 Sou Aluno", "👩‍🏫 Sou Professor"],
-            key="cadastro_tipo",
-            horizontal=True
-        )
-        
-        # Campos condicionais
-        if tipo_usuario == "🥋 Sou Aluno":
-            faixa = st.selectbox("Sua faixa atual:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"], key="cadastro_faixa")
-        else:
-            faixa = "Preta"
-            st.info("Informações adicionais de professor (como equipe) serão configuradas pelo Admin.")
-
-        submit_button = st.form_submit_button("Salvar e Acessar Plataforma", use_container_width=True)
-
-    if submit_button:
-        # Atualiza o banco de dados
-        novo_nome = st.session_state.cadastro_nome
-        novo_tipo = "aluno" if st.session_state.cadastro_tipo == "🥋 Sou Aluno" else "professor"
-        
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        
-        # 1. Atualiza a tabela 'usuarios'
-        try:
-            cursor.execute(
-                "UPDATE usuarios SET nome = ?, tipo_usuario = ?, perfil_completo = 1 WHERE id = ?",
-                (novo_nome, novo_tipo, user_data['id'])
-            )
-        except sqlite3.IntegrityError:
-            st.error("Erro: Nome de usuário já existe.")
-            conn.close()
-            return
-
-        # 2. Cria o registro na tabela 'alunos' ou 'professores'
-        if novo_tipo == "aluno":
-            cursor.execute(
-                """
-                INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo) 
-                VALUES (?, ?, 'pendente')
-                """,
-                (user_data['id'], faixa)
-            )
-        else: # Professor
-            cursor.execute(
-                """
-                INSERT INTO professores (usuario_id, status_vinculo) 
-                VALUES (?, 'pendente')
-                """,
-                (user_data['id'],)
-            )
-        
-        conn.commit()
-        conn.close()
-
-        # 3. Define o usuário na sessão
-        st.session_state.usuario = {"id": user_data['id'], "nome": novo_nome, "tipo": novo_tipo}
-        
-        # 4. Limpa o estado de registro pendente
-        del st.session_state.registration_pending
-        
-        st.success("Cadastro completo! Redirecionando...")
-        st.rerun()
-
-
-def app_principal():
-    """Função 'main' refatorada - executa o app principal quando logado."""
-    usuario_logado = st.session_state.usuario
-    if not usuario_logado:
-        st.error("Sessão expirada. Faça login novamente.")
-        st.session_state.usuario = None
-        st.rerun()
-
-    tipo_usuario = usuario_logado["tipo"]
-
-    # --- 1. Callback para os botões da Sidebar ---
-    def navigate_to_sidebar(page):
-        st.session_state.menu_selection = page
-
-    # --- Sidebar (Com 'Meu Perfil' e 'Gestão de Usuários') ---
-    st.sidebar.image("assets/logo.png", use_container_width=True)
-    st.sidebar.markdown(
-        f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>",
-        unsafe_allow_html=True,
-    )
-    st.sidebar.markdown(
-        f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>",
-        unsafe_allow_html=True,
-    )
-    
-    st.sidebar.button(
-        "👤 Meu Perfil", 
-        on_click=navigate_to_sidebar, 
-        args=("Meu Perfil",), 
-        use_container_width=True
-    )
-
-    if tipo_usuario == "admin":
-        st.sidebar.button(
-            "🔑 Gestão de Usuários", 
-            on_click=navigate_to_sidebar, 
-            args=("Gestão de Usuários",), 
-            use_container_width=True
-        )
-
-    st.sidebar.markdown("---")
-    if st.sidebar.button("🚪 Sair", use_container_width=True):
-        st.session_state.usuario = None
-        st.session_state.pop("menu_selection", None)
-        st.session_state.pop("token", None) 
-        st.session_state.pop("registration_pending", None) 
-        if "endereco_cache" in st.session_state: del st.session_state["endereco_cache"]
-        st.rerun()
-
-    # =========================================
-    # LÓGICA DE ROTA (ATUALIZADA)
-    # =========================================
-    
-    if "menu_selection" not in st.session_state:
-        st.session_state.menu_selection = "Início"
-
-    pagina_selecionada = st.session_state.menu_selection
-
-    # --- ROTA 1: Telas da Sidebar (Sem menu horizontal) ---
-    if pagina_selecionada in ["Meu Perfil", "Gestão de Usuários"]:
-        
-        if pagina_selecionada == "Meu Perfil":
-            tela_meu_perfil(usuario_logado)
-        elif pagina_selecionada == "Gestão de Usuários":
-            gestao_usuarios(usuario_logado) 
-        
-        if st.button("⬅️ Voltar ao Início", use_container_width=True):
-            navigate_to_sidebar("Início")
-            st.rerun()
-
-    # --- ROTA 2: Tela "Início" (Sem menu horizontal) ---
-    elif pagina_selecionada == "Início":
-        # Chama a tela inicial diretamente, sem desenhar o menu
-        tela_inicio()
-
-    # --- ROTA 3: Telas do Menu Horizontal (Desenha o menu) ---
-    else:
-        # Define as opções de menu (sem "Início", "Meu Perfil" ou "Gestão")
-        if tipo_usuario in ["admin", "professor"]:
-            opcoes = ["Modo Rola", "Exame de Faixa", "Ranking", "Painel do Professor", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-            icons = ["people-fill", "journal-check", "trophy-fill", "easel-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
-        
-        else: # aluno
-            opcoes = ["Modo Rola", "Ranking", "Meus Certificados"]
-            icons = ["people-fill", "trophy-fill", "patch-check-fill"]
-            
-            # Lógica para adicionar Exame (se habilitado)
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
-            dado = cursor.fetchone()
-            conn.close()
-            if dado and dado[0] == 1:
-                opcoes.insert(1, "Exame de Faixa") # Insere na posição 1 (depois de Modo Rola)
-                icons.insert(1, "journal-check")
-        
-        # Adiciona "Início" de volta ao começo das listas
-        opcoes.insert(0, "Início")
-        icons.insert(0, "house-fill")
-
-        # Desenha o menu horizontal
-        # A 'key' é a mesma (menu_selection), então ela controla o estado
-        menu = option_menu(
-            menu_title=None,
-            options=opcoes,
-            icons=icons,
-            key="menu_selection",
-            orientation="horizontal",
-            default_index=opcoes.index(pagina_selecionada), # Garante que a aba correta esteja selecionada
-            styles={
-                "container": {"padding": "0!importan", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
-                "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
-                "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
-                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
-            }
-        )
-
-        # Roteamento das telas do menu horizontal
-        if menu == "Início":
-            # (Este 'if' garante que se o usuário clicar em "Início" no menu, ele volte)
-            tela_inicio()
-        elif menu == "Modo Rola":
-            modo_rola(usuario_logado)
-        elif menu == "Exame de Faixa":
-            exame_de_faixa(usuario_logado)
-        elif menu == "Ranking":
-            ranking()
-        elif menu == "Painel do Professor":
-            painel_professor()
-        elif menu == "Gestão de Equipes":
-            gestao_equipes()
-        elif menu == "Gestão de Questões":
-            gestao_questoes()
-        elif menu == "Gestão de Exame":
-            gestao_exame_de_faixa()
-        elif menu == "Meus Certificados":
-            meus_certificados(usuario_logado)
-        
-# =========================================
-# EXECUÇÃO PRINCIPAL (ROTEADOR)
-# =========================================
-if __name__ == "__main__":
-    
-    # 1. Inicializa o estado de 'token' e 'registration' se não existirem
-    if "token" not in st.session_state:
-        st.session_state.token = None
-    if "registration_pending" not in st.session_state:
-        st.session_state.registration_pending = None
-    if "usuario" not in st.session_state:
-        st.session_state.usuario = None
-    
-    # Garante que os caches de endereço existam na sessão
-    st.session_state.setdefault("endereco_cache", {})
-    st.session_state.setdefault("cadastro_endereco_cache", {})
-
-    # 2. Lógica de Roteamento Principal
-    # (A lógica de pegar o token foi movida para 'tela_login()')
-    
-    if st.session_state.registration_pending:
-        # ROTA 1: Usuário precisa completar o cadastro (após Google Login)
-        tela_completar_cadastro(st.session_state.registration_pending)
-        
-    elif st.session_state.usuario:
-        # ROTA 2: Usuário está logado
-        app_principal()
-        
-    else:
-        # ROTA 3: Usuário está deslogado (mostra tela de login)
-        tela_login()
