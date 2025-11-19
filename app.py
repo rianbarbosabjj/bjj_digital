@@ -1047,7 +1047,7 @@ def gestao_equipes():
 
     # === 👩‍🏫 ABA 2 - PROFESSORES (Apoio) ===
     with aba2:
-        st.subheader("Vincular professor de apoio a uma equipe")
+        st.subheader("Vincular professor de auxiliar a uma equipe")
 
         professores_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='professor'", conn)
         equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
@@ -1055,12 +1055,12 @@ def gestao_equipes():
         if professores_df.empty or equipes_df.empty:
             st.warning("Cadastre professores e equipes primeiro.")
         else:
-            prof = st.selectbox("Professor de apoio:", professores_df["nome"])
+            prof = st.selectbox("Professor de auxiliar:", professores_df["nome"])
             equipe_prof = st.selectbox("Equipe:", equipes_df["nome"])
             prof_id = int(professores_df.loc[professores_df["nome"] == prof, "id"].values[0])
             equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_prof, "id"].values[0])
 
-            if st.button("📎 Vincular Professor de Apoio"):
+            if st.button("📎 Vincular Professor de auxiliar"):
                 cursor.execute("""
                     INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, status_vinculo)
                     VALUES (?, ?, ?, ?)
