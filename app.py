@@ -1848,7 +1848,6 @@ def tela_login():
             conn = sqlite3.connect(DB_PATH)
             # Carrega equipes para o formulário
             equipes_df = pd.read_sql_query("SELECT id, nome, professor_responsavel_id FROM equipes", conn)
-            # conn.close() # A conexão será fechada após o commit ou rollback
             
             # --- Definição da Faixa ---
             if tipo_usuario == "Aluno":
@@ -1856,9 +1855,7 @@ def tela_login():
                     "Branca", "Cinza", "Amarela", "Laranja", "Verde",
                     "Azul", "Roxa", "Marrom", "Preta"
                 ])
-                
             else: # Professor
-                # 📝 Professores podem escolher Marrom ou Preta
                 faixa = st.selectbox("Graduação (faixa):", ["Marrom", "Preta"])
                 st.info("Professores devem ser Marrom ou Preta.")
                 
@@ -1893,36 +1890,39 @@ def tela_login():
                 if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_reg_cep'):
                     endereco = buscar_cep(novo_cep_input)
                     if endereco:
+                        # Atualiza o estado da sessão com os dados encontrados
                         st.session_state.endereco_cep_cadastro = {
                             'cep': novo_cep_input,
                             **endereco
                         }
-                        st.success("Endereço encontrado e campos preenchidos! Preencha Número e Complemento.")
+                        st.success("Endereço encontrado e campos preenchidos! Verifique e complete com Número/Complemento.")
                     else:
                         st.error("CEP inválido ou não encontrado. Verifique o número.")
-                        # Limpa os campos se o CEP for inválido/não encontrado
+                        # Limpa os campos para que o usuário preencha manualmente
                         st.session_state.endereco_cep_cadastro = {
                             'cep': novo_cep_input,
                             'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
                         }
-                    st.rerun() # Atualiza a tela para exibir os campos preenchidos
+                    st.rerun() # Dispara a atualização para que os valores no campo mudem
 
-            # Campos preenchidos automaticamente e desabilitados
+            # CAMPOS HABILITADOS (sem disabled=True)
+            # O valor inicial é puxado da st.session_state.endereco_cep_cadastro (resultado da busca)
+            # mas o usuário pode editar, e o valor final será o que estiver na variável do widget.
             col_logr, col_bairro = st.columns(2)
             novo_logradouro = col_logr.text_input("Logradouro:", 
                                                   value=st.session_state.endereco_cep_cadastro['logradouro'], 
-                                                  disabled=True, key='reg_logradouro')
+                                                  key='reg_logradouro')
             novo_bairro = col_bairro.text_input("Bairro:", 
                                                 value=st.session_state.endereco_cep_cadastro['bairro'], 
-                                                disabled=True, key='reg_bairro')
+                                                key='reg_bairro')
 
             col_cidade, col_uf = st.columns(2)
             novo_cidade = col_cidade.text_input("Cidade:", 
                                                 value=st.session_state.endereco_cep_cadastro['cidade'], 
-                                                disabled=True, key='reg_cidade')
+                                                key='reg_cidade')
             novo_uf = col_uf.text_input("UF:", 
                                        value=st.session_state.endereco_cep_cadastro['uf'], 
-                                       disabled=True, key='reg_uf')
+                                       key='reg_uf')
             
             # Campos preenchidos pelo usuário
             col_num, col_comp = st.columns(2)
@@ -1959,7 +1959,7 @@ def tela_login():
                             tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
 
                             # 1. Salva na tabela 'usuarios' (com Endereço)
-                            endereco_data = st.session_state.endereco_cep_cadastro
+                            # 🚨 AQUI, USAMOS OS VALORES FINAIS DOS INPUTS (novo_logradouro, etc.)
                             cursor.execute(
                                 """
                                 INSERT INTO usuarios (
@@ -1975,21 +1975,20 @@ def tela_login():
                                     tipo_db, 
                                     hashed,
                                     
-                                    # Dados de Endereço
-                                    endereco_data['cep'],
-                                    endereco_data['logradouro'],
+                                    # Dados de Endereço (agora lendo o valor final dos widgets)
+                                    novo_cep_input,
+                                    novo_logradouro,
                                     novo_numero,
                                     novo_complemento,
-                                    endereco_data['bairro'],
-                                    endereco_data['cidade'],
-                                    endereco_data['uf']
+                                    novo_bairro,
+                                    novo_cidade,
+                                    novo_uf
                                 )
                             )
                             novo_id = cursor.lastrowid
                             
                             # 2. Salva na tabela 'alunos' ou 'professores' com status PENDENTE
                             if tipo_db == "aluno":
-                                # Professor_id fica NULL, será definido pelo professor responsável na aprovação
                                 cursor.execute(
                                     """
                                     INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) 
