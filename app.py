@@ -34,14 +34,12 @@ st.markdown(f"""
 
 /* --- CORREÇÃO CRÍTICA: GARANTE QUE O BACKGROUND E O CONTEÚDO APAREÇAM --- */
 
-/* Aplica cor de fundo ao corpo principal do Streamlit (resolve tela preta) */
 [data-testid="stAppViewContainer"] > .main {{
     background-color: {COR_FUNDO} !important;
     color: {COR_TEXTO} !important;
-    min-height: 100vh; /* Garante que a tela tenha altura total */
+    min-height: 100vh;
 }}
 
-/* Força a barra lateral a ter a mesma cor de fundo */
 [data-testid="stSidebar"] {{
     background-color: #0c241e !important;
 }}
@@ -280,6 +278,33 @@ if not os.path.exists(DB_PATH):
 
 # Sempre execute a migração se o DB existir
 migrar_db()
+
+# =========================================
+# AUTENTICAÇÃO (CRITICAL FIX: MOVED TO GLOBAL SCOPE)
+# =========================================
+
+# 1. Configuração do Google OAuth (lendo do secrets.toml)
+try:
+    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+    REDIRECT_URI = "https://bjjdigital.streamlit.app/" # Mude para sua URL de produção
+except FileNotFoundError:
+    st.error("Arquivo secrets.toml não encontrado. Crie .streamlit/secrets.toml")
+    st.stop()
+except KeyError:
+    st.error("Configure GOOGLE_CLIENT_ID e GOOGLE_CLIENT_SECRET no secrets.toml")
+    st.stop()
+
+# 2. Inicialização do componente OAuth (DEFINIÇÃO GLOBAL)
+oauth_google = OAuth2Component(
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    refresh_token_endpoint="https://oauth2.googleapis.com/token",
+    revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
+)
+
 
 # =========================================
 # FUNÇÕES DE UTILIDADE E AUTENTICAÇÃO
@@ -1413,76 +1438,6 @@ def tela_login():
 
 
     # =========================================
-    # CSS
-    # ... (o CSS permanece o mesmo) ...
-    # =========================================
-    st.markdown("""
-    <style>
-        html, body, [data-testid="stAppViewContainer"] {
-            height: 100%;
-            overflow-y: auto;
-        }
-
-        [data-testid="stAppViewContainer"] > .main {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            min-height: 95vh;
-        }
-        div[data-testid="stContainer"] > div[style*="border"] {
-            background-color: #0c241e !important;
-            border: 1px solid #078B6C !important;
-            border-radius: 12px !important;
-            padding: 25px 35px !important;
-            max-width: 400px !important;
-            margin: 0 auto !important;
-            box-shadow: 0px 0px 8px rgba(0,0,0,0.3);
-        }
-        .stButton>button[kind="primary"] {
-            background: linear-gradient(90deg, #078B6C, #056853) !important;
-            color: white !important;
-            font-weight: bold !important;
-            border: none !important;
-            border-radius: 8px !important;
-            padding: 0.6em 1.2em !important;
-            width: 100% !important;
-            transition: 0.3s;
-        }
-        .stButton>button[kind="primary"]:hover {
-            background: #FFD770 !important;
-            color: #0c241e !important;
-            transform: scale(1.02);
-        }
-        .divider {
-            text-align: center;
-            color: gray;
-            font-size: 13px;
-            margin: 12px 0;
-        }
-    </style>
-    """, unsafe_allow_html=True)
-
-    # =========================================
-    # LOGO CENTRALIZADA
-    # ... (o código da logo permanece o mesmo) ...
-    # =========================================
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        with open(logo_path, "rb") as f:
-            logo_base64 = base64.b64encode(f.read()).decode()
-        logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:140px;height:auto;margin-bottom:5px;'/>"
-    else:
-        logo_html = "<p style='color:red;'>Logo não encontrada.</p>"
-
-    st.markdown(f"""
-        <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-top:-20px;'>
-            {logo_html}
-            <h2 style='color:#FFD700;text-align:center;'>Bem-vindo(a) ao BJJ Digital</h2>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # =========================================
     # BLOCO DE LOGIN
     # =========================================
     c1, c2, c3 = st.columns([1, 1.5, 1])
@@ -1517,7 +1472,7 @@ def tela_login():
                             st.session_state["modo_login"] = "recuperar"
                             st.rerun()
 
-                # Botão Google
+                # Botão Google (OAuth component is now globally defined)
                 st.markdown("<div class='divider'>— OU —</div>", unsafe_allow_html=True)
                 token = oauth_google.authorize_button(
                     name="Entrar com o Google",
@@ -1843,7 +1798,7 @@ def app_principal():
             styles={
                 "container": {"padding": "0!important", "background-color": COR_FUNDO, "border-radius": "10px", "margin-bottom": "20px"},
                 "icon": {"color": COR_DESTAQUE, "font-size": "18px"},
-                "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
+                "nav-link": {"font-size": "14px", "text-align": "center", "--hover-color": "#1a4d40", "color": COR_TEXTO, "font-weight": "600"},
                 "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
             }
         )
