@@ -969,7 +969,7 @@ def gestao_equipes():
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
 
-    # 🚨 LINHA CRÍTICA: Definição das variáveis de aba (agora garantida)
+    # Definição das variáveis de aba
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
     # === 🏫 ABA 1 - EQUIPES ===
@@ -1099,13 +1099,13 @@ def gestao_equipes():
         else:
             st.dataframe(profs_df, use_container_width=True)
 
-    # === 🥋 ABA 3 - ALUNOS (Com Inclusão de Professor Responsável) ===
+    # === 🥋 ABA 3 - ALUNOS (Com Inclusão de Professor Responsável e Ativação de Vínculo) ===
     with aba3:
         st.subheader("Vincular aluno a professor e equipe")
 
         alunos_df = pd.read_sql_query("SELECT id, nome FROM usuarios WHERE tipo_usuario='aluno'", conn)
         
-        # 🚨 LÓGICA ATUALIZADA: Buscar todos os professores ativos/responsáveis para o seletor
+        # LÓGICA: Busca todos os professores ativos/responsáveis
         professores_disponiveis_df = pd.read_sql_query("""
             -- Professores Responsáveis
             SELECT 
@@ -1140,20 +1140,41 @@ def gestao_equipes():
             aluno_id = int(alunos_df.loc[alunos_df["nome"] == aluno, "id"].values[0])
             equipe_id = int(equipes_df.loc[equipes_df["nome"] == equipe_aluno, "id"].values[0])
 
-            # 1. Encontra o usuario_id do professor selecionado (para buscar na tabela 'professores')
-            # Usamos iloc[0] para pegar o primeiro ID correspondente ao nome
+            # 1. Encontra o usuario_id do professor selecionado
             prof_usuario_id = professores_disponiveis_df.loc[professores_disponiveis_df["nome_professor"] == professor_nome, "usuario_id"].iloc[0]
 
-            # 2. Encontra a PK na tabela 'professores' (p.id) que é a chave de vínculo do aluno
+            # 2. Encontra a PK na tabela 'professores' (p.id)
             cursor.execute("SELECT id FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (prof_usuario_id,))
             prof_pk_id_result = cursor.fetchone()
+            professor_id = prof_pk_id_result[0] if prof_pk_id_result else None
 
-            if prof_pk_id_result:
-                professor_id = prof_pk_id_result[0]
-            else:
-                st.error(f"Erro: O professor {professor_nome} não tem um vínculo ativo na tabela de professores. Não é possível vincular alunos.")
-                professor_id = None
-
+            # 🚨 CORREÇÃO CRÍTICA: Se o vínculo ativo não foi encontrado, criamos/ativamos agora
+            if not professor_id:
+                # Se não tem o PK, tentamos criar o vínculo ativo (assumindo que o Admin está corrigindo a falta de vínculo)
+                
+                # Checa se o registro existe (inativo ou pendente)
+                cursor.execute("SELECT id FROM professores WHERE usuario_id=?", 
+                               (prof_usuario_id,))
+                existing_prof_record = cursor.fetchone()
+                
+                if existing_prof_record:
+                    # Se existe, mas está inativo/pendente, ATIVAMOS e pegamos o ID.
+                    cursor.execute("UPDATE professores SET status_vinculo='ativo', equipe_id=? WHERE usuario_id=?", 
+                                   (equipe_id, prof_usuario_id))
+                    conn.commit()
+                    professor_id = existing_prof_record[0]
+                    st.info(f"O vínculo do professor {professor_nome} foi ATIVADO para prosseguir.")
+                else:
+                    # Se não existe registro nenhum, CRIA um novo ativo.
+                    cursor.execute("""
+                        INSERT INTO professores (usuario_id, equipe_id, pode_aprovar, eh_responsavel, status_vinculo)
+                        VALUES (?, ?, 1, 0, 'ativo')
+                    """, (prof_usuario_id, equipe_id))
+                    conn.commit()
+                    professor_id = cursor.lastrowid
+                    st.info(f"Vínculo do professor {professor_nome} CRIADO para prosseguir.")
+            
+            # --- Tenta Vincular o Aluno ---
             if professor_id and st.button("✅ Vincular Aluno"):
                 # Verifica se o aluno já está vinculado
                 cursor.execute("SELECT id FROM alunos WHERE usuario_id=?", (aluno_id,))
@@ -1163,7 +1184,7 @@ def gestao_equipes():
                     cursor.execute("""
                         INSERT INTO alunos (usuario_id, faixa_atual, turma, professor_id, equipe_id, status_vinculo)
                         VALUES (?, ?, ?, ?, ?, 'ativo')
-                    """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id))
+                    """, (aluno_id, "Branca", "Turma 1", professor_id, equipe_id)) # Status 'ativo' pois o Admin está forçando o vínculo
                     conn.commit()
                     st.success(f"Aluno {aluno} vinculado à equipe {equipe_aluno} sob orientação de {professor_nome}.")
                     st.rerun()
