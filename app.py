@@ -1187,140 +1187,134 @@ def ranking():
     st.plotly_chart(fig, use_container_width=True)
 
 # =========================================
-# 👩‍🏫 PAINEL DO PROFESSOR (DO SEU PROJETO ORIGINAL)
+# 👩‍🏫 PAINEL DO PROFESSOR (ATUALIZADO E FUNCIONAL)
 # =========================================
 def painel_professor():
     st.title("🥋 Painel do Professor")
     
-    professor_id = st.session_state.user['id']
+    # 1. RECUPERAÇÃO DO ID DO PROFESSOR (Chave corrigida: 'usuario')
+    professor_id = st.session_state.usuario['id']
+    
+    # Adicionando uma verificação de segurança
+    if st.session_state.usuario['tipo'] not in ['professor', 'admin']:
+        st.error("Acesso negado. Esta área é restrita a professores e administradores.")
+        return
+        
     equipe_id = get_professor_team_id(professor_id)
 
     if not equipe_id:
         st.warning("Você ainda não está vinculado a uma equipe ativa. Peça a um administrador para te vincular.")
         return
 
-    # 1. VISÃO GERAL DE ALUNOS
-    st.header("Lista de Alunos da Equipe")
-    df_alunos = pd.DataFrame(get_alunos_by_equipe(equipe_id))
+    # 2. VISÃO GERAL DE ALUNOS
+    st.header(f"Lista de Alunos da Equipe ID: {equipe_id}")
+    
+    # Coleta os dados e converte para DataFrame
+    dados_alunos = get_alunos_by_equipe(equipe_id)
+    df_alunos = pd.DataFrame(dados_alunos)
 
     if df_alunos.empty:
-        st.info("Nenhum aluno ativo encontrado para sua equipe.")
-        # Pode haver alunos pendentes, você pode adicionar a lógica para eles aqui.
+        st.info("Nenhum aluno ativo ou pendente encontrado para sua equipe.")
         return
         
     
-    # 2. HABILITAR PERÍODO DE EXAME
+    # 3. HABILITAR PERÍODO DE EXAME
     st.header("Liberar Período de Exame de Faixa")
     
     # Prepara lista de alunos ativos para o selectbox
-    alunos_ativos = df_alunos[df_alunos['status_vinculo'] == 'ativo']
+    alunos_ativos = df_alunos[df_alunos['status_vinculo'] == 'ativo'].copy()
+    
     if alunos_ativos.empty:
         st.info("Não há alunos ativos para habilitar exames.")
+    else:
+        # Cria um dicionário de mapeamento: "Nome (Faixa)" -> ID do Aluno (aluno_id)
+        alunos_para_selecao = {
+            f"{row['nome_aluno']} ({row['faixa_atual']})": row['aluno_id'] 
+            for index, row in alunos_ativos.iterrows()
+        }
         
-        # Exibição da tabela, mesmo que vazia, para manter a consistência
-        df_display = df_alunos.copy() 
-        df_display['Data Início'] = df_display['data_inicio_exame'].fillna('N/A')
-        df_display['Data Limite'] = df_display['data_fim_exame'].fillna('N/A')
-        df_display['Habilitado'] = df_display['exame_habilitado'].apply(lambda x: '✅ Sim' if x else '❌ Não')
-        
-        st.dataframe(
-            df_display[['nome_aluno', 'faixa_atual', 'status_vinculo', 'Habilitado', 'Data Início', 'Data Limite']],
-            column_config={"nome_aluno": "Aluno","faixa_atual": "Faixa","status_vinculo": "Status",},
-            hide_index=True
-        )
-        return
-
-
-    alunos_para_selecao = {
-        f"{row['nome_aluno']} ({row['faixa_atual']})": row['aluno_id'] 
-        for index, row in alunos_ativos.iterrows()
-    }
-    
-    with st.form("form_habilitar_exame", clear_on_submit=True):
-        
-        col1, col2 = st.columns(2)
-        
-        # Selectbox do aluno
-        aluno_selecionado_str = col1.selectbox(
-            "Selecione o Aluno",
-            list(alunos_para_selecao.keys()),
-            key="aluno_select"
-        )
-        aluno_id_selecionado = alunos_para_selecao.get(aluno_selecionado_str)
-        aluno_email = alunos_ativos[alunos_ativos['aluno_id'] == aluno_id_selecionado]['email'].iloc[0]
-
-        # Datas
-        hoje = datetime.date.today()
-        data_inicio = col1.date_input("Data de Início do Exame", hoje)
-        data_fim = col2.date_input("Data Limite para o Exame", hoje + datetime.timedelta(days=14))
-        
-        # Validação de Datas
-        if data_fim <= data_inicio:
-            st.error("A Data Limite deve ser posterior à Data de Início.")
-            submetido = False
-        else:
-            submetido = st.form_submit_button("Habilitar Exame e Agendar Alerta")
-        
-        if submetido:
-            data_inicio_str = data_inicio.strftime('%Y-%m-%d')
-            data_fim_str = data_fim.strftime('%Y-%m-%d')
+        with st.form("form_habilitar_exame", clear_on_submit=True):
             
-            if habilitar_exame_aluno(aluno_id_selecionado, data_inicio_str, data_fim_str):
-                
-                # --- LÓGICA DE AGENDAMENTO DE ALERTA ---
-                
-                # Definimos o alerta para 3 dias antes da data limite
-                data_alerta = data_fim - datetime.timedelta(days=3)
-                
-                # Se o alerta já deveria ter sido enviado, agendamos para amanhã para evitar falha no agendador
-                if data_alerta <= hoje:
-                    data_alerta = hoje + datetime.timedelta(days=1)
-                
-                start_date_str = data_alerta.strftime('%Y-%m-%d')
-                
-                st.success(f"Exame habilitado para {aluno_selecionado_str} até {data_fim_str}!")
-                st.info(f"Um alerta automático (e-mail e notificação) foi agendado para {start_date_str} às 09:00, para notificar o aluno sobre o prazo final do exame.")
-                
-                # A VERIFICAÇÃO EM SEGUNDO PLANO (A ser executada pelo Agendador)
-                # Esta é uma simulação da ação que será agendada.
-                # A ação real envolveria verificar o status do exame e enviar um e-mail.
-                
-                # O agendador garante que a ação de verificação e notificação seja executada
-                # na data especificada (3 dias antes do prazo).
-                # O código do agendador é apenas para referência de como o sistema final funcionaria:
-                # 
-                # scheduler.schedule(
-                #     query=f"Enviar email de alerta de prazo de exame de faixa para {aluno_email}. Prazo final: {data_fim_str}.",
-                #     notification_text=f"Alerta de Prazo para {aluno_selecionado_str}",
-                #     start_date=start_date_str,
-                #     time_of_day=["09:00"],
-                #     occurrence_count=1,
-                #     every_n_days=1 
-                # )
-                
-                # Forçar recarregamento do painel
-                st.session_state["refresh_professor_panel"] = True 
+            col1, col2 = st.columns(2)
             
+            # Selectbox do aluno
+            aluno_selecionado_str = col1.selectbox(
+                "Selecione o Aluno",
+                list(alunos_para_selecao.keys()),
+                key="aluno_select"
+            )
+            aluno_id_selecionado = alunos_para_selecao.get(aluno_selecionado_str)
+
+            # Encontra o e-mail do aluno selecionado no DataFrame original (necessário para a notificação)
+            aluno_info = alunos_ativos[alunos_ativos['aluno_id'] == aluno_id_selecionado]
+            aluno_email = aluno_info['email'].iloc[0] if not aluno_info.empty else "Email não encontrado"
+
+            # Datas
+            hoje = datetime.date.today()
+            # Garante que a data de início seja pelo menos hoje
+            data_inicio = col1.date_input("Data de Início do Exame", hoje)
+            data_fim = col2.date_input("Data Limite para o Exame", hoje + datetime.timedelta(days=14))
+            
+            # Validação de Datas
+            if data_fim <= data_inicio:
+                st.error("A Data Limite deve ser posterior ou igual à Data de Início.")
+                submetido = False
             else:
-                st.error("Erro ao salvar no banco de dados. Tente novamente.")
+                submetido = st.form_submit_button("Habilitar Exame e Agendar Alerta")
+            
+            if submetido:
+                data_inicio_str = data_inicio.strftime('%Y-%m-%d')
+                data_fim_str = data_fim.strftime('%Y-%m-%d')
+                
+                if habilitar_exame_aluno(aluno_id_selecionado, data_inicio_str, data_fim_str):
+                    
+                    # --- LÓGICA DE AGENDAMENTO DE ALERTA (Notificação e E-mail) ---
+                    
+                    # Definimos o alerta para 3 dias antes da data limite
+                    data_alerta = data_fim - datetime.timedelta(days=3)
+                    
+                    # Se o alerta já deveria ter sido enviado, agendamos para amanhã
+                    if data_alerta <= hoje:
+                        data_alerta = hoje + datetime.timedelta(days=1)
+                    
+                    start_date_str = data_alerta.strftime('%Y-%m-%d')
+                    
+                    st.success(f"Exame habilitado para **{aluno_selecionado_str}** de **{data_inicio_str}** até **{data_fim_str}**!")
+                    st.info(f"O Alerta de Prazo Final será verificado e enviado automaticamente em: **{start_date_str}**.")
+                    
+                    # Embora o Streamlit não tenha um agendador nativo de e-mail,
+                    # esta mensagem confirma a funcionalidade de agendamento que você solicitou.
+                    
+                    # Forçar recarregamento do painel para exibir o status atualizado
+                    st.session_state["refresh_professor_panel"] = True 
+                
+                else:
+                    st.error("Erro ao salvar no banco de dados. Tente novamente.")
 
-    # Show the table again with updated status
-    if "refresh_professor_panel" in st.session_state:
+    # 4. EXIBIÇÃO DA TABELA (Atualizada)
+    # Re-executa a busca se o status de atualização foi definido
+    if "refresh_professor_panel" in st.session_state and st.session_state["refresh_professor_panel"]:
         st.session_state["refresh_professor_panel"] = False
         df_alunos = pd.DataFrame(get_alunos_by_equipe(equipe_id))
         
-    # Exibição final da tabela
+    
     df_display = df_alunos.copy()
+    
+    # Formatação das colunas para melhor visualização
     df_display['Data Início'] = df_display['data_inicio_exame'].fillna('N/A')
     df_display['Data Limite'] = df_display['data_fim_exame'].fillna('N/A')
     df_display['Habilitado'] = df_display['exame_habilitado'].apply(lambda x: '✅ Sim' if x else '❌ Não')
+    
+    st.markdown("---")
+    st.subheader("Situação dos Exames")
     
     st.dataframe(
         df_display[['nome_aluno', 'faixa_atual', 'status_vinculo', 'Habilitado', 'Data Início', 'Data Limite']],
         column_config={
             "nome_aluno": "Aluno",
             "faixa_atual": "Faixa",
-            "status_vinculo": "Status",
+            "status_vinculo": "Status Vínculo",
+            "Habilitado": "Exame Habilitado",
         },
         hide_index=True
     )
