@@ -83,26 +83,20 @@ def gerar_certificado_pdf(cert_id, nome_aluno, faixa, professor, data_emissao):
     # QR CODE
     # ----------------------------------------------------------
 
-    validacao_url = f"https://seudominio.com/validar/{cert_id}"
+
+    validacao_url = f"https://bjjdigital.netlify.app/verificar.html?cert_id={cert_id}"
+
     qr_base64 = gerar_qrcode_base64(validacao_url)
 
     qr_bytes = base64.b64decode(qr_base64)
     qr_path = f"qr_{cert_id}.png"
     with open(qr_path, "wb") as f:
-        f.write(qr_bytes)
+    f.write(qr_bytes)
 
     pdf.image(qr_path, x=230, y=120, w=40)
 
     if os.path.exists(qr_path):
         os.remove(qr_path)
-
-    # ----------------------------------------------------------
-    # SALVAR PDF
-    # ----------------------------------------------------------
-
-    pdf.output(arquivo_saida)
-
-    return arquivo_saida
 
 
 # ============================================================
