@@ -1,28 +1,21 @@
 import streamlit as st
 from core.db import consultar_um
 
-
-def api_router():
+def api_router(params):
 
     st.set_page_config(page_title="API BJJ Digital")
 
-    # Pega a URL completa
-    full_url = st.experimental_get_query_params()
-    url_parts = st.experimental_get_url().split("/")
+    if params.get("api") == ["certificado"]:
 
-    # Se não tiver "/api/", não é rota válida
-    if "api" not in url_parts:
-        st.json({"error": "Use /api/... para acessar a API"})
-        return
+        # id do certificado
+        if "id" not in params:
+            st.json({"error": "Parâmetro id não informado"})
+            return
 
-    # -------------------------------------------------------
-    # /api/certificado/<id>
-    # -------------------------------------------------------
-    if "certificado" in url_parts:
         try:
-            cert_id = int(url_parts[-1])
+            cert_id = int(params["id"][0])
         except:
-            st.json({"error": "cert_id inválido"})
+            st.json({"error": "ID inválido"})
             return
 
         cert = consultar_um("""
@@ -48,5 +41,4 @@ def api_router():
         })
         return
 
-    # Se nenhuma rota for válida:
-    st.json({"error": "Rota inválida"})
+    st.json({"error": "API desconhecida"})
