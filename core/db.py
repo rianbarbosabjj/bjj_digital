@@ -113,6 +113,21 @@ def inicializar_banco():
     );
     """)
     # ============================================
+    # TABELA EXAMES LIBERADOS
+    # ============================================
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS exames_liberados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER NOT NULL,
+        exame_config_id INTEGER NOT NULL,
+        liberado INTEGER DEFAULT 0,
+        data_liberacao TEXT,
+        FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+        FOREIGN KEY(exame_config_id) REFERENCES exames_config(id)
+    );
+    """)
+    
+    # ============================================
     # CRIAR ADMIN PADRÃO (se não existir)
     # ============================================
     cursor.execute("SELECT * FROM usuarios WHERE email='admin'")
