@@ -191,3 +191,26 @@ def executar_retorna_id(query, params=()):
     last_id = cursor.lastrowid
     conn.close()
     return last_id
+
+def liberar_exame_para_aluno(usuario_id, exame_config_id):
+    executar("""
+        INSERT OR REPLACE INTO exames_liberados (usuario_id, exame_config_id, liberado, data_liberacao)
+        VALUES (?, ?, 1, datetime('now'))
+    """, (usuario_id, exame_config_id))
+
+
+def remover_liberacao(usuario_id, exame_config_id):
+    executar("""
+        DELETE FROM exames_liberados
+        WHERE usuario_id=? AND exame_config_id=?
+    """, (usuario_id, exame_config_id))
+
+
+def verificar_liberacao(usuario_id, exame_config_id):
+    row = consultar_um("""
+        SELECT liberado
+        FROM exames_liberados
+        WHERE usuario_id=? AND exame_config_id=? AND liberado=1
+    """, (usuario_id, exame_config_id))
+    return row is not None
+
