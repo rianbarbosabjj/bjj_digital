@@ -90,7 +90,25 @@ def inicializar_banco():
     conn.commit()
     conn.close()
 
+# ============================================
+# TABELA DE CERTIFICADOS
+# ============================================
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS certificados (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER NOT NULL,
+        exame_config_id INTEGER NOT NULL,
+        data_emissao TEXT NOT NULL,
+    
+        -- Campos úteis para a validação futura
+        codigo TEXT,        -- código BJJDIGITAL-YYYY-XXXX
+        verificado INTEGER DEFAULT 0,
+
+        FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
+        FOREIGN KEY(exame_config_id) REFERENCES exames_config(id)
+    );
+    """)
 # ============================================================
 # FUNÇÕES GENÉRICAS
 # ============================================================
