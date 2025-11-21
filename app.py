@@ -4,7 +4,7 @@ import os
 from core.db import inicializar_banco
 from core.auth import tela_login, verificar_sessao, tela_completar_cadastro
 
-# PÁGINAS DO SISTEMA
+# === PÁGINAS DO SISTEMA ===
 from pages.inicio import tela_inicio
 from pages.modo_rola import tela_modo_rola
 from pages.exame import tela_exame
@@ -15,6 +15,11 @@ from pages.gestao_usuarios import gestao_usuarios
 from pages.gestao_questoes import gestao_questoes
 from pages.gestao_exame import gestao_exames
 from pages.admin_dashboard import admin_dashboard
+
+# === NOVAS PÁGINAS ===
+from pages.meu_perfil import tela_perfil
+from pages.solicitacoes_faixa import tela_solicitacoes_faixa
+
 from api import api_router
 
 # ======================================================================
@@ -54,7 +59,6 @@ def menu_lateral(usuario):
     with st.sidebar:
         st.image("assets/logo.png", width=180)
         st.markdown(f"### 👋 Olá, **{usuario['nome'].title()}**")
-
         st.markdown("---")
 
         # MENU DO ALUNO
@@ -64,6 +68,7 @@ def menu_lateral(usuario):
                 "Modo Rola",
                 "Exame de Faixa",
                 "Ranking",
+                "Meu Perfil",
                 "Sair"
             ])
 
@@ -74,6 +79,8 @@ def menu_lateral(usuario):
                 "Ranking",
                 "Painel do Professor",
                 "Gestão de Equipes",
+                "Aprovar Mudanças de Faixa",
+                "Meu Perfil",
                 "Sair"
             ])
 
@@ -87,6 +94,8 @@ def menu_lateral(usuario):
                 "Gestão de Exames",
                 "Painel do Professor",
                 "Ranking",
+                "Aprovar Mudanças de Faixa",
+                "Meu Perfil",
                 "Sair"
             ])
 
@@ -96,16 +105,16 @@ def menu_lateral(usuario):
 # ======================================================================
 
 def main():
-   
+
     # ======================================================
-    # 🔥 INTERCEPTAÇÃO DA API (vem ANTES DE TUDO)
+    # 🔥 INTERCEPTAÇÃO DA API
     # ======================================================
     if "api" in st.experimental_get_url():
         api_router()
         return
 
     # ======================================================
-    # SISTEMA NORMAL (login → menu → páginas)
+    # SISTEMA NORMAL
     # ======================================================
     usuario = verificar_sessao()
 
@@ -120,7 +129,7 @@ def main():
     pagina = menu_lateral(usuario)
 
     # ======================================================
-    # Roteamento
+    # ROTEAMENTO DAS PÁGINAS
     # ======================================================
 
     # ---- ALUNO ----
@@ -136,12 +145,18 @@ def main():
     elif pagina == "Ranking":
         tela_ranking()
 
-    # ---- PROFESSOR ----
+    elif pagina == "Meu Perfil":
+        tela_perfil(usuario)
+
+    # ---- PROFESSOR E ADMIN ----
     elif pagina == "Painel do Professor":
         painel_professor()
 
     elif pagina == "Gestão de Equipes":
         gestao_equipes()
+
+    elif pagina == "Aprovar Mudanças de Faixa":
+        tela_solicitacoes_faixa(usuario)
 
     # ---- ADMIN ----
     elif pagina == "Dashboard Administrativo":
@@ -160,3 +175,11 @@ def main():
     elif pagina == "Sair":
         st.session_state.clear()
         st.rerun()
+
+
+# ======================================================================
+# EXECUÇÃO
+# ======================================================================
+
+if __name__ == "__main__":
+    main()
