@@ -4,7 +4,6 @@ from datetime import datetime
 
 DB_NAME = "bjj_digital.db"
 
-
 # ============================================================
 # CONEXÃO
 # ============================================================
@@ -13,7 +12,6 @@ def conectar():
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
-
 
 # ============================================================
 # INICIALIZAÇÃO DO BANCO
@@ -40,7 +38,7 @@ def inicializar_banco():
     """)
 
     # ============================================
-    # TABELA DE QUESTÕES (MODELO PROFISSIONAL)
+    # TABELA DE QUESTÕES
     # ============================================
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS questoes (
@@ -48,7 +46,7 @@ def inicializar_banco():
         tema TEXT NOT NULL,
         faixa TEXT NOT NULL,
         pergunta TEXT NOT NULL,
-        opcoes TEXT NOT NULL, 
+        opcoes TEXT NOT NULL,
         resposta TEXT NOT NULL,
         imagem TEXT,
         video TEXT
@@ -56,14 +54,14 @@ def inicializar_banco():
     """)
 
     # ============================================
-    # TABELA DE EXAMES CONFIGURADOS PELO PROFESSOR
+    # TABELA DE EXAMES CONFIG
     # ============================================
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS exames_config (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT NOT NULL,
         faixa TEXT NOT NULL,
-        questoes_ids TEXT NOT NULL, 
+        questoes_ids TEXT NOT NULL,
         embaralhar INTEGER DEFAULT 1,
         ativo INTEGER DEFAULT 0,
         professor_id INTEGER,
@@ -72,7 +70,7 @@ def inicializar_banco():
     """)
 
     # ============================================
-    # TABELA DE EXAMES REALIZADOS PELO ALUNO
+    # TABELA DE EXAMES REALIZADOS
     # ============================================
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS exames (
@@ -87,28 +85,26 @@ def inicializar_banco():
     );
     """)
 
-    conn.commit()
-    conn.close()
-
-# ============================================
-# TABELA DE CERTIFICADOS
-# ============================================
-
+    # ============================================
+    # TABELA DE CERTIFICADOS  (CORRIGIDA)
+    # ============================================
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS certificados (
+    CREATE TABLE IF NOT EXISTS certificados (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario_id INTEGER NOT NULL,
         exame_config_id INTEGER NOT NULL,
         data_emissao TEXT NOT NULL,
-    
-        -- Campos úteis para a validação futura
-        codigo TEXT,        -- código BJJDIGITAL-YYYY-XXXX
+        codigo TEXT,
         verificado INTEGER DEFAULT 0,
-
         FOREIGN KEY(usuario_id) REFERENCES usuarios(id),
         FOREIGN KEY(exame_config_id) REFERENCES exames_config(id)
     );
     """)
+
+    # FINALIZA
+    conn.commit()
+    conn.close()
+
 # ============================================================
 # FUNÇÕES GENÉRICAS
 # ============================================================
@@ -121,7 +117,6 @@ def consultar_todos(query, params=()):
     conn.close()
     return [dict(row) for row in rows]
 
-
 def consultar_um(query, params=()):
     conn = conectar()
     cursor = conn.cursor()
@@ -130,14 +125,12 @@ def consultar_um(query, params=()):
     conn.close()
     return dict(row) if row else None
 
-
 def executar(query, params=()):
     conn = conectar()
     cursor = conn.cursor()
     cursor.execute(query, params)
     conn.commit()
     conn.close()
-
 
 def executar_retorna_id(query, params=()):
     conn = conectar()
