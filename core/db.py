@@ -101,7 +101,32 @@ def inicializar_banco():
     );
     """)
 
-    # FINALIZA
+    # ============================================
+    # CRIAR ADMIN PADRÃO (se não existir)
+    # ============================================
+    cursor.execute("SELECT * FROM usuarios WHERE email='admin'")
+    existe_admin = cursor.fetchone()
+
+    if not existe_admin:
+        from bcrypt import hashpw, gensalt
+
+        senha_hash = hashpw("admin".encode(), gensalt()).decode()
+
+        cursor.execute("""
+            INSERT INTO usuarios (nome, email, cpf, endereco, tipo, senha, criado_em)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            "Administrador",
+            "admin",
+            None,
+            None,
+            "admin",
+            senha_hash,
+            datetime.now().strftime("%d/%m/%Y %H:%M")
+        ))
+
+        print(">> Usuário ADMIN criado com sucesso!")
+
     conn.commit()
     conn.close()
 
