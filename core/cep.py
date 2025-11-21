@@ -1,37 +1,44 @@
+import requests
 import re
 
-def limpar_cpf(cpf):
-    """Remove pontos e traços."""
-    return re.sub(r'\D', '', cpf)
+def limpar_cep(cep):
+    return re.sub(r"\D", "", cep)
 
 
-def validar_cpf(cpf: str) -> bool:
-    """Valida CPF com o algoritmo oficial."""
+def formatar_cep(cep):
+    cep = limpar_cep(cep)
+    if len(cep) == 8:
+        return f"{cep[:5]}-{cep[5:]}"
+    return cep
 
-    cpf = limpar_cpf(cpf)
 
-    if len(cpf) != 11:
-        return False
+def buscar_cep(cep):
+    """Consulta CEP na API ViaCEP e retorna dicionário formatado."""
 
-    # Rejeita CPFs repetidos
-    if cpf in [c * 11 for c in "0123456789"]:
-        return False
+    cep = limpar_cep(cep)
 
-    # Validação do primeiro dígito
-    soma = sum(int(cpf[i]) * (10 - i) for i in range(9))
-    dig1 = (soma * 10) % 11
-    dig1 = 0 if dig1 == 10 else dig1
+    if len(cep) != 8:
+        return None
 
-    if dig1 != int(cpf[9]):
-        return False
+    url = f"https://viacep.com.br/ws/{cep}/json/"
 
-    # Segundo dígito
-    soma = sum(int(cpf[i]) * (11 - i) for i in range(10))
-    dig2 = (soma * 10) % 11
-    dig2 = 0 if dig2 == 10 else dig2
+    try:
+        response = requests.get(url, timeout=4)
+        if response.status_code != 200:
+            return None
 
-    if dig2 != int(cpf[10]):
-        return False
+        dados = response.json()
 
-    return True
+        if "erro" in dados:
+            return None
 
+        return {
+            "logradouro": dados.get("logradouro", ""),
+            "bairro": dados.get("bairro", ""),
+            "localidade": dados.get("localidade", ""),
+            "uf": dados.get("uf", ""),
+            "cep": formatar_cep(cep)
+        }
+
+    except:
+        return None
