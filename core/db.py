@@ -28,16 +28,17 @@ def inicializar_banco():
     CREATE TABLE IF NOT EXISTS usuarios (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         nome TEXT,
-        email TEXT UNIQUE,
         cpf TEXT UNIQUE,
+        data_nascimento TEXT,
+        email TEXT UNIQUE,
         endereco TEXT,
         tipo TEXT,
+        faixa TEXT,
         senha TEXT,
         criado_em TEXT
     );
     """)
-
-    # ============================================
+     # ============================================
     # TABELA DE QUESTÕES
     # ============================================
     cursor.execute("""
