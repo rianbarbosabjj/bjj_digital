@@ -79,25 +79,38 @@ def gerar_certificado_pdf(cert_id, nome_aluno, faixa, professor, data_emissao):
     pdf.set_font("Arial", "", 14)
     pdf.cell(0, 10, f"Data: {data_emissao}", 0, 1, "C")
 
-    # ----------------------------------------------------------
-    # QR CODE
-    # ----------------------------------------------------------
+# ============================================================
+# CÓDIGO DO CERTIFICADO: BJJDIGITAL-YYYY-XXXX
+# ============================================================
 
+ano_atual = datetime.now().year
+numero_formatado = str(cert_id).zfill(4)
+codigo_certificado = f"BJJDIGITAL-{ano_atual}-{numero_formatado}"
 
-    validacao_url = f"https://bjjdigital.netlify.app/verificar.html?cert_id={cert_id}"
+# Exibir o código no PDF
+pdf.set_font("Arial", "B", 16)
+pdf.ln(8)
+pdf.cell(0, 10, f"Código de Validação: {codigo_certificado}", 0, 1, "C")
 
-    qr_base64 = gerar_qrcode_base64(validacao_url)
+# ============================================================
+# QR CODE PARA VALIDAÇÃO EXTERNA
+# ============================================================
 
-    qr_bytes = base64.b64decode(qr_base64)
-    qr_path = f"qr_{cert_id}.png"
-    with open(qr_path, "wb") as f:
+validacao_url = f"https://bjjdigital.netlify.app/verificar.html?cert_id={codigo_certificado}"
+
+qr_base64 = gerar_qrcode_base64(validacao_url)
+
+qr_bytes = base64.b64decode(qr_base64)
+qr_path = f"qr_{cert_id}.png"
+with open(qr_path, "wb") as f:
     f.write(qr_bytes)
 
-    pdf.image(qr_path, x=230, y=120, w=40)
+# Inserir QR Code no PDF (lado direito inferior)
+pdf.image(qr_path, x=230, y=120, w=40)
 
-    if os.path.exists(qr_path):
-        os.remove(qr_path)
-
+# Apagar arquivo temporário
+if os.path.exists(qr_path):
+    os.remove(qr_path)
 
 # ============================================================
 # REGISTRAR CERTIFICADO NO BANCO
