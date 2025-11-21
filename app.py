@@ -83,4 +83,81 @@ def menu_lateral(usuario):
                 "Dashboard Administrativo",
                 "Gestão de Usuários",
                 "Gestão de Equipes",
-                "
+                "Gestão de Questões",
+                "Gestão de Exames",
+                "Painel do Professor",
+                "Ranking",
+                "Sair"
+            ])
+
+
+# ======================================================================
+# SISTEMA PRINCIPAL
+# ======================================================================
+
+def main():
+
+    usuario = verificar_sessao()
+
+    # Se não está logado → vai para tela de login
+    if not usuario:
+        tela_login()
+        return
+
+    # Se não completou o endereço → tela obrigatória
+    if not usuario.get("endereco"):
+        tela_completar_cadastro(usuario)
+        return
+
+    # Menu lateral específico por tipo
+    pagina = menu_lateral(usuario)
+
+    # ==================================================================
+    # ROTEAMENTO DAS PÁGINAS
+    # ==================================================================
+
+    # ---- ALUNO ----
+    if pagina == "Início":
+        tela_inicio(usuario)
+
+    elif pagina == "Modo Rola":
+        tela_modo_rola(usuario)
+
+    elif pagina == "Exame de Faixa":
+        tela_exame(usuario)
+
+    elif pagina == "Ranking":
+        tela_ranking()
+
+    # ---- PROFESSOR ----
+    elif pagina == "Painel do Professor":
+        painel_professor()
+
+    elif pagina == "Gestão de Equipes":
+        gestao_equipes()
+
+    # ---- ADMIN ----
+    elif pagina == "Dashboard Administrativo":
+        admin_dashboard()
+
+    elif pagina == "Gestão de Usuários":
+        gestao_usuarios()
+
+    elif pagina == "Gestão de Questões":
+        gestao_questoes()
+
+    elif pagina == "Gestão de Exames":
+        gestao_exames()
+
+    # ---- SAIR ----
+    elif pagina == "Sair":
+        st.session_state.clear()
+        st.rerun()
+
+
+# ======================================================================
+# EXECUÇÃO
+# ======================================================================
+
+if __name__ == "__main__":
+    main()
