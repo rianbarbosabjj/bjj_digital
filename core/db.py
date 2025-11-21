@@ -1,183 +1,131 @@
 import sqlite3
-import threading
+import json
+from datetime import datetime
 
-DB_PATH = "bjj_digital.db"
+DB_NAME = "bjj_digital.db"
 
-# Mutex para evitar "database is locked"
-db_lock = threading.Lock()
 
+# ============================================================
+# CONEXÃO
+# ============================================================
 
 def conectar():
-    """Conecta ao banco com controle de bloqueio."""
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 # ============================================================
-# CRIAÇÃO DAS TABELAS
+# INICIALIZAÇÃO DO BANCO
 # ============================================================
 
 def inicializar_banco():
-    """Cria as tabelas caso não existam."""
-    with db_lock:
-        conn = conectar()
-        cursor = conn.cursor()
+    conn = conectar()
+    cursor = conn.cursor()
 
-        # Usuários
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS usuarios (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            email TEXT UNIQUE,
-            senha TEXT,
-            cpf TEXT UNIQUE,
-            tipo TEXT DEFAULT 'aluno',
-            faixa TEXT,
-            telefone TEXT,
-            endereco TEXT,
-            bairro TEXT,
-            cidade TEXT,
-            estado TEXT,
-            cep TEXT,
-            numero TEXT,
-            criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-        """)
+    # ============================================
+    # TABELA DE USUÁRIOS
+    # ============================================
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT,
+        email TEXT UNIQUE,
+        cpf TEXT UNIQUE,
+        endereco TEXT,
+        tipo TEXT,
+        senha TEXT,
+        criado_em TEXT
+    );
+    """)
 
-        # Equipes
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS equipes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL UNIQUE,
-            professor_id INTEGER,
-            FOREIGN KEY(professor_id) REFERENCES usuarios(id)
-        );
-        """)
+    # ============================================
+    # TABELA DE QUESTÕES (MODELO PROFISSIONAL)
+    # ============================================
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS questoes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tema TEXT NOT NULL,
+        faixa TEXT NOT NULL,
+        pergunta TEXT NOT NULL,
+        opcoes TEXT NOT NULL, 
+        resposta TEXT NOT NULL,
+        imagem TEXT,
+        video TEXT
+    );
+    """)
 
-        # Questões por faixa
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS questoes (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tema TEXT NOT NULL,
-            faixa TEXT NOT NULL,
-            pergunta TEXT NOT NULL,
-            opcoes TEXT NOT NULL,   -- JSON com alternativas (A,B,C,D,E)
-            resposta TEXT NOT NULL, -- letra
-            imagem TEXT,
-            video TEXT
-);
-        """)
+    # ============================================
+    # TABELA DE EXAMES CONFIGURADOS PELO PROFESSOR
+    # ============================================
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS exames_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nome TEXT NOT NULL,
+        faixa TEXT NOT NULL,
+        questoes_ids TEXT NOT NULL, 
+        embaralhar INTEGER DEFAULT 1,
+        ativo INTEGER DEFAULT 0,
+        professor_id INTEGER,
+        criado_em TEXT
+    );
+    """)
 
-        # Exames realizados
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS exames (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario_id INTEGER NOT NULL,
-            faixa TEXT NOT NULL,
-            nota REAL NOT NULL,
-            aprovado INTEGER NOT NULL,
-            data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
-        );
-        """)
+    # ============================================
+    # TABELA DE EXAMES REALIZADOS PELO ALUNO
+    # ============================================
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS exames (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario_id INTEGER NOT NULL,
+        exame_config_id INTEGER NOT NULL,
+        acertos INTEGER,
+        total INTEGER,
+        percentual REAL,
+        aprovado INTEGER,
+        data TEXT
+    );
+    """)
 
-        # Certificados (QR code + PDF)
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS certificados (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            usuario_id INTEGER NOT NULL,
-            faixa TEXT NOT NULL,
-            codigo_qr TEXT,
-            caminho_pdf TEXT,
-            data TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(usuario_id) REFERENCES usuarios(id)
-        );
-        """)
-
-        conn.commit()
-        conn.close()
+    conn.commit()
+    conn.close()
 
 
 # ============================================================
-# FUNÇÕES UTILITÁRIAS PADRÃO
+# FUNÇÕES GENÉRICAS
 # ============================================================
 
-def executar(query, params=()):
-    """Executa INSERT, UPDATE ou DELETE com garantia de commit."""
-    with db_lock:
-        conn = conectar()
-        cursor = conn.cursor()
-        try:
-            cursor.execute(query, params)
-            conn.commit()
-        finally:
-            conn.close()
+def consultar_todos(query, params=()):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
 def consultar_um(query, params=()):
-    """Retorna apenas 1 registro."""
-    with db_lock:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute(query, params)
-        resultado = cursor.fetchone()
-        conn.close()
-        return resultado
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
 
 
-def consultar_todos(query, params=()):
-    """Retorna lista de registros."""
-    with db_lock:
-        conn = conectar()
-        cursor = conn.cursor()
-        cursor.execute(query, params)
-        resultado = cursor.fetchall()
-        conn.close()
-        return resultado
+def executar(query, params=()):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    conn.commit()
+    conn.close()
 
 
-# ============================================================
-# FUNÇÕES DE ALTO NÍVEL (PÚBLICAS)
-# ============================================================
-
-def inserir_usuario(nome, email, senha_hash, cpf, tipo="aluno"):
-    executar("""
-        INSERT INTO usuarios (nome, email, senha, cpf, tipo)
-        VALUES (?, ?, ?, ?, ?)
-    """, (nome, email, senha_hash, cpf, tipo))
-
-
-def buscar_usuario_por_email(email):
-    return consultar_um("SELECT * FROM usuarios WHERE email = ?", (email,))
-
-
-def buscar_usuario_por_id(id_user):
-    return consultar_um("SELECT * FROM usuarios WHERE id = ?", (id_user,))
-
-
-def cpf_existe(cpf):
-    return consultar_um("SELECT id FROM usuarios WHERE cpf = ?", (cpf,)) is not None
-
-
-def email_existe(email):
-    return consultar_um("SELECT id FROM usuarios WHERE email = ?", (email,)) is not None
-
-
-def atualizar_endereco(id_user, dados):
-    executar("""
-        UPDATE usuarios
-        SET endereco=?, bairro=?, cidade=?, estado=?, cep=?, numero=?
-        WHERE id=?
-    """, (
-        dados["endereco"], dados["bairro"], dados["cidade"],
-        dados["estado"], dados["cep"], dados["numero"], id_user
-    ))
-
-
-def salvar_certificado(usuario_id, faixa, codigo_qr, caminho_pdf):
-    executar("""
-        INSERT INTO certificados (usuario_id, faixa, codigo_qr, caminho_pdf)
-        VALUES (?, ?, ?, ?)
-    """, (usuario_id, faixa, codigo_qr, caminho_pdf))
-
+def executar_retorna_id(query, params=()):
+    conn = conectar()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    conn.commit()
+    last_id = cursor.lastrowid
+    conn.close()
+    return last_id
