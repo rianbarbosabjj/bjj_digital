@@ -100,7 +100,18 @@ def inicializar_banco():
         FOREIGN KEY(exame_config_id) REFERENCES exames_config(id)
     );
     """)
-
+    # ============================================
+    # TABELA MODO ROLA  
+    # ============================================   
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS modo_rola (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vencedor_id INTEGER,
+        perdedor_id INTEGER,
+        resultado TEXT,
+        data TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
     # ============================================
     # CRIAR ADMIN PADRÃO (se não existir)
     # ============================================
