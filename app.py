@@ -27,8 +27,10 @@ from api import api_router
 # ======================================================================
 
 st.set_page_config(
+    from core.ui import aplicar_css
+    aplicar_css()
     page_title="BJJ Digital",
-    page_icon="🥋",
+    page_icon="assets/logo.png",
     layout="wide",
 )
 
