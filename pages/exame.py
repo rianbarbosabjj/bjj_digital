@@ -147,7 +147,42 @@ def tela_exame(usuario):
 
     if aprovado:
         st.success("🎉 Parabéns! Você foi **APROVADA** no exame!")
-        st.markdown("Seu certificado ficará disponível em breve.")
+
+        from core.certificado import gerar_certificado_pdf
+        from core.db import executar_retorna_id
+
+        # Registrar certificado no banco
+        cert_id = executar_retorna_id("""
+            INSERT INTO certificados (usuario_id, exame_config_id, data_emissao)
+            VALUES (?, ?, ?)
+        """, (usuario["id"], exame_config["id"], datetime.now().strftime("%d/%m/%Y %H:%M")))
+
+        # Gerar PDF do certificado imediatamente
+        pdf_path, codigo_certificado = gerar_certificado_pdf(
+            cert_id=cert_id,
+            nome_aluno=usuario["nome"],
+            faixa=exame_config["faixa"],
+            professor="Professor Responsável",
+            data_emissao=datetime.now().strftime("%d/%m/%Y")
+        )
+
+        st.success("Seu certificado está pronto! 🎖️")
+
+        # Botão de download imediato
+        with open(pdf_path, "rb") as f:
+            st.download_button(
+                label="📥 Baixar Certificado Agora",
+                data=f,
+                file_name=f"{codigo_certificado}.pdf",
+                mime="application/pdf"
+            )
+
+        # Remover arquivo temporário
+        import os
+        if os.path.exists(pdf_path):
+            os.remove(pdf_path)
+
+        st.info("Você também pode acessar esse certificado em **Meus Certificados**.")
     else:
         st.error("❌ Você foi **REPROVADA**. Continue treinando e tente novamente.")
 
