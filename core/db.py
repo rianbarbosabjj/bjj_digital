@@ -59,14 +59,14 @@ def inicializar_banco():
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS questoes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tema TEXT NOT NULL,
             faixa TEXT NOT NULL,
             pergunta TEXT NOT NULL,
-            alternativa_a TEXT,
-            alternativa_b TEXT,
-            alternativa_c TEXT,
-            alternativa_d TEXT,
-            correta TEXT
-        );
+            opcoes TEXT NOT NULL,   -- JSON com alternativas (A,B,C,D,E)
+            resposta TEXT NOT NULL, -- letra
+            imagem TEXT,
+            video TEXT
+);
         """)
 
         # Exames realizados
