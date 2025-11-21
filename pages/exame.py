@@ -1,8 +1,10 @@
 import streamlit as st
 import json
 import random
-from core.db import consultar_um, consultar_todos, executar
 from datetime import datetime
+from core.db import consultar_um, consultar_todos, executar, executar_retorna_id
+from core.certificado import gerar_certificado_pdf
+
 
 # ============================================================
 # TELA DE EXAME — LADO DO ALUNO
@@ -42,7 +44,6 @@ def tela_exame(usuario):
         st.error("Exame ativo não possui questões configuradas.")
         return
 
-    # Carrega TODAS as questões selecionadas
     questoes = []
     for qid in questoes_ids:
         q = consultar_um("SELECT * FROM questoes WHERE id=?", (qid,))
@@ -53,7 +54,6 @@ def tela_exame(usuario):
         st.error("Erro ao carregar questões.")
         return
 
-    # Embaralhar ordem (se professor marcou)
     if embaralhar:
         random.shuffle(questoes)
 
@@ -106,10 +106,8 @@ def tela_exame(usuario):
     total = len(questoes)
 
     for q in questoes:
-        correta = q["resposta"]  # Letra correta
+        correta = q["resposta"]
         opcoes = json.loads(q["opcoes"])
-
-        # localizar label correta
         correta_texto = next((x for x in opcoes if x.startswith(correta)), None)
 
         if respostas[q["id"]] == correta_texto:
@@ -118,10 +116,7 @@ def tela_exame(usuario):
     percentual = round((acertos / total) * 100, 2)
     aprovado = 1 if percentual >= 70 else 0
 
-    # ============================================================
-    # SALVAR RESULTADO
-    # ============================================================
-
+    # Registrar resultado do exame
     executar("""
         INSERT INTO exames (usuario_id, exame_config_id, acertos, total, percentual, aprovado, data)
         VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -135,30 +130,42 @@ def tela_exame(usuario):
         datetime.now().strftime("%d/%m/%Y %H:%M")
     ))
 
-    # ============================================================
-    # EXIBIR RESULTADO
-    # ============================================================
-
     st.markdown("## 📊 Resultado do Exame")
 
     st.info(f"Questões respondidas: **{total}**")
     st.info(f"Acertos: **{acertos}**")
     st.info(f"Percentual: **{percentual}%**")
 
+    # ============================================================
+    # APROVAÇÃO
+    # ============================================================
+
     if aprovado:
         st.success("🎉 Parabéns! Você foi **APROVADA** no exame!")
 
-        from core.certificado import gerar_certificado_pdf
-        from core.db import executar_retorna_id
-
-        # Registrar certificado no banco
+        # Registrar certificado
         cert_id = executar_retorna_id("""
             INSERT INTO certificados (usuario_id, exame_config_id, data_emissao)
             VALUES (?, ?, ?)
-        """, (usuario["id"], exame_config["id"], datetime.now().strftime("%d/%m/%Y %H:%M")))
+        """, (
+            usuario["id"],
+            exame_config["id"],
+            datetime.now().strftime("%d/%m/%Y %H:%M")
+        ))
 
-        # Gerar PDF do certificado imediatamente
-        pdf_path, codigo_certificado = gerar_certificado_pdf(
+        # Criar código BJJDIGITAL-YYYY-XXXX
+        ano_atual = datetime.now().year
+        codigo_formatado = f"BJJDIGITAL-{ano_atual}-{str(cert_id).zfill(4)}"
+
+        # Atualizar certificado com o código final
+        executar("""
+            UPDATE certificados
+            SET codigo=?
+            WHERE id=?
+        """, (codigo_formatado, cert_id))
+
+        # Gerar PDF com o código
+        pdf_path, codigo_cert = gerar_certificado_pdf(
             cert_id=cert_id,
             nome_aluno=usuario["nome"],
             faixa=exame_config["faixa"],
@@ -168,23 +175,22 @@ def tela_exame(usuario):
 
         st.success("Seu certificado está pronto! 🎖️")
 
-        # Botão de download imediato
+        # Botão para baixar imediatamente
         with open(pdf_path, "rb") as f:
             st.download_button(
                 label="📥 Baixar Certificado Agora",
                 data=f,
-                file_name=f"{codigo_certificado}.pdf",
+                file_name=f"{codigo_cert}.pdf",
                 mime="application/pdf"
             )
 
-        # Remover arquivo temporário
+        # Remover PDF temporário
         import os
         if os.path.exists(pdf_path):
             os.remove(pdf_path)
 
         st.info("Você também pode acessar esse certificado em **Meus Certificados**.")
+
     else:
         st.error("❌ Você foi **REPROVADA**. Continue treinando e tente novamente.")
 
-    st.markdown("---")
-    st.markdown("Se quiser refazer, peça ao professor para atualizar seu exame ativo.")
