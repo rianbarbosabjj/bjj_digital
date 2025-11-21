@@ -13,7 +13,7 @@ from pages.professor import painel_professor
 from pages.gestao_equipes import gestao_equipes
 from pages.gestao_usuarios import gestao_usuarios
 from pages.gestao_questoes import gestao_questoes
-from pages.gestao_exames import gestao_exames
+from pages.gestao_exame import gestao_exames
 from pages.admin_dashboard import admin_dashboard
 
 
