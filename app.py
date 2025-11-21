@@ -15,7 +15,7 @@ from pages.gestao_usuarios import gestao_usuarios
 from pages.gestao_questoes import gestao_questoes
 from pages.gestao_exame import gestao_exames
 from pages.admin_dashboard import admin_dashboard
-
+from api import api_router
 
 # ======================================================================
 # CONFIGURAÇÃO DO STREAMLIT
@@ -96,25 +96,32 @@ def menu_lateral(usuario):
 # ======================================================================
 
 def main():
+   
+    # ======================================================
+    # 🔥 INTERCEPTAÇÃO DA API (vem ANTES DE TUDO)
+    # ======================================================
+    if "api" in st.experimental_get_url():
+        api_router()
+        return
 
+    # ======================================================
+    # SISTEMA NORMAL (login → menu → páginas)
+    # ======================================================
     usuario = verificar_sessao()
 
-    # Se não está logado → vai para tela de login
     if not usuario:
         tela_login()
         return
 
-    # Se não completou o endereço → tela obrigatória
     if not usuario.get("endereco"):
         tela_completar_cadastro(usuario)
         return
 
-    # Menu lateral específico por tipo
     pagina = menu_lateral(usuario)
 
-    # ==================================================================
-    # ROTEAMENTO DAS PÁGINAS
-    # ==================================================================
+    # ======================================================
+    # Roteamento
+    # ======================================================
 
     # ---- ALUNO ----
     if pagina == "Início":
@@ -153,11 +160,3 @@ def main():
     elif pagina == "Sair":
         st.session_state.clear()
         st.rerun()
-
-
-# ======================================================================
-# EXECUÇÃO
-# ======================================================================
-
-if __name__ == "__main__":
-    main()
