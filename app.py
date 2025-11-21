@@ -1910,8 +1910,7 @@ def tela_login():
     with c2:
         if st.session_state["modo_login"] == "login":
             with st.container(border=True):
-                st.sidebar.image("assets/logo.png", use_container_width=True)
-                st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
+                 st.markdown("<h3 style='color:white; text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
                 user_ou_email = st.text_input("Nome de Usuário, Email ou CPF:")
                 pwd = st.text_input("Senha:", type="password")
