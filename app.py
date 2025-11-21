@@ -68,24 +68,55 @@ def menu_lateral(usuario):
 
         # MENU DO ALUNO
         if tipo == "aluno":
-            return st.radio("Navegação", [
-                "Início",
-                "Modo Rola",
-                "Exame de Faixa",
-                "Ranking",
-                "Meu Perfil",
-                "Sair"
-            ])
+            return st.radio(
+                "Navegação",
+                [
+                    "Início",
+                    "Modo Rola",
+                    "Exame de Faixa",
+                    "Ranking",
+                    "Sair",
+                ],
+                key="menu_selection",
+            )
 
-        # MENU DO PROFESSOR
         if tipo == "professor":
+            return st.radio(
+                "Navegação",
+                [
+                    "Início",
+                    "Ranking",
+                    "Painel do Professor",
+                    "Gestão de Equipes",
+                    "Sair",
+                ],
+                key="menu_selection",
+            )
+
+        if tipo == "admin":
+            return st.radio(
+                "Navegação",
+                [
+                    "Dashboard Administrativo",
+                    "Gestão de Usuários",
+                    "Gestão de Equipes",
+                    "Gestão de Questões",
+                    "Gestão de Exames",
+                    "Painel do Professor",
+                    "Ranking",
+                    "Sair",
+                ],
+                key="menu_selection",
+            )
+        if tipo == "admin":
             return st.radio("Navegação", [
-                "Início",
-                "Ranking",
-                "Painel do Professor",
+                "Dashboard Administrativo",
+                "Gestão de Usuários",
                 "Gestão de Equipes",
-                "Aprovar Mudanças de Faixa",
-                "Meu Perfil",
+                "Gestão de Questões",
+                "Gestão de Exames",
+                "Painel do Professor",
+                "Ranking",
                 "Sair"
             ])
 
