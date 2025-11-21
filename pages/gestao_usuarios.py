@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from core.db import consultar_todos, executar, buscar_usuario_por_id
-from core.utils import formatar_cpf, validar_cpf
+from core.cpf import limpar_cpf, validar_cpf
 import bcrypt
 
 
@@ -56,7 +56,7 @@ def gestao_usuarios():
     if st.button("Salvar alterações", use_container_width=True):
 
         # Validação do CPF
-        cpf_limpo = formatar_cpf(novo_cpf)
+        cpf_limpo = limpar_cpf(novo_cpf)
         if novo_cpf and not validar_cpf(cpf_limpo):
             st.error("CPF inválido.")
             return
