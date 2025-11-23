@@ -3,7 +3,7 @@ import sqlite3
 import bcrypt
 import pandas as pd
 import os
-import requests # <--- IMPORTANTE: Necessário para falar com o Google
+import requests 
 from streamlit_oauth import OAuth2Component
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
@@ -57,7 +57,6 @@ def tela_login():
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
                     entrada = user_ou_email.strip()
-                    # Identifica se é email ou CPF
                     if "@" in entrada:
                         entrada = entrada.lower()
                     else:
@@ -87,22 +86,26 @@ def tela_login():
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # --- LÓGICA GOOGLE CORRIGIDA ---
+                # --- LÓGICA GOOGLE BLINDADA ---
                 if GOOGLE_CLIENT_ID: 
-                    result = oauth_google.authorize_button(
-                        name="Continuar com Google",
-                        icon="https://www.google.com.br/favicon.ico",
-                        redirect_uri=REDIRECT_URI,
-                        scope="email profile",
-                        key="google_auth_btn",
-                        use_container_width=True,
-                    )
+                    try:
+                        result = oauth_google.authorize_button(
+                            name="Continuar com Google",
+                            icon="https://www.google.com.br/favicon.ico",
+                            redirect_uri=REDIRECT_URI,
+                            scope="email profile",
+                            key="google_auth_btn",
+                            use_container_width=True,
+                        )
+                    except Exception as e:
+                        # Captura o erro "STATE DOES NOT MATCH" e previne o crash
+                        st.warning("A conexão com o Google expirou. Por favor, recarregue a página (F5) e tente novamente.")
+                        result = None
                     
                     if result and result.get("token"):
                         st.session_state.token = result.get("token")
                         
                         try:
-                            # Busca manual dos dados do usuário usando requests
                             access_token = result.get("token").get("access_token")
                             if not access_token:
                                 st.error("Erro: Token de acesso não encontrado.")
