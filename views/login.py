@@ -2,6 +2,7 @@ import streamlit as st
 import sqlite3
 import bcrypt
 import pandas as pd
+import os  # <--- 1. ADICIONADO O IMPORT OS
 from streamlit_oauth import OAuth2Component
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
@@ -41,6 +42,15 @@ def tela_login():
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         if st.session_state["modo_login"] == "login":
+            
+            # --- 2. LOGO ADICIONADA AQUI (ACIMA DO CARD) ---
+            if os.path.exists("assets/logo.png"):
+                # Usamos colunas internas para centralizar a imagem visualmente
+                col_l, col_c, col_r = st.columns([1, 2, 1])
+                with col_c:
+                    st.image("assets/logo.png", use_container_width=True)
+            # -----------------------------------------------
+
             with st.container(border=True):
                 st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
