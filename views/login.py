@@ -43,7 +43,7 @@ def tela_login():
     with c2:
         if st.session_state["modo_login"] == "login":
             
-            # --- 2. LOGO ADICIONADA AQUI (ACIMA DO CARD) ---
+            # --- LOGO ACIMA DO CARD ---
             if os.path.exists("assets/logo.png"):
                 # Usamos colunas internas para centralizar a imagem visualmente
                 col_l, col_c, col_r = st.columns([1, 2, 1])
@@ -58,11 +58,21 @@ def tela_login():
                 pwd = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    # Tenta autenticar convertendo email para minúsculo caso o usuário digite maiúsculo
+                    # Lógica inteligente para identificar o tipo de entrada
                     entrada = user_ou_email.strip()
-                    # Se parecer um email (tem @), força minúsculo na busca
+                    
+                    # 1. Se tiver '@', tratamos como Email (minúsculo)
                     if "@" in entrada:
                         entrada = entrada.lower()
+                    
+                    # 2. Se não, verificamos se parece um CPF
+                    else:
+                        # Tenta extrair CPF usando a função de utils
+                        cpf_detectado = formatar_e_validar_cpf(entrada)
+                        if cpf_detectado:
+                            # Se for um CPF válido, usamos apenas os números
+                            entrada = cpf_detectado
+                        # Se não for CPF, mantemos como está (Nome de Usuário)
                         
                     u = autenticar_local(entrada, pwd.strip()) 
                     if u:
