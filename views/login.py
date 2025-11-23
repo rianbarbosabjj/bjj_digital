@@ -58,7 +58,7 @@ def tela_login():
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
                     entrada = user_ou_email.strip()
                     if "@" in entrada:
-                        entrada = entrada.lower()
+                        entrada = entrada.lower() # Garante login com email minúsculo
                     else:
                         cpf_detectado = formatar_e_validar_cpf(entrada)
                         if cpf_detectado:
@@ -98,7 +98,6 @@ def tela_login():
                             use_container_width=True,
                         )
                     except Exception as e:
-                        # Captura o erro "STATE DOES NOT MATCH" e previne o crash
                         st.warning("A conexão com o Google expirou. Por favor, recarregue a página (F5) e tente novamente.")
                         result = None
                     
@@ -115,7 +114,7 @@ def tela_login():
                                 
                                 if response.status_code == 200:
                                     user_info = response.json()
-                                    email = user_info["email"].lower()
+                                    email = user_info["email"].lower() # Email do Google sempre minúsculo
                                     nome = user_info.get("name", email.split("@")[0])
                                     
                                     existente = buscar_usuario_por_email(email)
@@ -238,7 +237,7 @@ def tela_cadastro_interno():
 
     if st.button("Cadastrar", use_container_width=True, type="primary"):
         nome_final = nome.upper()
-        email_final = email.lower().strip()
+        email_final = email.lower().strip() # <--- GARANTIDO: Email Minúsculo
         cpf_final = formatar_e_validar_cpf(cpf_input)
         cep_final = formatar_cep(st.session_state.reg_cep_input)
 
