@@ -57,6 +57,7 @@ def tela_login():
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
                     entrada = user_ou_email.strip()
+                    # Identifica se é email ou CPF
                     if "@" in entrada:
                         entrada = entrada.lower()
                     else:
@@ -100,21 +101,17 @@ def tela_login():
                     if result and result.get("token"):
                         st.session_state.token = result.get("token")
                         
-                        # 🛠️ AQUI ESTAVA O ERRO. CORREÇÃO ABAIXO:
                         try:
-                            # Extrai o token de acesso
+                            # Busca manual dos dados do usuário usando requests
                             access_token = result.get("token").get("access_token")
-                            
                             if not access_token:
-                                st.error("Erro: Token de acesso não retornado pelo Google.")
+                                st.error("Erro: Token de acesso não encontrado.")
                             else:
-                                # Faz a chamada manual para pegar os dados do usuário
                                 headers = {"Authorization": f"Bearer {access_token}"}
                                 response = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers=headers)
                                 
                                 if response.status_code == 200:
                                     user_info = response.json()
-                                    
                                     email = user_info["email"].lower()
                                     nome = user_info.get("name", email.split("@")[0])
                                     
@@ -131,11 +128,11 @@ def tela_login():
                                         st.session_state.registration_pending = novo_user
                                         st.rerun()
                                 else:
-                                    st.error("Falha ao obter dados do perfil do Google.")
+                                    st.error("Falha ao obter dados do Google.")
                         except Exception as e:
-                            st.error(f"Erro técnico na autenticação Google: {e}")
+                            st.error(f"Erro na autenticação Google: {e}")
                 else:
-                    st.warning("Google Auth não configurado (.streamlit/secrets.toml)")
+                    st.warning("Google Auth não configurado.")
 
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
@@ -184,6 +181,7 @@ def tela_cadastro_interno():
         'cep': '', 'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
     })
 
+    # Sincronização de Chaves
     st.session_state.setdefault('reg_logradouro', st.session_state.endereco_cep_cadastro['logradouro'])
     st.session_state.setdefault('reg_bairro', st.session_state.endereco_cep_cadastro['bairro'])
     st.session_state.setdefault('reg_cidade', st.session_state.endereco_cep_cadastro['cidade'])
@@ -202,7 +200,6 @@ def tela_cadastro_interno():
         if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_reg_cep'):
             cep_digitado = st.session_state.reg_cep_input
             endereco = buscar_cep(cep_digitado)
-            
             if endereco:
                 st.session_state.endereco_cep_cadastro = {'cep': cep_digitado, **endereco}
                 st.session_state['reg_logradouro'] = endereco['logradouro']
@@ -211,7 +208,7 @@ def tela_cadastro_interno():
                 st.session_state['reg_uf'] = endereco['uf']
                 st.success("Endereço encontrado!")
             else:
-                st.error("CEP inválido ou não encontrado.")
+                st.error("CEP inválido.")
             st.rerun()
 
     col_logr, col_bairro = st.columns(2)
@@ -289,34 +286,118 @@ def tela_cadastro_interno():
         st.rerun()
 
 def tela_completar_cadastro(user_data):
-    """Exibe formulário para completar perfil Google."""
+    """Exibe formulário para completar perfil Google, agora com ENDEREÇO."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
+    st.markdown("### Finalize seu cadastro para acessar a plataforma.")
+
+    # --- DADOS BÁSICOS ---
+    nome = st.text_input("Seu nome:", value=user_data['nome'])
+    st.text_input("Seu Email:", value=user_data['email'], disabled=True)
     
-    with st.form(key="form_completar_cadastro"):
-        st.text_input("Seu nome:", value=user_data['nome'], key="cadastro_nome")
-        st.text_input("Seu Email:", value=user_data['email'], disabled=True)
-        tipo_usuario = st.radio("Qual o seu tipo de perfil?", ["🥋 Sou Aluno", "👩‍🏫 Sou Professor"], key="cadastro_tipo")
-        
-        if tipo_usuario == "🥋 Sou Aluno":
-            st.selectbox("Sua faixa atual:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"], key="cadastro_faixa")
-            
-        if st.form_submit_button("Salvar e Acessar"):
-            novo_tipo = "aluno" if "Aluno" in tipo_usuario else "professor"
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            
-            nome_salvar = st.session_state.cadastro_nome.upper()
-            
-            cursor.execute("UPDATE usuarios SET nome=?, tipo_usuario=?, perfil_completo=1 WHERE id=?", (nome_salvar, novo_tipo, user_data['id']))
-            
-            if novo_tipo == "aluno":
-                cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo) VALUES (?, ?, 'pendente')", (user_data['id'], st.session_state.cadastro_faixa))
+    tipo_usuario = st.radio("Qual o seu tipo de perfil?", ["🥋 Sou Aluno", "👩‍🏫 Sou Professor"], horizontal=True)
+    
+    faixa = None
+    if tipo_usuario == "🥋 Sou Aluno":
+        faixa = st.selectbox("Sua faixa atual:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+
+    st.markdown("---")
+    st.markdown("#### 📍 Endereço Completo")
+
+    # --- LÓGICA DE ENDEREÇO (Igual ao Cadastro) ---
+    if 'end_google_cep' not in st.session_state:
+        st.session_state.end_google_cep = ''
+    if 'end_google_logradouro' not in st.session_state:
+        st.session_state.end_google_logradouro = ''
+    if 'end_google_bairro' not in st.session_state:
+        st.session_state.end_google_bairro = ''
+    if 'end_google_cidade' not in st.session_state:
+        st.session_state.end_google_cidade = ''
+    if 'end_google_uf' not in st.session_state:
+        st.session_state.end_google_uf = ''
+
+    col_cep, col_btn = st.columns([3, 1])
+    with col_cep:
+        cep_input = st.text_input("CEP:", max_chars=9, key="input_cep_google", value=st.session_state.end_google_cep)
+        cep_formatado = formatar_cep(cep_input)
+        if cep_formatado:
+             st.caption(f"CEP Formatado: {cep_formatado[:5]}-{cep_formatado[5:]}")
+
+    with col_btn:
+        st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
+        if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_cep_google'):
+            dados_end = buscar_cep(cep_input)
+            if dados_end:
+                st.session_state.end_google_cep = cep_input
+                st.session_state.end_google_logradouro = dados_end['logradouro']
+                st.session_state.end_google_bairro = dados_end['bairro']
+                st.session_state.end_google_cidade = dados_end['cidade']
+                st.session_state.end_google_uf = dados_end['uf']
+                st.success("Endereço encontrado!")
+                st.rerun()
             else:
-                cursor.execute("INSERT INTO professores (usuario_id, status_vinculo) VALUES (?, 'pendente')", (user_data['id'],))
+                st.error("CEP não encontrado.")
+
+    # Campos de Endereço (preenchidos via sessão ou manual)
+    c1, c2 = st.columns(2)
+    logradouro = c1.text_input("Logradouro:", value=st.session_state.end_google_logradouro)
+    bairro = c2.text_input("Bairro:", value=st.session_state.end_google_bairro)
+
+    c3, c4 = st.columns(2)
+    cidade = c3.text_input("Cidade:", value=st.session_state.end_google_cidade)
+    uf = c4.text_input("UF:", value=st.session_state.end_google_uf)
+
+    c5, c6 = st.columns(2)
+    numero = c5.text_input("Número:", key="num_google")
+    complemento = c6.text_input("Complemento (Opcional):", key="comp_google")
+
+    st.markdown("---")
+
+    if st.button("Salvar e Acessar Plataforma", type="primary", use_container_width=True):
+        # Validações Básicas
+        if not nome:
+            st.warning("O nome é obrigatório.")
+            return
+        
+        # Validações Endereço
+        cep_final = formatar_cep(cep_input)
+        if not (cep_final and logradouro and bairro and cidade and uf and numero):
+             st.error("Por favor, preencha o endereço completo (CEP, Logradouro, Bairro, Cidade, UF e Número).")
+             return
+
+        # Salvar no Banco
+        novo_tipo = "aluno" if "Aluno" in tipo_usuario else "professor"
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        
+        nome_salvar = nome.upper()
+        
+        # Update INCLUINDO ENDEREÇO
+        cursor.execute("""
+            UPDATE usuarios 
+            SET nome=?, tipo_usuario=?, perfil_completo=1,
+                cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, uf=?
+            WHERE id=?
+        """, (
+            nome_salvar, novo_tipo, 
+            cep_final, logradouro.upper(), numero.upper(), 
+            complemento.upper() if complemento else None, 
+            bairro.upper(), cidade.upper(), uf.upper(),
+            user_data['id']
+        ))
+        
+        # Inserir na tabela específica
+        if novo_tipo == "aluno":
+            cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo) VALUES (?, ?, 'pendente')", (user_data['id'], faixa))
+        else:
+            cursor.execute("INSERT INTO professores (usuario_id, status_vinculo) VALUES (?, 'pendente')", (user_data['id'],))
+        
+        conn.commit()
+        conn.close()
+        
+        st.session_state.usuario = {"id": user_data['id'], "nome": nome_salvar, "tipo": novo_tipo}
+        
+        # Limpa chaves temporárias
+        for k in ['end_google_cep', 'end_google_logradouro', 'end_google_bairro', 'end_google_cidade', 'end_google_uf', 'registration_pending']:
+            st.session_state.pop(k, None)
             
-            conn.commit()
-            conn.close()
-            
-            st.session_state.usuario = {"id": user_data['id'], "nome": nome_salvar, "tipo": novo_tipo}
-            del st.session_state.registration_pending
-            st.rerun()
+        st.rerun()
