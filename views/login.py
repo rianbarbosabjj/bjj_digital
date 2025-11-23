@@ -2,7 +2,8 @@ import streamlit as st
 import sqlite3
 import bcrypt
 import pandas as pd
-import os  # <--- 1. ADICIONADO O IMPORT OS
+import os
+import requests # <--- IMPORTANTE: Necessário para falar com o Google
 from streamlit_oauth import OAuth2Component
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
@@ -14,9 +15,8 @@ from config import DB_PATH, COR_DESTAQUE, COR_TEXTO
 try:
     GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
     GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
-    REDIRECT_URI = "https://bjjdigital.streamlit.app/" # Ajuste se necessário para localhost durante testes
+    REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
 except (FileNotFoundError, KeyError):
-    # Valores vazios para não quebrar se não tiver secrets configurado ainda
     GOOGLE_CLIENT_ID = ""
     GOOGLE_CLIENT_SECRET = ""
     REDIRECT_URI = ""
@@ -38,18 +38,16 @@ def tela_login():
     """Tela de login com autenticação local, Google e opção de cadastro."""
     st.session_state.setdefault("modo_login", "login")
 
-    # Layout de colunas para centralizar
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
         if st.session_state["modo_login"] == "login":
             
-            # --- LOGO ACIMA DO CARD ---
+            # --- LOGO ---
             if os.path.exists("assets/logo.png"):
-                # Usamos colunas internas para centralizar a imagem visualmente
                 col_l, col_c, col_r = st.columns([1, 2, 1])
                 with col_c:
                     st.image("assets/logo.png", use_container_width=True)
-            # -----------------------------------------------
+            # ------------
 
             with st.container(border=True):
                 st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
@@ -58,21 +56,13 @@ def tela_login():
                 pwd = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    # Lógica inteligente para identificar o tipo de entrada
                     entrada = user_ou_email.strip()
-                    
-                    # 1. Se tiver '@', tratamos como Email (minúsculo)
                     if "@" in entrada:
                         entrada = entrada.lower()
-                    
-                    # 2. Se não, verificamos se parece um CPF
                     else:
-                        # Tenta extrair CPF usando a função de utils
                         cpf_detectado = formatar_e_validar_cpf(entrada)
                         if cpf_detectado:
-                            # Se for um CPF válido, usamos apenas os números
                             entrada = cpf_detectado
-                        # Se não for CPF, mantemos como está (Nome de Usuário)
                         
                     u = autenticar_local(entrada, pwd.strip()) 
                     if u:
@@ -96,8 +86,8 @@ def tela_login():
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # Botão Google
-                if GOOGLE_CLIENT_ID: # Só mostra se tiver configurado
+                # --- LÓGICA GOOGLE CORRIGIDA ---
+                if GOOGLE_CLIENT_ID: 
                     result = oauth_google.authorize_button(
                         name="Continuar com Google",
                         icon="https://www.google.com.br/favicon.ico",
@@ -109,23 +99,41 @@ def tela_login():
                     
                     if result and result.get("token"):
                         st.session_state.token = result.get("token")
-                        user_info = oauth_google.get_user_info(st.session_state.token)
-                        if user_info:
-                            email = user_info["email"].lower() # Garante minúsculo vindo do Google
-                            nome = user_info.get("name", email.split("@")[0])
+                        
+                        # 🛠️ AQUI ESTAVA O ERRO. CORREÇÃO ABAIXO:
+                        try:
+                            # Extrai o token de acesso
+                            access_token = result.get("token").get("access_token")
                             
-                            existente = buscar_usuario_por_email(email)
-                            if existente:
-                                if not existente["perfil_completo"]:
-                                    st.session_state.registration_pending = existente
-                                    st.rerun()
-                                else:
-                                    st.session_state.usuario = existente
-                                    st.rerun()
+                            if not access_token:
+                                st.error("Erro: Token de acesso não retornado pelo Google.")
                             else:
-                                novo_user = criar_usuario_parcial_google(email, nome)
-                                st.session_state.registration_pending = novo_user
-                                st.rerun()
+                                # Faz a chamada manual para pegar os dados do usuário
+                                headers = {"Authorization": f"Bearer {access_token}"}
+                                response = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers=headers)
+                                
+                                if response.status_code == 200:
+                                    user_info = response.json()
+                                    
+                                    email = user_info["email"].lower()
+                                    nome = user_info.get("name", email.split("@")[0])
+                                    
+                                    existente = buscar_usuario_por_email(email)
+                                    if existente:
+                                        if not existente["perfil_completo"]:
+                                            st.session_state.registration_pending = existente
+                                            st.rerun()
+                                        else:
+                                            st.session_state.usuario = existente
+                                            st.rerun()
+                                    else:
+                                        novo_user = criar_usuario_parcial_google(email, nome)
+                                        st.session_state.registration_pending = novo_user
+                                        st.rerun()
+                                else:
+                                    st.error("Falha ao obter dados do perfil do Google.")
+                        except Exception as e:
+                            st.error(f"Erro técnico na autenticação Google: {e}")
                 else:
                     st.warning("Google Auth não configurado (.streamlit/secrets.toml)")
 
@@ -157,29 +165,25 @@ def tela_cadastro_interno():
     conn = sqlite3.connect(DB_PATH)
     equipes_df = pd.read_sql_query("SELECT id, nome, professor_responsavel_id FROM equipes", conn)
     
-    # --- Faixa e Equipe ---
     if tipo_usuario == "Aluno":
         faixa = st.selectbox("Graduação (faixa):", [
             "Branca", "Cinza", "Amarela", "Laranja", "Verde",
             "Azul", "Roxa", "Marrom", "Preta"
         ])
-    else: # Professor
+    else: 
         faixa = st.selectbox("Graduação (faixa):", ["Marrom", "Preta"])
         st.info("Professores devem ser Marrom ou Preta.")
         
     opcoes_equipe = ["Nenhuma (Vínculo Pendente)"] + equipes_df["nome"].tolist()
-    # Apenas visual, lógica de vínculo seria implementada aqui se necessário
     _ = st.selectbox("Selecione sua Equipe (Opcional):", opcoes_equipe)
     
     st.markdown("---")
     st.markdown("#### 3. Endereço") 
 
-    # Inicializa estado para busca de CEP no cadastro
     st.session_state.setdefault('endereco_cep_cadastro', {
         'cep': '', 'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
     })
 
-    # --- Sincronização de Chaves ---
     st.session_state.setdefault('reg_logradouro', st.session_state.endereco_cep_cadastro['logradouro'])
     st.session_state.setdefault('reg_bairro', st.session_state.endereco_cep_cadastro['bairro'])
     st.session_state.setdefault('reg_cidade', st.session_state.endereco_cep_cadastro['cidade'])
@@ -200,11 +204,7 @@ def tela_cadastro_interno():
             endereco = buscar_cep(cep_digitado)
             
             if endereco:
-                st.session_state.endereco_cep_cadastro = {
-                    'cep': cep_digitado,
-                    **endereco
-                }
-                # Atualiza widgets
+                st.session_state.endereco_cep_cadastro = {'cep': cep_digitado, **endereco}
                 st.session_state['reg_logradouro'] = endereco['logradouro']
                 st.session_state['reg_bairro'] = endereco['bairro']
                 st.session_state['reg_cidade'] = endereco['cidade']
@@ -212,13 +212,8 @@ def tela_cadastro_interno():
                 st.success("Endereço encontrado!")
             else:
                 st.error("CEP inválido ou não encontrado.")
-                st.session_state['reg_logradouro'] = ''
-                st.session_state['reg_bairro'] = ''
-                st.session_state['reg_cidade'] = ''
-                st.session_state['reg_uf'] = ''
             st.rerun()
 
-    # CAMPOS HABILITADOS
     col_logr, col_bairro = st.columns(2)
     novo_logradouro = col_logr.text_input("Logradouro:", key='reg_logradouro')
     novo_bairro = col_bairro.text_input("Bairro:", key='reg_bairro')
@@ -232,9 +227,8 @@ def tela_cadastro_interno():
     novo_complemento = col_comp.text_input("Complemento (Opcional):", value="", key='reg_complemento')
 
     if st.button("Cadastrar", use_container_width=True, type="primary"):
-        # Formatação
-        nome_final = nome.upper() # Nome continua Maiúsculo
-        email_final = email.lower().strip() # <--- MUDANÇA AQUI: Email agora é Minúsculo
+        nome_final = nome.upper()
+        email_final = email.lower().strip()
         cpf_final = formatar_e_validar_cpf(cpf_input)
         cep_final = formatar_cep(st.session_state.reg_cep_input)
 
@@ -311,7 +305,6 @@ def tela_completar_cadastro(user_data):
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             
-            # Nome continua sendo salvo em Maiúsculo para padronização
             nome_salvar = st.session_state.cadastro_nome.upper()
             
             cursor.execute("UPDATE usuarios SET nome=?, tipo_usuario=?, perfil_completo=1 WHERE id=?", (nome_salvar, novo_tipo, user_data['id']))
