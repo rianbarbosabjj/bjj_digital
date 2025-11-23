@@ -58,7 +58,13 @@ def tela_login():
                 pwd = st.text_input("Senha:", type="password")
 
                 if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    u = autenticar_local(user_ou_email.strip(), pwd.strip()) 
+                    # Tenta autenticar convertendo email para minúsculo caso o usuário digite maiúsculo
+                    entrada = user_ou_email.strip()
+                    # Se parecer um email (tem @), força minúsculo na busca
+                    if "@" in entrada:
+                        entrada = entrada.lower()
+                        
+                    u = autenticar_local(entrada, pwd.strip()) 
                     if u:
                         st.session_state.usuario = u
                         st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
@@ -95,7 +101,7 @@ def tela_login():
                         st.session_state.token = result.get("token")
                         user_info = oauth_google.get_user_info(st.session_state.token)
                         if user_info:
-                            email = user_info["email"]
+                            email = user_info["email"].lower() # Garante minúsculo vindo do Google
                             nome = user_info.get("name", email.split("@")[0])
                             
                             existente = buscar_usuario_por_email(email)
@@ -217,8 +223,8 @@ def tela_cadastro_interno():
 
     if st.button("Cadastrar", use_container_width=True, type="primary"):
         # Formatação
-        nome_final = nome.upper()
-        email_final = email.upper()
+        nome_final = nome.upper() # Nome continua Maiúsculo
+        email_final = email.lower().strip() # <--- MUDANÇA AQUI: Email agora é Minúsculo
         cpf_final = formatar_e_validar_cpf(cpf_input)
         cep_final = formatar_cep(st.session_state.reg_cep_input)
 
@@ -232,7 +238,7 @@ def tela_cadastro_interno():
             st.error("Endereço incompleto.")
         else:
             cursor = conn.cursor()
-            cursor.execute("SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", (nome, email, cpf_final))
+            cursor.execute("SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", (nome_final, email_final, cpf_final))
             
             if cursor.fetchone():
                 st.error("Usuário já cadastrado.")
@@ -295,7 +301,10 @@ def tela_completar_cadastro(user_data):
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             
-            cursor.execute("UPDATE usuarios SET nome=?, tipo_usuario=?, perfil_completo=1 WHERE id=?", (st.session_state.cadastro_nome, novo_tipo, user_data['id']))
+            # Nome continua sendo salvo em Maiúsculo para padronização
+            nome_salvar = st.session_state.cadastro_nome.upper()
+            
+            cursor.execute("UPDATE usuarios SET nome=?, tipo_usuario=?, perfil_completo=1 WHERE id=?", (nome_salvar, novo_tipo, user_data['id']))
             
             if novo_tipo == "aluno":
                 cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo) VALUES (?, ?, 'pendente')", (user_data['id'], st.session_state.cadastro_faixa))
@@ -305,6 +314,6 @@ def tela_completar_cadastro(user_data):
             conn.commit()
             conn.close()
             
-            st.session_state.usuario = {"id": user_data['id'], "nome": st.session_state.cadastro_nome, "tipo": novo_tipo}
+            st.session_state.usuario = {"id": user_data['id'], "nome": nome_salvar, "tipo": novo_tipo}
             del st.session_state.registration_pending
             st.rerun()
