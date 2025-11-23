@@ -1,0 +1,9 @@
+streamlit
+streamlit-oauth
+streamlit-option-menu
+fpdf
+bcrypt
+qrcode
+pandas
+plotly
+requests
