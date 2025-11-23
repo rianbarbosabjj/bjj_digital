@@ -1,9 +1,0 @@
-streamlit
-fpdf2
-Pillow
-bcrypt
-qrcode
-requests
-pandas
-plotly
-streamlit-option-menu
