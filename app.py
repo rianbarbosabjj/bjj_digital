@@ -81,7 +81,11 @@ def app_principal():
         professor.painel_professor()
         if st.button("⬅️ Voltar ao Início"): ir_para("Início")
     
-    # 2. Tela Inicial e Menu Horizontal
+    # 2. CASO ESPECIAL: Tela Inicial (SEM MENU HORIZONTAL)
+    elif pagina == "Início":
+        geral.tela_inicio()
+
+    # 3. Demais Telas (COM MENU HORIZONTAL)
     else:
         # Define opções do menu baseado no perfil
         if tipo_usuario in ["admin", "professor"]:
@@ -91,17 +95,22 @@ def app_principal():
             opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
             icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
             
-            # Verifica se exame está habilitado (consulta rápida opcional ou via banco)
-            # Para simplificar aqui, deixamos padrão, mas você pode reativar a query de 'exame_habilitado' se quiser.
+            # Verifica se exame está habilitado (lógica opcional)
             opcoes.insert(2, "Exame de Faixa")
             icons.insert(2, "journal-check")
+
+        # Descobre o índice da página atual
+        try:
+            index_atual = opcoes.index(pagina)
+        except ValueError:
+            index_atual = 0
 
         # Menu Horizontal
         menu = option_menu(
             menu_title=None, 
             options=opcoes, 
             icons=icons, 
-            default_index=opcoes.index(pagina) if pagina in opcoes else 0,
+            default_index=index_atual,
             orientation="horizontal",
             styles={
                 "container": {"padding": "0!important", "background-color": COR_FUNDO},
@@ -110,6 +119,11 @@ def app_principal():
                 "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
             }
         )
+
+        # Atualiza o estado se o usuário clicar no menu
+        if menu != pagina:
+            st.session_state.menu_selection = menu
+            st.rerun()
 
         # Roteador do Menu Horizontal
         if menu == "Início": geral.tela_inicio()
