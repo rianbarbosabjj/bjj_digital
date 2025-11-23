@@ -152,7 +152,7 @@ def carregar_todas_questoes():
 
     return todas
   
-  def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
+def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     """Gera certificado oficial do exame de faixa com assinatura caligráfica (Allura)."""
     pdf = FPDF("L", "mm", "A4") # Layout paisagem
     pdf.set_auto_page_break(False)
