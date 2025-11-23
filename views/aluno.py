@@ -59,9 +59,6 @@ def modo_rola(usuario_logado):
             if st.button(f"Confirmar {i}", key=f"conf_{i}"):
                 if resposta.startswith(q["resposta"]):
                     st.success("Correto!")
-                    # Nota: Em modo treino, o contador simples aqui reseta a cada rerun.
-                    # Para um modo treino robusto, seria ideal usar session_state, 
-                    # mas mantivemos a lógica original simplificada.
                 else:
                     st.error(f"Errado. Era: {q['resposta']}")
             st.markdown("---")
@@ -129,7 +126,6 @@ def exame_de_faixa(usuario_logado):
             
             codigo = gerar_codigo_verificacao()
             
-            # Salva no banco
             conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             cursor.execute("""
@@ -139,43 +135,48 @@ def exame_de_faixa(usuario_logado):
             conn.commit()
             conn.close()
 
-            # Salva no estado para o botão aparecer (e persistir)
             st.session_state["certificado_pronto"] = True
             st.session_state["dados_certificado"] = {
                 "usuario": usuario_logado["nome"],
                 "faixa": faixa,
                 "acertos": acertos,
                 "total": total,
-                "codigo": codigo,
-                "pontuacao": percentual
+                "codigo": codigo
             }
         else:
             st.error("Reprovado. Tente novamente.")
             st.session_state["certificado_pronto"] = False
 
-    # --- BOTÃO DE DOWNLOAD (FORA DO IF FINALIZAR) ---
+    # --- BOTÃO DE DOWNLOAD (COM TRATAMENTO DE ERRO) ---
     if st.session_state.get("certificado_pronto"):
         st.info("📥 Seu certificado está pronto para download abaixo:")
         
         dados = st.session_state["dados_certificado"]
         
-        # Gera o PDF na hora (ou recupera)
-        caminho_pdf = gerar_pdf(
-            dados["usuario"],
-            dados["faixa"],
-            dados["acertos"],
-            dados["total"],
-            dados["codigo"]
-        )
-        
-        with open(caminho_pdf, "rb") as f:
-            st.download_button(
-                label="📄 Baixar Certificado PDF",
-                data=f.read(),
-                file_name=os.path.basename(caminho_pdf),
-                mime="application/pdf",
-                use_container_width=True
+        try:
+            caminho_pdf = gerar_pdf(
+                dados["usuario"],
+                dados["faixa"],
+                dados["acertos"],
+                dados["total"],
+                dados["codigo"]
             )
+            
+            if os.path.exists(caminho_pdf):
+                with open(caminho_pdf, "rb") as f:
+                    st.download_button(
+                        label="📄 Baixar Certificado PDF",
+                        data=f.read(),
+                        file_name=os.path.basename(caminho_pdf),
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+            else:
+                st.error(f"Erro: O arquivo PDF não foi encontrado em {caminho_pdf}.")
+                
+        except Exception as e:
+            st.error(f"Ocorreu um erro ao gerar o PDF: {e}")
+            # Dica: Se o erro for 'name gerar_qrcode is not defined', verifique o arquivo utils.py
 
 # =========================================
 # RANKING
@@ -226,19 +227,20 @@ def meus_certificados(usuario_logado):
         st.markdown(f"### 🥋 Faixa {faixa}")
         st.write(f"Data: {data} | Nota: {pontuacao}% | Código: {codigo}")
         
-        # Fallback para registros antigos sem acertos/total salvos
         acertos_safe = acertos if acertos is not None else int((pontuacao/100)*10)
         total_safe = total if total is not None else 10
 
-        caminho_pdf = gerar_pdf(usuario_logado["nome"], faixa, acertos_safe, total_safe, codigo)
-        
-        with open(caminho_pdf, "rb") as f:
-            st.download_button(
-                label=f"Baixar Certificado {faixa}",
-                data=f.read(),
-                file_name=os.path.basename(caminho_pdf),
-                mime="application/pdf",
-                key=f"cert_{i}",
-                use_container_width=True
-            )
+        try:
+            caminho_pdf = gerar_pdf(usuario_logado["nome"], faixa, acertos_safe, total_safe, codigo)
+            with open(caminho_pdf, "rb") as f:
+                st.download_button(
+                    label=f"Baixar Certificado {faixa}",
+                    data=f.read(),
+                    file_name=os.path.basename(caminho_pdf),
+                    mime="application/pdf",
+                    key=f"cert_{i}",
+                    use_container_width=True
+                )
+        except Exception as e:
+            st.error(f"Erro ao gerar este certificado: {e}")
         st.markdown("---")
