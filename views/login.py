@@ -161,18 +161,28 @@ def tela_cadastro_interno():
     
     conn = sqlite3.connect(DB_PATH)
     equipes_df = pd.read_sql_query("SELECT id, nome, professor_responsavel_id FROM equipes", conn)
+    conn.close()
     
+    # --- Faixa e Equipe ---
     if tipo_usuario == "Aluno":
         faixa = st.selectbox("Graduação (faixa):", [
             "Branca", "Cinza", "Amarela", "Laranja", "Verde",
             "Azul", "Roxa", "Marrom", "Preta"
         ])
-    else: 
+    else: # Professor
         faixa = st.selectbox("Graduação (faixa):", ["Marrom", "Preta"])
         st.info("Professores devem ser Marrom ou Preta.")
         
     opcoes_equipe = ["Nenhuma (Vínculo Pendente)"] + equipes_df["nome"].tolist()
-    _ = st.selectbox("Selecione sua Equipe (Opcional):", opcoes_equipe)
+    equipe_selecionada = st.selectbox("Selecione sua Equipe (Opcional):", opcoes_equipe)
+    
+    equipe_id = None
+    if equipe_selecionada != "Nenhuma (Vínculo Pendente)":
+        try:
+            equipe_row = equipes_df[equipes_df["nome"] == equipe_selecionada].iloc[0]
+            equipe_id = int(equipe_row["id"])
+        except:
+            pass
     
     st.markdown("---")
     st.markdown("#### 3. Endereço") 
@@ -238,6 +248,7 @@ def tela_cadastro_interno():
         elif not (cep_final and novo_logradouro and novo_bairro and novo_cidade and novo_uf):
             st.error("Endereço incompleto.")
         else:
+            conn = sqlite3.connect(DB_PATH)
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", (nome_final, email_final, cpf_final))
             
@@ -266,9 +277,9 @@ def tela_cadastro_interno():
                     novo_id = cursor.lastrowid
                     
                     if tipo_db == "aluno":
-                         cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo) VALUES (?, ?, 'pendente')", (novo_id, faixa))
+                         cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, ?, ?, 'pendente')", (novo_id, faixa, equipe_id))
                     else:
-                         cursor.execute("INSERT INTO professores (usuario_id, status_vinculo) VALUES (?, 'pendente')", (novo_id,))
+                         cursor.execute("INSERT INTO professores (usuario_id, equipe_id, status_vinculo) VALUES (?, ?, 'pendente')", (novo_id, equipe_id))
 
                     conn.commit()
                     st.session_state.pop('endereco_cep_cadastro', None)
@@ -286,9 +297,14 @@ def tela_cadastro_interno():
         st.rerun()
 
 def tela_completar_cadastro(user_data):
-    """Exibe formulário para completar perfil Google, agora com ENDEREÇO."""
+    """Exibe formulário para completar perfil Google, agora com ENDEREÇO, FAIXA e EQUIPE."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
     st.markdown("### Finalize seu cadastro para acessar a plataforma.")
+
+    # --- 1. Busca Equipes no Banco ---
+    conn = sqlite3.connect(DB_PATH)
+    equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
+    conn.close()
 
     # --- DADOS BÁSICOS ---
     nome = st.text_input("Seu nome:", value=user_data['nome'])
@@ -296,9 +312,26 @@ def tela_completar_cadastro(user_data):
     
     tipo_usuario = st.radio("Qual o seu tipo de perfil?", ["🥋 Sou Aluno", "👩‍🏫 Sou Professor"], horizontal=True)
     
-    faixa = None
-    if tipo_usuario == "🥋 Sou Aluno":
-        faixa = st.selectbox("Sua faixa atual:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+    col_faixa, col_equipe = st.columns(2)
+    
+    with col_faixa:
+        if tipo_usuario == "🥋 Sou Aluno":
+            faixa = st.selectbox("Sua faixa atual:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        else:
+            faixa = st.selectbox("Sua faixa atual:", ["Marrom", "Preta"])
+            st.caption("Professores devem ser Marrom ou Preta.")
+
+    with col_equipe:
+        opcoes_equipe = ["Nenhuma (Vínculo Pendente)"] + equipes_df["nome"].tolist()
+        equipe_nome = st.selectbox("Selecione sua Equipe:", opcoes_equipe)
+        
+    # Lógica para pegar o ID da equipe selecionada
+    equipe_id = None
+    if equipe_nome != "Nenhuma (Vínculo Pendente)":
+        try:
+            equipe_id = int(equipes_df[equipes_df["nome"] == equipe_nome]["id"].values[0])
+        except:
+            pass
 
     st.markdown("---")
     st.markdown("#### 📍 Endereço Completo")
@@ -385,18 +418,19 @@ def tela_completar_cadastro(user_data):
             user_data['id']
         ))
         
-        # Inserir na tabela específica
+        # Inserir na tabela específica com FAIXA e EQUIPE
         if novo_tipo == "aluno":
-            cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, status_vinculo) VALUES (?, ?, 'pendente')", (user_data['id'], faixa))
+            cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, ?, ?, 'pendente')", (user_data['id'], faixa, equipe_id))
         else:
-            cursor.execute("INSERT INTO professores (usuario_id, status_vinculo) VALUES (?, 'pendente')", (user_data['id'],))
+            cursor.execute("INSERT INTO professores (usuario_id, equipe_id, status_vinculo) VALUES (?, ?, 'pendente')", (user_data['id'], equipe_id))
         
         conn.commit()
         conn.close()
         
+        # Atualiza sessão
         st.session_state.usuario = {"id": user_data['id'], "nome": nome_salvar, "tipo": novo_tipo}
         
-        # Limpa chaves temporárias
+        # Limpa chaves temporárias da sessão para não poluir
         for k in ['end_google_cep', 'end_google_logradouro', 'end_google_bairro', 'end_google_cidade', 'end_google_uf', 'registration_pending']:
             st.session_state.pop(k, None)
             
