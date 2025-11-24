@@ -141,7 +141,7 @@ def tela_login():
                 st.rerun()
 
 def tela_cadastro_interno():
-    """Cadastro manual salvando no FIRESTORE."""
+    """Cadastro manual salvando no FIRESTORE com filtro dinâmico de professores."""
     st.subheader("📋 Cadastro de Novo Usuário")
     nome = st.text_input("Nome de Usuário:") 
     email = st.text_input("E-mail:")
@@ -152,10 +152,9 @@ def tela_cadastro_interno():
     st.markdown("---")
     tipo = st.selectbox("Tipo:", ["Aluno", "Professor"])
     
-    # Busca equipes e professores do Firestore
     db = get_db()
     
-    # 1. Equipes
+    # 1. Carrega Equipes
     equipes_ref = db.collection('equipes').stream()
     lista_equipes = ["Nenhuma (Vínculo Pendente)"]
     mapa_equipes = {} # Nome -> ID
@@ -164,26 +163,55 @@ def tela_cadastro_interno():
         nome_eq = d.get('nome', 'Sem Nome')
         lista_equipes.append(nome_eq)
         mapa_equipes[nome_eq] = doc.id
-        
-    # 2. Professores
-    profs_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
-    lista_profs = ["Nenhum (Vínculo Pendente)"]
-    mapa_profs = {}
-    for doc in profs_ref:
+    
+    # 2. Carrega Nomes dos Professores
+    # Precisamos do nome para exibir no selectbox
+    profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+    mapa_nomes_profs = {} # UID -> Nome
+    for doc in profs_users_ref:
+        mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
+
+    # 3. Carrega Vínculos (Quem dá aula onde)
+    # Buscamos na coleção 'professores' para saber qual usuário está em qual equipe
+    vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
+    profs_por_equipe = {} # EquipeID -> [(Nome, UID)]
+    
+    for doc in vincs_ref:
         d = doc.to_dict()
-        nome_p = d.get('nome', 'Sem Nome')
-        lista_profs.append(nome_p)
-        mapa_profs[nome_p] = doc.id
+        eid = d.get('equipe_id')
+        uid = d.get('usuario_id')
         
+        if eid and uid and uid in mapa_nomes_profs:
+            if eid not in profs_por_equipe:
+                profs_por_equipe[eid] = []
+            profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
+
+    # Lógica de Exibição dos Selectboxes
     if tipo == "Aluno":
         faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        
+        # Seleção de Equipe
         eq_sel = st.selectbox("Equipe:", lista_equipes)
-        prof_sel = st.selectbox("Professor:", lista_profs)
+        
+        # Filtro Dinâmico de Professores
+        lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
+        mapa_profs_final = {}
+        
+        eq_id_selecionada = mapa_equipes.get(eq_sel)
+        
+        # Se uma equipe válida foi selecionada e tem professores vinculados
+        if eq_id_selecionada and eq_id_selecionada in profs_por_equipe:
+            for p_nome, p_uid in profs_por_equipe[eq_id_selecionada]:
+                lista_profs_filtrada.append(p_nome)
+                mapa_profs_final[p_nome] = p_uid
+                
+        prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
+        
     else:
         faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
         st.caption("Professores devem ser Marrom ou Preta.")
         eq_sel = st.selectbox("Equipe:", lista_equipes)
-        prof_sel = None # Professores não selecionam outro professor no cadastro
+        prof_sel = None # Professores não selecionam mestre no cadastro inicial
     
     # Endereço
     st.markdown("#### Endereço")
@@ -230,7 +258,7 @@ def tela_cadastro_interno():
             st.error("CPF inválido.")
             return
 
-        # Verifica duplicidade no Firestore
+        # Verifica duplicidade
         users_ref = db.collection('usuarios')
         if len(list(users_ref.where('email', '==', email_fin).stream())) > 0:
             st.error("Email já cadastrado.")
@@ -240,7 +268,7 @@ def tela_cadastro_interno():
             hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
             tipo_db = tipo.lower()
             
-            # 1. Cria Usuário no Firestore
+            # Cria Usuário
             novo_user = {
                 "nome": nome_fin, "email": email_fin, "cpf": cpf_fin, 
                 "tipo_usuario": tipo_db, "senha": hashed, "auth_provider": "local", 
@@ -252,28 +280,28 @@ def tela_cadastro_interno():
             update_time, doc_ref = db.collection('usuarios').add(novo_user)
             user_id = doc_ref.id
             
-            # 2. Cria vínculo
+            # Vínculo
             eq_id = mapa_equipes.get(eq_sel)
-            prof_id = mapa_profs.get(prof_sel) if prof_sel else None
+            
+            # Recupera o ID do professor do mapa filtrado (se for aluno e escolheu prof)
+            prof_id = None
+            if tipo_db == "aluno" and prof_sel and prof_sel != "Nenhum (Vínculo Pendente)":
+                prof_id = mapa_profs_final.get(prof_sel)
             
             if tipo_db == "aluno":
                 db.collection('alunos').add({
-                    "usuario_id": user_id, 
-                    "faixa_atual": faixa, 
-                    "equipe_id": eq_id,
-                    "professor_id": prof_id,
+                    "usuario_id": user_id, "faixa_atual": faixa, 
+                    "equipe_id": eq_id, "professor_id": prof_id,
                     "status_vinculo": "pendente"
                 })
             else:
                 db.collection('professores').add({
-                    "usuario_id": user_id, 
-                    "equipe_id": eq_id, 
+                    "usuario_id": user_id, "equipe_id": eq_id, 
                     "status_vinculo": "pendente"
                 })
                 
             st.success("Cadastro realizado! Faça login.")
             
-            # Limpa sessão
             for k in ['cad_cep', 'cad_end']: st.session_state.pop(k, None)
             st.session_state["modo_login"] = "login"
             st.rerun()
@@ -286,13 +314,12 @@ def tela_cadastro_interno():
         st.rerun()
 
 def tela_completar_cadastro(user_data):
-    """Completa cadastro Google no FIRESTORE."""
+    """Completa cadastro Google com filtro dinâmico."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
     
-    # Busca Equipes e Professores
     db = get_db()
     
-    # Equipes
+    # 1. Equipes
     equipes_ref = db.collection('equipes').stream()
     lista_equipes = ["Nenhuma (Vínculo Pendente)"]
     mapa_equipes = {} 
@@ -301,22 +328,31 @@ def tela_completar_cadastro(user_data):
         nm = d.get('nome', 'Sem Nome')
         lista_equipes.append(nm)
         mapa_equipes[nm] = doc.id
-        
-    # Professores
-    profs_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
-    lista_profs = ["Nenhum (Vínculo Pendente)"]
-    mapa_profs = {}
-    for doc in profs_ref:
-        d = doc.to_dict()
-        nome_p = d.get('nome', 'Sem Nome')
-        lista_profs.append(nome_p)
-        mapa_profs[nome_p] = doc.id
 
-    # Dados
+    # 2. Professores
+    profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+    mapa_nomes_profs = {} 
+    for doc in profs_users_ref:
+        mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
+
+    # 3. Vínculos
+    vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
+    profs_por_equipe = {} 
+    for doc in vincs_ref:
+        d = doc.to_dict()
+        eid = d.get('equipe_id')
+        uid = d.get('usuario_id')
+        if eid and uid and uid in mapa_nomes_profs:
+            if eid not in profs_por_equipe:
+                profs_por_equipe[eid] = []
+            profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
+
+    # Dados Básicos
     nome = st.text_input("Nome:", value=user_data['nome'])
     st.text_input("Email:", value=user_data['email'], disabled=True)
     tipo = st.radio("Perfil:", ["Aluno", "Professor"], horizontal=True)
     
+    # Colunas de Seleção
     c_faixa, c_eq = st.columns(2)
     
     if tipo == "Aluno":
@@ -324,7 +360,19 @@ def tela_completar_cadastro(user_data):
             faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
         with c_eq:
             eq_sel = st.selectbox("Equipe:", lista_equipes)
-        prof_sel = st.selectbox("Professor:", lista_profs)
+            
+        # Filtro Professor
+        lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
+        mapa_profs_final = {}
+        eq_id_sel = mapa_equipes.get(eq_sel)
+        
+        if eq_id_sel and eq_id_sel in profs_por_equipe:
+            for p_nome, p_uid in profs_por_equipe[eq_id_sel]:
+                lista_profs_filtrada.append(p_nome)
+                mapa_profs_final[p_nome] = p_uid
+                
+        prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
+        
     else:
         with c_faixa:
             faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
@@ -366,7 +414,10 @@ def tela_completar_cadastro(user_data):
 
         tipo_db = tipo.lower()
         eq_id = mapa_equipes.get(eq_sel)
-        prof_id = mapa_profs.get(prof_sel) if prof_sel else None
+        
+        prof_id = None
+        if tipo_db == "aluno" and prof_sel and prof_sel != "Nenhum (Vínculo Pendente)":
+            prof_id = mapa_profs_final.get(prof_sel)
         
         # Atualiza Usuário
         db.collection('usuarios').document(user_data['id']).update({
@@ -379,10 +430,8 @@ def tela_completar_cadastro(user_data):
         # Cria Vínculo
         if tipo_db == "aluno":
             db.collection('alunos').add({
-                "usuario_id": user_data['id'], 
-                "faixa_atual": faixa, 
-                "equipe_id": eq_id, 
-                "professor_id": prof_id,
+                "usuario_id": user_data['id'], "faixa_atual": faixa, 
+                "equipe_id": eq_id, "professor_id": prof_id,
                 "status_vinculo": "pendente"
             })
         else:
