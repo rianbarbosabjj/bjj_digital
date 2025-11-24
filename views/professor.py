@@ -113,9 +113,6 @@ def gestao_equipes():
     equipes_map = {} 
     lista_equipes = []
     
-    # Se for admin, busca tudo. Se não, busca filtrado (ou filtra em memória se a lista for pequena)
-    # Firestore não tem "where id in [...]" para muitos IDs, então vamos buscar tudo e filtrar no Python 
-    # (para bases pequenas/médias é ok).
     all_equipes = db.collection('equipes').stream()
     
     for doc in all_equipes:
@@ -124,18 +121,15 @@ def gestao_equipes():
             equipes_map[doc.id] = d
             lista_equipes.append((d.get('nome', 'Sem Nome'), doc.id))
 
-    # Descobre quais alunos pertencem a essas equipes (Para filtrar o dropdown de alunos)
+    # Descobre quais alunos pertencem a essas equipes
     allowed_student_ids = set()
     if not is_admin and allowed_team_ids:
-        # Busca alunos vinculados às equipes permitidas
-        # Limitado a 10 no 'in'. Se o prof tiver >10 equipes, ideal fazer em batches.
-        # Simplificação: Vamos iterar as equipes permitidas.
         for tid in allowed_team_ids:
             s_query = db.collection('alunos').where('equipe_id', '==', tid).stream()
             for s in s_query:
                 allowed_student_ids.add(s.to_dict().get('usuario_id'))
 
-    # Carrega Usuários (Mapeamento ID -> Nome e Listas para Dropdown)
+    # Carrega Usuários
     users_ref = db.collection('usuarios').stream()
     users_map = {} 
     lista_professores = [] 
@@ -147,11 +141,11 @@ def gestao_equipes():
         users_map[uid] = d
         u_tipo = str(d.get('tipo_usuario', '')).lower()
         
-        # Professores: Admin vê todos, Prof vê todos (para poder adicionar colegas de apoio)
+        # Lista todos os professores disponíveis para serem vinculados
         if u_tipo in ['professor', 'admin']:
             lista_professores.append((d.get('nome'), uid))
             
-        # Alunos: Admin vê todos, Prof só vê os das suas equipes
+        # Lista alunos
         elif u_tipo == 'aluno':
             if is_admin:
                 lista_alunos_dropdown.append((d.get('nome'), uid))
@@ -159,7 +153,7 @@ def gestao_equipes():
                 lista_alunos_dropdown.append((d.get('nome'), uid))
 
     # --- ABAS ---
-    aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
+    aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores (Apoio)", "🥋 Alunos"])
 
     # ----------------------------------------------------------
     # ABA 1: EQUIPES
@@ -167,14 +161,11 @@ def gestao_equipes():
     with aba1:
         st.subheader("Gerenciar Equipes")
         
-        # Só Admin cria equipe ou Prof Responsável pode criar? 
-        # Geralmente só Admin cria, ou Prof cria a sua. Vamos deixar liberado.
         with st.expander("➕ Cadastrar Nova Equipe"):
             nome_eq = st.text_input("Nome da equipe:")
             desc_eq = st.text_area("Descrição:")
             prof_opcoes = ["Nenhum"] + [p[0] for p in lista_professores]
             
-            # Se for prof criando, já vem pré-selecionado ele mesmo
             idx_padrao = 0
             if not is_admin:
                 try: idx_padrao = [p[1] for p in lista_professores].index(user_logado['id']) + 1
@@ -252,39 +243,73 @@ def gestao_equipes():
                         st.warning("Excluído!"); st.rerun()
 
     # ----------------------------------------------------------
-    # ABA 2: PROFESSORES
+    # ABA 2: PROFESSORES (Apoio)
     # ----------------------------------------------------------
     with aba2:
-        st.subheader("Equipe Técnica (Professores)")
-        c1, c2 = st.columns(2)
-        p_sel = c1.selectbox("Professor:", [p[0] for p in lista_professores])
-        e_sel = c2.selectbox("Vincular à Equipe:", [e[0] for e in lista_equipes])
+        st.subheader("Vincular Professor de Apoio")
+        st.caption("Adicione outros professores para ajudar a gerenciar a equipe.")
         
-        if st.button("Vincular Professor"):
-            pid = next(uid for nome, uid in lista_professores if nome == p_sel)
-            eid = next(uid for nome, uid in lista_equipes if nome == e_sel)
-            
-            # Check duplicidade
-            exists = list(db.collection('professores').where('usuario_id','==',pid).where('equipe_id','==',eid).stream())
-            if exists: st.warning("Já vinculado.")
-            else:
-                db.collection('professores').add({
-                    "usuario_id": pid, "equipe_id": eid, 
-                    "pode_aprovar": False, "eh_responsavel": False, "status_vinculo": "ativo"
-                })
-                st.success("Vinculado!"); st.rerun()
+        c1, c2 = st.columns(2)
+        # Lista para seleção (nome, uid)
+        opcoes_prof = [p[0] for p in lista_professores]
+        # Lista para seleção (nome, eid)
+        opcoes_eq = [e[0] for e in lista_equipes]
+        
+        p_sel = c1.selectbox("Professor:", opcoes_prof, key="sel_prof_apoio")
+        e_sel = c2.selectbox("Vincular à Equipe:", opcoes_eq, key="sel_eq_apoio")
+        
+        if st.button("📎 Vincular Professor"):
+            if p_sel and e_sel:
+                pid = next(uid for nome, uid in lista_professores if nome == p_sel)
+                eid = next(uid for nome, uid in lista_equipes if nome == e_sel)
+                
+                # Check duplicidade
+                exists = list(db.collection('professores').where('usuario_id','==',pid).where('equipe_id','==',eid).stream())
+                if exists:
+                    st.warning("Este professor já está vinculado a esta equipe.")
+                else:
+                    db.collection('professores').add({
+                        "usuario_id": pid, "equipe_id": eid, 
+                        "pode_aprovar": False, "eh_responsavel": False, "status_vinculo": "ativo"
+                    })
+                    st.success(f"Professor {p_sel} vinculado com sucesso!")
+                    st.rerun()
         
         st.markdown("---")
-        # Lista apenas professores das equipes permitidas
+        st.subheader("Professores Vinculados")
+        
         vincs = db.collection('professores').stream()
-        lista_v = []
+        
+        # Header da tabela manual
+        c1, c2, c3 = st.columns([3, 3, 2])
+        c1.markdown("**Professor**")
+        c2.markdown("**Equipe (Função)**")
+        c3.markdown("**Ação**")
+        
         for v in vincs:
             d = v.to_dict()
-            if d.get('equipe_id') in equipes_map: # Filtro de segurança
-                pn = users_map.get(d.get('usuario_id'), {}).get('nome', '?')
-                en = equipes_map.get(d.get('equipe_id'), {}).get('nome', '?')
-                lista_v.append({"Professor": pn, "Equipe": en, "Função": "Responsável" if d.get('eh_responsavel') else "Apoio"})
-        st.dataframe(pd.DataFrame(lista_v), use_container_width=True)
+            eid = d.get('equipe_id')
+            
+            # Mostra apenas se a equipe é visível para quem está logado
+            if eid in equipes_map: 
+                uid = d.get('usuario_id')
+                pn = users_map.get(uid, {}).get('nome', 'Desconhecido')
+                en = equipes_map.get(eid, {}).get('nome', 'Desconhecido')
+                func = "Responsável" if d.get('eh_responsavel') else "Apoio"
+                
+                c1, c2, c3 = st.columns([3, 3, 2])
+                c1.write(pn)
+                c2.write(f"{en} ({func})")
+                
+                # Botão de desvincular (apenas se não for o responsável principal da equipe)
+                # O responsável principal deve ser alterado na edição da equipe
+                if not d.get('eh_responsavel'):
+                    if c3.button("Desvincular", key=f"del_vin_{v.id}"):
+                        db.collection('professores').document(v.id).delete()
+                        st.success("Desvinculado!")
+                        st.rerun()
+                else:
+                    c3.caption("Principal")
 
     # ----------------------------------------------------------
     # ABA 3: ALUNOS (FILTRADA)
