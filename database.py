@@ -7,7 +7,11 @@ from firebase_admin import credentials, firestore
 def get_db():
     """Inicializa e retorna a conexão com o Firestore."""
     
-    # Verifica se o app do Firebase já não está rodando para evitar erro de inicialização duplicada
+    # O NOME DO SEU BANCO (Descoberto pelo script)
+    # Não mude isso, pois é o nome que está criado no Google
+    DATABASE_NAME = 'bjjdigital'
+
+    # Verifica se o app do Firebase já não está rodando
     if not firebase_admin._apps:
         try:
             # Carrega as credenciais do secrets.toml
@@ -17,29 +21,24 @@ def get_db():
             cred = credentials.Certificate(key_dict)
             
             # Inicializa o Firebase
+            # Nota: Não passamos o project_id aqui para evitar conflitos antigos
             firebase_admin.initialize_app(cred)
             
-            # Retorna o cliente do banco de dados (Firestore)
-            # IMPORTANTE: Forçamos o project_id para evitar o erro 404 Not Found
-            return firestore.client(project=key_dict['project_id'])
-            
         except Exception as e:
-            st.error(f"Erro ao conectar com o Firebase: {e}")
+            st.error(f"Erro ao inicializar Firebase: {e}")
             return None
             
-    # Se já estiver inicializado, tenta retornar o cliente forçando o projeto novamente
+    # Retorna o cliente conectado explicitamente ao banco 'bjjdigital'
     try:
-        key_dict = dict(st.secrets["FIREBASE_KEY"])
-        return firestore.client(project=key_dict['project_id'])
-    except:
-        return firestore.client()
+        return firestore.client(database=DATABASE_NAME)
+    except TypeError:
+        # Se der erro de versão, tentamos forçar a atualização das libs
+        st.error("Erro de versão da biblioteca. Atualize o requirements.txt")
+        return None
+    except Exception as e:
+        st.error(f"Erro ao conectar no banco '{DATABASE_NAME}': {e}")
+        return None
 
-# --- FUNÇÕES LEGADO (MANTIDAS VAZIAS PARA COMPATIBILIDADE) ---
-# Como migramos para a nuvem (Firebase), não criamos mais banco local (.db).
-# Mantemos as funções vazias para que o app.py não quebre ao tentar chamá-las.
-
-def criar_banco():
-    pass
-
-def criar_usuarios_teste():
-    pass
+# --- FUNÇÕES LEGADO ---
+def criar_banco(): pass
+def criar_usuarios_teste(): pass
