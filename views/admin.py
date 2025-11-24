@@ -19,7 +19,7 @@ def gestao_usuarios(usuario_logado):
         return
 
     st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
-    st.markdown("Edite informações ou altere o tipo de perfil de um usuário.")
+    st.markdown("Edite informações, altere perfis ou exclua usuários.")
 
     db = get_db()
     
@@ -30,7 +30,8 @@ def gestao_usuarios(usuario_logado):
     for doc in docs:
         d = doc.to_dict()
         d['id_doc'] = doc.id # Guarda o ID do documento para updates
-        # Garante campos padrão para evitar erro no DataFrame
+        
+        # Garante campos padrão
         d.setdefault('cpf', '')
         d.setdefault('tipo_usuario', 'aluno')
         d.setdefault('auth_provider', 'local')
@@ -45,42 +46,48 @@ def gestao_usuarios(usuario_logado):
     df = pd.DataFrame(lista_usuarios)
     
     st.subheader("Visão Geral dos Usuários")
+    
     # Exibe apenas colunas relevantes
     colunas_exibir = ['nome', 'email', 'tipo_usuario', 'cpf', 'auth_provider']
-    # Filtra colunas que existem no DF
     cols = [c for c in colunas_exibir if c in df.columns]
     st.dataframe(df[cols], use_container_width=True)
     st.markdown("---")
 
-    st.subheader("Editar Usuário")
+    st.subheader("Gerenciar Usuário Individual")
     
     # Seletor de usuário
-    nomes = df["nome"].tolist()
-    nome_selecionado = st.selectbox(
-        "Selecione um usuário para gerenciar:",
-        options=nomes,
+    # Cria lista formatada "Nome (Email)" para facilitar a seleção de homônimos
+    opcoes_selecao = [f"{u['nome']} ({u['email']})" for u in lista_usuarios]
+    selecionado_str = st.selectbox(
+        "Selecione um usuário:",
+        options=opcoes_selecao,
         index=None,
-        placeholder="Selecione..."
+        placeholder="Selecione para editar ou excluir..."
     )
 
-    if nome_selecionado:
-        # Pega os dados do usuário selecionado (usando o ID do doc para garantir unicidade)
-        # Nota: Se tiver nomes iguais, isso pega o primeiro. O ideal seria selecionar por Email ou ID.
-        user_row = df[df["nome"] == nome_selecionado].iloc[0]
-        user_id = user_row['id_doc']
+    if selecionado_str:
+        # Encontra o dicionário do usuário selecionado na lista original
+        # (A string selecionada é "Nome (Email)", então buscamos pelo índice ou correspondência)
+        index_selecionado = opcoes_selecao.index(selecionado_str)
+        user_data_list = lista_usuarios[index_selecionado]
+        user_id = user_data_list['id_doc']
         
-        # Busca dados frescos do banco
+        # Busca dados frescos do banco para garantir edição correta
         user_ref = db.collection('usuarios').document(user_id)
-        user_data = user_ref.get().to_dict()
-
-        if not user_data:
-            st.error("Erro ao carregar dados do usuário.")
+        doc_snap = user_ref.get()
+        
+        if not doc_snap.exists:
+            st.error("Erro: Usuário não encontrado no banco (pode ter sido excluído).")
+            st.rerun()
             return
+            
+        user_data = doc_snap.to_dict()
 
-        with st.expander(f"Gerenciando: {user_data.get('nome')}", expanded=True):
+        with st.expander(f"⚙️ Editar: {user_data.get('nome')}", expanded=True):
+            
+            # --- ABA 1: EDIÇÃO ---
+            st.markdown("### 📝 Dados Cadastrais")
             with st.form(key="form_edit_user_admin"):
-                st.markdown("#### 1. Informações do Perfil")
-                
                 c1, c2 = st.columns(2)
                 novo_nome = c1.text_input("Nome:", value=user_data.get('nome', ''))
                 novo_email = c2.text_input("Email:", value=user_data.get('email', ''))
@@ -116,22 +123,58 @@ def gestao_usuarios(usuario_logado):
 
             st.markdown("---")
 
-            # Reset de Senha (Apenas para contas locais)
+            # --- ABA 2: SENHA (LOCAL) ---
             if user_data.get('auth_provider') == 'local':
-                st.markdown("#### 2. Redefinição de Senha")
+                st.markdown("### 🔑 Redefinição de Senha")
                 with st.form(key="form_reset_pass_admin"):
                     nova_senha = st.text_input("Nova Senha:", type="password")
                     conf_senha = st.text_input("Confirmar Nova Senha:", type="password")
                     
-                    if st.form_submit_button("🔑 Redefinir Senha"):
+                    if st.form_submit_button("Redefinir Senha"):
                         if not nova_senha or nova_senha != conf_senha:
                             st.error("Senhas inválidas ou não conferem.")
                         else:
                             hash_senha = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
                             user_ref.update({"senha": hash_senha})
                             st.success("Senha redefinida!")
-            else:
-                st.info(f"Este usuário faz login via {user_data.get('auth_provider')}, não é possível alterar a senha aqui.")
+            
+            st.markdown("---")
+
+            # --- ABA 3: ZONA DE PERIGO (EXCLUSÃO) ---
+            st.markdown("### 🚨 Zona de Perigo")
+            st.warning("Atenção: A exclusão é irreversível e apagará todos os dados vinculados a este usuário.")
+            
+            col_del_1, col_del_2 = st.columns([3, 1])
+            with col_del_1:
+                confirmacao = st.text_input("Digite 'DELETAR' para confirmar a exclusão:", key="confirm_del")
+            
+            with col_del_2:
+                st.markdown("<div style='height: 28px'></div>", unsafe_allow_html=True)
+                if st.button("🗑️ Excluir Usuário", type="primary"):
+                    if confirmacao == "DELETAR":
+                        try:
+                            # 1. Excluir o documento do usuário
+                            user_ref.delete()
+                            
+                            # 2. Limpeza de dados relacionados (Opcional mas recomendado)
+                            # Excluir vínculos de aluno
+                            alunos_ref = db.collection('alunos').where('usuario_id', '==', user_id).stream()
+                            for doc in alunos_ref: doc.reference.delete()
+                                
+                            # Excluir vínculos de professor
+                            profs_ref = db.collection('professores').where('usuario_id', '==', user_id).stream()
+                            for doc in profs_ref: doc.reference.delete()
+                            
+                            # Nota: Resultados e logs geralmente são mantidos para histórico, 
+                            # mas se quiser apagar, seria a mesma lógica.
+                            
+                            st.success(f"Usuário {user_data.get('nome')} excluído com sucesso!")
+                            st.rerun()
+                            
+                        except Exception as e:
+                            st.error(f"Erro ao excluir: {e}")
+                    else:
+                        st.error("Confirmação incorreta. Digite DELETAR.")
 
 # =========================================
 # GESTÃO DE QUESTÕES
@@ -148,11 +191,10 @@ def gestao_questoes():
     elif usuario_logado["tipo"] == "professor":
         # Verifica se professor está ativo no Firestore
         db = get_db()
-        # A busca por professor é um pouco mais complexa pois o ID do usuário está dentro do documento
         prof_docs = db.collection('professores')\
                       .where('usuario_id', '==', usuario_logado['id'])\
                       .where('status_vinculo', '==', 'ativo').stream()
-        if list(prof_docs): # Se encontrou algum registro ativo
+        if list(prof_docs): 
             permitido = True
             
     if not permitido:
