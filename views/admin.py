@@ -1,43 +1,17 @@
 import streamlit as st
 import pandas as pd
+import bcrypt
 from database import get_db
+from utils import formatar_e_validar_cpf, carregar_questoes, salvar_questoes, carregar_todas_questoes
+import os
+import json
+from datetime import datetime
 
+# =========================================
+# GESTÃO DE USUÁRIOS
+# =========================================
 def gestao_usuarios(usuario_logado):
-    if usuario_logado["tipo"] != "admin":
-        st.error("Acesso negado.")
-        return
-
-    st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
-    db = get_db()
-    
-    # Lista todos os usuários
-    docs = db.collection('usuarios').stream()
-    lista = []
-    for doc in docs:
-        d = doc.to_dict()
-        d['id_doc'] = doc.id
-        lista.append(d)
-        
-    df = pd.DataFrame(lista)
-    if not df.empty:
-        st.dataframe(df[['nome', 'email', 'tipo_usuario', 'cpf']], use_container_width=True)
-        
-        # Edição simples
-        user_sel = st.selectbox("Editar Usuário:", df['nome'].tolist())
-        if user_sel:
-            # Pega dados do selecionado
-            sel_data = df[df['nome'] == user_sel].iloc[0]
-            
-            with st.expander(f"Editar {user_sel}"):
-                novo_tipo = st.selectbox("Tipo:", ["aluno", "professor", "admin"], index=["aluno", "professor", "admin"].index(sel_data['tipo_usuario']))
-                
-                if st.button("Salvar Alteração"):
-                    db.collection('usuarios').document(sel_data['id_doc']).update({"tipo_usuario": novo_tipo})
-                    st.success("Tipo atualizado!")
-                    st.rerun()
-
-def gestao_usuarios(usuario_logado):
-    """Página de gerenciamento de usuários, restrita ao Admin."""
+    """Página de gerenciamento de usuários (Admin)."""
     
     # 🔒 Restrição de Acesso
     if usuario_logado["tipo"] != "admin":
@@ -45,298 +19,298 @@ def gestao_usuarios(usuario_logado):
         return
 
     st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
-    st.markdown("Edite informações, redefina senhas ou altere o tipo de perfil de um usuário.")
+    st.markdown("Edite informações ou altere o tipo de perfil de um usuário.")
 
-    conn = sqlite3.connect(DB_PATH)
-    # Seleciona o CPF e o ID para uso na edição
-    df = pd.read_sql_query(
-        "SELECT id, nome, email, cpf, tipo_usuario, auth_provider, perfil_completo FROM usuarios ORDER BY nome", 
-        conn
-    )
+    db = get_db()
+    
+    # 1. Busca todos os usuários do Firestore
+    docs = db.collection('usuarios').stream()
+    lista_usuarios = []
+    
+    for doc in docs:
+        d = doc.to_dict()
+        d['id_doc'] = doc.id # Guarda o ID do documento para updates
+        # Garante campos padrão para evitar erro no DataFrame
+        d.setdefault('cpf', '')
+        d.setdefault('tipo_usuario', 'aluno')
+        d.setdefault('auth_provider', 'local')
+        d.setdefault('perfil_completo', False)
+        lista_usuarios.append(d)
+        
+    if not lista_usuarios:
+        st.info("Nenhum usuário encontrado.")
+        return
 
+    # Cria DataFrame para exibição
+    df = pd.DataFrame(lista_usuarios)
+    
     st.subheader("Visão Geral dos Usuários")
-    st.dataframe(df, use_container_width=True)
+    # Exibe apenas colunas relevantes
+    colunas_exibir = ['nome', 'email', 'tipo_usuario', 'cpf', 'auth_provider']
+    # Filtra colunas que existem no DF
+    cols = [c for c in colunas_exibir if c in df.columns]
+    st.dataframe(df[cols], use_container_width=True)
     st.markdown("---")
 
     st.subheader("Editar Usuário")
-    lista_nomes = df["nome"].tolist()
+    
+    # Seletor de usuário
+    nomes = df["nome"].tolist()
     nome_selecionado = st.selectbox(
         "Selecione um usuário para gerenciar:",
-        options=lista_nomes,
+        options=nomes,
         index=None,
         placeholder="Selecione..."
     )
 
     if nome_selecionado:
-        try:
-            # 1. Recupera o ID
-            user_id_selecionado = int(df[df["nome"] == nome_selecionado]["id"].values[0])
-        except IndexError:
-            st.error("Usuário não encontrado no DataFrame. Tente recarregar a página.")
-            conn.close()
-            return
-            
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
+        # Pega os dados do usuário selecionado (usando o ID do doc para garantir unicidade)
+        # Nota: Se tiver nomes iguais, isso pega o primeiro. O ideal seria selecionar por Email ou ID.
+        user_row = df[df["nome"] == nome_selecionado].iloc[0]
+        user_id = user_row['id_doc']
         
-        # 2. Busca dados completos
-        cursor.execute("SELECT * FROM usuarios WHERE id=?", (user_id_selecionado,))
-        user_data = cursor.fetchone()
-        
+        # Busca dados frescos do banco
+        user_ref = db.collection('usuarios').document(user_id)
+        user_data = user_ref.get().to_dict()
+
         if not user_data:
-            st.error("Usuário não encontrado no banco de dados. (ID não correspondeu)")
-            conn.close()
+            st.error("Erro ao carregar dados do usuário.")
             return
 
-        with st.expander(f"Gerenciando: {user_data['nome']}", expanded=True):
-            
-            with st.form(key="form_edit_user"):
+        with st.expander(f"Gerenciando: {user_data.get('nome')}", expanded=True):
+            with st.form(key="form_edit_user_admin"):
                 st.markdown("#### 1. Informações do Perfil")
                 
-                col1, col2 = st.columns(2)
-                novo_nome = col1.text_input("Nome:", value=user_data['nome'])
-                novo_email = col2.text_input("Email:", value=user_data['email'])
+                c1, c2 = st.columns(2)
+                novo_nome = c1.text_input("Nome:", value=user_data.get('nome', ''))
+                novo_email = c2.text_input("Email:", value=user_data.get('email', ''))
                 
-                # NOVO CAMPO CPF
-                novo_cpf_input = st.text_input("CPF:", value=user_data['cpf'] or "")
+                novo_cpf = st.text_input("CPF:", value=user_data.get('cpf', ''))
+                cpf_fmt = formatar_e_validar_cpf(novo_cpf)
+                if cpf_fmt: st.caption(f"CPF Válido: {cpf_fmt}")
                 
-                # Máscara visual do CPF
-                cpf_display_limpo = formatar_e_validar_cpf(novo_cpf_input)
-                if cpf_display_limpo:
-                    st.info(f"CPF Formatado: {cpf_display_limpo[:3]}.{cpf_display_limpo[3:6]}.{cpf_display_limpo[6:9]}-{cpf_display_limpo[9:]}")
-                
+                tipo_atual = user_data.get('tipo_usuario', 'aluno')
                 opcoes_tipo = ["aluno", "professor", "admin"]
-                tipo_atual_db = user_data['tipo_usuario']
+                try: idx_tipo = opcoes_tipo.index(tipo_atual)
+                except: idx_tipo = 0
                 
-                index_atual = 0 
-                if tipo_atual_db:
-                    try:
-                        index_atual = [t.lower() for t in opcoes_tipo].index(tipo_atual_db.lower())
-                    except ValueError:
-                        index_atual = 0 
+                novo_tipo = st.selectbox("Tipo de Usuário:", options=opcoes_tipo, index=idx_tipo)
                 
-                novo_tipo = st.selectbox(
-                    "Tipo de Usuário:",
-                    options=opcoes_tipo,
-                    index=index_atual 
-                )
+                st.text_input("Provedor:", value=user_data.get('auth_provider', 'local'), disabled=True)
                 
-                st.text_input("Provedor de Auth:", value=user_data['auth_provider'], disabled=True)
-                
-                submitted_info = st.form_submit_button("💾 Salvar Alterações", use_container_width=True)
-                
-                if submitted_info:
-                    # ⚠️ VALIDAÇÃO DO CPF (se não estiver vazio)
-                    cpf_editado = formatar_e_validar_cpf(novo_cpf_input) if novo_cpf_input else None
-
-                    if novo_cpf_input and not cpf_editado:
-                        st.error("CPF inválido na edição. Por favor, corrija o formato (11 dígitos).")
-                        conn.close()
-                        return
-                        
-                    try:
-                        # 3. Executa o UPDATE (incluindo o CPF)
-                        cursor.execute(
-                            "UPDATE usuarios SET nome=?, email=?, cpf=?, tipo_usuario=? WHERE id=?",
-                            (novo_nome.upper(), novo_email.upper(), cpf_editado, novo_tipo, user_id_selecionado)
-                        )
-                        conn.commit()
-                        st.success("Dados do usuário atualizados com sucesso!")
-                        st.rerun() # Recarrega para refletir a mudança no DataFrame
-                    except sqlite3.IntegrityError:
-                        st.error(f"Erro: O email '{novo_email}' ou o CPF já está em uso por outro usuário.")
-                    except Exception as e:
-                        st.error(f"Ocorreu um erro: {e}")
+                if st.form_submit_button("💾 Salvar Alterações"):
+                    if novo_cpf and not cpf_fmt:
+                        st.error("CPF inválido.")
+                    else:
+                        try:
+                            user_ref.update({
+                                "nome": novo_nome.upper(),
+                                "email": novo_email.lower().strip(),
+                                "cpf": cpf_fmt,
+                                "tipo_usuario": novo_tipo
+                            })
+                            st.success("Usuário atualizado com sucesso!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao atualizar: {e}")
 
             st.markdown("---")
 
-            st.markdown("#### 2. Redefinição de Senha")
-            if user_data['auth_provider'] == 'local':
-                with st.form(key="form_reset_pass"):
+            # Reset de Senha (Apenas para contas locais)
+            if user_data.get('auth_provider') == 'local':
+                st.markdown("#### 2. Redefinição de Senha")
+                with st.form(key="form_reset_pass_admin"):
                     nova_senha = st.text_input("Nova Senha:", type="password")
-                    confirmar_senha = st.text_input("Confirmar Nova Senha:", type="password")
+                    conf_senha = st.text_input("Confirmar Nova Senha:", type="password")
                     
-                    submitted_pass = st.form_submit_button("🔑 Redefinir Senha", use_container_width=True)
-                    
-                    if submitted_pass:
-                        if not nova_senha or not confirmar_senha:
-                            st.warning("Por favor, preencha os dois campos de senha.")
-                        elif nova_senha != confirmar_senha:
-                            st.error("As senhas não coincidem.")
+                    if st.form_submit_button("🔑 Redefinir Senha"):
+                        if not nova_senha or nova_senha != conf_senha:
+                            st.error("Senhas inválidas ou não conferem.")
                         else:
-                            novo_hash = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
-                            cursor.execute(
-                                "UPDATE usuarios SET senha=? WHERE id=?",
-                                (novo_hash, user_id_selecionado)
-                            )
-                            conn.commit()
-                            st.success("Senha do usuário redefinida com sucesso!")
+                            hash_senha = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+                            user_ref.update({"senha": hash_senha})
+                            st.success("Senha redefinida!")
             else:
-                st.info(f"Não é possível redefinir a senha de usuários via '{user_data['auth_provider']}'.")
-    
-    conn.close()
+                st.info(f"Este usuário faz login via {user_data.get('auth_provider')}, não é possível alterar a senha aqui.")
+
 # =========================================
-# 🧩 GESTÃO DE QUESTÕES (DO SEU PROJETO ORIGINAL)
+# GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes():
+    """Adicionar, editar ou remover questões dos arquivos JSON."""
+    
     usuario_logado = st.session_state.usuario
-    # ... (restrição para Admin) ...
-
-    # 📝 Checagem adicional para Professores (se necessário)
-    if usuario_logado["tipo"] == "professor":
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM professores WHERE usuario_id=? AND status_vinculo='ativo'", (usuario_logado["id"],))
-        if cursor.fetchone()[0] == 0:
-            st.error("Acesso negado. Seu vínculo como professor ainda não foi aprovado ou você não tem um vínculo ativo.")
-            conn.close()
-            return
-        conn.close()
+    
+    # Verificação de permissão (Admin ou Professor Ativo)
+    permitido = False
+    if usuario_logado["tipo"] == "admin":
+        permitido = True
+    elif usuario_logado["tipo"] == "professor":
+        # Verifica se professor está ativo no Firestore
+        db = get_db()
+        # A busca por professor é um pouco mais complexa pois o ID do usuário está dentro do documento
+        prof_docs = db.collection('professores')\
+                      .where('usuario_id', '==', usuario_logado['id'])\
+                      .where('status_vinculo', '==', 'ativo').stream()
+        if list(prof_docs): # Se encontrou algum registro ativo
+            permitido = True
+            
+    if not permitido:
+        st.error("Acesso negado. Apenas Admins ou Professores ativos.")
+        return
     
     st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
 
+    # Listar temas (lê da pasta local 'questions')
+    os.makedirs("questions", exist_ok=True)
     temas_existentes = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
-    tema_selecionado = st.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
-
+    
+    c1, c2 = st.columns([3, 1])
+    with c1:
+        tema_selecionado = st.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
+    
+    novo_tema_nome = ""
     if tema_selecionado == "Novo Tema":
-        tema = st.text_input("Digite o nome do novo tema:")
+        with c2:
+            novo_tema_nome = st.text_input("Nome do novo tema:")
+        tema_atual = novo_tema_nome
     else:
-        tema = tema_selecionado
+        tema_atual = tema_selecionado
 
-    questoes = carregar_questoes(tema) if tema else []
+    # Carrega questões do arquivo JSON
+    questoes = carregar_questoes(tema_atual) if tema_atual else []
 
     st.markdown("### ✍️ Adicionar nova questão")
     with st.expander("Expandir para adicionar questão", expanded=False):
-        pergunta = st.text_area("Pergunta:")
-        opcoes = [st.text_input(f"Alternativa {letra}:", key=f"opt_{letra}") for letra in ["A", "B", "C", "D", "E"]]
-        resposta = st.selectbox("Resposta correta:", ["A", "B", "C", "D", "E"])
-        imagem = st.text_input("Caminho da imagem (opcional):")
-        video = st.text_input("URL do vídeo (opcional):")
+        with st.form(key="form_add_questao"):
+            pergunta = st.text_area("Pergunta:")
+            
+            c_opts = st.columns(5)
+            opcoes = []
+            letras = ["A", "B", "C", "D", "E"]
+            for i, l in enumerate(letras):
+                opcoes.append(c_opts[i].text_input(f"Opção {l}:"))
+                
+            resposta = st.selectbox("Resposta Correta:", letras)
+            
+            c_midia = st.columns(2)
+            imagem = c_midia[0].text_input("Caminho da Imagem (opcional):")
+            video = c_midia[1].text_input("URL do Vídeo (opcional):")
 
-        if st.button("💾 Salvar Questão"):
-            if pergunta.strip() and tema.strip():
-                nova = {
-                    "pergunta": pergunta.strip(),
-                    "opcoes": [f"{letra}) {txt}" for letra, txt in zip(["A", "B", "C", "D", "E"], opcoes) if txt.strip()],
-                    "resposta": resposta,
-                    "imagem": imagem.strip(),
-                    "video": video.strip(),
-                }
-                questoes.append(nova)
-                salvar_questoes(tema, questoes)
-                st.success("Questão adicionada com sucesso! ✅")
-                st.rerun()
-            else:
-                st.error("A pergunta e o nome do tema não podem estar vazios.")
+            if st.form_submit_button("💾 Salvar Questão"):
+                if pergunta.strip() and tema_atual.strip():
+                    # Formata opções: "A) Texto"
+                    opts_formatadas = [f"{l}) {txt}" for l, txt in zip(letras, opcoes) if txt.strip()]
+                    
+                    if len(opts_formatadas) < 2:
+                        st.error("Adicione pelo menos 2 alternativas.")
+                    else:
+                        nova = {
+                            "pergunta": pergunta.strip(),
+                            "opcoes": opts_formatadas,
+                            "resposta": resposta,
+                            "imagem": imagem.strip(),
+                            "video": video.strip(),
+                        }
+                        questoes.append(nova)
+                        salvar_questoes(tema_atual, questoes)
+                        st.success(f"Questão salva em '{tema_atual}'!")
+                        st.rerun()
+                else:
+                    st.error("Preencha a pergunta e o nome do tema.")
 
-    st.markdown("### 📚 Questões cadastradas")
+    st.markdown("### 📚 Questões cadastradas neste tema")
     if not questoes:
-        st.info("Nenhuma questão cadastrada para este tema ainda.")
+        st.info("Nenhuma questão cadastrada.")
     else:
-        for i, q in enumerate(questoes, 1):
-            st.markdown(f"**{i}. {q['pergunta']}**")
-            for alt in q["opcoes"]:
-                st.markdown(f"- {alt}")
-            st.markdown(f"**Resposta:** {q['resposta']}")
-            if st.button(f"🗑️ Excluir questão {i}", key=f"del_{i}"):
-                questoes.pop(i - 1)
-                salvar_questoes(tema, questoes)
-                st.warning("Questão removida.")
-                st.rerun()
+        for i, q in enumerate(questoes):
+            with st.expander(f"{i+1}. {q['pergunta']}"):
+                st.write(q['opcoes'])
+                st.caption(f"Resposta: {q['resposta']}")
+                if st.button("🗑️ Excluir", key=f"del_q_{i}"):
+                    questoes.pop(i)
+                    salvar_questoes(tema_atual, questoes)
+                    st.rerun()
 
+# =========================================
+# GESTÃO DE EXAME DE FAIXA
+# =========================================
 def gestao_exame_de_faixa():
+    """Montar provas selecionando questões dos temas."""
+    
     st.markdown("<h1 style='color:#FFD700;'>🥋 Gestão de Exame de Faixa</h1>", unsafe_allow_html=True)
 
     os.makedirs("exames", exist_ok=True)
     faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-    faixa = st.selectbox("Selecione a faixa:", faixas)
+    faixa = st.selectbox("Selecione a faixa para editar o exame:", faixas)
 
     exame_path = f"exames/faixa_{faixa.lower()}.json"
+    
+    # Carrega exame existente ou cria novo
     if os.path.exists(exame_path):
         try:
-            with open(exame_path, "r", encoding="utf-8") as f:
-                exame = json.load(f)
-        except json.JSONDecodeError:
-            st.error("Arquivo de exame corrompido. Criando um novo.")
-            exame = {} # Reseta
+            with open(exame_path, "r", encoding="utf-8") as f: exame = json.load(f)
+        except: exame = {}
     else:
         exame = {}
 
-    # Garante que a estrutura base exista
-    if "questoes" not in exame:
-        exame = {
-            "faixa": faixa,
-            "ultima_atualizacao": datetime.now().strftime("%Y-%m-%d"),
-            "criado_por": st.session_state.usuario["nome"],
-            "temas_incluidos": [],
-            "questoes": []
-        }
+    # Estrutura base
+    exame.setdefault("questoes", [])
+    exame.setdefault("faixa", faixa)
 
-    # 🔹 Carrega todas as questões disponíveis
-    todas_questoes = carregar_todas_questoes()
-    if not todas_questoes:
-        st.warning("Nenhuma questão cadastrada nos temas (pasta 'questions') até o momento.")
+    # Carrega TODAS as questões disponíveis nos arquivos de temas
+    todas = carregar_todas_questoes()
+    
+    if not todas:
+        st.warning("Nenhuma questão encontrada nos temas. Cadastre questões primeiro.")
         return
 
-    # 🔹 Filtro por tema
-    temas_disponiveis = sorted(list(set(q["tema"] for q in todas_questoes)))
-    tema_filtro = st.selectbox("Filtrar questões por tema:", ["Todos"] + temas_disponiveis)
-
-    # 🔹 Exibição com filtro
-    if tema_filtro != "Todos":
-        questoes_filtradas = [q for q in todas_questoes if q["tema"] == tema_filtro]
-    else:
-        questoes_filtradas = todas_questoes
-
-    st.markdown("### ✅ Selecione as questões que farão parte do exame")
-    selecao = []
+    # Filtro de visualização
+    temas_disp = sorted(list(set(q["tema"] for q in todas)))
+    filtro = st.selectbox("Filtrar questões disponíveis por tema:", ["Todos"] + temas_disp)
     
-    # Filtra questões que JÁ ESTÃO no exame para evitar duplicatas
-    perguntas_no_exame = set(q["pergunta"] for q in exame["questoes"])
-    questoes_para_selecao = [q for q in questoes_filtradas if q["pergunta"] not in perguntas_no_exame]
+    if filtro != "Todos":
+        questoes_exibir = [q for q in todas if q["tema"] == filtro]
+    else:
+        questoes_exibir = todas
 
-    if not questoes_para_selecao:
-        st.info(f"Todas as questões {('do tema ' + tema_filtro) if tema_filtro != 'Todos' else ''} já foram adicionadas ou não há questões disponíveis.")
-
-    for i, q in enumerate(questoes_para_selecao, 1):
-        st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
-        if st.checkbox(f"Adicionar esta questão ({q['tema']})", key=f"{faixa}_{q['tema']}_{i}"):
-            selecao.append(q)
-
-    # 🔘 Botão para inserir as selecionadas
-    if selecao and st.button("➕ Inserir Questões Selecionadas"):
-        exame["questoes"].extend(selecao)
-        exame["temas_incluidos"] = sorted(list(set(q["tema"] for q in exame["questoes"])))
-        exame["ultima_atualizacao"] = datetime.now().strftime("%Y-%m-%d")
+    # Identifica quais já estão no exame (para não duplicar)
+    perguntas_no_exame = [q['pergunta'] for q in exame['questoes']]
+    
+    st.markdown("### ✅ Adicionar Questões ao Exame")
+    
+    with st.form(key="form_add_exame"):
+        selecionadas = []
+        for i, q in enumerate(questoes_exibir):
+            # Só mostra se não estiver no exame
+            if q['pergunta'] not in perguntas_no_exame:
+                if st.checkbox(f"{q['tema']} | {q['pergunta']}", key=f"chk_{i}"):
+                    selecionadas.append(q)
         
-        with open(exame_path, "w", encoding="utf-8") as f:
-            json.dump(exame, f, indent=4, ensure_ascii=False)
-        
-        st.success(f"{len(selecao)} questão(ões) adicionada(s) ao exame da faixa {faixa}.")
-        st.rerun()
+        if st.form_submit_button("➕ Adicionar Selecionadas"):
+            if selecionadas:
+                exame['questoes'].extend(selecionadas)
+                # Salva
+                with open(exame_path, "w", encoding="utf-8") as f:
+                    json.dump(exame, f, indent=4, ensure_ascii=False)
+                st.success(f"{len(selecionadas)} questões adicionadas!")
+                st.rerun()
+            else:
+                st.warning("Selecione pelo menos uma questão.")
 
     st.markdown("---")
-    st.markdown("### 📋 Questões já incluídas no exame atual:")
-    if not exame["questoes"]:
-        st.info("Nenhuma questão adicionada ainda.")
+    st.markdown(f"### 📋 Questões no Exame da Faixa {faixa} ({len(exame['questoes'])})")
+    
+    if not exame['questoes']:
+        st.info("O exame está vazio.")
     else:
-        for i, q in enumerate(exame["questoes"], 1):
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.markdown(f"**{i}. ({q['tema']}) {q['pergunta']}**")
-                st.markdown(f"<small>Resposta correta: {q['resposta']}</small>", unsafe_allow_html=True)
-            with col2:
-                if st.button(f"Remover {i}", key=f"rem_{i}"):
-                    exame["questoes"].pop(i - 1)
+        for i, q in enumerate(exame['questoes']):
+            c1, c2 = st.columns([5, 1])
+            with c1:
+                st.write(f"**{i+1}.** [{q.get('tema','?')}] {q['pergunta']}")
+            with c2:
+                if st.button("Remover", key=f"rem_ex_{i}"):
+                    exame['questoes'].pop(i)
                     with open(exame_path, "w", encoding="utf-8") as f:
                         json.dump(exame, f, indent=4, ensure_ascii=False)
                     st.rerun()
-
-    st.markdown("---")
-    if st.button("🗑️ Excluir exame completo desta faixa", type="primary"):
-        if os.path.exists(exame_path):
-            os.remove(exame_path)
-            st.warning(f"O exame da faixa {faixa} foi excluído.")
-            st.rerun()
-        else:
-            st.error("O arquivo de exame não existe.")
