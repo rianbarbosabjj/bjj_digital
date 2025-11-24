@@ -18,12 +18,21 @@ def get_db():
             
             # Inicializa o Firebase
             firebase_admin.initialize_app(cred)
+            
+            # Retorna o cliente do banco de dados (Firestore)
+            # IMPORTANTE: Forçamos o project_id para evitar o erro 404 Not Found
+            return firestore.client(project=key_dict['project_id'])
+            
         except Exception as e:
             st.error(f"Erro ao conectar com o Firebase: {e}")
             return None
             
-    # Retorna o cliente do banco de dados (Firestore)
-    return firestore.client()
+    # Se já estiver inicializado, tenta retornar o cliente forçando o projeto novamente
+    try:
+        key_dict = dict(st.secrets["FIREBASE_KEY"])
+        return firestore.client(project=key_dict['project_id'])
+    except:
+        return firestore.client()
 
 # --- FUNÇÕES LEGADO (MANTIDAS VAZIAS PARA COMPATIBILIDADE) ---
 # Como migramos para a nuvem (Firebase), não criamos mais banco local (.db).
