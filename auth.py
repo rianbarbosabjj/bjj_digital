@@ -1,93 +1,97 @@
-import sqlite3
 import bcrypt
-from config import DB_PATH
+from database import get_db
 from utils import formatar_e_validar_cpf
 
-# 3. Autenticação local (Login/Senha)
 def autenticar_local(usuario_email_ou_cpf, senha):
     """
-    Atualizado: Autentica o usuário local usando NOME, EMAIL ou CPF.
+    Autentica o usuário verificando email ou CPF no Firestore.
     """
-    # 📝 Tenta formatar para CPF para verificar se a entrada é um CPF
-    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf) 
+    db = get_db()
+    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf)
+    
+    users_ref = db.collection('usuarios')
+    usuario_doc = None
 
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    # 1. Tenta buscar por Email (ou nome de usuário se foi salvo assim)
+    # No Firestore, fazemos queries baseadas em campos
+    query_email = users_ref.where('email', '==', usuario_email_ou_cpf).where('auth_provider', '==', 'local').stream()
     
-    # 1. Tenta autenticar usando NOME ou EMAIL (a entrada original)
-    cursor.execute(
-        "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE (nome=? OR email=?) AND auth_provider='local'", 
-        (usuario_email_ou_cpf, usuario_email_ou_cpf) 
-    )
-    dados = cursor.fetchone()
+    for doc in query_email:
+        usuario_doc = doc
+        break # Pega o primeiro encontrado
     
-    # 2. Se a busca por NOME/EMAIL falhar e a entrada for um CPF válido, tenta autenticar por CPF
-    if not dados and cpf_formatado:
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, senha FROM usuarios WHERE cpf=? AND auth_provider='local'", 
-            (cpf_formatado,) # Busca usando o CPF formatado
-        )
-        dados = cursor.fetchone()
+    # 2. Se não achou por email, tenta buscar por CPF (se for válido)
+    if not usuario_doc and cpf_formatado:
+        query_cpf = users_ref.where('cpf', '==', cpf_formatado).where('auth_provider', '==', 'local').stream()
+        for doc in query_cpf:
+            usuario_doc = doc
+            break
+            
+    # 3. Se não achou nada, tenta buscar por Nome (fallback)
+    if not usuario_doc:
+        query_nome = users_ref.where('nome', '==', usuario_email_ou_cpf.upper()).where('auth_provider', '==', 'local').stream()
+        for doc in query_nome:
+            usuario_doc = doc
+            break
+
+    # Se encontrou o usuário, verifica a senha
+    if usuario_doc:
+        dados = usuario_doc.to_dict()
+        senha_hash = dados.get('senha')
         
-    conn.close()
-    
-    # 3. Verifica a senha no resultado final
-    if dados and bcrypt.checkpw(senha.encode(), dados[3].encode()):
-        return {"id": dados[0], "nome": dados[1], "tipo": dados[2]}
+        if senha_hash and bcrypt.checkpw(senha.encode(), senha_hash.encode()):
+            # Retorna os dados essenciais + o ID do documento (importante para updates)
+            return {
+                "id": usuario_doc.id, # O ID agora é a chave do documento no Firestore
+                "nome": dados.get('nome'),
+                "tipo": dados.get('tipo_usuario'),
+                "email": dados.get('email')
+            }
         
     return None
 
-# 4. Funções de busca e criação de usuário
 def buscar_usuario_por_email(email_ou_cpf):
-    """
-    Busca um usuário pelo email (principalmente usado para Auth Social)
-    e retorna seus dados. Também verifica o CPF para garantir unicidade cruzada.
-    """
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
+    """Busca usuário para o fluxo do Google Auth."""
+    db = get_db()
+    users_ref = db.collection('usuarios')
+    usuario_doc = None
     
-    cpf_formatado = formatar_e_validar_cpf(email_ou_cpf)
-
-    # Busca por 'email' (o caso mais comum) ou 'cpf' (se a entrada for um CPF válido)
-    if cpf_formatado:
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=? OR cpf=?", 
-            (email_ou_cpf, cpf_formatado)
-        )
-    else:
-        cursor.execute(
-            "SELECT id, nome, tipo_usuario, perfil_completo FROM usuarios WHERE email=?", 
-            (email_ou_cpf,)
-        )
+    # Busca por email
+    query = users_ref.where('email', '==', email_ou_cpf).stream()
+    for doc in query:
+        usuario_doc = doc
+        break
         
-    dados = cursor.fetchone()
-    conn.close()
-    
-    if dados:
+    if usuario_doc:
+        dados = usuario_doc.to_dict()
         return {
-            "id": dados[0], 
-            "nome": dados[1], 
-            "tipo": dados[2], 
-            "perfil_completo": bool(dados[3])
+            "id": usuario_doc.id,
+            "nome": dados.get('nome'),
+            "tipo": dados.get('tipo_usuario'),
+            "perfil_completo": dados.get('perfil_completo', False),
+            "email": dados.get('email')
         }
         
     return None
 
 def criar_usuario_parcial_google(email, nome):
-    """Cria um registro inicial para um novo usuário do Google."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            """
-            INSERT INTO usuarios (email, nome, auth_provider, perfil_completo)
-            VALUES (?, ?, 'google', 0)
-            """, (email, nome)
-        )
-        conn.commit()
-        novo_id = cursor.lastrowid
-        conn.close()
-        return {"id": novo_id, "email": email, "nome": nome}
-    except sqlite3.IntegrityError: # Email já existe
-        conn.close()
-        return None
+    """Cria o registro inicial vindo do Google."""
+    db = get_db()
+    
+    # Prepara os dados
+    novo_usuario = {
+        "email": email,
+        "nome": nome.upper(),
+        "auth_provider": "google",
+        "perfil_completo": False,
+        "data_criacao": firestore.SERVER_TIMESTAMP
+    }
+    
+    # Adiciona ao Firestore (ele gera o ID automaticamente)
+    update_time, doc_ref = db.collection('usuarios').add(novo_usuario)
+    
+    return {
+        "id": doc_ref.id, 
+        "email": email, 
+        "nome": nome
+    }
