@@ -12,8 +12,6 @@ def painel_professor():
     user = st.session_state.usuario
     
     # 1. Descobre quais equipes este professor lidera ou apoia
-    # Precisamos buscar na coleção 'professores' onde usuario_id == id_do_logado
-    # e o status é 'ativo'
     prof_query = db.collection('professores')\
         .where('usuario_id', '==', user['id'])\
         .where('status_vinculo', '==', 'ativo').stream()
@@ -32,8 +30,6 @@ def painel_professor():
         return
 
     # 2. Busca alunos pendentes nessas equipes
-    # Nota: O operador 'in' do Firestore suporta até 10 valores.
-    # Se tiver mais que 10 equipes, precisaria de lógica extra, mas para este caso serve.
     alunos_pend_ref = db.collection('alunos')\
         .where('equipe_id', 'in', equipes_ids)\
         .where('status_vinculo', '==', 'pendente').stream()
@@ -43,8 +39,6 @@ def painel_professor():
         d = doc.to_dict()
         
         # Busca dados do aluno (Nome)
-        # O ideal seria ter o nome desnormalizado no documento do aluno, 
-        # mas vamos buscar na coleção usuarios para garantir dados frescos.
         u_snap = db.collection('usuarios').document(d['usuario_id']).get()
         if u_snap.exists:
             nome_aluno = u_snap.to_dict().get('nome', 'Desconhecido')
@@ -70,10 +64,9 @@ def painel_professor():
                 c1.markdown(f"**{p['nome']}** quer entrar na equipe **{p['equipe']}** (Faixa: {p['faixa']})")
                 
                 if c2.button("✅ Aprovar", key=f"ok_{p['id_doc']}"):
-                    # Atualiza o status do aluno
                     db.collection('alunos').document(p['id_doc']).update({
                         "status_vinculo": "ativo",
-                        "professor_id": user['id'] # Vincula a quem aprovou (opcional)
+                        "professor_id": user['id']
                     })
                     st.success(f"{p['nome']} aprovado!")
                     st.rerun()
@@ -90,26 +83,23 @@ def gestao_equipes():
     st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    # --- PREPARAÇÃO DOS DADOS (Cache local para evitar muitas leituras) ---
-    # Carrega todos os usuários para mapear ID -> Nome
+    # --- PREPARAÇÃO DOS DADOS ---
     users_ref = db.collection('usuarios').stream()
-    users_map = {} # {id: {'nome': 'X', 'tipo': 'professor'}}
-    
-    lista_professores = [] # Para dropdowns
-    lista_alunos = []      # Para dropdowns
+    users_map = {} 
+    lista_professores = [] 
+    lista_alunos = []      
     
     for doc in users_ref:
         d = doc.to_dict()
         uid = doc.id
         users_map[uid] = d
-        if d.get('tipo_usuario') == 'professor' or d.get('tipo_usuario') == 'admin':
+        if d.get('tipo_usuario') in ['professor', 'admin']:
             lista_professores.append((d.get('nome'), uid))
         elif d.get('tipo_usuario') == 'aluno':
             lista_alunos.append((d.get('nome'), uid))
             
-    # Carrega todas as equipes
     equipes_ref = db.collection('equipes').stream()
-    equipes_map = {} # {id: {'nome': 'X', ...}}
+    equipes_map = {} 
     lista_equipes = []
     
     for doc in equipes_ref:
@@ -129,30 +119,26 @@ def gestao_equipes():
         nome_eq = st.text_input("Nome da equipe:")
         desc_eq = st.text_area("Descrição:")
         
-        # Selectbox de professor responsável
         prof_opcoes = ["Nenhum"] + [p[0] for p in lista_professores]
         prof_sel = st.selectbox("Professor Responsável:", prof_opcoes)
         
         if st.button("➕ Criar Equipe"):
             if nome_eq:
-                # Resolve ID do professor
                 prof_resp_id = None
                 if prof_sel != "Nenhum":
-                    # Busca o ID baseado no nome selecionado
                     for nome, uid in lista_professores:
                         if nome == prof_sel:
                             prof_resp_id = uid
                             break
                 
-                # Cria equipe
+                # --- CRIAÇÃO: Nome em Maiúsculo ---
                 _, new_eq_ref = db.collection('equipes').add({
-                    "nome": nome_eq,
+                    "nome": nome_eq.upper(), # <--- AQUI
                     "descricao": desc_eq,
                     "professor_responsavel_id": prof_resp_id,
                     "ativo": True
                 })
                 
-                # Se tem responsável, cria vínculo na tabela professores também
                 if prof_resp_id:
                     db.collection('professores').add({
                         "usuario_id": prof_resp_id,
@@ -162,7 +148,7 @@ def gestao_equipes():
                         "status_vinculo": "ativo"
                     })
                     
-                st.success(f"Equipe '{nome_eq}' criada!")
+                st.success(f"Equipe '{nome_eq.upper()}' criada!")
                 st.rerun()
             else:
                 st.warning("Nome obrigatório.")
@@ -170,7 +156,6 @@ def gestao_equipes():
         st.markdown("---")
         st.subheader("Equipes Existentes")
         
-        # Monta tabela para exibição
         dados_tabela = []
         for eid, data in equipes_map.items():
             pid = data.get('professor_responsavel_id')
@@ -179,19 +164,17 @@ def gestao_equipes():
                 "Equipe": data.get('nome'),
                 "Descrição": data.get('descricao'),
                 "Responsável": pnome,
-                "ID_Equipe": eid # Escondido no dataframe se quiser, mas útil para lógica
+                "ID_Equipe": eid
             })
             
         if dados_tabela:
             df = pd.DataFrame(dados_tabela)
             st.dataframe(df[['Equipe', 'Descrição', 'Responsável']], use_container_width=True)
             
-            # Edição / Exclusão
             st.markdown("### Gerenciar Equipe")
             eq_to_edit = st.selectbox("Selecione para editar:", [d['Equipe'] for d in dados_tabela])
             
             if eq_to_edit:
-                # Recupera dados originais
                 item = next(i for i in dados_tabela if i['Equipe'] == eq_to_edit)
                 eid = item['ID_Equipe']
                 original = equipes_map[eid]
@@ -200,7 +183,6 @@ def gestao_equipes():
                     n_nome = st.text_input("Novo nome:", value=original.get('nome'))
                     n_desc = st.text_area("Nova descrição:", value=original.get('descricao'))
                     
-                    # Recupera índice do prof atual
                     p_atual = item['Responsável']
                     try: idx_p = prof_opcoes.index(p_atual)
                     except: idx_p = 0
@@ -208,15 +190,17 @@ def gestao_equipes():
                     
                     c1, c2 = st.columns(2)
                     if c1.button("💾 Salvar"):
-                        # Resolve ID
                         pid_new = None
                         if n_prof != "Nenhum":
                             for nome, uid in lista_professores:
                                 if nome == n_prof: 
                                     pid_new = uid; break
                         
+                        # --- EDIÇÃO: Nome em Maiúsculo ---
                         db.collection('equipes').document(eid).update({
-                            "nome": n_nome, "descricao": n_desc, "professor_responsavel_id": pid_new
+                            "nome": n_nome.upper(), # <--- AQUI
+                            "descricao": n_desc, 
+                            "professor_responsavel_id": pid_new
                         })
                         st.success("Atualizado!")
                         st.rerun()
@@ -233,32 +217,34 @@ def gestao_equipes():
         st.subheader("Vincular Professor de Apoio")
         
         c1, c2 = st.columns(2)
-        p_sel = c1.selectbox("Professor:", [p[0] for p in lista_professores], key="sel_prof_apoio")
-        e_sel = c2.selectbox("Equipe:", [e[0] for e in lista_equipes], key="sel_eq_apoio")
-        
-        if st.button("📎 Vincular"):
-            pid = next(uid for nome, uid in lista_professores if nome == p_sel)
-            eid = next(uid for nome, uid in lista_equipes if nome == e_sel)
+        # Verifica se as listas não estão vazias para evitar erro no selectbox
+        if not lista_professores or not lista_equipes:
+            st.warning("Cadastre professores e equipes primeiro.")
+        else:
+            p_sel = c1.selectbox("Professor:", [p[0] for p in lista_professores], key="sel_prof_apoio")
+            e_sel = c2.selectbox("Equipe:", [e[0] for e in lista_equipes], key="sel_eq_apoio")
             
-            # Verifica se já existe
-            exists = list(db.collection('professores')
-                          .where('usuario_id', '==', pid)
-                          .where('equipe_id', '==', eid).stream())
-            
-            if exists:
-                st.warning("Vínculo já existe.")
-            else:
-                db.collection('professores').add({
-                    "usuario_id": pid, "equipe_id": eid, 
-                    "pode_aprovar": False, "eh_responsavel": False, 
-                    "status_vinculo": "ativo"
-                })
-                st.success("Vinculado!")
-                st.rerun()
+            if st.button("📎 Vincular"):
+                pid = next(uid for nome, uid in lista_professores if nome == p_sel)
+                eid = next(uid for nome, uid in lista_equipes if nome == e_sel)
+                
+                exists = list(db.collection('professores')
+                              .where('usuario_id', '==', pid)
+                              .where('equipe_id', '==', eid).stream())
+                
+                if exists:
+                    st.warning("Vínculo já existe.")
+                else:
+                    db.collection('professores').add({
+                        "usuario_id": pid, "equipe_id": eid, 
+                        "pode_aprovar": False, "eh_responsavel": False, 
+                        "status_vinculo": "ativo"
+                    })
+                    st.success("Vinculado!")
+                    st.rerun()
         
         st.markdown("---")
         st.subheader("Professores Vinculados")
-        # Lista todos os vínculos
         vincs = db.collection('professores').stream()
         lista_v = []
         for v in vincs:
@@ -276,39 +262,38 @@ def gestao_equipes():
     with aba3:
         st.subheader("Gerenciar Vínculo de Aluno")
         
-        a_sel = st.selectbox("Aluno:", [a[0] for a in lista_alunos], key="sel_aluno_gest")
-        eq_aluno_sel = st.selectbox("Nova Equipe:", [e[0] for e in lista_equipes], key="sel_eq_aluno")
-        
-        if st.button("Atualizar Vínculo do Aluno"):
-            aid = next(uid for nome, uid in lista_alunos if nome == a_sel)
-            eid = next(uid for nome, uid in lista_equipes if nome == eq_aluno_sel)
+        if not lista_alunos or not lista_equipes:
+            st.warning("Cadastre alunos e equipes primeiro.")
+        else:
+            a_sel = st.selectbox("Aluno:", [a[0] for a in lista_alunos], key="sel_aluno_gest")
+            eq_aluno_sel = st.selectbox("Nova Equipe:", [e[0] for e in lista_equipes], key="sel_eq_aluno")
             
-            # Verifica se aluno já tem registro na coleção 'alunos'
-            aluno_docs = list(db.collection('alunos').where('usuario_id', '==', aid).stream())
-            
-            if aluno_docs:
-                # Update no primeiro encontrado
-                doc_id = aluno_docs[0].id
-                db.collection('alunos').document(doc_id).update({
-                    "equipe_id": eid,
-                    "status_vinculo": "ativo" # Força ativo pois foi o admin/prof que mudou
-                })
-                st.success(f"Aluno {a_sel} movido para {eq_aluno_sel}.")
-            else:
-                # Cria novo
-                db.collection('alunos').add({
-                    "usuario_id": aid,
-                    "equipe_id": eid,
-                    "faixa_atual": "Branca", # Default
-                    "status_vinculo": "ativo"
-                })
-                st.success(f"Aluno {a_sel} vinculado a {eq_aluno_sel}.")
-            st.rerun()
+            if st.button("Atualizar Vínculo do Aluno"):
+                aid = next(uid for nome, uid in lista_alunos if nome == a_sel)
+                eid = next(uid for nome, uid in lista_equipes if nome == eq_aluno_sel)
+                
+                aluno_docs = list(db.collection('alunos').where('usuario_id', '==', aid).stream())
+                
+                if aluno_docs:
+                    doc_id = aluno_docs[0].id
+                    db.collection('alunos').document(doc_id).update({
+                        "equipe_id": eid,
+                        "status_vinculo": "ativo"
+                    })
+                    st.success(f"Aluno {a_sel} movido para {eq_aluno_sel}.")
+                else:
+                    db.collection('alunos').add({
+                        "usuario_id": aid,
+                        "equipe_id": eid,
+                        "faixa_atual": "Branca",
+                        "status_vinculo": "ativo"
+                    })
+                    st.success(f"Aluno {a_sel} vinculado a {eq_aluno_sel}.")
+                st.rerun()
 
         st.markdown("---")
         st.subheader("Alunos Vinculados")
         
-        # Busca alunos
         alunos_bd = db.collection('alunos').stream()
         lista_a_bd = []
         for doc in alunos_bd:
