@@ -1,13 +1,14 @@
 import streamlit as st
-import sqlite3
-import bcrypt
 import pandas as pd
 import os
 import requests 
+import bcrypt
 from streamlit_oauth import OAuth2Component
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
-from config import DB_PATH, COR_DESTAQUE, COR_TEXTO
+from config import COR_DESTAQUE, COR_TEXTO
+from database import get_db
+from firebase_admin import firestore
 
 # =========================================
 # CONFIGURAÇÃO OAUTH
@@ -35,7 +36,7 @@ oauth_google = OAuth2Component(
 # =========================================
 
 def tela_login():
-    """Tela de login com autenticação local, Google e opção de cadastro."""
+    """Tela de login com autenticação local (Firebase) e Google."""
     st.session_state.setdefault("modo_login", "login")
 
     c1, c2, c3 = st.columns([1, 1.5, 1])
@@ -47,46 +48,40 @@ def tela_login():
                 col_l, col_c, col_r = st.columns([1, 2, 1])
                 with col_c:
                     st.image("assets/logo.png", use_container_width=True)
-            # ------------
 
             with st.container(border=True):
                 st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
-                user_ou_email = st.text_input("Nome de Usuário, Email ou CPF:")
+                user_input = st.text_input("Nome de Usuário, Email ou CPF:")
                 pwd = st.text_input("Senha:", type="password")
 
-                if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
-                    entrada = user_ou_email.strip()
+                if st.button("Entrar", use_container_width=True, type="primary"):
+                    entrada = user_input.strip()
                     if "@" in entrada:
-                        entrada = entrada.lower() # Garante login com email minúsculo
+                        entrada = entrada.lower()
                     else:
-                        cpf_detectado = formatar_e_validar_cpf(entrada)
-                        if cpf_detectado:
-                            entrada = cpf_detectado
+                        cpf = formatar_e_validar_cpf(entrada)
+                        if cpf: entrada = cpf
                         
                     u = autenticar_local(entrada, pwd.strip()) 
                     if u:
                         st.session_state.usuario = u
-                        st.success(f"Login realizado com sucesso! Bem-vindo(a), {u['nome'].title()}.")
+                        st.success(f"Bem-vindo(a), {u['nome'].title()}!")
                         st.rerun()
                     else:
-                        st.error("Usuário/Email/CPF ou senha incorretos.")
+                        st.error("Credenciais inválidas.")
 
-                colx, coly, colz = st.columns([1, 2, 1])
-                with coly:
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        if st.button("📋 Criar Conta", key="criar_conta_btn"):
-                            st.session_state["modo_login"] = "cadastro"
-                            st.rerun()
-                    with col2:
-                        if st.button("🔑 Esqueci Senha", key="esqueci_btn"):
-                            st.session_state["modo_login"] = "recuperar"
-                            st.rerun()
+                col1, col2 = st.columns(2)
+                if col1.button("📋 Criar Conta"):
+                    st.session_state["modo_login"] = "cadastro"
+                    st.rerun()
+                if col2.button("🔑 Esqueci Senha"):
+                    st.session_state["modo_login"] = "recuperar"
+                    st.rerun()
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # --- LÓGICA GOOGLE BLINDADA ---
+                # --- LÓGICA GOOGLE (BLINDADA) ---
                 if GOOGLE_CLIENT_ID: 
                     try:
                         result = oauth_google.authorize_button(
@@ -97,42 +92,38 @@ def tela_login():
                             key="google_auth_btn",
                             use_container_width=True,
                         )
-                    except Exception as e:
-                        st.warning("A conexão com o Google expirou. Por favor, recarregue a página (F5) e tente novamente.")
+                    except Exception:
+                        st.warning("A conexão expirou. Recarregue a página (F5).")
                         result = None
                     
                     if result and result.get("token"):
                         st.session_state.token = result.get("token")
-                        
                         try:
-                            access_token = result.get("token").get("access_token")
-                            if not access_token:
-                                st.error("Erro: Token de acesso não encontrado.")
-                            else:
-                                headers = {"Authorization": f"Bearer {access_token}"}
-                                response = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers=headers)
+                            token = result.get("token").get("access_token")
+                            headers = {"Authorization": f"Bearer {token}"}
+                            resp = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers=headers)
+                            
+                            if resp.status_code == 200:
+                                u_info = resp.json()
+                                email = u_info["email"].lower()
+                                nome = u_info.get("name", "").upper()
                                 
-                                if response.status_code == 200:
-                                    user_info = response.json()
-                                    email = user_info["email"].lower() # Email do Google sempre minúsculo
-                                    nome = user_info.get("name", email.split("@")[0])
-                                    
-                                    existente = buscar_usuario_por_email(email)
-                                    if existente:
-                                        if not existente["perfil_completo"]:
-                                            st.session_state.registration_pending = existente
-                                            st.rerun()
-                                        else:
-                                            st.session_state.usuario = existente
-                                            st.rerun()
+                                exist = buscar_usuario_por_email(email)
+                                if exist:
+                                    if not exist.get("perfil_completo"):
+                                        st.session_state.registration_pending = exist
+                                        st.rerun()
                                     else:
-                                        novo_user = criar_usuario_parcial_google(email, nome)
-                                        st.session_state.registration_pending = novo_user
+                                        st.session_state.usuario = exist
                                         st.rerun()
                                 else:
-                                    st.error("Falha ao obter dados do Google.")
+                                    novo = criar_usuario_parcial_google(email, nome)
+                                    st.session_state.registration_pending = novo
+                                    st.rerun()
+                            else:
+                                st.error("Falha ao obter dados do Google.")
                         except Exception as e:
-                            st.error(f"Erro na autenticação Google: {e}")
+                            st.error(f"Erro Google: {e}")
                 else:
                     st.warning("Google Auth não configurado.")
 
@@ -141,299 +132,227 @@ def tela_login():
 
         elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
-            st.text_input("Digite o e-mail cadastrado:")
+            st.text_input("Email cadastrado:")
             if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Funcionalidade em desenvolvimento.")
+                st.info("Funcionalidade em breve.")
             
-            if st.button("⬅️ Voltar para Login", use_container_width=True):
+            if st.button("Voltar"):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
 
 def tela_cadastro_interno():
-    """Formulário de cadastro completo."""
+    """Cadastro manual salvando no FIRESTORE."""
     st.subheader("📋 Cadastro de Novo Usuário")
-    nome = st.text_input("Nome de Usuário (login):") 
+    nome = st.text_input("Nome de Usuário:") 
     email = st.text_input("E-mail:")
-    cpf_input = st.text_input("CPF:") 
+    cpf_inp = st.text_input("CPF:") 
     senha = st.text_input("Senha:", type="password")
-    confirmar = st.text_input("Confirmar senha:", type="password")
+    conf = st.text_input("Confirmar senha:", type="password")
     
     st.markdown("---")
-    tipo_usuario = st.selectbox("Tipo de Usuário:", ["Aluno", "Professor"])
+    tipo = st.selectbox("Tipo:", ["Aluno", "Professor"])
     
-    conn = sqlite3.connect(DB_PATH)
-    equipes_df = pd.read_sql_query("SELECT id, nome, professor_responsavel_id FROM equipes", conn)
-    conn.close()
+    # Busca equipes do Firestore
+    db = get_db()
+    equipes_ref = db.collection('equipes').stream()
+    lista_equipes = ["Nenhuma (Vínculo Pendente)"]
+    mapa_equipes = {} # Nome -> ID
     
-    # --- Faixa e Equipe ---
-    if tipo_usuario == "Aluno":
-        faixa = st.selectbox("Graduação (faixa):", [
-            "Branca", "Cinza", "Amarela", "Laranja", "Verde",
-            "Azul", "Roxa", "Marrom", "Preta"
-        ])
-    else: # Professor
-        faixa = st.selectbox("Graduação (faixa):", ["Marrom", "Preta"])
-        st.info("Professores devem ser Marrom ou Preta.")
+    for doc in equipes_ref:
+        d = doc.to_dict()
+        nome_eq = d.get('nome', 'Sem Nome')
+        lista_equipes.append(nome_eq)
+        mapa_equipes[nome_eq] = doc.id
         
-    opcoes_equipe = ["Nenhuma (Vínculo Pendente)"] + equipes_df["nome"].tolist()
-    equipe_selecionada = st.selectbox("Selecione sua Equipe (Opcional):", opcoes_equipe)
+    if tipo == "Aluno":
+        faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+    else:
+        faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
+        st.caption("Professores devem ser Marrom ou Preta.")
+        
+    eq_sel = st.selectbox("Equipe:", lista_equipes)
     
-    equipe_id = None
-    if equipe_selecionada != "Nenhuma (Vínculo Pendente)":
-        try:
-            equipe_row = equipes_df[equipes_df["nome"] == equipe_selecionada].iloc[0]
-            equipe_id = int(equipe_row["id"])
-        except:
-            pass
+    # Endereço
+    st.markdown("#### Endereço")
+    if 'cad_cep' not in st.session_state: st.session_state.cad_cep = ''
     
-    st.markdown("---")
-    st.markdown("#### 3. Endereço") 
-
-    st.session_state.setdefault('endereco_cep_cadastro', {
-        'cep': '', 'logradouro': '', 'bairro': '', 'cidade': '', 'uf': ''
-    })
-
-    # Sincronização de Chaves
-    st.session_state.setdefault('reg_logradouro', st.session_state.endereco_cep_cadastro['logradouro'])
-    st.session_state.setdefault('reg_bairro', st.session_state.endereco_cep_cadastro['bairro'])
-    st.session_state.setdefault('reg_cidade', st.session_state.endereco_cep_cadastro['cidade'])
-    st.session_state.setdefault('reg_uf', st.session_state.endereco_cep_cadastro['uf'])
-    st.session_state.setdefault('reg_cep_input', st.session_state.endereco_cep_cadastro['cep'])
-
     col_cep, col_btn = st.columns([3, 1])
     with col_cep:
-        st.text_input("CEP:", max_chars=9, key='reg_cep_input')
-        cep_digitado_limpo = formatar_cep(st.session_state.reg_cep_input)
-        if cep_digitado_limpo:
-             st.info(f"CEP Formatado: {cep_digitado_limpo[:5]}-{cep_digitado_limpo[5:]}")
-
+        cep = st.text_input("CEP:", key="input_cep_cad", value=st.session_state.cad_cep)
     with col_btn:
         st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
-        if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_reg_cep'):
-            cep_digitado = st.session_state.reg_cep_input
-            endereco = buscar_cep(cep_digitado)
-            if endereco:
-                st.session_state.endereco_cep_cadastro = {'cep': cep_digitado, **endereco}
-                st.session_state['reg_logradouro'] = endereco['logradouro']
-                st.session_state['reg_bairro'] = endereco['bairro']
-                st.session_state['reg_cidade'] = endereco['cidade']
-                st.session_state['reg_uf'] = endereco['uf']
-                st.success("Endereço encontrado!")
+        if st.button("Buscar", key="btn_cep_cad"):
+            end = buscar_cep(cep)
+            if end:
+                st.session_state.cad_cep = cep
+                st.session_state.cad_end = end
+                st.success("OK!")
             else:
-                st.error("CEP inválido.")
-            st.rerun()
-
-    col_logr, col_bairro = st.columns(2)
-    novo_logradouro = col_logr.text_input("Logradouro:", key='reg_logradouro')
-    novo_bairro = col_bairro.text_input("Bairro:", key='reg_bairro')
-
-    col_cidade, col_uf = st.columns(2)
-    novo_cidade = col_cidade.text_input("Cidade:", key='reg_cidade')
-    novo_uf = col_uf.text_input("UF:", key='reg_uf')
+                st.error("Inválido")
     
-    col_num, col_comp = st.columns(2)
-    novo_numero = col_num.text_input("Número (Opcional):", value="", key='reg_numero')
-    novo_complemento = col_comp.text_input("Complemento (Opcional):", value="", key='reg_complemento')
+    end_cache = st.session_state.get('cad_end', {})
+    c1, c2 = st.columns(2)
+    logr = c1.text_input("Logradouro:", value=end_cache.get('logradouro',''))
+    bairro = c2.text_input("Bairro:", value=end_cache.get('bairro',''))
+    c3, c4 = st.columns(2)
+    cid = c3.text_input("Cidade:", value=end_cache.get('cidade',''))
+    uf = c4.text_input("UF:", value=end_cache.get('uf',''))
+    c5, c6 = st.columns(2)
+    num = c5.text_input("Número:")
+    comp = c6.text_input("Complemento:")
 
     if st.button("Cadastrar", use_container_width=True, type="primary"):
-        nome_final = nome.upper()
-        email_final = email.lower().strip() # <--- GARANTIDO: Email Minúsculo
-        cpf_final = formatar_e_validar_cpf(cpf_input)
-        cep_final = formatar_cep(st.session_state.reg_cep_input)
+        nome_fin = nome.upper()
+        email_fin = email.lower().strip()
+        cpf_fin = formatar_e_validar_cpf(cpf_inp)
+        cep_fin = formatar_cep(cep)
 
-        if not (nome and email and cpf_input and senha and confirmar):
-            st.warning("Preencha todos os campos obrigatórios.")
-        elif senha != confirmar:
-            st.error("As senhas não coincidem.")
-        elif not cpf_final:
+        if not (nome and email and cpf_inp and senha and conf):
+            st.warning("Preencha campos obrigatórios.")
+            return
+        if senha != conf:
+            st.error("Senhas não conferem.")
+            return
+        if not cpf_fin:
             st.error("CPF inválido.")
-        elif not (cep_final and novo_logradouro and novo_bairro and novo_cidade and novo_uf):
-            st.error("Endereço incompleto.")
-        else:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("SELECT id FROM usuarios WHERE nome=? OR email=? OR cpf=?", (nome_final, email_final, cpf_final))
+            return
+
+        # Verifica duplicidade no Firestore
+        users_ref = db.collection('usuarios')
+        if len(list(users_ref.where('email', '==', email_fin).stream())) > 0:
+            st.error("Email já cadastrado.")
+            return
             
-            if cursor.fetchone():
-                st.error("Usuário já cadastrado.")
-            else: 
-                try:
-                    hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                    tipo_db = "aluno" if tipo_usuario == "Aluno" else "professor"
+        try:
+            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+            tipo_db = tipo.lower()
+            
+            # 1. Cria Usuário no Firestore
+            novo_user = {
+                "nome": nome_fin, "email": email_fin, "cpf": cpf_fin, 
+                "tipo_usuario": tipo_db, "senha": hashed, "auth_provider": "local", 
+                "perfil_completo": True, "cep": cep_fin, "logradouro": logr.upper(),
+                "numero": num, "complemento": comp.upper(), "bairro": bairro.upper(),
+                "cidade": cid.upper(), "uf": uf.upper(), "data_criacao": firestore.SERVER_TIMESTAMP
+            }
+            
+            update_time, doc_ref = db.collection('usuarios').add(novo_user)
+            user_id = doc_ref.id
+            
+            # 2. Cria vínculo
+            eq_id = mapa_equipes.get(eq_sel)
+            
+            if tipo_db == "aluno":
+                db.collection('alunos').add({
+                    "usuario_id": user_id, "faixa_atual": faixa, 
+                    "equipe_id": eq_id, "status_vinculo": "pendente"
+                })
+            else:
+                db.collection('professores').add({
+                    "usuario_id": user_id, "equipe_id": eq_id, 
+                    "status_vinculo": "pendente"
+                })
+                
+            st.success("Cadastro realizado! Faça login.")
+            
+            # Limpa sessão
+            for k in ['cad_cep', 'cad_end']: st.session_state.pop(k, None)
+            st.session_state["modo_login"] = "login"
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"Erro ao gravar: {e}")
 
-                    cursor.execute("""
-                        INSERT INTO usuarios (
-                            nome, email, cpf, tipo_usuario, senha, auth_provider, perfil_completo,
-                            cep, logradouro, numero, complemento, bairro, cidade, uf
-                        ) VALUES (?, ?, ?, ?, ?, 'local', 1, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        nome_final, email_final, cpf_final, tipo_db, hashed,
-                        cep_final, 
-                        novo_logradouro.upper(), 
-                        novo_numero.upper() if novo_numero else None, 
-                        novo_complemento.upper() if novo_complemento else None, 
-                        novo_bairro.upper(), 
-                        novo_cidade.upper(), 
-                        novo_uf.upper()
-                    ))
-                    novo_id = cursor.lastrowid
-                    
-                    if tipo_db == "aluno":
-                         cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, ?, ?, 'pendente')", (novo_id, faixa, equipe_id))
-                    else:
-                         cursor.execute("INSERT INTO professores (usuario_id, equipe_id, status_vinculo) VALUES (?, ?, 'pendente')", (novo_id, equipe_id))
-
-                    conn.commit()
-                    st.session_state.pop('endereco_cep_cadastro', None)
-                    st.success("Cadastro realizado! Faça login.")
-                    st.session_state["modo_login"] = "login"
-                    st.rerun()
-                except Exception as e:
-                    conn.rollback() 
-                    st.error(f"Erro ao cadastrar: {e}")
-            conn.close()
-
-    if st.button("⬅️ Voltar para Login", use_container_width=True):
-        st.session_state.pop('endereco_cep_cadastro', None)
+    if st.button("Voltar"):
         st.session_state["modo_login"] = "login"
         st.rerun()
 
 def tela_completar_cadastro(user_data):
-    """Exibe formulário para completar perfil Google, agora com ENDEREÇO, FAIXA e EQUIPE."""
+    """Completa cadastro Google no FIRESTORE."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
-    st.markdown("### Finalize seu cadastro para acessar a plataforma.")
+    
+    # Busca Equipes
+    db = get_db()
+    equipes_ref = db.collection('equipes').stream()
+    lista_equipes = ["Nenhuma (Vínculo Pendente)"]
+    mapa_equipes = {} 
+    for doc in equipes_ref:
+        d = doc.to_dict()
+        nm = d.get('nome', 'Sem Nome')
+        lista_equipes.append(nm)
+        mapa_equipes[nm] = doc.id
 
-    # --- 1. Busca Equipes no Banco ---
-    conn = sqlite3.connect(DB_PATH)
-    equipes_df = pd.read_sql_query("SELECT id, nome FROM equipes", conn)
-    conn.close()
-
-    # --- DADOS BÁSICOS ---
-    nome = st.text_input("Seu nome:", value=user_data['nome'])
-    st.text_input("Seu Email:", value=user_data['email'], disabled=True)
+    # Dados
+    nome = st.text_input("Nome:", value=user_data['nome'])
+    st.text_input("Email:", value=user_data['email'], disabled=True)
+    tipo = st.radio("Perfil:", ["Aluno", "Professor"], horizontal=True)
     
-    tipo_usuario = st.radio("Qual o seu tipo de perfil?", ["🥋 Sou Aluno", "👩‍🏫 Sou Professor"], horizontal=True)
-    
-    col_faixa, col_equipe = st.columns(2)
-    
-    with col_faixa:
-        if tipo_usuario == "🥋 Sou Aluno":
-            faixa = st.selectbox("Sua faixa atual:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+    c_faixa, c_eq = st.columns(2)
+    with c_faixa:
+        if tipo == "Aluno":
+            faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
         else:
-            faixa = st.selectbox("Sua faixa atual:", ["Marrom", "Preta"])
-            st.caption("Professores devem ser Marrom ou Preta.")
+            faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
+    with c_eq:
+        eq_sel = st.selectbox("Equipe:", lista_equipes)
 
-    with col_equipe:
-        opcoes_equipe = ["Nenhuma (Vínculo Pendente)"] + equipes_df["nome"].tolist()
-        equipe_nome = st.selectbox("Selecione sua Equipe:", opcoes_equipe)
-        
-    # Lógica para pegar o ID da equipe selecionada
-    equipe_id = None
-    if equipe_nome != "Nenhuma (Vínculo Pendente)":
-        try:
-            equipe_id = int(equipes_df[equipes_df["nome"] == equipe_nome]["id"].values[0])
-        except:
-            pass
-
-    st.markdown("---")
-    st.markdown("#### 📍 Endereço Completo")
-
-    # --- LÓGICA DE ENDEREÇO (Igual ao Cadastro) ---
-    if 'end_google_cep' not in st.session_state:
-        st.session_state.end_google_cep = ''
-    if 'end_google_logradouro' not in st.session_state:
-        st.session_state.end_google_logradouro = ''
-    if 'end_google_bairro' not in st.session_state:
-        st.session_state.end_google_bairro = ''
-    if 'end_google_cidade' not in st.session_state:
-        st.session_state.end_google_cidade = ''
-    if 'end_google_uf' not in st.session_state:
-        st.session_state.end_google_uf = ''
-
+    st.markdown("#### Endereço")
+    if 'goog_cep' not in st.session_state: st.session_state.goog_cep = ''
+    
     col_cep, col_btn = st.columns([3, 1])
     with col_cep:
-        cep_input = st.text_input("CEP:", max_chars=9, key="input_cep_google", value=st.session_state.end_google_cep)
-        cep_formatado = formatar_cep(cep_input)
-        if cep_formatado:
-             st.caption(f"CEP Formatado: {cep_formatado[:5]}-{cep_formatado[5:]}")
-
+        cep = st.text_input("CEP:", key="input_cep_goog", value=st.session_state.goog_cep)
     with col_btn:
         st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
-        if st.button("Buscar CEP 🔍", use_container_width=True, key='btn_buscar_cep_google'):
-            dados_end = buscar_cep(cep_input)
-            if dados_end:
-                st.session_state.end_google_cep = cep_input
-                st.session_state.end_google_logradouro = dados_end['logradouro']
-                st.session_state.end_google_bairro = dados_end['bairro']
-                st.session_state.end_google_cidade = dados_end['cidade']
-                st.session_state.end_google_uf = dados_end['uf']
-                st.success("Endereço encontrado!")
-                st.rerun()
-            else:
-                st.error("CEP não encontrado.")
+        if st.button("Buscar", key="btn_cep_goog"):
+            end = buscar_cep(cep)
+            if end:
+                st.session_state.goog_cep = cep
+                st.session_state.goog_end = end
+                st.success("OK!")
+            else: st.error("Inválido")
 
-    # Campos de Endereço (preenchidos via sessão ou manual)
+    end_cache = st.session_state.get('goog_end', {})
     c1, c2 = st.columns(2)
-    logradouro = c1.text_input("Logradouro:", value=st.session_state.end_google_logradouro)
-    bairro = c2.text_input("Bairro:", value=st.session_state.end_google_bairro)
-
+    logr = c1.text_input("Logradouro:", value=end_cache.get('logradouro',''))
+    bairro = c2.text_input("Bairro:", value=end_cache.get('bairro',''))
     c3, c4 = st.columns(2)
-    cidade = c3.text_input("Cidade:", value=st.session_state.end_google_cidade)
-    uf = c4.text_input("UF:", value=st.session_state.end_google_uf)
-
+    cid = c3.text_input("Cidade:", value=end_cache.get('cidade',''))
+    uf = c4.text_input("UF:", value=end_cache.get('uf',''))
     c5, c6 = st.columns(2)
-    numero = c5.text_input("Número:", key="num_google")
-    complemento = c6.text_input("Complemento (Opcional):", key="comp_google")
+    num = c5.text_input("Número:")
+    comp = c6.text_input("Complemento:")
 
-    st.markdown("---")
-
-    if st.button("Salvar e Acessar Plataforma", type="primary", use_container_width=True):
-        # Validações Básicas
-        if not nome:
-            st.warning("O nome é obrigatório.")
+    if st.button("Salvar e Acessar", type="primary"):
+        if not nome or not cep or not logr or not num:
+            st.warning("Preencha Nome e Endereço completo.")
             return
-        
-        # Validações Endereço
-        cep_final = formatar_cep(cep_input)
-        if not (cep_final and logradouro and bairro and cidade and uf and numero):
-             st.error("Por favor, preencha o endereço completo (CEP, Logradouro, Bairro, Cidade, UF e Número).")
-             return
 
-        # Salvar no Banco
-        novo_tipo = "aluno" if "Aluno" in tipo_usuario else "professor"
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+        tipo_db = tipo.lower()
+        eq_id = mapa_equipes.get(eq_sel)
         
-        nome_salvar = nome.upper()
+        # Atualiza Usuário
+        db.collection('usuarios').document(user_data['id']).update({
+            "nome": nome.upper(), "tipo_usuario": tipo_db, "perfil_completo": True,
+            "cep": formatar_cep(cep), "logradouro": logr.upper(), "numero": num, 
+            "complemento": comp.upper(), "bairro": bairro.upper(), 
+            "cidade": cid.upper(), "uf": uf.upper()
+        })
         
-        # Update INCLUINDO ENDEREÇO
-        cursor.execute("""
-            UPDATE usuarios 
-            SET nome=?, tipo_usuario=?, perfil_completo=1,
-                cep=?, logradouro=?, numero=?, complemento=?, bairro=?, cidade=?, uf=?
-            WHERE id=?
-        """, (
-            nome_salvar, novo_tipo, 
-            cep_final, logradouro.upper(), numero.upper(), 
-            complemento.upper() if complemento else None, 
-            bairro.upper(), cidade.upper(), uf.upper(),
-            user_data['id']
-        ))
-        
-        # Inserir na tabela específica com FAIXA e EQUIPE
-        if novo_tipo == "aluno":
-            cursor.execute("INSERT INTO alunos (usuario_id, faixa_atual, equipe_id, status_vinculo) VALUES (?, ?, ?, 'pendente')", (user_data['id'], faixa, equipe_id))
+        # Cria Vínculo
+        if tipo_db == "aluno":
+            db.collection('alunos').add({
+                "usuario_id": user_data['id'], "faixa_atual": faixa, 
+                "equipe_id": eq_id, "status_vinculo": "pendente"
+            })
         else:
-            cursor.execute("INSERT INTO professores (usuario_id, equipe_id, status_vinculo) VALUES (?, ?, 'pendente')", (user_data['id'], equipe_id))
-        
-        conn.commit()
-        conn.close()
-        
-        # Atualiza sessão
-        st.session_state.usuario = {"id": user_data['id'], "nome": nome_salvar, "tipo": novo_tipo}
-        
-        # Limpa chaves temporárias da sessão para não poluir
-        for k in ['end_google_cep', 'end_google_logradouro', 'end_google_bairro', 'end_google_cidade', 'end_google_uf', 'registration_pending']:
-            st.session_state.pop(k, None)
+            db.collection('professores').add({
+                "usuario_id": user_data['id'], "equipe_id": eq_id, 
+                "status_vinculo": "pendente"
+            })
             
+        st.session_state.usuario = {"id": user_data['id'], "nome": nome.upper(), "tipo": tipo_db}
+        
+        for k in ['goog_cep', 'goog_end', 'registration_pending']:
+            st.session_state.pop(k, None)
         st.rerun()
