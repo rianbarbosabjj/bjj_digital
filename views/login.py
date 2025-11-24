@@ -152,25 +152,38 @@ def tela_cadastro_interno():
     st.markdown("---")
     tipo = st.selectbox("Tipo:", ["Aluno", "Professor"])
     
-    # Busca equipes do Firestore
+    # Busca equipes e professores do Firestore
     db = get_db()
+    
+    # 1. Equipes
     equipes_ref = db.collection('equipes').stream()
     lista_equipes = ["Nenhuma (Vínculo Pendente)"]
     mapa_equipes = {} # Nome -> ID
-    
     for doc in equipes_ref:
         d = doc.to_dict()
         nome_eq = d.get('nome', 'Sem Nome')
         lista_equipes.append(nome_eq)
         mapa_equipes[nome_eq] = doc.id
         
+    # 2. Professores
+    profs_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+    lista_profs = ["Nenhum (Vínculo Pendente)"]
+    mapa_profs = {}
+    for doc in profs_ref:
+        d = doc.to_dict()
+        nome_p = d.get('nome', 'Sem Nome')
+        lista_profs.append(nome_p)
+        mapa_profs[nome_p] = doc.id
+        
     if tipo == "Aluno":
         faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        eq_sel = st.selectbox("Equipe:", lista_equipes)
+        prof_sel = st.selectbox("Professor:", lista_profs)
     else:
         faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
         st.caption("Professores devem ser Marrom ou Preta.")
-        
-    eq_sel = st.selectbox("Equipe:", lista_equipes)
+        eq_sel = st.selectbox("Equipe:", lista_equipes)
+        prof_sel = None # Professores não selecionam outro professor no cadastro
     
     # Endereço
     st.markdown("#### Endereço")
@@ -241,15 +254,20 @@ def tela_cadastro_interno():
             
             # 2. Cria vínculo
             eq_id = mapa_equipes.get(eq_sel)
+            prof_id = mapa_profs.get(prof_sel) if prof_sel else None
             
             if tipo_db == "aluno":
                 db.collection('alunos').add({
-                    "usuario_id": user_id, "faixa_atual": faixa, 
-                    "equipe_id": eq_id, "status_vinculo": "pendente"
+                    "usuario_id": user_id, 
+                    "faixa_atual": faixa, 
+                    "equipe_id": eq_id,
+                    "professor_id": prof_id,
+                    "status_vinculo": "pendente"
                 })
             else:
                 db.collection('professores').add({
-                    "usuario_id": user_id, "equipe_id": eq_id, 
+                    "usuario_id": user_id, 
+                    "equipe_id": eq_id, 
                     "status_vinculo": "pendente"
                 })
                 
@@ -271,8 +289,10 @@ def tela_completar_cadastro(user_data):
     """Completa cadastro Google no FIRESTORE."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
     
-    # Busca Equipes
+    # Busca Equipes e Professores
     db = get_db()
+    
+    # Equipes
     equipes_ref = db.collection('equipes').stream()
     lista_equipes = ["Nenhuma (Vínculo Pendente)"]
     mapa_equipes = {} 
@@ -281,6 +301,16 @@ def tela_completar_cadastro(user_data):
         nm = d.get('nome', 'Sem Nome')
         lista_equipes.append(nm)
         mapa_equipes[nm] = doc.id
+        
+    # Professores
+    profs_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+    lista_profs = ["Nenhum (Vínculo Pendente)"]
+    mapa_profs = {}
+    for doc in profs_ref:
+        d = doc.to_dict()
+        nome_p = d.get('nome', 'Sem Nome')
+        lista_profs.append(nome_p)
+        mapa_profs[nome_p] = doc.id
 
     # Dados
     nome = st.text_input("Nome:", value=user_data['nome'])
@@ -288,13 +318,19 @@ def tela_completar_cadastro(user_data):
     tipo = st.radio("Perfil:", ["Aluno", "Professor"], horizontal=True)
     
     c_faixa, c_eq = st.columns(2)
-    with c_faixa:
-        if tipo == "Aluno":
+    
+    if tipo == "Aluno":
+        with c_faixa:
             faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
-        else:
+        with c_eq:
+            eq_sel = st.selectbox("Equipe:", lista_equipes)
+        prof_sel = st.selectbox("Professor:", lista_profs)
+    else:
+        with c_faixa:
             faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
-    with c_eq:
-        eq_sel = st.selectbox("Equipe:", lista_equipes)
+        with c_eq:
+            eq_sel = st.selectbox("Equipe:", lista_equipes)
+        prof_sel = None
 
     st.markdown("#### Endereço")
     if 'goog_cep' not in st.session_state: st.session_state.goog_cep = ''
@@ -330,6 +366,7 @@ def tela_completar_cadastro(user_data):
 
         tipo_db = tipo.lower()
         eq_id = mapa_equipes.get(eq_sel)
+        prof_id = mapa_profs.get(prof_sel) if prof_sel else None
         
         # Atualiza Usuário
         db.collection('usuarios').document(user_data['id']).update({
@@ -342,8 +379,11 @@ def tela_completar_cadastro(user_data):
         # Cria Vínculo
         if tipo_db == "aluno":
             db.collection('alunos').add({
-                "usuario_id": user_data['id'], "faixa_atual": faixa, 
-                "equipe_id": eq_id, "status_vinculo": "pendente"
+                "usuario_id": user_data['id'], 
+                "faixa_atual": faixa, 
+                "equipe_id": eq_id, 
+                "professor_id": prof_id,
+                "status_vinculo": "pendente"
             })
         else:
             db.collection('professores').add({
