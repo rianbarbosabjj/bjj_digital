@@ -4,7 +4,7 @@ from database import get_db
 from firebase_admin import firestore
 
 # =========================================
-# PAINEL DO PROFESSOR (Aprovações)
+# PAINEL DO PROFESSOR (Aprovações de Alunos)
 # =========================================
 def painel_professor():
     st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
@@ -52,9 +52,9 @@ def painel_professor():
             })
             
     if not lista_pend:
-        st.info("Nenhuma solicitação pendente nas suas equipes.")
+        st.info("Nenhuma solicitação de aluno pendente nas suas equipes.")
     else:
-        st.markdown("### 🔔 Solicitações de Vínculo")
+        st.markdown("### 🔔 Solicitações de Alunos")
         for p in lista_pend:
             with st.container(border=True):
                 c1, c2, c3 = st.columns([3, 1, 1])
@@ -85,7 +85,7 @@ def gestao_equipes():
     is_admin = tipo_logado == 'admin'
 
     # --- 1. DEFINIR O ESCOPO (QUAIS EQUIPES POSSO VER?) ---
-    allowed_team_ids = [] # Se None, vê tudo
+    allowed_team_ids = [] 
     
     if is_admin:
         allowed_team_ids = None 
@@ -126,11 +126,11 @@ def gestao_equipes():
             for s in s_query:
                 allowed_student_ids.add(s.to_dict().get('usuario_id'))
 
-    # Usuários (Professores e Alunos)
+    # Carrega Usuários (Geral)
     users_ref = db.collection('usuarios').stream()
     users_map = {} # ID -> Dados
-    lista_professores_geral = [] # Todos os professores (para vincular na equipe)
-    lista_alunos_dropdown = []   # Alunos visíveis
+    lista_professores_geral = [] 
+    lista_alunos_dropdown = []   
     
     for doc in users_ref:
         d = doc.to_dict()
@@ -147,18 +147,26 @@ def gestao_equipes():
             elif uid in allowed_student_ids:
                 lista_alunos_dropdown.append((d.get('nome'), uid))
 
-    # Mapeamento: ID Equipe -> Lista de (NomeProf, IDProf) vinculados
-    # Isso serve para filtrar o dropdown na Aba 3
-    mapa_profs_por_equipe = {}
-    all_vincs = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
-    for doc in all_vincs:
+    # Busca Professores Pendentes por Equipe (Para a Aba 2)
+    # Mapeamento: EquipeID -> Lista de (Nome, ID_DOC_PROFESSOR)
+    pendentes_por_equipe = {}
+    
+    # Busca todos os vínculos pendentes de professores
+    # Se não for admin, filtra depois.
+    q_pend = db.collection('professores').where('status_vinculo', '==', 'pendente').stream()
+    
+    for doc in q_pend:
         d = doc.to_dict()
         eid = d.get('equipe_id')
         uid = d.get('usuario_id')
-        if eid and uid and uid in users_map:
-            if eid not in mapa_profs_por_equipe:
-                mapa_profs_por_equipe[eid] = []
-            mapa_profs_por_equipe[eid].append((users_map[uid].get('nome'), uid))
+        
+        # Só adiciona se a equipe for visível para o usuário atual
+        if eid in equipes_map and uid in users_map:
+            if eid not in pendentes_por_equipe:
+                pendentes_por_equipe[eid] = []
+            
+            nome_prof = users_map[uid].get('nome', 'Desconhecido')
+            pendentes_por_equipe[eid].append((nome_prof, doc.id)) # Guarda o ID do documento 'professores'
 
     # --- ABAS ---
     aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores (Apoio)", "🥋 Alunos"])
@@ -251,36 +259,49 @@ def gestao_equipes():
                         st.warning("Excluído!"); st.rerun()
 
     # ----------------------------------------------------------
-    # ABA 2: PROFESSORES (Apoio)
+    # ABA 2: PROFESSORES (Apoio - FILTRADO)
     # ----------------------------------------------------------
     with aba2:
-        st.subheader("Vincular Professor de Apoio")
+        st.subheader("Aprovar Professores Auxiliares")
+        st.caption("Professores que se cadastraram nesta equipe e aguardam aprovação.")
         
         c1, c2 = st.columns(2)
-        p_sel = c1.selectbox("Professor:", [p[0] for p in lista_professores_geral], key="sel_prof_apoio")
-        e_sel = c2.selectbox("Vincular à Equipe:", [e[0] for e in lista_equipes], key="sel_eq_apoio")
         
-        if st.button("📎 Vincular Professor"):
-            if p_sel and e_sel:
-                pid = next(uid for nome, uid in lista_professores_geral if nome == p_sel)
-                eid = next(uid for nome, uid in lista_equipes if nome == e_sel)
-                
-                exists = list(db.collection('professores').where('usuario_id','==',pid).where('equipe_id','==',eid).stream())
-                if exists:
-                    st.warning("Já vinculado.")
-                else:
-                    db.collection('professores').add({
-                        "usuario_id": pid, "equipe_id": eid, 
-                        "pode_aprovar": False, "eh_responsavel": False, "status_vinculo": "ativo"
+        # Seleciona a Equipe primeiro
+        e_sel = c1.selectbox("Selecione a Equipe:", [e[0] for e in lista_equipes], key="sel_eq_apoio")
+        
+        # Filtra professores pendentes APENAS dessa equipe
+        eid_sel = next((eid for nome, eid in lista_equipes if nome == e_sel), None)
+        
+        lista_pendentes_dropdown = []
+        mapa_pendentes = {}
+        
+        if eid_sel and eid_sel in pendentes_por_equipe:
+            for p_nome, p_doc_id in pendentes_por_equipe[eid_sel]:
+                lista_pendentes_dropdown.append(p_nome)
+                mapa_pendentes[p_nome] = p_doc_id # Mapeia Nome -> ID do Documento de Vinculo
+        
+        if not lista_pendentes_dropdown:
+            c2.info("Nenhum professor pendente nesta equipe.")
+        else:
+            p_sel = c2.selectbox("Professor Pendente:", lista_pendentes_dropdown, key="sel_prof_apoio")
+            
+            if st.button("✅ Aprovar como Auxiliar"):
+                doc_id_vinculo = mapa_pendentes.get(p_sel)
+                if doc_id_vinculo:
+                    db.collection('professores').document(doc_id_vinculo).update({
+                        "status_vinculo": "ativo",
+                        "pode_aprovar": False, # Auxiliar padrão não aprova alunos (configurável)
+                        "eh_responsavel": False
                     })
-                    st.success("Vinculado!"); st.rerun()
+                    st.success(f"Professor {p_sel} aprovado e vinculado!")
+                    st.rerun()
         
         st.markdown("---")
-        st.subheader("Professores Vinculados")
+        st.subheader("Professores Vinculados (Ativos)")
         
         vincs = db.collection('professores').stream()
         
-        # Header tabela
         c1, c2, c3 = st.columns([3, 3, 2])
         c1.markdown("**Professor**")
         c2.markdown("**Equipe (Função)**")
@@ -289,7 +310,8 @@ def gestao_equipes():
         for v in vincs:
             d = v.to_dict()
             eid = d.get('equipe_id')
-            if eid in equipes_map: 
+            
+            if eid in equipes_map and d.get('status_vinculo') == 'ativo': 
                 uid = d.get('usuario_id')
                 pn = users_map.get(uid, {}).get('nome', 'Desconhecido')
                 en = equipes_map.get(eid, {}).get('nome', 'Desconhecido')
@@ -308,72 +330,38 @@ def gestao_equipes():
                     c3.caption("Principal")
 
     # ----------------------------------------------------------
-    # ABA 3: ALUNOS (Com Filtro de Professor)
+    # ABA 3: ALUNOS (FILTRADA)
     # ----------------------------------------------------------
     with aba3:
-        st.subheader("Gerenciar Alunos")
+        st.subheader("Alunos da Equipe")
         
         if not lista_alunos_dropdown:
-            st.info("Nenhum aluno encontrado.")
+            st.info("Nenhum aluno encontrado nas suas equipes.")
         else:
-            c1, c2, c3 = st.columns(3)
+            # Mostra apenas alunos que o professor TEM PERMISSÃO de ver
+            a_sel = st.selectbox("Selecione o Aluno:", [a[0] for a in lista_alunos_dropdown])
+            eq_aluno_sel = st.selectbox("Mover para Equipe:", [e[0] for e in lista_equipes])
             
-            # 1. Seleciona Aluno
-            a_sel = c1.selectbox("Selecione o Aluno:", [a[0] for a in lista_alunos_dropdown])
-            
-            # 2. Seleciona Nova Equipe
-            eq_aluno_sel = c2.selectbox("Mover para Equipe:", [e[0] for e in lista_equipes])
-            
-            # 3. Seleciona Professor (FILTRADO PELA EQUIPE)
-            # Descobre o ID da equipe selecionada
-            eid_selecionado = next((uid for nome, uid in lista_equipes if nome == eq_aluno_sel), None)
-            
-            # Filtra a lista de professores baseada nessa equipe
-            profs_da_equipe = mapa_profs_por_equipe.get(eid_selecionado, [])
-            opcoes_profs_aluno = ["Nenhum"] + [p[0] for p in profs_da_equipe]
-            
-            prof_aluno_sel = c3.selectbox("Selecione o Professor:", opcoes_profs_aluno)
-            
-            if st.button("Atualizar Dados do Aluno"):
+            if st.button("Atualizar Aluno"):
                 aid = next(uid for nome, uid in lista_alunos_dropdown if nome == a_sel)
-                
-                # Resolve ID do professor selecionado
-                pid_final = None
-                if prof_aluno_sel != "Nenhum":
-                    for p_nome, p_uid in profs_da_equipe:
-                        if p_nome == prof_aluno_sel:
-                            pid_final = p_uid
-                            break
+                eid = next(uid for nome, uid in lista_equipes if nome == eq_aluno_sel)
                 
                 aluno_docs = list(db.collection('alunos').where('usuario_id', '==', aid).stream())
-                
-                update_data = {
-                    "equipe_id": eid_selecionado,
-                    "professor_id": pid_final,
-                    "status_vinculo": "ativo"
-                }
-                
                 if aluno_docs:
-                    db.collection('alunos').document(aluno_docs[0].id).update(update_data)
-                    st.success(f"Aluno atualizado!"); st.rerun()
-                else:
-                    # Se não existir doc em 'alunos', cria (caso de migração manual)
-                    update_data["usuario_id"] = aid
-                    update_data["faixa_atual"] = "Branca"
-                    db.collection('alunos').add(update_data)
-                    st.success(f"Aluno vinculado!"); st.rerun()
+                    db.collection('alunos').document(aluno_docs[0].id).update({"equipe_id": eid})
+                    st.success(f"Aluno movido!"); st.rerun()
 
         st.markdown("---")
-        # Lista geral
+        # Lista geral filtrada
         alunos_bd = db.collection('alunos').stream()
         lista_a_bd = []
         for doc in alunos_bd:
             d = doc.to_dict()
+            # Filtro Mágico: Só mostra se a equipe estiver na lista de permitidas
             if d.get('equipe_id') in equipes_map:
                 anome = users_map.get(d.get('usuario_id'), {}).get('nome', '?')
                 enome = equipes_map.get(d.get('equipe_id'), {}).get('nome', '?')
-                pnome = users_map.get(d.get('professor_id'), {}).get('nome', 'Nenhum')
-                lista_a_bd.append({"Aluno": anome, "Equipe": enome, "Professor": pnome, "Faixa": d.get('faixa_atual')})
+                lista_a_bd.append({"Aluno": anome, "Equipe": enome, "Faixa": d.get('faixa_atual')})
             
         if lista_a_bd:
             st.dataframe(pd.DataFrame(lista_a_bd), use_container_width=True)
