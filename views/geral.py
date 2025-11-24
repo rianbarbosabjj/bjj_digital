@@ -18,11 +18,12 @@ def render_card(titulo, descricao, texto_botao, chave_botao, pagina_destino):
 def tela_inicio():
     # Header e Logo
     logo_path = "assets/logo.png"
-    logo_html = ""
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             logo_base64 = base64.b64encode(f.read()).decode()
         logo_html = f"<img src='data:image/png;base64,{logo_base64}' style='width:180px;max-width:200px;height:auto;margin-bottom:10px;'/>"
+    else:
+        logo_html = ""
 
     st.markdown(f"""
         <div style='display:flex;flex-direction:column;align-items:center;justify-content:center;margin-bottom:30px;'>
@@ -55,8 +56,9 @@ def tela_inicio():
         )
 
     # --- CARTÕES DE GESTÃO (Apenas Admin/Professor) ---
-    # Recupera o tipo de usuário com segurança (padrão 'aluno' se não houver)
-    tipo_usuario = st.session_state.usuario.get("tipo", "aluno")
+    # Recupera o tipo, converte para string e minúsculo para evitar erro de compatibilidade
+    raw_tipo = st.session_state.usuario.get("tipo", "aluno")
+    tipo_usuario = str(raw_tipo).lower()
     
     if tipo_usuario in ["admin", "professor"]:
         st.markdown("---")
