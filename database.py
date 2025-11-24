@@ -9,7 +9,7 @@ def get_db():
     
     # O NOME DO SEU BANCO (Descoberto pelo script)
     # Não mude isso, pois é o nome que está criado no Google
-    DATABASE_NAME = 'bjjdigital'
+    DATABASE_NAME = 'bjj-digital'
 
     # Verifica se o app do Firebase já não está rodando
     if not firebase_admin._apps:
