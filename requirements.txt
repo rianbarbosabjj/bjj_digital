@@ -7,3 +7,4 @@ qrcode
 pandas
 plotly
 requests
+firebase-admin
