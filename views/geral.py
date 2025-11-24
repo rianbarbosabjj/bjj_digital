@@ -120,117 +120,158 @@ def tela_meu_perfil(usuario_logado):
                 except Exception as e:
                     st.error(f"Erro ao salvar: {e}")
 
-    # --- ABA 2: DADOS ESPECÍFICOS (Aluno ou Professor) ---
+    # --- ABA 2: DADOS ESPECÍFICOS ---
     tipo_usuario = str(user_data.get("tipo_usuario", "")).lower()
     
     # SE FOR ALUNO
     if tipo_usuario == 'aluno':
-        alunos_query = db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).stream()
-        lista_alunos = list(alunos_query)
+        # Carrega Listas (Sempre necessário)
+        eq_ref = db.collection('equipes').stream()
+        lista_eq = ["Nenhuma (Vínculo Pendente)"]
+        mapa_eq = {}
+        mapa_id_eq = {}
         
-        if lista_alunos:
-            aluno_doc = lista_alunos[0]
-            aluno_data = aluno_doc.to_dict()
+        for d in eq_ref:
+            nm = d.to_dict().get('nome', '?')
+            lista_eq.append(nm)
+            mapa_eq[nm] = d.id
+            mapa_id_eq[d.id] = nm
+        
+        prof_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+        lista_pf = ["Nenhum (Vínculo Pendente)"]
+        mapa_pf = {}
+        mapa_id_pf = {}
+        
+        for d in prof_ref:
+            nm = d.to_dict().get('nome', '?')
+            lista_pf.append(nm)
+            mapa_pf[nm] = d.id
+            mapa_id_pf[d.id] = nm
+
+        # Busca vínculo existente (se houver)
+        alunos_query = db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).stream()
+        lista_alunos_doc = list(alunos_query)
+        
+        # Valores padrão
+        aluno_doc_id = None
+        nome_eq_atual = "Nenhuma (Vínculo Pendente)"
+        nome_pf_atual = "Nenhum (Vínculo Pendente)"
+        faixa_atual = "Branca"
+        
+        if lista_alunos_doc:
+            aluno_doc = lista_alunos_doc[0]
+            d = aluno_doc.to_dict()
             aluno_doc_id = aluno_doc.id
-            
-            # Carrega Equipes e Professores
-            eq_ref = db.collection('equipes').stream()
-            lista_eq = ["Nenhuma (Vínculo Pendente)"]
-            mapa_eq = {}
-            nome_eq_atual = "Nenhuma (Vínculo Pendente)"
-            for d in eq_ref:
-                nm = d.to_dict().get('nome', '?')
-                lista_eq.append(nm)
-                mapa_eq[nm] = d.id
-                if d.id == aluno_data.get('equipe_id'): nome_eq_atual = nm
-            
-            prof_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
-            lista_pf = ["Nenhum (Vínculo Pendente)"]
-            mapa_pf = {}
-            nome_pf_atual = "Nenhum (Vínculo Pendente)"
-            for d in prof_ref:
-                nm = d.to_dict().get('nome', '?')
-                lista_pf.append(nm)
-                mapa_pf[nm] = d.id
-                if d.id == aluno_data.get('professor_id'): nome_pf_atual = nm
+            faixa_atual = d.get('faixa_atual', 'Branca')
+            nome_eq_atual = mapa_id_eq.get(d.get('equipe_id'), "Nenhuma (Vínculo Pendente)")
+            nome_pf_atual = mapa_id_pf.get(d.get('professor_id'), "Nenhum (Vínculo Pendente)")
 
-            try: idx_eq = lista_eq.index(nome_eq_atual)
-            except: idx_eq = 0
-            try: idx_pf = lista_pf.index(nome_pf_atual)
-            except: idx_pf = 0
-            
-            faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-            try: idx_fx = faixas.index(aluno_data.get('faixa_atual', 'Branca'))
-            except: idx_fx = 0
+        # Índices
+        try: idx_eq = lista_eq.index(nome_eq_atual)
+        except: idx_eq = 0
+        try: idx_pf = lista_pf.index(nome_pf_atual)
+        except: idx_pf = 0
+        faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+        try: idx_fx = faixas.index(faixa_atual)
+        except: idx_fx = 0
 
-            with st.expander("🥋 Dados de Treino (Faixa, Equipe e Professor)", expanded=False):
-                with st.form(key="form_bjj_data"):
-                    st.info("Alterar equipe ou professor redefinirá seu status para 'Pendente'.")
+        with st.expander("🥋 Dados de Treino (Faixa, Equipe e Professor)", expanded=False):
+            with st.form(key="form_bjj_data"):
+                st.info("Alterar equipe ou professor redefinirá seu status para 'Pendente'.")
+                
+                c_fx, c_eq = st.columns(2)
+                nova_faixa = c_fx.selectbox("Faixa Atual:", faixas, index=idx_fx)
+                nova_equipe = c_eq.selectbox("Equipe:", lista_eq, index=idx_eq)
+                novo_prof = st.selectbox("Professor:", lista_pf, index=idx_pf)
+                
+                if st.form_submit_button("💾 Atualizar Dados de Treino"):
+                    eq_id_save = mapa_eq.get(nova_equipe)
+                    prof_id_save = mapa_pf.get(novo_prof)
                     
-                    c_fx, c_eq = st.columns(2)
-                    nova_faixa = c_fx.selectbox("Faixa Atual:", faixas, index=idx_fx)
-                    nova_equipe = c_eq.selectbox("Equipe:", lista_eq, index=idx_eq)
-                    novo_prof = st.selectbox("Professor:", lista_pf, index=idx_pf)
+                    novo_status = 'pendente' # Default para mudança
                     
-                    if st.form_submit_button("💾 Atualizar Dados de Treino"):
-                        eq_id_save = mapa_eq.get(nova_equipe)
-                        prof_id_save = mapa_pf.get(novo_prof)
+                    # Se já existe doc e não mudou vínculos críticos, mantém status
+                    if aluno_doc_id and lista_alunos_doc:
+                        d_old = lista_alunos_doc[0].to_dict()
+                        if eq_id_save == d_old.get('equipe_id') and prof_id_save == d_old.get('professor_id'):
+                            novo_status = d_old.get('status_vinculo', 'pendente')
+                    
+                    dados_save = {
+                        "usuario_id": usuario_logado['id'],
+                        "faixa_atual": nova_faixa,
+                        "equipe_id": eq_id_save,
+                        "professor_id": prof_id_save,
+                        "status_vinculo": novo_status
+                    }
+                    
+                    if aluno_doc_id:
+                        db.collection('alunos').document(aluno_doc_id).update(dados_save)
+                    else:
+                        db.collection('alunos').add(dados_save)
                         
-                        novo_status = aluno_data.get('status_vinculo')
-                        if eq_id_save != aluno_data.get('equipe_id') or prof_id_save != aluno_data.get('professor_id'):
-                            novo_status = 'pendente'
-                        
-                        db.collection('alunos').document(aluno_doc_id).update({
-                            "faixa_atual": nova_faixa, "equipe_id": eq_id_save,
-                            "professor_id": prof_id_save, "status_vinculo": novo_status
-                        })
-                        st.success("Dados de treino atualizados!")
-                        st.rerun()
+                    st.success("Dados de treino atualizados!")
+                    st.rerun()
 
     # SE FOR PROFESSOR (OU ADMIN)
     elif tipo_usuario in ['professor', 'admin']:
+        # Carrega Equipes
+        eq_ref = db.collection('equipes').stream()
+        lista_eq = ["Nenhuma (Vínculo Pendente)"]
+        mapa_eq = {}
+        mapa_id_eq = {}
+        
+        for d in eq_ref:
+            nm = d.to_dict().get('nome', '?')
+            lista_eq.append(nm)
+            mapa_eq[nm] = d.id
+            mapa_id_eq[d.id] = nm
+
         # Busca vínculo de professor
         prof_query = db.collection('professores').where('usuario_id', '==', usuario_logado['id']).stream()
         lista_profs = list(prof_query)
         
+        prof_doc_id = None
+        nome_eq_atual = "Nenhuma (Vínculo Pendente)"
+        
         if lista_profs:
-            # Edita o primeiro vínculo encontrado (para simplificar)
             prof_doc = lista_profs[0]
             prof_data = prof_doc.to_dict()
             prof_doc_id = prof_doc.id
+            nome_eq_atual = mapa_id_eq.get(prof_data.get('equipe_id'), "Nenhuma (Vínculo Pendente)")
             
-            # Carrega Equipes
-            eq_ref = db.collection('equipes').stream()
-            lista_eq = ["Nenhuma (Vínculo Pendente)"]
-            mapa_eq = {}
-            nome_eq_atual = "Nenhuma (Vínculo Pendente)"
-            
-            for d in eq_ref:
-                nm = d.to_dict().get('nome', '?')
-                lista_eq.append(nm)
-                mapa_eq[nm] = d.id
-                if d.id == prof_data.get('equipe_id'): nome_eq_atual = nm
-            
-            try: idx_eq = lista_eq.index(nome_eq_atual)
-            except: idx_eq = 0
-            
-            with st.expander("🥋 Dados de Vínculo (Equipe)", expanded=False):
-                with st.form(key="form_prof_data"):
-                    st.info("⚠️ Atenção: Alterar sua equipe redefinirá seu status para 'Pendente' e removerá privilégios até aprovação.")
+        try: idx_eq = lista_eq.index(nome_eq_atual)
+        except: idx_eq = 0
+        
+        with st.expander("🥋 Dados de Vínculo (Equipe)", expanded=False):
+            with st.form(key="form_prof_data"):
+                st.info("⚠️ Atenção: Alterar sua equipe redefinirá seu status para 'Pendente' e removerá privilégios até aprovação.")
+                
+                nova_equipe = st.selectbox("Sua Equipe:", lista_eq, index=idx_eq)
+                
+                if st.form_submit_button("💾 Atualizar Equipe"):
+                    eq_id_save = mapa_eq.get(nova_equipe)
                     
-                    nova_equipe = st.selectbox("Sua Equipe:", lista_eq, index=idx_eq)
-                    
-                    if st.form_submit_button("💾 Atualizar Equipe"):
-                        eq_id_save = mapa_eq.get(nova_equipe)
-                        
-                        if eq_id_save != prof_data.get('equipe_id'):
-                            db.collection('professores').document(prof_doc_id).update({
-                                "equipe_id": eq_id_save,
-                                "status_vinculo": 'pendente',
-                                "eh_responsavel": False, # Reseta privilégios por segurança
-                                "pode_aprovar": False
-                            })
-                            st.success("Solicitação de mudança enviada! Aguarde aprovação.")
-                            st.rerun()
-                        else:
+                    # Verifica se mudou
+                    changed = True
+                    if prof_doc_id:
+                        # Se for a mesma, não faz nada (ou apenas avisa)
+                        if lista_profs and lista_profs[0].to_dict().get('equipe_id') == eq_id_save:
+                            changed = False
                             st.info("Nenhuma alteração realizada.")
+                    
+                    if changed:
+                        dados_prof = {
+                            "usuario_id": usuario_logado['id'],
+                            "equipe_id": eq_id_save,
+                            "status_vinculo": 'pendente',
+                            "eh_responsavel": False,
+                            "pode_aprovar": False
+                        }
+                        
+                        if prof_doc_id:
+                            db.collection('professores').document(prof_doc_id).update(dados_prof)
+                        else:
+                            db.collection('professores').add(dados_prof)
+                            
+                        st.success("Solicitação de mudança enviada! Aguarde aprovação.")
+                        st.rerun()
