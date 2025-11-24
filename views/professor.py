@@ -1,306 +1,398 @@
 import streamlit as st
 import pandas as pd
+import os
+import requests 
+import bcrypt
+from streamlit_oauth import OAuth2Component
+from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
+from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
+from config import COR_DESTAQUE, COR_TEXTO
 from database import get_db
 from firebase_admin import firestore
 
 # =========================================
-# PAINEL DO PROFESSOR (Aprovações)
+# CONFIGURAÇÃO OAUTH
 # =========================================
-def painel_professor():
-    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
-    db = get_db()
-    user = st.session_state.usuario
-    
-    # 1. Descobre quais equipes este professor lidera ou apoia
-    prof_query = db.collection('professores')\
-        .where('usuario_id', '==', user['id'])\
-        .where('status_vinculo', '==', 'ativo').stream()
-        
-    meus_vinculos = list(prof_query)
-    
-    if not meus_vinculos:
-        st.warning("Você não está vinculado a nenhuma equipe como professor ativo.")
-        return
-    
-    # Lista de IDs das equipes que ele gerencia
-    equipes_ids = [doc.to_dict().get('equipe_id') for doc in meus_vinculos]
-    
-    if not equipes_ids:
-        st.info("Nenhuma equipe vinculada.")
-        return
+try:
+    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+    REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
+except (FileNotFoundError, KeyError):
+    GOOGLE_CLIENT_ID = ""
+    GOOGLE_CLIENT_SECRET = ""
+    REDIRECT_URI = ""
 
-    # 2. Busca alunos pendentes nessas equipes
-    alunos_pend_ref = db.collection('alunos')\
-        .where('equipe_id', 'in', equipes_ids)\
-        .where('status_vinculo', '==', 'pendente').stream()
-        
-    lista_pend = []
-    for doc in alunos_pend_ref:
-        d = doc.to_dict()
-        
-        # Busca dados do aluno (Nome)
-        u_snap = db.collection('usuarios').document(d['usuario_id']).get()
-        if u_snap.exists:
-            nome_aluno = u_snap.to_dict().get('nome', 'Desconhecido')
+oauth_google = OAuth2Component(
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    refresh_token_endpoint="https://oauth2.googleapis.com/token",
+    revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
+)
+
+# =========================================
+# FUNÇÕES DE TELA
+# =========================================
+
+def tela_login():
+    """Tela de login com autenticação local (Firebase) e Google."""
+    st.session_state.setdefault("modo_login", "login")
+
+    c1, c2, c3 = st.columns([1, 1.5, 1])
+    with c2:
+        if st.session_state["modo_login"] == "login":
             
-            # Busca nome da equipe
-            eq_snap = db.collection('equipes').document(d['equipe_id']).get()
-            nome_equipe = eq_snap.to_dict().get('nome', '?') if eq_snap.exists else '?'
-            
-            lista_pend.append({
-                "id_doc": doc.id,
-                "nome": nome_aluno,
-                "equipe": nome_equipe,
-                "faixa": d.get('faixa_atual')
-            })
-            
-    if not lista_pend:
-        st.info("Nenhuma solicitação pendente nas suas equipes.")
-    else:
-        st.markdown("### 🔔 Solicitações de Vínculo")
-        for p in lista_pend:
+            # --- LOGO ---
+            if os.path.exists("assets/logo.png"):
+                col_l, col_c, col_r = st.columns([1, 2, 1])
+                with col_c:
+                    st.image("assets/logo.png", use_container_width=True)
+
             with st.container(border=True):
-                c1, c2, c3 = st.columns([3, 1, 1])
-                c1.markdown(f"**{p['nome']}** quer entrar na equipe **{p['equipe']}** (Faixa: {p['faixa']})")
+                st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
-                if c2.button("✅ Aprovar", key=f"ok_{p['id_doc']}"):
-                    db.collection('alunos').document(p['id_doc']).update({
-                        "status_vinculo": "ativo",
-                        "professor_id": user['id']
-                    })
-                    st.success(f"{p['nome']} aprovado!")
+                user_input = st.text_input("Nome de Usuário, Email ou CPF:")
+                pwd = st.text_input("Senha:", type="password")
+
+                if st.button("Entrar", use_container_width=True, type="primary"):
+                    entrada = user_input.strip()
+                    if "@" in entrada:
+                        entrada = entrada.lower()
+                    else:
+                        cpf = formatar_e_validar_cpf(entrada)
+                        if cpf: entrada = cpf
+                        
+                    u = autenticar_local(entrada, pwd.strip()) 
+                    if u:
+                        st.session_state.usuario = u
+                        st.success(f"Bem-vindo(a), {u['nome'].title()}!")
+                        st.rerun()
+                    else:
+                        st.error("Credenciais inválidas.")
+
+                col1, col2 = st.columns(2)
+                if col1.button("📋 Criar Conta"):
+                    st.session_state["modo_login"] = "cadastro"
                     st.rerun()
+                if col2.button("🔑 Esqueci Senha"):
+                    st.session_state["modo_login"] = "recuperar"
+                    st.rerun()
+
+                st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
+                
+                # --- LÓGICA GOOGLE (BLINDADA) ---
+                if GOOGLE_CLIENT_ID: 
+                    try:
+                        result = oauth_google.authorize_button(
+                            name="Continuar com Google",
+                            icon="https://www.google.com.br/favicon.ico",
+                            redirect_uri=REDIRECT_URI,
+                            scope="email profile",
+                            key="google_auth_btn",
+                            use_container_width=True,
+                        )
+                    except Exception:
+                        st.warning("A conexão expirou. Recarregue a página (F5).")
+                        result = None
                     
-                if c3.button("❌ Rejeitar", key=f"no_{p['id_doc']}"):
-                    db.collection('alunos').document(p['id_doc']).update({"status_vinculo": "rejeitado"})
-                    st.warning("Rejeitado.")
-                    st.rerun()
+                    if result and result.get("token"):
+                        st.session_state.token = result.get("token")
+                        try:
+                            token = result.get("token").get("access_token")
+                            headers = {"Authorization": f"Bearer {token}"}
+                            resp = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers=headers)
+                            
+                            if resp.status_code == 200:
+                                u_info = resp.json()
+                                email = u_info["email"].lower()
+                                nome = u_info.get("name", "").upper()
+                                
+                                exist = buscar_usuario_por_email(email)
+                                if exist:
+                                    if not exist.get("perfil_completo"):
+                                        st.session_state.registration_pending = exist
+                                        st.rerun()
+                                    else:
+                                        st.session_state.usuario = exist
+                                        st.rerun()
+                                else:
+                                    novo = criar_usuario_parcial_google(email, nome)
+                                    st.session_state.registration_pending = novo
+                                    st.rerun()
+                            else:
+                                st.error("Falha ao obter dados do Google.")
+                        except Exception as e:
+                            st.error(f"Erro Google: {e}")
+                else:
+                    st.warning("Google Auth não configurado.")
 
-# =========================================
-# GESTÃO DE EQUIPES
-# =========================================
-def gestao_equipes():
-    st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
-    db = get_db()
+        elif st.session_state["modo_login"] == "cadastro":
+            tela_cadastro_interno()
 
-    # --- PREPARAÇÃO DOS DADOS ---
-    users_ref = db.collection('usuarios').stream()
-    users_map = {} 
-    lista_professores = [] 
-    lista_alunos = []      
-    
-    for doc in users_ref:
-        d = doc.to_dict()
-        uid = doc.id
-        users_map[uid] = d
-        if d.get('tipo_usuario') in ['professor', 'admin']:
-            lista_professores.append((d.get('nome'), uid))
-        elif d.get('tipo_usuario') == 'aluno':
-            lista_alunos.append((d.get('nome'), uid))
+        elif st.session_state["modo_login"] == "recuperar":
+            st.subheader("🔑 Recuperar Senha")
+            st.text_input("Email cadastrado:")
+            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                st.info("Funcionalidade em breve.")
             
-    equipes_ref = db.collection('equipes').stream()
-    equipes_map = {} 
-    lista_equipes = []
+            if st.button("Voltar"):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
+
+def tela_cadastro_interno():
+    """Cadastro manual salvando no FIRESTORE."""
+    st.subheader("📋 Cadastro de Novo Usuário")
+    nome = st.text_input("Nome de Usuário:") 
+    email = st.text_input("E-mail:")
+    cpf_inp = st.text_input("CPF:") 
+    senha = st.text_input("Senha:", type="password")
+    conf = st.text_input("Confirmar senha:", type="password")
     
+    st.markdown("---")
+    tipo = st.selectbox("Tipo:", ["Aluno", "Professor"])
+    
+    # Busca equipes e professores do Firestore
+    db = get_db()
+    
+    # 1. Equipes
+    equipes_ref = db.collection('equipes').stream()
+    lista_equipes = ["Nenhuma (Vínculo Pendente)"]
+    mapa_equipes = {} # Nome -> ID
     for doc in equipes_ref:
         d = doc.to_dict()
-        eid = doc.id
-        equipes_map[eid] = d
-        lista_equipes.append((d.get('nome'), eid))
-
-    # --- ABAS ---
-    aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
-
-    # ----------------------------------------------------------
-    # ABA 1: CRIAÇÃO E EDIÇÃO DE EQUIPES
-    # ----------------------------------------------------------
-    with aba1:
-        st.subheader("Cadastrar nova equipe")
-        nome_eq = st.text_input("Nome da equipe:")
-        desc_eq = st.text_area("Descrição:")
+        nome_eq = d.get('nome', 'Sem Nome')
+        lista_equipes.append(nome_eq)
+        mapa_equipes[nome_eq] = doc.id
         
-        prof_opcoes = ["Nenhum"] + [p[0] for p in lista_professores]
-        prof_sel = st.selectbox("Professor Responsável:", prof_opcoes)
+    # 2. Professores
+    profs_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+    lista_profs = ["Nenhum (Vínculo Pendente)"]
+    mapa_profs = {}
+    for doc in profs_ref:
+        d = doc.to_dict()
+        nome_p = d.get('nome', 'Sem Nome')
+        lista_profs.append(nome_p)
+        mapa_profs[nome_p] = doc.id
         
-        if st.button("➕ Criar Equipe"):
-            if nome_eq:
-                prof_resp_id = None
-                if prof_sel != "Nenhum":
-                    for nome, uid in lista_professores:
-                        if nome == prof_sel:
-                            prof_resp_id = uid
-                            break
-                
-                # --- CRIAÇÃO: Nome em Maiúsculo ---
-                _, new_eq_ref = db.collection('equipes').add({
-                    "nome": nome_eq.upper(), # <--- AQUI
-                    "descricao": desc_eq,
-                    "professor_responsavel_id": prof_resp_id,
-                    "ativo": True
+    if tipo == "Aluno":
+        faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        eq_sel = st.selectbox("Equipe:", lista_equipes)
+        prof_sel = st.selectbox("Professor:", lista_profs)
+    else:
+        faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
+        st.caption("Professores devem ser Marrom ou Preta.")
+        eq_sel = st.selectbox("Equipe:", lista_equipes)
+        prof_sel = None # Professores não selecionam outro professor no cadastro
+    
+    # Endereço
+    st.markdown("#### Endereço")
+    if 'cad_cep' not in st.session_state: st.session_state.cad_cep = ''
+    
+    col_cep, col_btn = st.columns([3, 1])
+    with col_cep:
+        cep = st.text_input("CEP:", key="input_cep_cad", value=st.session_state.cad_cep)
+    with col_btn:
+        st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
+        if st.button("Buscar", key="btn_cep_cad"):
+            end = buscar_cep(cep)
+            if end:
+                st.session_state.cad_cep = cep
+                st.session_state.cad_end = end
+                st.success("OK!")
+            else:
+                st.error("Inválido")
+    
+    end_cache = st.session_state.get('cad_end', {})
+    c1, c2 = st.columns(2)
+    logr = c1.text_input("Logradouro:", value=end_cache.get('logradouro',''))
+    bairro = c2.text_input("Bairro:", value=end_cache.get('bairro',''))
+    c3, c4 = st.columns(2)
+    cid = c3.text_input("Cidade:", value=end_cache.get('cidade',''))
+    uf = c4.text_input("UF:", value=end_cache.get('uf',''))
+    c5, c6 = st.columns(2)
+    num = c5.text_input("Número:")
+    comp = c6.text_input("Complemento:")
+
+    if st.button("Cadastrar", use_container_width=True, type="primary"):
+        nome_fin = nome.upper()
+        email_fin = email.lower().strip()
+        cpf_fin = formatar_e_validar_cpf(cpf_inp)
+        cep_fin = formatar_cep(cep)
+
+        if not (nome and email and cpf_inp and senha and conf):
+            st.warning("Preencha campos obrigatórios.")
+            return
+        if senha != conf:
+            st.error("Senhas não conferem.")
+            return
+        if not cpf_fin:
+            st.error("CPF inválido.")
+            return
+
+        # Verifica duplicidade no Firestore
+        users_ref = db.collection('usuarios')
+        if len(list(users_ref.where('email', '==', email_fin).stream())) > 0:
+            st.error("Email já cadastrado.")
+            return
+            
+        try:
+            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+            tipo_db = tipo.lower()
+            
+            # 1. Cria Usuário no Firestore
+            novo_user = {
+                "nome": nome_fin, "email": email_fin, "cpf": cpf_fin, 
+                "tipo_usuario": tipo_db, "senha": hashed, "auth_provider": "local", 
+                "perfil_completo": True, "cep": cep_fin, "logradouro": logr.upper(),
+                "numero": num, "complemento": comp.upper(), "bairro": bairro.upper(),
+                "cidade": cid.upper(), "uf": uf.upper(), "data_criacao": firestore.SERVER_TIMESTAMP
+            }
+            
+            update_time, doc_ref = db.collection('usuarios').add(novo_user)
+            user_id = doc_ref.id
+            
+            # 2. Cria vínculo
+            eq_id = mapa_equipes.get(eq_sel)
+            prof_id = mapa_profs.get(prof_sel) if prof_sel else None
+            
+            if tipo_db == "aluno":
+                db.collection('alunos').add({
+                    "usuario_id": user_id, 
+                    "faixa_atual": faixa, 
+                    "equipe_id": eq_id,
+                    "professor_id": prof_id,
+                    "status_vinculo": "pendente"
+                })
+            else:
+                db.collection('professores').add({
+                    "usuario_id": user_id, 
+                    "equipe_id": eq_id, 
+                    "status_vinculo": "pendente"
                 })
                 
-                if prof_resp_id:
-                    db.collection('professores').add({
-                        "usuario_id": prof_resp_id,
-                        "equipe_id": new_eq_ref.id,
-                        "eh_responsavel": True,
-                        "pode_aprovar": True,
-                        "status_vinculo": "ativo"
-                    })
-                    
-                st.success(f"Equipe '{nome_eq.upper()}' criada!")
-                st.rerun()
-            else:
-                st.warning("Nome obrigatório.")
+            st.success("Cadastro realizado! Faça login.")
+            
+            # Limpa sessão
+            for k in ['cad_cep', 'cad_end']: st.session_state.pop(k, None)
+            st.session_state["modo_login"] = "login"
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"Erro ao gravar: {e}")
 
-        st.markdown("---")
-        st.subheader("Equipes Existentes")
+    if st.button("Voltar"):
+        st.session_state["modo_login"] = "login"
+        st.rerun()
+
+def tela_completar_cadastro(user_data):
+    """Completa cadastro Google no FIRESTORE."""
+    st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
+    
+    # Busca Equipes e Professores
+    db = get_db()
+    
+    # Equipes
+    equipes_ref = db.collection('equipes').stream()
+    lista_equipes = ["Nenhuma (Vínculo Pendente)"]
+    mapa_equipes = {} 
+    for doc in equipes_ref:
+        d = doc.to_dict()
+        nm = d.get('nome', 'Sem Nome')
+        lista_equipes.append(nm)
+        mapa_equipes[nm] = doc.id
         
-        dados_tabela = []
-        for eid, data in equipes_map.items():
-            pid = data.get('professor_responsavel_id')
-            pnome = users_map.get(pid, {}).get('nome', 'Nenhum') if pid else 'Nenhum'
-            dados_tabela.append({
-                "Equipe": data.get('nome'),
-                "Descrição": data.get('descricao'),
-                "Responsável": pnome,
-                "ID_Equipe": eid
+    # Professores
+    profs_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+    lista_profs = ["Nenhum (Vínculo Pendente)"]
+    mapa_profs = {}
+    for doc in profs_ref:
+        d = doc.to_dict()
+        nome_p = d.get('nome', 'Sem Nome')
+        lista_profs.append(nome_p)
+        mapa_profs[nome_p] = doc.id
+
+    # Dados
+    nome = st.text_input("Nome:", value=user_data['nome'])
+    st.text_input("Email:", value=user_data['email'], disabled=True)
+    tipo = st.radio("Perfil:", ["Aluno", "Professor"], horizontal=True)
+    
+    c_faixa, c_eq = st.columns(2)
+    
+    if tipo == "Aluno":
+        with c_faixa:
+            faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        with c_eq:
+            eq_sel = st.selectbox("Equipe:", lista_equipes)
+        prof_sel = st.selectbox("Professor:", lista_profs)
+    else:
+        with c_faixa:
+            faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
+        with c_eq:
+            eq_sel = st.selectbox("Equipe:", lista_equipes)
+        prof_sel = None
+
+    st.markdown("#### Endereço")
+    if 'goog_cep' not in st.session_state: st.session_state.goog_cep = ''
+    
+    col_cep, col_btn = st.columns([3, 1])
+    with col_cep:
+        cep = st.text_input("CEP:", key="input_cep_goog", value=st.session_state.goog_cep)
+    with col_btn:
+        st.markdown("<div style='height: 29px;'></div>", unsafe_allow_html=True)
+        if st.button("Buscar", key="btn_cep_goog"):
+            end = buscar_cep(cep)
+            if end:
+                st.session_state.goog_cep = cep
+                st.session_state.goog_end = end
+                st.success("OK!")
+            else: st.error("Inválido")
+
+    end_cache = st.session_state.get('goog_end', {})
+    c1, c2 = st.columns(2)
+    logr = c1.text_input("Logradouro:", value=end_cache.get('logradouro',''))
+    bairro = c2.text_input("Bairro:", value=end_cache.get('bairro',''))
+    c3, c4 = st.columns(2)
+    cid = c3.text_input("Cidade:", value=end_cache.get('cidade',''))
+    uf = c4.text_input("UF:", value=end_cache.get('uf',''))
+    c5, c6 = st.columns(2)
+    num = c5.text_input("Número:")
+    comp = c6.text_input("Complemento:")
+
+    if st.button("Salvar e Acessar", type="primary"):
+        if not nome or not cep or not logr or not num:
+            st.warning("Preencha Nome e Endereço completo.")
+            return
+
+        tipo_db = tipo.lower()
+        eq_id = mapa_equipes.get(eq_sel)
+        prof_id = mapa_profs.get(prof_sel) if prof_sel else None
+        
+        # Atualiza Usuário
+        db.collection('usuarios').document(user_data['id']).update({
+            "nome": nome.upper(), "tipo_usuario": tipo_db, "perfil_completo": True,
+            "cep": formatar_cep(cep), "logradouro": logr.upper(), "numero": num, 
+            "complemento": comp.upper(), "bairro": bairro.upper(), 
+            "cidade": cid.upper(), "uf": uf.upper()
+        })
+        
+        # Cria Vínculo
+        if tipo_db == "aluno":
+            db.collection('alunos').add({
+                "usuario_id": user_data['id'], 
+                "faixa_atual": faixa, 
+                "equipe_id": eq_id, 
+                "professor_id": prof_id,
+                "status_vinculo": "pendente"
+            })
+        else:
+            db.collection('professores').add({
+                "usuario_id": user_data['id'], "equipe_id": eq_id, 
+                "status_vinculo": "pendente"
             })
             
-        if dados_tabela:
-            df = pd.DataFrame(dados_tabela)
-            st.dataframe(df[['Equipe', 'Descrição', 'Responsável']], use_container_width=True)
-            
-            st.markdown("### Gerenciar Equipe")
-            eq_to_edit = st.selectbox("Selecione para editar:", [d['Equipe'] for d in dados_tabela])
-            
-            if eq_to_edit:
-                item = next(i for i in dados_tabela if i['Equipe'] == eq_to_edit)
-                eid = item['ID_Equipe']
-                original = equipes_map[eid]
-                
-                with st.expander(f"Editar {eq_to_edit}", expanded=True):
-                    n_nome = st.text_input("Novo nome:", value=original.get('nome'))
-                    n_desc = st.text_area("Nova descrição:", value=original.get('descricao'))
-                    
-                    p_atual = item['Responsável']
-                    try: idx_p = prof_opcoes.index(p_atual)
-                    except: idx_p = 0
-                    n_prof = st.selectbox("Novo Responsável:", prof_opcoes, index=idx_p, key="edit_prof_resp")
-                    
-                    c1, c2 = st.columns(2)
-                    if c1.button("💾 Salvar"):
-                        pid_new = None
-                        if n_prof != "Nenhum":
-                            for nome, uid in lista_professores:
-                                if nome == n_prof: 
-                                    pid_new = uid; break
-                        
-                        # --- EDIÇÃO: Nome em Maiúsculo ---
-                        db.collection('equipes').document(eid).update({
-                            "nome": n_nome.upper(), # <--- AQUI
-                            "descricao": n_desc, 
-                            "professor_responsavel_id": pid_new
-                        })
-                        st.success("Atualizado!")
-                        st.rerun()
-                        
-                    if c2.button("🗑️ Excluir"):
-                        db.collection('equipes').document(eid).delete()
-                        st.warning("Excluído.")
-                        st.rerun()
-
-    # ----------------------------------------------------------
-    # ABA 2: PROFESSORES (Apoio)
-    # ----------------------------------------------------------
-    with aba2:
-        st.subheader("Vincular Professor de Apoio")
+        st.session_state.usuario = {"id": user_data['id'], "nome": nome.upper(), "tipo": tipo_db}
         
-        c1, c2 = st.columns(2)
-        # Verifica se as listas não estão vazias para evitar erro no selectbox
-        if not lista_professores or not lista_equipes:
-            st.warning("Cadastre professores e equipes primeiro.")
-        else:
-            p_sel = c1.selectbox("Professor:", [p[0] for p in lista_professores], key="sel_prof_apoio")
-            e_sel = c2.selectbox("Equipe:", [e[0] for e in lista_equipes], key="sel_eq_apoio")
-            
-            if st.button("📎 Vincular"):
-                pid = next(uid for nome, uid in lista_professores if nome == p_sel)
-                eid = next(uid for nome, uid in lista_equipes if nome == e_sel)
-                
-                exists = list(db.collection('professores')
-                              .where('usuario_id', '==', pid)
-                              .where('equipe_id', '==', eid).stream())
-                
-                if exists:
-                    st.warning("Vínculo já existe.")
-                else:
-                    db.collection('professores').add({
-                        "usuario_id": pid, "equipe_id": eid, 
-                        "pode_aprovar": False, "eh_responsavel": False, 
-                        "status_vinculo": "ativo"
-                    })
-                    st.success("Vinculado!")
-                    st.rerun()
-        
-        st.markdown("---")
-        st.subheader("Professores Vinculados")
-        vincs = db.collection('professores').stream()
-        lista_v = []
-        for v in vincs:
-            d = v.to_dict()
-            pn = users_map.get(d.get('usuario_id'), {}).get('nome', '?')
-            en = equipes_map.get(d.get('equipe_id'), {}).get('nome', '?')
-            lista_v.append({"Professor": pn, "Equipe": en, "Status": d.get('status_vinculo')})
-            
-        if lista_v:
-            st.dataframe(pd.DataFrame(lista_v), use_container_width=True)
-
-    # ----------------------------------------------------------
-    # ABA 3: ALUNOS
-    # ----------------------------------------------------------
-    with aba3:
-        st.subheader("Gerenciar Vínculo de Aluno")
-        
-        if not lista_alunos or not lista_equipes:
-            st.warning("Cadastre alunos e equipes primeiro.")
-        else:
-            a_sel = st.selectbox("Aluno:", [a[0] for a in lista_alunos], key="sel_aluno_gest")
-            eq_aluno_sel = st.selectbox("Nova Equipe:", [e[0] for e in lista_equipes], key="sel_eq_aluno")
-            
-            if st.button("Atualizar Vínculo do Aluno"):
-                aid = next(uid for nome, uid in lista_alunos if nome == a_sel)
-                eid = next(uid for nome, uid in lista_equipes if nome == eq_aluno_sel)
-                
-                aluno_docs = list(db.collection('alunos').where('usuario_id', '==', aid).stream())
-                
-                if aluno_docs:
-                    doc_id = aluno_docs[0].id
-                    db.collection('alunos').document(doc_id).update({
-                        "equipe_id": eid,
-                        "status_vinculo": "ativo"
-                    })
-                    st.success(f"Aluno {a_sel} movido para {eq_aluno_sel}.")
-                else:
-                    db.collection('alunos').add({
-                        "usuario_id": aid,
-                        "equipe_id": eid,
-                        "faixa_atual": "Branca",
-                        "status_vinculo": "ativo"
-                    })
-                    st.success(f"Aluno {a_sel} vinculado a {eq_aluno_sel}.")
-                st.rerun()
-
-        st.markdown("---")
-        st.subheader("Alunos Vinculados")
-        
-        alunos_bd = db.collection('alunos').stream()
-        lista_a_bd = []
-        for doc in alunos_bd:
-            d = doc.to_dict()
-            anome = users_map.get(d.get('usuario_id'), {}).get('nome', '?')
-            enome = equipes_map.get(d.get('equipe_id'), {}).get('nome', '?')
-            lista_a_bd.append({"Aluno": anome, "Equipe": enome, "Status": d.get('status_vinculo')})
-            
-        if lista_a_bd:
-            st.dataframe(pd.DataFrame(lista_a_bd), use_container_width=True)
+        for k in ['goog_cep', 'goog_end', 'registration_pending']:
+            st.session_state.pop(k, None)
+        st.rerun()
