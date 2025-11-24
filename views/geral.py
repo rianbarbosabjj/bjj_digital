@@ -5,7 +5,7 @@ from config import COR_DESTAQUE, COR_TEXTO, COR_FUNDO, DB_PATH, COR_BOTAO
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
 from database import get_db 
 
-# Função auxiliar para renderizar cartões de forma limpa
+# Função auxiliar para renderizar cartões de forma limpa e padronizada
 def render_card(titulo, descricao, texto_botao, chave_botao, pagina_destino):
     with st.container(border=True):
         st.markdown(f"<h3>{titulo}</h3>", unsafe_allow_html=True)
@@ -55,6 +55,7 @@ def tela_inicio():
         )
 
     # --- CARTÕES DE GESTÃO (Apenas Admin/Professor) ---
+    # Recupera o tipo de usuário com segurança (padrão 'aluno' se não houver)
     tipo_usuario = st.session_state.usuario.get("tipo", "aluno")
     
     if tipo_usuario in ["admin", "professor"]:
@@ -99,18 +100,21 @@ def tela_meu_perfil(usuario_logado):
             novo_nome = col1.text_input("Nome:", value=user_data.get('nome', ''))
             novo_email = col2.text_input("Email:", value=user_data.get('email', ''), disabled=True)
             
+            # Inicializa CEP no estado se não existir
             if 'perf_cep' not in st.session_state: 
                 st.session_state.perf_cep = user_data.get('cep', '')
                 
             c_cep, c_btn = st.columns([3, 1])
             novo_cep = c_cep.text_input("CEP:", key="in_perf_cep", value=st.session_state.perf_cep)
             
+            # Botão de busca de CEP dentro do form (usando form_submit_button secundário)
             if c_btn.form_submit_button("Buscar"):
                 end = buscar_cep(novo_cep)
                 if end:
                     st.session_state.perf_end = end
                     st.rerun()
             
+            # Usa dados do cache de busca ou do banco
             end_base = st.session_state.get('perf_end', user_data)
             
             c1, c2 = st.columns(2)
@@ -138,6 +142,7 @@ def tela_meu_perfil(usuario_logado):
                         "uf": uf.upper()
                     })
                     st.success("Dados atualizados!")
+                    # Atualiza o nome na sessão para refletir na sidebar imediatamente
                     st.session_state.usuario['nome'] = novo_nome.upper()
                     st.rerun()
                 except Exception as e:
