@@ -1,12 +1,40 @@
 import streamlit as st
-import sqlite3
 import pandas as pd
-import bcrypt
-import os
-import json
-from datetime import datetime
-from config import DB_PATH
-from utils import carregar_questoes, salvar_questoes, formatar_e_validar_cpf, carregar_todas_questoes
+from database import get_db
+
+def gestao_usuarios(usuario_logado):
+    if usuario_logado["tipo"] != "admin":
+        st.error("Acesso negado.")
+        return
+
+    st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
+    db = get_db()
+    
+    # Lista todos os usuários
+    docs = db.collection('usuarios').stream()
+    lista = []
+    for doc in docs:
+        d = doc.to_dict()
+        d['id_doc'] = doc.id
+        lista.append(d)
+        
+    df = pd.DataFrame(lista)
+    if not df.empty:
+        st.dataframe(df[['nome', 'email', 'tipo_usuario', 'cpf']], use_container_width=True)
+        
+        # Edição simples
+        user_sel = st.selectbox("Editar Usuário:", df['nome'].tolist())
+        if user_sel:
+            # Pega dados do selecionado
+            sel_data = df[df['nome'] == user_sel].iloc[0]
+            
+            with st.expander(f"Editar {user_sel}"):
+                novo_tipo = st.selectbox("Tipo:", ["aluno", "professor", "admin"], index=["aluno", "professor", "admin"].index(sel_data['tipo_usuario']))
+                
+                if st.button("Salvar Alteração"):
+                    db.collection('usuarios').document(sel_data['id_doc']).update({"tipo_usuario": novo_tipo})
+                    st.success("Tipo atualizado!")
+                    st.rerun()
 
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários, restrita ao Admin."""
