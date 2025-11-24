@@ -60,5 +60,3 @@ def painel_professor():
 def gestao_equipes():
     st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
     st.info("Funcionalidade em migração para o Firestore (Exige lógica complexa de relacionamentos).")
-    # A gestão completa de equipes é complexa para migrar de uma vez.
-    # Sugiro focar primeiro no fluxo Aluno/Login que já fizemos.
