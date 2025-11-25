@@ -9,12 +9,15 @@ from datetime import datetime, time
 from firebase_admin import firestore
 
 # =========================================
-# GESTÃO DE USUÁRIOS
+# GESTÃO DE USUÁRIOS (Mantida)
 # =========================================
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários (Admin)."""
     
-    if usuario_logado["tipo"] != "admin":
+    # Normaliza tipo para segurança
+    tipo_user = str(usuario_logado.get("tipo", "")).lower()
+    
+    if tipo_user != "admin":
         st.error("Acesso negado. Esta página é restrita aos administradores.")
         return
 
@@ -52,11 +55,13 @@ def gestao_usuarios(usuario_logado):
         user_id = lista_usuarios[index_selecionado]['id_doc']
         
         user_ref = db.collection('usuarios').document(user_id)
-        user_data = user_ref.get().to_dict()
-
-        if not user_data:
+        doc_snap = user_ref.get()
+        
+        if not doc_snap.exists:
             st.error("Usuário não encontrado.")
             return
+
+        user_data = doc_snap.to_dict()
 
         with st.expander(f"⚙️ Editar: {user_data.get('nome')}", expanded=True):
             with st.form(key="form_edit_user_admin"):
@@ -65,7 +70,7 @@ def gestao_usuarios(usuario_logado):
                 novo_email = c2.text_input("Email:", value=user_data.get('email', ''))
                 novo_cpf = st.text_input("CPF:", value=user_data.get('cpf', ''))
                 
-                tipo_atual = user_data.get('tipo_usuario', 'aluno')
+                tipo_atual = str(user_data.get('tipo_usuario', 'aluno')).lower()
                 opcoes_tipo = ["aluno", "professor", "admin"]
                 try: idx_tipo = opcoes_tipo.index(tipo_atual)
                 except: idx_tipo = 0
@@ -105,13 +110,15 @@ def gestao_usuarios(usuario_logado):
                 st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (COM AUTORIA E PERMISSÕES)
+# GESTÃO DE QUESTÕES (COM FLUXO DE APROVAÇÃO CORRIGIDO)
 # =========================================
 def gestao_questoes():
     """Gestão de Banco de Questões no Firestore."""
     
     user = st.session_state.usuario
-    tipo_user = user["tipo"]
+    # Normaliza tipo para evitar erro de caixa alta/baixa
+    tipo_user = str(user.get("tipo", "")).lower()
+    
     if tipo_user not in ["admin", "professor"]:
         st.error("Acesso negado.")
         return
@@ -131,10 +138,12 @@ def gestao_questoes():
     for doc in docs_q:
         d = doc.to_dict()
         d['id'] = doc.id
-        status = d.get('status', 'aprovada') 
+        # Se não tiver status, assume aprovada (legado), senão pega o status real
+        status = d.get('status', 'aprovada')
         
         if status == 'pendente':
             pendentes.append(d)
+            # Se eu fui quem criou, adiciona na minha lista de acompanhamento
             if d.get('criado_por_id') == user['id']:
                 minhas_pendentes.append(d)
         else:
@@ -169,9 +178,6 @@ def gestao_questoes():
             st.info("Nenhuma questão aprovada encontrada.")
         else:
             for q in q_exibir:
-                # Cor de fundo para destacar se tiver correção pendente
-                border_color = "#5c4b0b" if q.get('solicitacao_correcao') else None
-                
                 with st.container(border=True):
                     col_txt, col_btn = st.columns([6, 1])
                     col_txt.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
@@ -187,13 +193,14 @@ def gestao_questoes():
                         st.markdown("---")
                         c_act1, c_act2 = st.columns(2)
                         
-                        # --- AQUI ESTÁ A REGRA: SÓ ADMIN EXCLUI ---
+                        # ADMIN: Exclui direto
                         if tipo_user == "admin":
                             if c_act2.button("🗑️ Excluir Definitivamente", key=f"del_{q['id']}"):
                                 db.collection('questoes').document(q['id']).delete()
+                                st.success("Excluída!")
                                 st.rerun()
                         
-                        # Solicitação de correção (Todos)
+                        # TODOS (Prof/Admin): Solicitam correção
                         if not q.get('solicitacao_correcao'):
                             with c_act1.popover("🚩 Solicitar Correção"):
                                 motivo = st.text_input("Motivo:", key=f"motivo_{q['id']}")
@@ -206,7 +213,7 @@ def gestao_questoes():
                                     st.success("Enviado!")
                                     st.rerun()
                         else:
-                            c_act1.warning(f"Correção pendente: {q.get('motivo_correcao')} (por {q.get('solicitado_por')})")
+                            c_act1.warning(f"Correção pendente: {q.get('motivo_correcao')}")
 
     # -------------------------------------------------------
     # ABA 2: ADICIONAR NOVA
@@ -214,7 +221,7 @@ def gestao_questoes():
     with abas[1]:
         st.markdown("### Cadastrar Nova Questão")
         if tipo_user == "professor":
-            st.info("ℹ️ Suas questões ficarão como 'Pendente' até aprovação de um administrador.")
+            st.info("ℹ️ Suas questões entrarão como 'Pendente' até aprovação de um Admin.")
             
         with st.form("form_add_q"):
             c_tema1, c_tema2 = st.columns([1, 1])
@@ -223,6 +230,7 @@ def gestao_questoes():
             tema_final = tema_novo if tema_novo else tema_sel_add
             
             pergunta = st.text_area("Enunciado da Pergunta:")
+            
             cols = st.columns(2)
             op_a = cols[0].text_input("Opção A:")
             op_b = cols[1].text_input("Opção B:")
@@ -239,6 +247,7 @@ def gestao_questoes():
                     mapa = {"A": op_a, "B": op_b, "C": op_c, "D": op_d}
                     resp_texto = mapa.get(correta_letra)
                     
+                    # Regra de Status: Admin -> Aprovada / Professor -> Pendente
                     status_inicial = "aprovada" if tipo_user == "admin" else "pendente"
                     
                     nova_q = {
@@ -250,37 +259,42 @@ def gestao_questoes():
                         "solicitacao_correcao": False
                     }
                     db.collection('questoes').add(nova_q)
-                    msg = "Questão salva e aprovada!" if status_inicial == "aprovada" else "Questão enviada para aprovação!"
+                    
+                    msg = "Questão salva e APROVADA!" if status_inicial == "aprovada" else "Questão enviada para APROVAÇÃO!"
                     st.success(msg)
                     st.rerun()
                 else:
                     st.warning("Preencha a pergunta, o tema e pelo menos 2 opções.")
 
     # -------------------------------------------------------
-    # ABA ADMIN: APROVAR PENDENTES
+    # ABA 3: ADMIN - APROVAR PENDENTES
     # -------------------------------------------------------
     if tipo_user == "admin":
         with abas[2]:
-            st.markdown("### ✅ Aprovação de Questões")
+            st.markdown(f"### ✅ Aprovação de Questões ({len(pendentes)})")
             if not pendentes:
-                st.info("Nenhuma questão pendente.")
+                st.info("Nenhuma questão aguardando aprovação.")
             else:
                 for q in pendentes:
-                    with st.expander(f"{q['tema']} | {q['pergunta']} (Por: {q.get('criado_por')})"):
-                        st.write(f"**Opções:** {q.get('opcoes')}")
-                        st.caption(f"Resposta: {q.get('resposta')}")
+                    with st.container(border=True):
+                        st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                        st.caption(f"Por: {q.get('criado_por')} | Status: Pendente")
                         
-                        c_apr, c_rej = st.columns(2)
-                        if c_apr.button("Aprovar", key=f"apr_{q['id']}"):
-                            db.collection('questoes').document(q['id']).update({"status": "aprovada"})
-                            st.success("Aprovada!")
-                            st.rerun()
-                        if c_rej.button("Rejeitar/Excluir", key=f"rej_{q['id']}"):
-                            db.collection('questoes').document(q['id']).delete()
-                            st.warning("Excluída.")
-                            st.rerun()
+                        with st.expander("Revisar"):
+                            st.write(f"**Opções:** {q.get('opcoes')}")
+                            st.write(f"**Resposta:** {q.get('resposta')}")
                             
-        # ABA ADMIN: CORREÇÕES
+                            c_apr, c_rej = st.columns(2)
+                            if c_apr.button("✅ Aprovar", key=f"apr_{q['id']}"):
+                                db.collection('questoes').document(q['id']).update({"status": "aprovada"})
+                                st.success("Aprovada!")
+                                st.rerun()
+                            if c_rej.button("❌ Rejeitar", key=f"rej_{q['id']}"):
+                                db.collection('questoes').document(q['id']).delete()
+                                st.warning("Rejeitada e excluída.")
+                                st.rerun()
+                            
+        # ABA 4: ADMIN - CORREÇÕES
         with abas[3]:
             st.markdown("### 🔧 Solicitações de Correção")
             if not correcoes:
@@ -289,13 +303,13 @@ def gestao_questoes():
                 for q in correcoes:
                     with st.container(border=True):
                         st.markdown(f"**Questão:** {q['pergunta']}")
-                        st.error(f"📢 Motivo: {q.get('motivo_correcao')} (Reportado por: {q.get('solicitado_por')})")
+                        st.error(f"📢 Motivo: {q.get('motivo_correcao')} (Por: {q.get('solicitado_por')})")
                         
-                        with st.expander("Editar e Corrigir"):
+                        with st.expander("Editar"):
                             with st.form(key=f"fix_{q['id']}"):
                                 n_perg = st.text_area("Pergunta:", value=q['pergunta'])
                                 c_fix1, c_fix2 = st.columns(2)
-                                salvar_fix = c_fix1.form_submit_button("Salvar e Marcar como Resolvido")
+                                salvar_fix = c_fix1.form_submit_button("Salvar e Resolver")
                                 
                                 if salvar_fix:
                                     db.collection('questoes').document(q['id']).update({
@@ -306,7 +320,7 @@ def gestao_questoes():
                                     st.success("Resolvido!")
                                     st.rerun()
                                     
-                        if st.button("Ignorar/Remover Flag", key=f"ign_{q['id']}"):
+                        if st.button("Ignorar Flag", key=f"ign_{q['id']}"):
                              db.collection('questoes').document(q['id']).update({
                                 "solicitacao_correcao": False,
                                 "motivo_correcao": firestore.DELETE_FIELD
@@ -314,7 +328,7 @@ def gestao_questoes():
                              st.rerun()
 
     # -------------------------------------------------------
-    # ABA PROFESSOR: MINHAS PENDENTES
+    # ABA 3: PROFESSOR - MINHAS PENDENTES
     # -------------------------------------------------------
     elif tipo_user == "professor":
         with abas[2]:
@@ -323,16 +337,21 @@ def gestao_questoes():
                 st.info("Você não tem questões aguardando aprovação.")
             else:
                 for q in minhas_pendentes:
-                    st.info(f"[{q['tema']}] {q['pergunta']}")
+                    with st.container(border=True):
+                        st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                        st.caption("Status: Aguardando Admin")
 
 # =========================================
-# GESTÃO DE EXAME DE FAIXA
+# GESTÃO DE EXAME DE FAIXA (Mantida igual)
 # =========================================
 def gestao_exame_de_faixa():
+    # ... (código anterior da gestão de exame, sem alterações) ...
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
     
     user_logado = st.session_state.usuario
-    if user_logado["tipo"] not in ["admin", "professor"]:
+    tipo_user = str(user_logado.get("tipo", "")).lower()
+    
+    if tipo_user not in ["admin", "professor"]:
         st.error("Acesso negado.")
         return
 
@@ -363,6 +382,7 @@ def gestao_exame_de_faixa():
             min_value=10, max_value=240, value=tempo_limite_atual, step=10
         )
 
+        # CARREGA APENAS QUESTÕES APROVADAS
         docs_q = db.collection('questoes').where('status', '==', 'aprovada').stream()
         todas_q = [d.to_dict() for d in docs_q] 
         
@@ -433,7 +453,7 @@ def gestao_exame_de_faixa():
         db = get_db()
 
         equipes_permitidas = []
-        if user_logado['tipo'] == 'admin':
+        if tipo_user == 'admin':
             equipes_permitidas = None 
         else:
             q1 = db.collection('equipes').where('professor_responsavel_id', '==', user_logado['id']).stream()
