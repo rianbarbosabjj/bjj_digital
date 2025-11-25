@@ -1,6 +1,7 @@
 import streamlit as st
 import random
 import os
+import json
 from datetime import datetime
 import pandas as pd
 import plotly.express as px
@@ -15,14 +16,33 @@ def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    # 1. Carrega TEMAS disponíveis no Firestore
-    docs_questoes = list(db.collection('questoes').stream())
+    # 1. Carrega TEMAS (Tenta Firestore, senão JSON)
+    todas_questoes = []
     
-    if not docs_questoes:
+    # Tentativa 1: Firestore
+    try:
+        docs_questoes = list(db.collection('questoes').stream())
+        if docs_questoes:
+            todas_questoes = [d.to_dict() for d in docs_questoes]
+    except: pass
+    
+    # Tentativa 2: JSON Local (Fallback)
+    if not todas_questoes and os.path.exists("questions"):
+        for f in os.listdir("questions"):
+            if f.endswith(".json"):
+                try:
+                    with open(f"questions/{f}", "r", encoding="utf-8") as file:
+                        q_list = json.load(file)
+                        tema_nome = f.replace(".json", "")
+                        for q in q_list:
+                            q['tema'] = tema_nome
+                            todas_questoes.append(q)
+                except: continue
+
+    if not todas_questoes:
         st.warning("O banco de questões está vazio. Peça ao professor para cadastrar perguntas.")
         return
 
-    todas_questoes = [d.to_dict() for d in docs_questoes]
     temas = sorted(list(set(q.get('tema', 'Geral') for q in todas_questoes)))
     temas.insert(0, "Todos os Temas")
 
@@ -71,15 +91,19 @@ def modo_rola(usuario_logado):
             
             percentual = int((acertos / total) * 100) if total > 0 else 0
             
-            db.collection('rola_resultados').add({
-                "usuario": usuario_logado["nome"],
-                "faixa": faixa,
-                "tema": tema,
-                "acertos": acertos,
-                "total": total,
-                "percentual": percentual,
-                "data": firestore.SERVER_TIMESTAMP
-            })
+            # Salva no Firestore
+            try:
+                db.collection('rola_resultados').add({
+                    "usuario": usuario_logado["nome"],
+                    "faixa": faixa,
+                    "tema": tema,
+                    "acertos": acertos,
+                    "total": total,
+                    "percentual": percentual,
+                    "data": firestore.SERVER_TIMESTAMP
+                })
+            except:
+                st.warning("Erro de conexão ao salvar resultado. Mas parabéns pelo treino!")
             
             st.balloons()
             st.success(f"Treino concluído! Você acertou {acertos} de {total} ({percentual}%).")
@@ -115,7 +139,6 @@ def exame_de_faixa(usuario_logado):
                         else:
                             msg_bloqueio = f"Fora do período. Disponível entre {ini_tz.strftime('%d/%m %H:%M')} e {fim_tz.strftime('%d/%m %H:%M')}."
                     except:
-                        # Se der erro de data, libera se estiver marcado como habilitado (fallback)
                         permitido = True
                 else:
                     permitido = True 
@@ -128,26 +151,35 @@ def exame_de_faixa(usuario_logado):
     faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
     faixa_sel = st.selectbox("Selecione a faixa do exame:", faixas)
     
-    # 3. BUSCA A PROVA NO FIRESTORE (Robustez Aumentada)
-    # Tenta buscar pelo ID direto (Padrão novo)
-    doc_ref = db.collection('exames').document(faixa_sel)
-    doc_exame = doc_ref.get()
-    
+    # 3. BUSCA A PROVA (Firestore OU JSON Local)
     dados_exame = {}
     
+    # Tentativa A: Firestore (ID Direto)
+    doc_ref = db.collection('exames').document(faixa_sel)
+    doc_exame = doc_ref.get()
     if doc_exame.exists:
         dados_exame = doc_exame.to_dict()
-    else:
-        # Fallback: Tenta buscar por campo caso o ID esteja diferente
+    
+    # Tentativa B: Firestore (Query por campo)
+    if not dados_exame:
         query = db.collection('exames').where('faixa', '==', faixa_sel).stream()
         results = list(query)
         if results:
             dados_exame = results[0].to_dict()
-            
+
+    # Tentativa C: Arquivo JSON Local (Fallback de Migração)
+    if not dados_exame:
+        json_path = f"exames/faixa_{faixa_sel.lower()}.json"
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, "r", encoding="utf-8") as f:
+                    dados_exame = json.load(f)
+            except: pass
+
     if not dados_exame:
         st.info(f"Ainda não há prova cadastrada para a faixa {faixa_sel}.")
         if usuario_logado["tipo"] in ["admin", "professor"]:
-            st.warning("⚠️ Professor: Você precisa ir em 'Gestão de Exame' e salvar as questões para esta faixa no novo banco de dados.")
+            st.warning("⚠️ Professor: Vá em 'Gestão de Exame', adicione questões e SALVE para registrar na nuvem.")
         return
 
     lista_questoes_prova = dados_exame.get('questoes', [])
@@ -183,7 +215,6 @@ def exame_de_faixa(usuario_logado):
             resp_certa = q.get('resposta')
             
             if resp_user:
-                # Comparação flexível (texto exato ou prefixo "A)")
                 if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
                     acertos += 1
         
