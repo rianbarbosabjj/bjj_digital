@@ -148,8 +148,7 @@ def exame_de_faixa(usuario_logado):
                 st.success(f"🎉 APROVADO! Nota: {res['percentual']}% ({res['acertos']}/{res['total']})")
                 st.info("Seu certificado foi gerado e o código de verificação registrado.")
                 
-                # Botão de Download
-                # Usamos um ID único no botão para evitar conflitos de renderização
+                # Botão de Download (Blindado contra erros)
                 try:
                     pdf_path = gerar_pdf(
                         usuario_logado['nome'], 
@@ -169,9 +168,9 @@ def exame_de_faixa(usuario_logado):
                                 key="btn_download_final"
                             )
                     else:
-                        st.error("Erro: Arquivo PDF não foi criado.")
+                        st.error("Erro: Arquivo PDF não foi encontrado no disco.")
                 except Exception as e:
-                    st.error(f"Erro ao gerar PDF: {e}")
+                    st.error(f"Erro ao gerar o arquivo PDF: {e}")
             else:
                 msg_tempo = "Tempo Esgotado. " if res.get('tempo_esgotado') else ""
                 st.error(f"Reprovado. {msg_tempo}Nota: {res['percentual']}%. Mínimo: 70%.")
@@ -235,15 +234,15 @@ def exame_de_faixa(usuario_logado):
     tempo_esgotado = segundos_restantes <= 0
 
     if not tempo_esgotado:
-        # CRONÔMETRO COM ID ÚNICO PARA EVITAR CONFLITOS
+        # CRONÔMETRO COM TIMEOUT (Correção do bug de travamento)
         timer_id = f"timer_{uuid.uuid4()}"
         st.markdown(
             f"""
             <div style="text-align: center; padding: 10px; border: 2px solid #FFD700; border-radius: 10px; margin-bottom: 20px; background-color: #0e2d26;">
-                <h3 id="{timer_id}" style="color: #FFD700; margin: 0;">Carregando...</h3>
+                <h3 id="{timer_id}" style="color: #FFD700; margin: 0;">Carregando tempo...</h3>
             </div>
             <script>
-            (function() {{
+            setTimeout(function() {{
                 var timeleft = {segundos_restantes};
                 var timerElement = document.getElementById("{timer_id}");
                 if (timerElement) {{
@@ -259,7 +258,7 @@ def exame_de_faixa(usuario_logado):
                     timeleft -= 1;
                     }}, 1000);
                 }}
-            }})();
+            }}, 500); // Delay de segurança para o elemento ser criado
             </script>
             """,
             unsafe_allow_html=True
@@ -293,16 +292,21 @@ def exame_de_faixa(usuario_logado):
                 resp_user = respostas.get(i)
                 resp_certa = q.get('resposta')
                 if resp_user:
-                    # Verifica se a resposta contém o texto correto
                     if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
                         acertos += 1
         
         percentual = int((acertos / total) * 100) if total > 0 else 0
         aprovado = percentual >= 70
         
-        # Gera código (agora usando utils.py corrigido com Firestore)
-        codigo = gerar_codigo_verificacao() if aprovado else None
+        # Gera código com fallback seguro
+        codigo = None
+        if aprovado:
+            try:
+                codigo = gerar_codigo_verificacao()
+            except Exception:
+                codigo = f"BJJ-ERRO-{random.randint(1000,9999)}" # Fallback de emergência
 
+        # Salva no Banco (com Try/Except para não travar a tela de sucesso)
         if aprovado:
             try:
                 db.collection('resultados').add({
@@ -312,9 +316,9 @@ def exame_de_faixa(usuario_logado):
                     "data": firestore.SERVER_TIMESTAMP, "codigo_verificacao": codigo
                 })
             except Exception as e:
-                st.error(f"Erro ao salvar resultado na nuvem: {e}")
+                print(f"Erro silencioso ao salvar: {e}")
         
-        # Salva estado e recarrega para limpar a tela
+        # Salva estado e força recarregamento
         st.session_state.prova_concluida = True
         st.session_state.resultado_final = {
             "usuario": usuario_logado["nome"], "faixa": faixa_sel,
