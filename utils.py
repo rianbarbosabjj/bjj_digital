@@ -115,7 +115,7 @@ def gerar_qrcode(codigo):
     caminho_qr = f"temp_qr/{codigo}.png"
     
     # Link fictício de validação
-    link = f"https://bjjdigital.com.br/validar?code={codigo}"
+    link = f"https://bjjdigital.netlify.app//validar?code={codigo}"
     
     qr = qrcode.QRCode(box_size=10, border=2)
     qr.add_data(link)
