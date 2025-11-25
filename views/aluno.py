@@ -115,7 +115,7 @@ def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    # 1. VERIFICAÇÃO DE SEGURANÇA (NO FIRESTORE)
+    # --- VERIFICAÇÃO DE PERMISSÃO ---
     if usuario_logado["tipo"] == "aluno":
         alunos_query = db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).stream()
         aluno_doc = next(alunos_query, None)
@@ -139,7 +139,7 @@ def exame_de_faixa(usuario_logado):
                         else:
                             msg_bloqueio = f"Fora do período. Disponível entre {ini_tz.strftime('%d/%m %H:%M')} e {fim_tz.strftime('%d/%m %H:%M')}."
                     except:
-                        permitido = True
+                        permitido = True # Fallback de data
                 else:
                     permitido = True 
             
@@ -147,51 +147,76 @@ def exame_de_faixa(usuario_logado):
             st.warning(f"🚫 {msg_bloqueio}")
             return
 
-    # 2. SELEÇÃO DA PROVA
+    # --- SELEÇÃO DE FAIXA ---
     faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
     faixa_sel = st.selectbox("Selecione a faixa do exame:", faixas)
     
-    # 3. BUSCA A PROVA (Firestore OU JSON Local)
-    dados_exame = {}
+    # --- INICIALIZA ESTADO DE "PROVA EM ANDAMENTO" ---
+    if 'prova_iniciada' not in st.session_state:
+        st.session_state.prova_iniciada = False
     
-    # Tentativa A: Firestore (ID Direto)
+    # Se mudou a faixa no selectbox, reseta a prova
+    if 'ultima_faixa_sel' not in st.session_state:
+        st.session_state.ultima_faixa_sel = faixa_sel
+    elif st.session_state.ultima_faixa_sel != faixa_sel:
+        st.session_state.prova_iniciada = False
+        st.session_state.ultima_faixa_sel = faixa_sel
+
+    # --- BUSCA A PROVA (Firestore ou Local) ---
+    dados_exame = {}
     doc_ref = db.collection('exames').document(faixa_sel)
     doc_exame = doc_ref.get()
+    
     if doc_exame.exists:
         dados_exame = doc_exame.to_dict()
-    
-    # Tentativa B: Firestore (Query por campo)
-    if not dados_exame:
+    else:
         query = db.collection('exames').where('faixa', '==', faixa_sel).stream()
         results = list(query)
-        if results:
-            dados_exame = results[0].to_dict()
+        if results: dados_exame = results[0].to_dict()
 
-    # Tentativa C: Arquivo JSON Local (Fallback de Migração)
     if not dados_exame:
         json_path = f"exames/faixa_{faixa_sel.lower()}.json"
         if os.path.exists(json_path):
             try:
-                with open(json_path, "r", encoding="utf-8") as f:
-                    dados_exame = json.load(f)
+                with open(json_path, "r", encoding="utf-8") as f: dados_exame = json.load(f)
             except: pass
 
     if not dados_exame:
         st.info(f"Ainda não há prova cadastrada para a faixa {faixa_sel}.")
         if usuario_logado["tipo"] in ["admin", "professor"]:
-            st.warning("⚠️ Professor: Vá em 'Gestão de Exame', adicione questões e SALVE para registrar na nuvem.")
+            st.warning("⚠️ Professor: Cadastre a prova na Gestão de Exame.")
         return
 
     lista_questoes_prova = dados_exame.get('questoes', [])
-    
     if not lista_questoes_prova:
-        st.warning("Esta prova existe mas está sem questões. Avise seu professor.")
+        st.warning("Esta prova existe mas está vazia.")
         return
 
+    # --- TELA DE INSTRUÇÕES (ANTES DA PROVA) ---
+    if not st.session_state.prova_iniciada:
+        st.markdown("---")
+        with st.container(border=True):
+            st.markdown(f"### 📜 Instruções para o Exame de Faixa {faixa_sel}")
+            st.markdown(f"""
+            Você está prestes a iniciar sua avaliação teórica. Por favor, leia com atenção:
+            
+            * **Total de Questões:** {len(lista_questoes_prova)} perguntas.
+            * **Nota Mínima:** Você precisa acertar pelo menos **70%** para ser aprovado.
+            * **Tempo:** Não há limite de tempo, faça com calma.
+            * **Revisão:** Você pode revisar suas respostas antes de clicar em "Finalizar".
+            
+            Ao clicar no botão abaixo, a prova será carregada. Boa sorte! 🥋
+            """)
+            
+            if st.button("✅ Começar Agora", type="primary", use_container_width=True):
+                st.session_state.prova_iniciada = True
+                st.rerun()
+        return # Para a execução aqui até o usuário clicar
+
+    # --- APLICAÇÃO DA PROVA (SÓ APARECE SE INICIADA) ---
     st.markdown(f"### 📝 Prova de Faixa {faixa_sel}")
     st.caption(f"Total de questões: {len(lista_questoes_prova)}")
 
-    # 4. APLICAÇÃO DA PROVA
     respostas = {}
     with st.form(key=f"form_prova_{faixa_sel}"):
         for i, q in enumerate(lista_questoes_prova, 1):
@@ -205,7 +230,6 @@ def exame_de_faixa(usuario_logado):
             
         finalizar = st.form_submit_button("Finalizar Exame 🏁", use_container_width=True)
 
-    # 5. CORREÇÃO E SALVAMENTO
     if finalizar:
         acertos = 0
         total = len(lista_questoes_prova)
@@ -221,6 +245,7 @@ def exame_de_faixa(usuario_logado):
         percentual = int((acertos / total) * 100) if total > 0 else 0
         
         if percentual >= 70:
+            st.balloons()
             st.success(f"🎉 APROVADO! Nota: {percentual}% ({acertos}/{total})")
             codigo = gerar_codigo_verificacao()
             
@@ -239,6 +264,8 @@ def exame_de_faixa(usuario_logado):
                 "usuario": usuario_logado["nome"], "faixa": faixa_sel,
                 "acertos": acertos, "total": total, "codigo": codigo
             }
+            # Reseta estado para que na proxima vez volte as instruções
+            st.session_state.prova_iniciada = False 
         else:
             st.error(f"Reprovado. Nota: {percentual}%. Mínimo: 70%.")
     
