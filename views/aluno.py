@@ -3,7 +3,7 @@ import random
 import os
 import json
 import time
-import uuid  # Import para gerar ID único do timer
+import uuid
 from datetime import datetime, timedelta
 import pandas as pd
 import plotly.express as px
@@ -12,21 +12,18 @@ from utils import gerar_codigo_verificacao, gerar_pdf
 from firebase_admin import firestore
 
 # =========================================
-# MODO ROLA (Treino Livre)
+# FUNÇÕES AUXILIARES COM CACHE
 # =========================================
-def modo_rola(usuario_logado):
-    st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
+@st.cache_data(ttl=300) 
+def carregar_questoes_firestore():
     db = get_db()
-
     todas_questoes = []
-    # Tenta carregar do Firestore
     try:
         docs_questoes = list(db.collection('questoes').stream())
         if docs_questoes:
             todas_questoes = [d.to_dict() for d in docs_questoes]
     except: pass
     
-    # Fallback local
     if not todas_questoes and os.path.exists("questions"):
         for f in os.listdir("questions"):
             if f.endswith(".json"):
@@ -36,6 +33,31 @@ def modo_rola(usuario_logado):
                         tema_nome = f.replace(".json", "")
                         for q in q_list: q['tema'] = tema_nome; todas_questoes.append(q)
                 except: continue
+    return todas_questoes
+
+@st.cache_data(ttl=300)
+def carregar_exame_firestore(faixa_sel):
+    db = get_db()
+    doc_ref = db.collection('exames').document(faixa_sel)
+    doc_exame = doc_ref.get()
+    dados_exame = doc_exame.to_dict() if doc_exame.exists else {}
+    
+    if not dados_exame:
+        json_path = f"exames/faixa_{faixa_sel.lower()}.json"
+        if os.path.exists(json_path):
+            try:
+                with open(json_path, "r") as f: dados_exame = json.load(f)
+            except: pass
+    return dados_exame
+
+# =========================================
+# MODO ROLA (Treino Livre)
+# =========================================
+def modo_rola(usuario_logado):
+    st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
+    db = get_db()
+
+    todas_questoes = carregar_questoes_firestore()
 
     if not todas_questoes:
         st.warning("Banco de questões vazio.")
@@ -91,7 +113,7 @@ def modo_rola(usuario_logado):
             st.success(f"Treino concluído! {acertos}/{total} ({percentual}%).")
 
 # =========================================
-# EXAME DE FAIXA (TIMER CORRIGIDO)
+# EXAME DE FAIXA (OTIMIZADO)
 # =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
@@ -112,11 +134,11 @@ def exame_de_faixa(usuario_logado):
                 fim = dados.get('exame_fim')
                 if ini and fim:
                     try:
-                        ini = ini.replace(tzinfo=None)
-                        fim = fim.replace(tzinfo=None)
+                        if isinstance(ini, datetime): ini = ini.replace(tzinfo=None)
+                        if isinstance(fim, datetime): fim = fim.replace(tzinfo=None)
                         if ini <= agora <= fim: permitido = True
                         else: msg = f"Fora do prazo. ({ini.strftime('%d/%m')} - {fim.strftime('%d/%m')})"
-                    except: permitido = True
+                    except Exception: permitido = True
                 else: permitido = True 
         if not permitido:
             st.warning(f"🚫 {msg}")
@@ -146,31 +168,29 @@ def exame_de_faixa(usuario_logado):
             if res['aprovado']:
                 st.balloons()
                 st.success(f"🎉 APROVADO! Nota: {res['percentual']}% ({res['acertos']}/{res['total']})")
-                st.info("Seu certificado foi gerado e o código de verificação registrado.")
+                st.info("Seu certificado foi gerado.")
                 
-                # Botão de Download (Blindado contra erros)
-                try:
-                    pdf_path = gerar_pdf(
-                        usuario_logado['nome'], 
-                        res['faixa'], 
-                        res['acertos'], 
-                        res['total'], 
-                        res['codigo']
+                # Botão de Download OTIMIZADO (Usa bytes da memória, não gera de novo)
+                pdf_data = res.get('pdf_bytes')
+                pdf_name = res.get('pdf_name', 'certificado.pdf')
+                
+                if pdf_data:
+                    st.download_button(
+                        label="📥 BAIXAR CERTIFICADO AGORA",
+                        data=pdf_data,
+                        file_name=pdf_name,
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="btn_download_final"
                     )
-                    if os.path.exists(pdf_path):
-                        with open(pdf_path, "rb") as f:
-                            st.download_button(
-                                label="📥 BAIXAR CERTIFICADO AGORA",
-                                data=f.read(),
-                                file_name=os.path.basename(pdf_path),
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="btn_download_final"
-                            )
-                    else:
-                        st.error("Erro: Arquivo PDF não foi encontrado no disco.")
-                except Exception as e:
-                    st.error(f"Erro ao gerar o arquivo PDF: {e}")
+                else:
+                    # Fallback se algo deu errado no cache
+                    st.warning("O PDF está sendo gerado novamente...")
+                    try:
+                        p = gerar_pdf(usuario_logado['nome'], res['faixa'], res['acertos'], res['total'], res['codigo'])
+                        with open(p, "rb") as f:
+                            st.download_button("📥 Baixar Certificado", f.read(), os.path.basename(p), "application/pdf", use_container_width=True)
+                    except: st.error("Erro ao recuperar PDF.")
             else:
                 msg_tempo = "Tempo Esgotado. " if res.get('tempo_esgotado') else ""
                 st.error(f"Reprovado. {msg_tempo}Nota: {res['percentual']}%. Mínimo: 70%.")
@@ -182,17 +202,7 @@ def exame_de_faixa(usuario_logado):
             return
 
     # --- 4. CARREGA PROVA ---
-    doc_ref = db.collection('exames').document(faixa_sel)
-    doc_exame = doc_ref.get()
-    dados_exame = doc_exame.to_dict() if doc_exame.exists else {}
-    
-    if not dados_exame:
-        json_path = f"exames/faixa_{faixa_sel.lower()}.json"
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, "r") as f: dados_exame = json.load(f)
-            except: pass
-
+    dados_exame = carregar_exame_firestore(faixa_sel)
     if not dados_exame:
         st.info(f"Sem prova cadastrada para {faixa_sel}.")
         return
@@ -213,8 +223,6 @@ def exame_de_faixa(usuario_logado):
             * **Questões:** {len(lista_questoes)}
             * **Tempo Limite:** ⏱️ {tempo_limite} minutos
             * **Aprovação:** 70% de acertos
-            
-            Ao clicar em iniciar, o tempo começará a contar.
             """)
             
             if st.button("✅ Começar Agora", type="primary", use_container_width=True):
@@ -230,35 +238,32 @@ def exame_de_faixa(usuario_logado):
     agora = datetime.now()
     tempo_restante = st.session_state.fim_prova - agora
     segundos_restantes = int(tempo_restante.total_seconds())
-    
     tempo_esgotado = segundos_restantes <= 0
 
     if not tempo_esgotado:
-        # CRONÔMETRO COM TIMEOUT (Correção do bug de travamento)
+        # CRONÔMETRO COM TIMEOUT
         timer_id = f"timer_{uuid.uuid4()}"
         st.markdown(
             f"""
             <div style="text-align: center; padding: 10px; border: 2px solid #FFD700; border-radius: 10px; margin-bottom: 20px; background-color: #0e2d26;">
-                <h3 id="{timer_id}" style="color: #FFD700; margin: 0;">Carregando tempo...</h3>
+                <h3 id="{timer_id}" style="color: #FFD700; margin: 0;">Carregando...</h3>
             </div>
             <script>
             setTimeout(function() {{
                 var timeleft = {segundos_restantes};
-                var timerElement = document.getElementById("{timer_id}");
-                if (timerElement) {{
-                    var downloadTimer = setInterval(function(){{
-                    if(timeleft <= 0){{
-                        clearInterval(downloadTimer);
-                        timerElement.innerHTML = "⌛ Tempo Esgotado!";
-                    }} else {{
+                var el = document.getElementById("{timer_id}");
+                if (el) {{
+                    var timer = setInterval(function(){{
+                    if(timeleft <= 0){{ clearInterval(timer); el.innerHTML = "⌛ Tempo Esgotado!"; }} 
+                    else {{
                         var m = Math.floor(timeleft / 60);
                         var s = timeleft % 60;
-                        timerElement.innerHTML = "⏱️ " + m + ":" + (s < 10 ? "0" : "") + s;
+                        el.innerHTML = "⏱️ " + m + ":" + (s < 10 ? "0" : "") + s;
                     }}
                     timeleft -= 1;
                     }}, 1000);
                 }}
-            }}, 500); // Delay de segurança para o elemento ser criado
+            }}, 500);
             </script>
             """,
             unsafe_allow_html=True
@@ -266,7 +271,6 @@ def exame_de_faixa(usuario_logado):
     else:
         st.error("⌛ TEMPO ESGOTADO!")
 
-    # Prova
     respostas = {}
     finalizar = False
     
@@ -282,58 +286,66 @@ def exame_de_faixa(usuario_logado):
     else:
         finalizar = True 
         
-    # --- 7. FINALIZAÇÃO ---
+    # --- 7. FINALIZAÇÃO OTIMIZADA ---
     if finalizar:
-        acertos = 0
-        total = len(lista_questoes)
-        
-        if not tempo_esgotado:
-            for i, q in enumerate(lista_questoes, 1):
-                resp_user = respostas.get(i)
-                resp_certa = q.get('resposta')
-                if resp_user:
-                    if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
-                        acertos += 1
-        
-        percentual = int((acertos / total) * 100) if total > 0 else 0
-        aprovado = percentual >= 70
-        
-        # Gera código com fallback seguro
-        codigo = None
-        if aprovado:
-            try:
-                codigo = gerar_codigo_verificacao()
-            except Exception:
-                codigo = f"BJJ-ERRO-{random.randint(1000,9999)}" # Fallback de emergência
+        with st.spinner("Processando resultados e gerando certificado..."):
+            acertos = 0
+            total = len(lista_questoes)
+            
+            if not tempo_esgotado:
+                for i, q in enumerate(lista_questoes, 1):
+                    resp_user = respostas.get(i)
+                    resp_certa = q.get('resposta')
+                    if resp_user:
+                        if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
+                            acertos += 1
+            
+            percentual = int((acertos / total) * 100) if total > 0 else 0
+            aprovado = percentual >= 70
+            
+            codigo = None
+            pdf_bytes = None
+            pdf_name = ""
 
-        # Salva no Banco (com Try/Except para não travar a tela de sucesso)
-        if aprovado:
-            try:
-                db.collection('resultados').add({
-                    "usuario": usuario_logado["nome"], "modo": "Exame de Faixa",
-                    "faixa": faixa_sel, "pontuacao": percentual,
-                    "acertos": acertos, "total_questoes": total,
-                    "data": firestore.SERVER_TIMESTAMP, "codigo_verificacao": codigo
-                })
-            except Exception as e:
-                print(f"Erro silencioso ao salvar: {e}")
-        
-        # Salva estado e força recarregamento
-        st.session_state.prova_concluida = True
-        st.session_state.resultado_final = {
-            "usuario": usuario_logado["nome"], "faixa": faixa_sel,
-            "acertos": acertos, "total": total, "percentual": percentual,
-            "codigo": codigo, "aprovado": aprovado, "tempo_esgotado": tempo_esgotado
-        }
-        st.rerun()
+            if aprovado:
+                # 1. Gera código
+                try: codigo = gerar_codigo_verificacao()
+                except: import random; codigo = f"BJJ-{random.randint(1000,9999)}"
+
+                # 2. Salva no Banco
+                try:
+                    db.collection('resultados').add({
+                        "usuario": usuario_logado["nome"], "modo": "Exame de Faixa",
+                        "faixa": faixa_sel, "pontuacao": percentual,
+                        "acertos": acertos, "total_questoes": total,
+                        "data": firestore.SERVER_TIMESTAMP, "codigo_verificacao": codigo
+                    })
+                except Exception as e: print(f"Erro save: {e}")
+                
+                # 3. GERA PDF AGORA (Para não travar depois)
+                try:
+                    pdf_path = gerar_pdf(usuario_logado['nome'], faixa_sel, acertos, total, codigo)
+                    with open(pdf_path, "rb") as f:
+                        pdf_bytes = f.read()
+                    pdf_name = os.path.basename(pdf_path)
+                except Exception as e: print(f"Erro PDF: {e}")
+            
+            # Salva tudo na sessão para exibição instantânea
+            st.session_state.prova_concluida = True
+            st.session_state.resultado_final = {
+                "usuario": usuario_logado["nome"], "faixa": faixa_sel,
+                "acertos": acertos, "total": total, "percentual": percentual,
+                "codigo": codigo, "aprovado": aprovado, "tempo_esgotado": tempo_esgotado,
+                "pdf_bytes": pdf_bytes, "pdf_name": pdf_name
+            }
+            st.rerun()
 
 # =========================================
-# RANKING
+# RANKING e CERTIFICADOS (Mantidos iguais)
 # =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking</h1>", unsafe_allow_html=True)
     db = get_db()
-    
     docs = db.collection('rola_resultados').stream()
     data = [d.to_dict() for d in docs]
     if not data: st.info("Ranking vazio."); return
@@ -342,14 +354,10 @@ def ranking():
         rdf = df.groupby("usuario", as_index=False).agg(media=("percentual", "mean"), total=("usuario", "count")).sort_values("media", ascending=False)
         st.dataframe(rdf, use_container_width=True)
 
-# =========================================
-# MEUS CERTIFICADOS
-# =========================================
 def meus_certificados(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
     db = get_db()
     docs = db.collection('resultados').where('usuario', '==', usuario_logado['nome']).where('modo', '==', 'Exame de Faixa').stream()
-    
     lista = [d.to_dict() for d in docs]
     if not lista: st.info("Sem certificados."); return
 
