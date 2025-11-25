@@ -1,246 +1,302 @@
 import streamlit as st
-import json
-import os
 import random
-import sqlite3
+import os
 from datetime import datetime
 import pandas as pd
 import plotly.express as px
-from config import DB_PATH
-from utils import carregar_questoes, gerar_codigo_verificacao, gerar_pdf, normalizar_nome
+from database import get_db
+from utils import gerar_codigo_verificacao, gerar_pdf
+from firebase_admin import firestore
 
 # =========================================
-# MODO ROLA
+# MODO ROLA (Treino Livre)
 # =========================================
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
+    db = get_db()
 
-    path_questions = "questions"
-    os.makedirs(path_questions, exist_ok=True)
-    temas = [f.replace(".json", "") for f in os.listdir(path_questions) if f.endswith(".json")]
-    temas.append("Todos os Temas")
+    # 1. Carrega TEMAS disponíveis no Firestore
+    # (Buscamos todas as questões e extraímos os temas únicos)
+    docs_questoes = list(db.collection('questoes').stream())
+    
+    if not docs_questoes:
+        st.warning("O banco de questões está vazio. Peça ao professor para cadastrar perguntas.")
+        return
+
+    todas_questoes = [d.to_dict() for d in docs_questoes]
+    temas = sorted(list(set(q.get('tema', 'Geral') for q in todas_questoes)))
+    temas.insert(0, "Todos os Temas")
 
     col1, col2 = st.columns(2)
     with col1:
         tema = st.selectbox("Selecione o tema:", temas)
     with col2:
+        # A faixa aqui é apenas informativa para o registro do treino
         faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
 
     if st.button("Iniciar Treino 🤼", use_container_width=True):
+        # Filtra questões
         if tema == "Todos os Temas":
-            questoes = []
-            for arquivo in os.listdir(path_questions):
-                if arquivo.endswith(".json"):
-                    try:
-                        with open(f"{path_questions}/{arquivo}", "r", encoding="utf-8") as f:
-                            questoes += json.load(f)
-                    except: continue
+            questoes_selecionadas = todas_questoes
         else:
-            questoes = carregar_questoes(tema)
+            questoes_selecionadas = [q for q in todas_questoes if q.get('tema') == tema]
 
-        if not questoes:
-            st.error("Nenhuma questão disponível.")
+        if not questoes_selecionadas:
+            st.error("Nenhuma questão encontrada para este tema.")
             return
 
-        random.shuffle(questoes)
+        random.shuffle(questoes_selecionadas)
+        # Limita a 10 perguntas para treino rápido (opcional)
+        questoes_treino = questoes_selecionadas[:10] 
+        
+        # --- INTERFACE DO TREINO ---
+        # Como o Streamlit recarrega, precisamos usar um container ou expanders para mostrar o resultado
+        # Mas para o Modo Rola simples, vamos mostrar tudo de uma vez
+        
         acertos = 0
-        total = len(questoes)
+        respostas_usuario = {}
+        
+        st.markdown("---")
+        with st.form("form_treino"):
+            for i, q in enumerate(questoes_treino, 1):
+                st.markdown(f"**{i}.** {q['pergunta']}")
+                
+                if q.get("imagem"):
+                    st.image(q["imagem"])
+                
+                # Opções
+                opcoes = q.get('opcoes', [])
+                respostas_usuario[i] = st.radio(f"Opções {i}", options=opcoes, key=f"q_{i}", index=None)
+                st.markdown("---")
+            
+            enviar = st.form_submit_button("Finalizar Treino")
 
-        st.markdown(f"### 🧩 Total de questões: {total}")
-
-        for i, q in enumerate(questoes, 1):
-            st.markdown(f"### {i}. {q['pergunta']}")
+        if enviar:
+            total = len(questoes_treino)
+            for i, q in enumerate(questoes_treino, 1):
+                resp = respostas_usuario.get(i)
+                if resp and resp == q.get('resposta'): # Verifica se bate com a resposta correta salva
+                    acertos += 1
             
-            if q.get("imagem") and os.path.exists(q["imagem"]):
-                st.image(q["imagem"])
+            percentual = int((acertos / total) * 100)
             
-            resposta = st.radio("Escolha:", q["opcoes"], key=f"rola_{i}")
+            # Salva histórico
+            db.collection('rola_resultados').add({
+                "usuario": usuario_logado["nome"],
+                "faixa": faixa,
+                "tema": tema,
+                "acertos": acertos,
+                "total": total,
+                "percentual": percentual,
+                "data": firestore.SERVER_TIMESTAMP
+            })
             
-            if st.button(f"Confirmar {i}", key=f"conf_{i}"):
-                if resposta.startswith(q["resposta"]):
-                    st.success("Correto!")
-                else:
-                    st.error(f"Errado. Era: {q['resposta']}")
-            st.markdown("---")
+            st.balloons()
+            st.success(f"Treino concluído! Você acertou {acertos} de {total} ({percentual}%).")
 
 # =========================================
-# EXAME DE FAIXA (CORRIGIDO)
+# EXAME DE FAIXA
 # =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
+    db = get_db()
 
-    # Verifica liberação
+    # 1. VERIFICAÇÃO DE SEGURANÇA (NO FIRESTORE)
     if usuario_logado["tipo"] == "aluno":
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("SELECT exame_habilitado FROM alunos WHERE usuario_id=?", (usuario_logado["id"],))
-        dado = cursor.fetchone()
-        conn.close()
+        # Busca o documento do aluno vinculado ao usuário logado
+        alunos_query = db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).stream()
+        aluno_doc = next(alunos_query, None)
         
-        if not dado or dado[0] == 0:
-            st.warning("🚫 Seu exame ainda não foi liberado pelo professor.")
+        permitido = False
+        msg_bloqueio = "Seu exame ainda não foi liberado pelo professor."
+        
+        if aluno_doc:
+            dados = aluno_doc.to_dict()
+            if dados.get('exame_habilitado'):
+                # Verifica datas se existirem
+                agora = datetime.now()
+                inicio = dados.get('exame_inicio')
+                fim = dados.get('exame_fim')
+                
+                if inicio and fim:
+                    # Remove timezone para comparação simples
+                    ini_tz = inicio.replace(tzinfo=None)
+                    fim_tz = fim.replace(tzinfo=None)
+                    if ini_tz <= agora <= fim_tz:
+                        permitido = True
+                    else:
+                        msg_bloqueio = f"Fora do período. Disponível entre {ini_tz.strftime('%d/%m %H:%M')} e {fim_tz.strftime('%d/%m %H:%M')}."
+                else:
+                    # Se não tiver data configurada mas estiver habilitado, libera (ou bloqueia, dependendo da regra)
+                    permitido = True 
+            
+        if not permitido:
+            st.warning(f"🚫 {msg_bloqueio}")
             return
 
-    faixa = st.selectbox("Selecione sua faixa:", ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+    # 2. SELEÇÃO DA PROVA
+    faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+    faixa_sel = st.selectbox("Selecione a faixa do exame:", faixas)
     
-    exame_path = f"exames/faixa_{faixa.lower()}.json"
-    if not os.path.exists(exame_path):
-        st.error("Nenhum exame cadastrado para esta faixa.")
+    # 3. BUSCA A PROVA NO FIRESTORE
+    # Procuramos na coleção 'exames' um documento com o ID da faixa (ex: 'Azul')
+    doc_exame = db.collection('exames').document(faixa_sel).get()
+    
+    if not doc_exame.exists:
+        st.info(f"Ainda não há prova cadastrada para a faixa {faixa_sel}.")
         return
-
-    try:
-        with open(exame_path, "r", encoding="utf-8") as f:
-            exame = json.load(f)
-    except:
-        st.error("Erro ao carregar arquivo do exame.")
-        return
-
-    questoes = exame.get("questoes", [])
-    if not questoes:
-        st.info("Sem questões neste exame.")
-        return
-
-    # Renderiza as questões
-    respostas = {}
-    for i, q in enumerate(questoes, 1):
-        st.markdown(f"**{i}. {q['pergunta']}**")
-        if q.get("imagem") and os.path.exists(q["imagem"]):
-            st.image(q["imagem"])
-            
-        respostas[i] = st.radio("Alternativa:", q["opcoes"], key=f"exame_resp_{i}", index=None)
-        st.markdown("---")
-
-    # Botão de Finalizar
-    finalizar = st.button("Finalizar Exame 🏁", use_container_width=True)
-
-    # --- LÓGICA DE PROCESSAMENTO ---
-    if finalizar:
-        acertos = sum(1 for i, q in enumerate(questoes, 1) if respostas.get(i, "") and respostas[i].startswith(q["resposta"]))
-        total = len(questoes)
-        percentual = int((acertos / total) * 100) if total > 0 else 0
         
-        st.markdown(f"## Resultado: {percentual}% de acertos ({acertos}/{total})")
+    dados_exame = doc_exame.to_dict()
+    lista_questoes_prova = dados_exame.get('questoes', [])
+    
+    if not lista_questoes_prova:
+        st.warning("Esta prova está sem questões. Avise seu professor.")
+        return
 
-        if percentual >= 70:
-            st.success("🎉 APROVADO! Seu certificado foi gerado.")
+    st.markdown(f"### 📝 Prova de Faixa {faixa_sel}")
+    st.caption(f"Total de questões: {len(lista_questoes_prova)}")
+
+    # 4. APLICAÇÃO DA PROVA
+    # Usamos st.form para não recarregar a cada clique
+    respostas = {}
+    with st.form(key=f"form_prova_{faixa_sel}"):
+        for i, q in enumerate(lista_questoes_prova, 1):
+            st.markdown(f"**{i}.** {q['pergunta']}")
             
+            if q.get("imagem"):
+                st.image(q["imagem"])
+            
+            # As opções já devem vir salvas na questão
+            # O ideal é salvar a resposta certa separada ou criptografada, mas aqui vem junto no dict q
+            respostas[i] = st.radio("Selecione:", q.get('opcoes', []), key=f"resp_{i}", index=None)
+            st.markdown("---")
+            
+        finalizar = st.form_submit_button("Finalizar Exame 🏁", use_container_width=True)
+
+    # 5. CORREÇÃO E SALVAMENTO
+    if finalizar:
+        acertos = 0
+        total = len(lista_questoes_prova)
+        
+        # Verifica respostas
+        for i, q in enumerate(lista_questoes_prova, 1):
+            resp_user = respostas.get(i)
+            resp_certa = q.get('resposta')
+            
+            # A resposta pode estar salva como "A" ou "A) Texto". O radio retorna o texto inteiro.
+            # Vamos assumir que 'resp_certa' é a string exata ou o prefixo.
+            if resp_user:
+                # Lógica simples: se a string da resposta certa estiver contida na escolhida
+                # Ex: resp_certa="A", resp_user="A) Raspagem" -> Match
+                if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
+                    acertos += 1
+        
+        percentual = int((acertos / total) * 100)
+        
+        # Resultado
+        if percentual >= 70:
+            st.success(f"🎉 APROVADO! Nota: {percentual}% ({acertos}/{total})")
             codigo = gerar_codigo_verificacao()
             
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute("""
-                INSERT INTO resultados (usuario, modo, faixa, pontuacao, acertos, total_questoes, data, codigo_verificacao)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (usuario_logado["nome"], "Exame de Faixa", faixa, percentual, acertos, total, datetime.now(), codigo))
-            conn.commit()
-            conn.close()
-
-            st.session_state["certificado_pronto"] = True
-            st.session_state["dados_certificado"] = {
+            # Salva resultado
+            db.collection('resultados').add({
                 "usuario": usuario_logado["nome"],
-                "faixa": faixa,
+                "modo": "Exame de Faixa",
+                "faixa": faixa_sel,
+                "pontuacao": percentual,
                 "acertos": acertos,
-                "total": total,
-                "codigo": codigo
+                "total_questoes": total,
+                "data": firestore.SERVER_TIMESTAMP,
+                "codigo_verificacao": codigo
+            })
+            
+            # Habilita download do certificado
+            st.session_state['certificado_temp'] = {
+                "usuario": usuario_logado["nome"], "faixa": faixa_sel,
+                "acertos": acertos, "total": total, "codigo": codigo
             }
         else:
-            st.error("Reprovado. Tente novamente.")
-            st.session_state["certificado_pronto"] = False
-
-    # --- BOTÃO DE DOWNLOAD (COM TRATAMENTO DE ERRO) ---
-    if st.session_state.get("certificado_pronto"):
-        st.info("📥 Seu certificado está pronto para download abaixo:")
-        
-        dados = st.session_state["dados_certificado"]
-        
-        try:
-            caminho_pdf = gerar_pdf(
-                dados["usuario"],
-                dados["faixa"],
-                dados["acertos"],
-                dados["total"],
-                dados["codigo"]
-            )
-            
-            if os.path.exists(caminho_pdf):
-                with open(caminho_pdf, "rb") as f:
-                    st.download_button(
-                        label="📄 Baixar Certificado PDF",
-                        data=f.read(),
-                        file_name=os.path.basename(caminho_pdf),
-                        mime="application/pdf",
-                        use_container_width=True
-                    )
-            else:
-                st.error(f"Erro: O arquivo PDF não foi encontrado em {caminho_pdf}.")
-                
-        except Exception as e:
-            st.error(f"Ocorreu um erro ao gerar o PDF: {e}")
-            # Dica: Se o erro for 'name gerar_qrcode is not defined', verifique o arquivo utils.py
+            st.error(f"Reprovado. Nota: {percentual}%. Mínimo: 70%.")
+    
+    # Botão de Download (fora do form para persistir)
+    if 'certificado_temp' in st.session_state:
+        dados = st.session_state['certificado_temp']
+        if dados['faixa'] == faixa_sel: # Garante que é o cert da prova atual
+            try:
+                pdf_path = gerar_pdf(dados['usuario'], dados['faixa'], dados['acertos'], dados['total'], dados['codigo'])
+                with open(pdf_path, "rb") as f:
+                    st.download_button("📥 Baixar Certificado", f.read(), os.path.basename(pdf_path), "application/pdf", use_container_width=True)
+            except Exception as e:
+                st.error(f"Erro ao gerar PDF: {e}")
 
 # =========================================
 # RANKING
 # =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking</h1>", unsafe_allow_html=True)
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM rola_resultados", conn)
-    conn.close()
-
-    if df.empty:
-        st.info("Ranking vazio.")
+    db = get_db()
+    
+    # Busca dados do Firestore
+    docs = db.collection('rola_resultados').stream()
+    data = [d.to_dict() for d in docs]
+    
+    if not data:
+        st.info("O Ranking ainda está vazio. Bora treinar!")
         return
 
-    ranking_df = df.groupby("usuario", as_index=False).agg(
-        media_percentual=("percentual", "mean"),
-        total_treinos=("id", "count")
-    ).sort_values(by="media_percentual", ascending=False)
+    df = pd.DataFrame(data)
+    
+    # Agrupa e calcula média
+    if 'usuario' in df.columns and 'percentual' in df.columns:
+        ranking_df = df.groupby("usuario", as_index=False).agg(
+            media_percentual=("percentual", "mean"),
+            total_treinos=("usuario", "count")
+        ).sort_values(by="media_percentual", ascending=False)
 
-    ranking_df["media_percentual"] = ranking_df["media_percentual"].round(2)
-    st.dataframe(ranking_df, use_container_width=True)
-
-    fig = px.bar(ranking_df.head(10), x="usuario", y="media_percentual", title="Top 10 Média de Acertos")
-    st.plotly_chart(fig, use_container_width=True)
+        ranking_df["media_percentual"] = ranking_df["media_percentual"].round(1)
+        
+        st.dataframe(
+            ranking_df, 
+            column_config={
+                "media_percentual": st.column_config.ProgressColumn("Aproveitamento Médio", format="%f%%", min_value=0, max_value=100),
+                "total_treinos": st.column_config.NumberColumn("Treinos Realizados")
+            },
+            use_container_width=True
+        )
+    else:
+        st.error("Dados insuficientes para gerar ranking.")
 
 # =========================================
 # MEUS CERTIFICADOS
 # =========================================
 def meus_certificados(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
-
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT faixa, pontuacao, data, codigo_verificacao, acertos, total_questoes
-        FROM resultados
-        WHERE usuario = ? AND modo = 'Exame de Faixa'
-        ORDER BY data DESC
-    """, (usuario_logado["nome"],))
-    certificados = cursor.fetchall()
-    conn.close()
+    db = get_db()
+    
+    docs = db.collection('resultados')\
+             .where('usuario', '==', usuario_logado['nome'])\
+             .where('modo', '==', 'Exame de Faixa').stream()
+             
+    certificados = [d.to_dict() for d in docs]
 
     if not certificados:
-        st.info("Nenhum certificado encontrado.")
+        st.info("Você ainda não possui certificados.")
         return
 
-    for i, (faixa, pontuacao, data, codigo, acertos, total) in enumerate(certificados, 1):
-        st.markdown(f"### 🥋 Faixa {faixa}")
-        st.write(f"Data: {data} | Nota: {pontuacao}% | Código: {codigo}")
-        
-        acertos_safe = acertos if acertos is not None else int((pontuacao/100)*10)
-        total_safe = total if total is not None else 10
-
-        try:
-            caminho_pdf = gerar_pdf(usuario_logado["nome"], faixa, acertos_safe, total_safe, codigo)
-            with open(caminho_pdf, "rb") as f:
-                st.download_button(
-                    label=f"Baixar Certificado {faixa}",
-                    data=f.read(),
-                    file_name=os.path.basename(caminho_pdf),
-                    mime="application/pdf",
-                    key=f"cert_{i}",
-                    use_container_width=True
+    for i, cert in enumerate(certificados):
+        with st.container(border=True):
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"### 🥋 Faixa {cert.get('faixa')}")
+            c1.write(f"**Nota:** {cert.get('pontuacao')}% | **Código:** {cert.get('codigo_verificacao')}")
+            
+            # Recria o PDF sob demanda
+            try:
+                path = gerar_pdf(
+                    usuario_logado['nome'], cert.get('faixa'), 
+                    cert.get('acertos', 0), cert.get('total_questoes', 10), 
+                    cert.get('codigo_verificacao')
                 )
-        except Exception as e:
-            st.error(f"Erro ao gerar este certificado: {e}")
-        st.markdown("---")
+                with open(path, "rb") as f:
+                    c2.download_button("📥 Baixar", f.read(), os.path.basename(path), "application/pdf", key=f"dn_{i}")
+            except:
+                c2.error("Erro PDF")
