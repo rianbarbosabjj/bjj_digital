@@ -8,10 +8,6 @@ import json
 from datetime import datetime, time
 from firebase_admin import firestore
 
-# ... (As funções gestao_usuarios e gestao_questoes permanecem IGUAIS, vou resumir para focar na mudança) ...
-# Copie as funções gestao_usuarios e gestao_questoes do seu código anterior ou mantenha se já estiverem lá.
-# A alteração principal é na função abaixo:
-
 # =========================================
 # GESTÃO DE USUÁRIOS
 # =========================================
@@ -54,13 +50,7 @@ def gestao_usuarios(usuario_logado):
     if selecionado_str:
         index_selecionado = opcoes_selecao.index(selecionado_str)
         user_id = lista_usuarios[index_selecionado]['id_doc']
-        
-        user_ref = db.collection('usuarios').document(user_id)
-        user_data = user_ref.get().to_dict()
-
-        if not user_data:
-            st.error("Usuário não encontrado.")
-            return
+        user_data = lista_usuarios[index_selecionado]
 
         with st.expander(f"⚙️ Editar: {user_data.get('nome')}", expanded=True):
             with st.form(key="form_edit_user_admin"):
@@ -77,7 +67,7 @@ def gestao_usuarios(usuario_logado):
                 
                 if st.form_submit_button("💾 Salvar"):
                     try:
-                        user_ref.update({
+                        db.collection('usuarios').document(user_id).update({
                             "nome": novo_nome.upper(), "email": novo_email.lower().strip(),
                             "cpf": novo_cpf, "tipo_usuario": novo_tipo
                         })
@@ -92,13 +82,14 @@ def gestao_usuarios(usuario_logado):
                     if st.form_submit_button("Redefinir Senha"):
                         if n_senha:
                             h = bcrypt.hashpw(n_senha.encode(), bcrypt.gensalt()).decode()
-                            user_ref.update({"senha": h})
+                            db.collection('usuarios').document(user_id).update({"senha": h})
                             st.success("Senha alterada.")
 
             st.markdown("---")
             st.warning("Zona de Perigo")
             if st.button("🗑️ Excluir Usuário"):
-                user_ref.delete()
+                db.collection('usuarios').document(user_id).delete()
+                # Limpeza de vínculos (batch)
                 batch = db.batch()
                 for a_doc in db.collection('alunos').where('usuario_id', '==', user_id).stream():
                     batch.delete(a_doc.reference)
@@ -109,9 +100,11 @@ def gestao_usuarios(usuario_logado):
                 st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES
+# GESTÃO DE QUESTÕES (FIRESTORE)
 # =========================================
 def gestao_questoes():
+    """Gestão de Banco de Questões no Firestore."""
+    
     user = st.session_state.usuario
     if user["tipo"] not in ["admin", "professor"]:
         st.error("Acesso negado.")
@@ -120,20 +113,28 @@ def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
     db = get_db()
 
+    # 1. Carregar questões existentes
     docs_q = list(db.collection('questoes').stream())
     todas_questoes = []
     temas_set = set()
+    
     for doc in docs_q:
         d = doc.to_dict()
         d['id'] = doc.id
         todas_questoes.append(d)
         temas_set.add(d.get('tema', 'Geral'))
+        
     temas_existentes = sorted(list(temas_set))
     
+    # 2. Seleção de Tema
     c1, c2 = st.columns([3, 1])
     tema_sel = c1.selectbox("Filtrar/Adicionar Tema:", ["Novo Tema"] + temas_existentes)
-    tema_atual = c2.text_input("Nome do novo tema:") if tema_sel == "Novo Tema" else tema_sel
+    
+    tema_atual = tema_sel
+    if tema_sel == "Novo Tema":
+        tema_atual = c2.text_input("Nome do novo tema:")
 
+    # 3. Formulário de Adição
     with st.expander("➕ Adicionar Nova Questão", expanded=False):
         with st.form("form_add_q"):
             pergunta = st.text_area("Pergunta:")
@@ -143,6 +144,7 @@ def gestao_questoes():
             cols2 = st.columns(2)
             op_c = cols2[0].text_input("Opção C:")
             op_d = cols2[1].text_input("Opção D:")
+            
             correta_letra = st.selectbox("Qual a correta?", ["A", "B", "C", "D"])
             img = st.text_input("URL da Imagem (Opcional):")
 
@@ -150,6 +152,7 @@ def gestao_questoes():
                 if pergunta and tema_atual and op_a and op_b:
                     opcoes_raw = [op_a, op_b, op_c, op_d]
                     opcoes_limpas = [o for o in opcoes_raw if o.strip()]
+                    
                     mapa = {"A": op_a, "B": op_b, "C": op_c, "D": op_d}
                     resp_texto = mapa.get(correta_letra)
                     
@@ -157,17 +160,24 @@ def gestao_questoes():
                         st.error("A opção correta não pode estar vazia.")
                     else:
                         nova_q = {
-                            "tema": tema_atual, "pergunta": pergunta, "opcoes": opcoes_limpas,
-                            "resposta": resp_texto, "imagem": img, "criado_por": user['nome'],
+                            "tema": tema_atual,
+                            "pergunta": pergunta,
+                            "opcoes": opcoes_limpas,
+                            "resposta": resp_texto,
+                            "imagem": img,
+                            "criado_por": user['nome'],
                             "data": firestore.SERVER_TIMESTAMP
                         }
                         db.collection('questoes').add(nova_q)
                         st.success("Salvo!")
                         st.rerun()
-                else: st.warning("Preencha a pergunta e pelo menos 2 opções.")
+                else:
+                    st.warning("Preencha a pergunta e pelo menos 2 opções.")
 
+    # 4. Listagem e Exclusão
     st.markdown(f"### Questões do tema: {tema_atual}")
     questoes_filtradas = [q for q in todas_questoes if q.get('tema') == tema_atual]
+    
     if not questoes_filtradas:
         st.info("Nenhuma questão neste tema.")
     else:
@@ -180,7 +190,7 @@ def gestao_questoes():
                     st.rerun()
 
 # =========================================
-# GESTÃO DE EXAME DE FAIXA (ATUALIZADO COM TEMPO)
+# GESTÃO DE EXAME DE FAIXA (FIRESTORE)
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
@@ -196,7 +206,7 @@ def gestao_exame_de_faixa():
     # ABA 1: MONTAR PROVA
     # ---------------------------------------------------------
     with tab_prova:
-        st.subheader("Configurar Perguntas e Tempo")
+        st.subheader("Configurar Prova")
         db = get_db()
         
         faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
@@ -204,27 +214,14 @@ def gestao_exame_de_faixa():
 
         doc_ref = db.collection('exames').document(faixa)
         doc_prova = doc_ref.get()
-        
-        questoes_na_prova = []
-        tempo_limite_atual = 60 # Default 60 min
-        
         if doc_prova.exists:
             prova_data = doc_prova.to_dict()
             questoes_na_prova = prova_data.get('questoes', [])
-            tempo_limite_atual = prova_data.get('tempo_limite', 60)
+        else:
+            questoes_na_prova = []
 
-        # --- CONFIGURAÇÃO DE TEMPO ---
-        # Agora o professor pode definir o tempo
-        col_tempo, col_vazia = st.columns([1, 3])
-        novo_tempo = col_tempo.number_input(
-            "⏱️ Tempo Limite (minutos):", 
-            min_value=10, max_value=240, value=tempo_limite_atual, step=10,
-            help="Tempo total para o aluno responder todas as questões."
-        )
-
-        # Carrega todas as questões para seleção
         docs_q = db.collection('questoes').stream()
-        todas_q = [d.to_dict() for d in docs_q]
+        todas_q = [d.to_dict() for d in docs_q] 
         
         temas = sorted(list(set(q.get('tema', 'Geral') for q in todas_q)))
         filtro = st.selectbox("Filtrar banco por tema:", ["Todos"] + temas)
@@ -248,24 +245,18 @@ def gestao_exame_de_faixa():
                             selecionadas.append(q)
                     with c_det:
                         st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
-                        # Mostra alternativas para facilitar escolha
-                        if 'opcoes' in q:
-                            txt_opts = " | ".join(q['opcoes'])
-                            st.caption(f"Opções: {txt_opts[:100]}...")
+                        st.caption(f"✅ {q.get('resposta')}")
                         st.markdown("---")
             
-            # Botão Salvar agora atualiza Questões E Tempo
-            if st.form_submit_button("➕ Salvar Prova (Questões e Tempo)"):
+            if st.form_submit_button("➕ Adicionar à Prova"):
                 questoes_na_prova.extend(selecionadas)
-                
-                doc_ref.set({
+                db.collection('exames').document(faixa).set({
                     "faixa": faixa,
                     "questoes": questoes_na_prova,
-                    "tempo_limite": novo_tempo, # <--- SALVA O TEMPO
                     "atualizado_em": firestore.SERVER_TIMESTAMP,
                     "atualizado_por": user_logado['nome']
                 })
-                st.success(f"Prova atualizada! Tempo definido: {novo_tempo} min.")
+                st.success("Prova atualizada!")
                 st.rerun()
 
         st.markdown("---")
@@ -278,10 +269,9 @@ def gestao_exame_de_faixa():
                     st.caption(f"Resp: {q.get('resposta')}")
                     if st.button("Remover", key=f"rm_{i}"):
                         questoes_na_prova.pop(i)
-                        doc_ref.update({
-                            "questoes": questoes_na_prova,
-                            # Mantém o tempo atual ao remover questão
-                            "tempo_limite": novo_tempo 
+                        db.collection('exames').document(faixa).set({
+                            "faixa": faixa,
+                            "questoes": questoes_na_prova
                         })
                         st.rerun()
         else:
@@ -292,7 +282,8 @@ def gestao_exame_de_faixa():
     # ---------------------------------------------------------
     with tab_alunos:
         st.subheader("Autorizar Alunos")
-        
+        db = get_db()
+
         equipes_permitidas = []
         if user_logado['tipo'] == 'admin':
             equipes_permitidas = None 
@@ -307,7 +298,10 @@ def gestao_exame_de_faixa():
             
             if not equipes_permitidas:
                 st.warning("Sem equipes vinculadas.")
-                st.stop() 
+                # Aqui uso st.stop() para não renderizar o resto se não tiver equipe,
+                # mas como estamos dentro de um 'with tab', o st.stop() pararia todo o script.
+                # Melhor usar return, pois estamos em uma função.
+                return
 
         alunos_ref = db.collection('alunos')
         if equipes_permitidas:
@@ -323,7 +317,7 @@ def gestao_exame_de_faixa():
             users_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('usuarios').stream()}
             equipes_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('equipes').stream()}
             
-            st.markdown("#### Configurar Período Disponível")
+            st.markdown("#### Configurar Data")
             c_ini, c_fim = st.columns(2)
             d_ini = c_ini.date_input("Início:", value=datetime.now())
             h_ini = c_ini.time_input("Hora:", value=time(0, 0))
@@ -339,7 +333,7 @@ def gestao_exame_de_faixa():
             h[0].markdown("**Aluno**")
             h[1].markdown("**Equipe**")
             h[2].markdown("**Faixa**")
-            h[3].markdown("**Status**")
+            h[3].markdown("**Status/Data**")
             h[4].markdown("**Ação**")
             
             for doc in docs_alunos:
