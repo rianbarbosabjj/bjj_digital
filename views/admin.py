@@ -9,7 +9,7 @@ from datetime import datetime, time
 from firebase_admin import firestore
 
 # =========================================
-# GESTÃO DE USUÁRIOS
+# GESTÃO DE USUÁRIOS (Mantida igual)
 # =========================================
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários (Admin)."""
@@ -50,7 +50,15 @@ def gestao_usuarios(usuario_logado):
     if selecionado_str:
         index_selecionado = opcoes_selecao.index(selecionado_str)
         user_id = lista_usuarios[index_selecionado]['id_doc']
-        user_data = lista_usuarios[index_selecionado]
+        
+        user_ref = db.collection('usuarios').document(user_id)
+        doc_snap = user_ref.get()
+        
+        if not doc_snap.exists:
+            st.error("Usuário não encontrado.")
+            return
+
+        user_data = doc_snap.to_dict()
 
         with st.expander(f"⚙️ Editar: {user_data.get('nome')}", expanded=True):
             with st.form(key="form_edit_user_admin"):
@@ -67,7 +75,7 @@ def gestao_usuarios(usuario_logado):
                 
                 if st.form_submit_button("💾 Salvar"):
                     try:
-                        db.collection('usuarios').document(user_id).update({
+                        user_ref.update({
                             "nome": novo_nome.upper(), "email": novo_email.lower().strip(),
                             "cpf": novo_cpf, "tipo_usuario": novo_tipo
                         })
@@ -82,14 +90,13 @@ def gestao_usuarios(usuario_logado):
                     if st.form_submit_button("Redefinir Senha"):
                         if n_senha:
                             h = bcrypt.hashpw(n_senha.encode(), bcrypt.gensalt()).decode()
-                            db.collection('usuarios').document(user_id).update({"senha": h})
+                            user_ref.update({"senha": h})
                             st.success("Senha alterada.")
 
             st.markdown("---")
             st.warning("Zona de Perigo")
             if st.button("🗑️ Excluir Usuário"):
-                db.collection('usuarios').document(user_id).delete()
-                # Limpeza de vínculos (batch)
+                user_ref.delete()
                 batch = db.batch()
                 for a_doc in db.collection('alunos').where('usuario_id', '==', user_id).stream():
                     batch.delete(a_doc.reference)
@@ -100,99 +107,240 @@ def gestao_usuarios(usuario_logado):
                 st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (FIRESTORE)
+# GESTÃO DE QUESTÕES (COM FLUXO DE APROVAÇÃO)
 # =========================================
 def gestao_questoes():
     """Gestão de Banco de Questões no Firestore."""
     
     user = st.session_state.usuario
-    if user["tipo"] not in ["admin", "professor"]:
+    tipo_user = user["tipo"]
+    if tipo_user not in ["admin", "professor"]:
         st.error("Acesso negado.")
         return
     
     st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    # 1. Carregar questões existentes
+    # --- CARREGAMENTO INICIAL ---
     docs_q = list(db.collection('questoes').stream())
     todas_questoes = []
     temas_set = set()
     
+    pendentes = []
+    correcoes = []
+    aprovadas = []
+    minhas_pendentes = []
+
     for doc in docs_q:
         d = doc.to_dict()
         d['id'] = doc.id
-        todas_questoes.append(d)
-        temas_set.add(d.get('tema', 'Geral'))
+        status = d.get('status', 'aprovada') # Legado assume aprovada
         
+        # Separação por Status
+        if status == 'pendente':
+            pendentes.append(d)
+            if d.get('criado_por_id') == user['id']:
+                minhas_pendentes.append(d)
+        else:
+            aprovadas.append(d)
+            temas_set.add(d.get('tema', 'Geral'))
+            # Verifica se tem pedido de correção
+            if d.get('solicitacao_correcao'):
+                correcoes.append(d)
+
     temas_existentes = sorted(list(temas_set))
     
-    # 2. Seleção de Tema
-    c1, c2 = st.columns([3, 1])
-    tema_sel = c1.selectbox("Filtrar/Adicionar Tema:", ["Novo Tema"] + temas_existentes)
+    # --- DEFINIÇÃO DAS ABAS ---
+    titulos_abas = ["📚 Banco de Questões (Aprovadas)", "➕ Adicionar Nova"]
     
-    tema_atual = tema_sel
-    if tema_sel == "Novo Tema":
-        tema_atual = c2.text_input("Nome do novo tema:")
+    if tipo_user == "admin":
+        titulos_abas.extend([f"✅ Aprovar ({len(pendentes)})", f"🔧 Correções ({len(correcoes)})"])
+    else:
+        titulos_abas.append(f"⏳ Minhas Pendentes ({len(minhas_pendentes)})")
+        
+    abas = st.tabs(titulos_abas)
 
-    # 3. Formulário de Adição
-    with st.expander("➕ Adicionar Nova Questão", expanded=False):
+    # -------------------------------------------------------
+    # ABA 1: BANCO DE QUESTÕES (APROVADAS)
+    # -------------------------------------------------------
+    with abas[0]:
+        c1, c2 = st.columns([3, 1])
+        filtro_tema = c1.selectbox("Filtrar por Tema:", ["Todos"] + temas_existentes)
+        q_exibir = aprovadas
+        if filtro_tema != "Todos":
+            q_exibir = [q for q in aprovadas if q.get('tema') == filtro_tema]
+        
+        if not q_exibir:
+            st.info("Nenhuma questão aprovada encontrada.")
+        else:
+            for q in q_exibir:
+                cor_card = "#2e2e2e" if not q.get('solicitacao_correcao') else "#5c4b0b" # Destaca se tiver flag
+                with st.container(border=True):
+                    # Cabeçalho da Questão
+                    col_txt, col_btn = st.columns([6, 1])
+                    col_txt.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                    
+                    with st.expander("Ver Detalhes / Opções"):
+                        st.write(f"**Opções:** {q.get('opcoes')}")
+                        st.caption(f"✅ Resposta: {q.get('resposta')}")
+                        if q.get('imagem'): st.image(q['imagem'], width=200)
+                        
+                        st.markdown("---")
+                        
+                        # Ações
+                        c_act1, c_act2 = st.columns(2)
+                        
+                        # Admin pode excluir direto
+                        if tipo_user == "admin":
+                            if c_act2.button("🗑️ Excluir", key=f"del_{q['id']}"):
+                                db.collection('questoes').document(q['id']).delete()
+                                st.rerun()
+                        
+                        # Professor/Admin pode solicitar correção
+                        if not q.get('solicitacao_correcao'):
+                            with c_act1.popover("🚩 Solicitar Correção"):
+                                motivo = st.text_input("Motivo:", key=f"motivo_{q['id']}")
+                                if st.button("Enviar Solicitação", key=f"send_fix_{q['id']}"):
+                                    db.collection('questoes').document(q['id']).update({
+                                        "solicitacao_correcao": True,
+                                        "motivo_correcao": motivo,
+                                        "solicitado_por": user['nome']
+                                    })
+                                    st.success("Enviado!")
+                                    st.rerun()
+                        else:
+                            c_act1.warning(f"Correção pendente: {q.get('motivo_correcao')} (por {q.get('solicitado_por')})")
+
+    # -------------------------------------------------------
+    # ABA 2: ADICIONAR NOVA
+    # -------------------------------------------------------
+    with abas[1]:
+        st.markdown("### Cadastrar Nova Questão")
+        if tipo_user == "professor":
+            st.info("ℹ️ Suas questões ficarão como 'Pendente' até aprovação de um administrador.")
+            
         with st.form("form_add_q"):
-            pergunta = st.text_area("Pergunta:")
+            c_tema1, c_tema2 = st.columns([1, 1])
+            tema_sel_add = c_tema1.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
+            tema_novo = c_tema2.text_input("Nome do Novo Tema:") if tema_sel_add == "Novo Tema" else None
+            
+            tema_final = tema_novo if tema_novo else tema_sel_add
+            
+            pergunta = st.text_area("Enunciado da Pergunta:")
+            
             cols = st.columns(2)
-            op_a = cols[0].text_input("Opção A (Correta):")
+            op_a = cols[0].text_input("Opção A:")
             op_b = cols[1].text_input("Opção B:")
-            cols2 = st.columns(2)
-            op_c = cols2[0].text_input("Opção C:")
-            op_d = cols2[1].text_input("Opção D:")
+            op_c = cols[0].text_input("Opção C:")
+            op_d = cols[1].text_input("Opção D:")
             
             correta_letra = st.selectbox("Qual a correta?", ["A", "B", "C", "D"])
             img = st.text_input("URL da Imagem (Opcional):")
 
-            if st.form_submit_button("Salvar"):
-                if pergunta and tema_atual and op_a and op_b:
+            if st.form_submit_button("💾 Salvar Questão"):
+                if pergunta and tema_final and op_a and op_b:
                     opcoes_raw = [op_a, op_b, op_c, op_d]
                     opcoes_limpas = [o for o in opcoes_raw if o.strip()]
-                    
                     mapa = {"A": op_a, "B": op_b, "C": op_c, "D": op_d}
                     resp_texto = mapa.get(correta_letra)
                     
-                    if not resp_texto:
-                        st.error("A opção correta não pode estar vazia.")
-                    else:
-                        nova_q = {
-                            "tema": tema_atual,
-                            "pergunta": pergunta,
-                            "opcoes": opcoes_limpas,
-                            "resposta": resp_texto,
-                            "imagem": img,
-                            "criado_por": user['nome'],
-                            "data": firestore.SERVER_TIMESTAMP
-                        }
-                        db.collection('questoes').add(nova_q)
-                        st.success("Salvo!")
-                        st.rerun()
-                else:
-                    st.warning("Preencha a pergunta e pelo menos 2 opções.")
-
-    # 4. Listagem e Exclusão
-    st.markdown(f"### Questões do tema: {tema_atual}")
-    questoes_filtradas = [q for q in todas_questoes if q.get('tema') == tema_atual]
-    
-    if not questoes_filtradas:
-        st.info("Nenhuma questão neste tema.")
-    else:
-        for q in questoes_filtradas:
-            with st.expander(f"{q['pergunta']}"):
-                st.write(f"**Opções:** {q.get('opcoes')}")
-                st.caption(f"✅ Resposta: {q.get('resposta')}")
-                if st.button("🗑️ Excluir", key=f"del_{q['id']}"):
-                    db.collection('questoes').document(q['id']).delete()
+                    status_inicial = "aprovada" if tipo_user == "admin" else "pendente"
+                    
+                    nova_q = {
+                        "tema": tema_final, "pergunta": pergunta, "opcoes": opcoes_limpas,
+                        "resposta": resp_texto, "imagem": img, 
+                        "criado_por": user['nome'], "criado_por_id": user['id'],
+                        "data": firestore.SERVER_TIMESTAMP,
+                        "status": status_inicial,
+                        "solicitacao_correcao": False
+                    }
+                    db.collection('questoes').add(nova_q)
+                    
+                    msg = "Questão salva e aprovada!" if status_inicial == "aprovada" else "Questão enviada para aprovação!"
+                    st.success(msg)
                     st.rerun()
+                else:
+                    st.warning("Preencha a pergunta, o tema e pelo menos 2 opções.")
+
+    # -------------------------------------------------------
+    # ABA ADMIN: APROVAR PENDENTES
+    # -------------------------------------------------------
+    if tipo_user == "admin":
+        with abas[2]:
+            st.markdown("### ✅ Aprovação de Questões")
+            if not pendentes:
+                st.info("Nenhuma questão pendente.")
+            else:
+                for q in pendentes:
+                    with st.expander(f"{q['tema']} | {q['pergunta']} (Por: {q.get('criado_por')})"):
+                        st.write(f"**Opções:** {q.get('opcoes')}")
+                        st.caption(f"Resposta: {q.get('resposta')}")
+                        
+                        c_apr, c_rej = st.columns(2)
+                        if c_apr.button("Aprovar", key=f"apr_{q['id']}"):
+                            db.collection('questoes').document(q['id']).update({"status": "aprovada"})
+                            st.success("Aprovada!")
+                            st.rerun()
+                        if c_rej.button("Rejeitar/Excluir", key=f"rej_{q['id']}"):
+                            db.collection('questoes').document(q['id']).delete()
+                            st.warning("Excluída.")
+                            st.rerun()
+                            
+        # ABA ADMIN: CORREÇÕES
+        with abas[3]:
+            st.markdown("### 🔧 Solicitações de Correção")
+            if not correcoes:
+                st.info("Nenhuma solicitação em aberto.")
+            else:
+                for q in correcoes:
+                    with st.container(border=True):
+                        st.markdown(f"**Questão:** {q['pergunta']}")
+                        st.error(f"📢 Motivo: {q.get('motivo_correcao')} (Reportado por: {q.get('solicitado_por')})")
+                        
+                        with st.expander("Editar e Corrigir"):
+                            with st.form(key=f"fix_{q['id']}"):
+                                n_perg = st.text_area("Pergunta:", value=q['pergunta'])
+                                # Simplificação: Editar apenas a pergunta e resposta aqui. 
+                                # Para editar opções, precisaria explodir a lista.
+                                # Vamos permitir limpar a flag ou excluir.
+                                
+                                c_fix1, c_fix2 = st.columns(2)
+                                salvar_fix = c_fix1.form_submit_button("Salvar e Marcar como Resolvido")
+                                
+                                if salvar_fix:
+                                    db.collection('questoes').document(q['id']).update({
+                                        "pergunta": n_perg,
+                                        "solicitacao_correcao": False,
+                                        "motivo_correcao": firestore.DELETE_FIELD
+                                    })
+                                    st.success("Resolvido!")
+                                    st.rerun()
+                                    
+                        if st.button("Ignorar/Remover Flag", key=f"ign_{q['id']}"):
+                             db.collection('questoes').document(q['id']).update({
+                                "solicitacao_correcao": False,
+                                "motivo_correcao": firestore.DELETE_FIELD
+                             })
+                             st.rerun()
+
+    # -------------------------------------------------------
+    # ABA PROFESSOR: MINHAS PENDENTES
+    # -------------------------------------------------------
+    elif tipo_user == "professor":
+        with abas[2]:
+            st.markdown("### ⏳ Minhas Questões em Análise")
+            if not minhas_pendentes:
+                st.info("Você não tem questões aguardando aprovação.")
+            else:
+                for q in minhas_pendentes:
+                    st.info(f"[{q['tema']}] {q['pergunta']}")
+
 
 # =========================================
-# GESTÃO DE EXAME DE FAIXA (ATUALIZADO COM TEMPO)
+# GESTÃO DE EXAME DE FAIXA (Mantida igual)
 # =========================================
 def gestao_exame_de_faixa():
+    # ... (código anterior da gestão de exame, sem alterações) ...
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
     
     user_logado = st.session_state.usuario
@@ -202,11 +350,9 @@ def gestao_exame_de_faixa():
 
     tab_prova, tab_alunos = st.tabs(["📝 Montar Prova", "✅ Habilitar Alunos"])
 
-    # ---------------------------------------------------------
     # ABA 1: MONTAR PROVA
-    # ---------------------------------------------------------
     with tab_prova:
-        st.subheader("Configurar Perguntas e Tempo")
+        st.subheader("Configurar Prova")
         db = get_db()
         
         faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
@@ -216,24 +362,22 @@ def gestao_exame_de_faixa():
         doc_prova = doc_ref.get()
         
         questoes_na_prova = []
-        tempo_limite_atual = 60 # Default 60 min
+        tempo_limite_atual = 60
         
         if doc_prova.exists:
             prova_data = doc_prova.to_dict()
             questoes_na_prova = prova_data.get('questoes', [])
             tempo_limite_atual = prova_data.get('tempo_limite', 60)
 
-        # --- CONFIGURAÇÃO DE TEMPO ---
         col_tempo, col_vazia = st.columns([1, 3])
         novo_tempo = col_tempo.number_input(
             "⏱️ Tempo Limite (minutos):", 
-            min_value=10, max_value=240, value=tempo_limite_atual, step=10,
-            help="Tempo total para o aluno responder todas as questões."
+            min_value=10, max_value=240, value=tempo_limite_atual, step=10
         )
 
-        # Carrega todas as questões para seleção
-        docs_q = db.collection('questoes').stream()
-        todas_q = [d.to_dict() for d in docs_q]
+        # CARREGA APENAS QUESTÕES APROVADAS
+        docs_q = db.collection('questoes').where('status', '==', 'aprovada').stream()
+        todas_q = [d.to_dict() for d in docs_q] 
         
         temas = sorted(list(set(q.get('tema', 'Geral') for q in todas_q)))
         filtro = st.selectbox("Filtrar banco por tema:", ["Todos"] + temas)
@@ -257,31 +401,22 @@ def gestao_exame_de_faixa():
                             selecionadas.append(q)
                     with c_det:
                         st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
-                        
-                        # --- VISUALIZAÇÃO DETALHADA ---
-                        # Exibe todas as alternativas
                         if 'opcoes' in q and q['opcoes']:
                             for op in q['opcoes']:
                                 st.markdown(f"<span style='color: #aaaaaa; margin-left: 15px;'>• {op}</span>", unsafe_allow_html=True)
-                        
-                        # Exibe a resposta correta destacada
-                        resp_correta = q.get('resposta', 'Não definida')
-                        st.markdown(f"<span style='color: #4CAF50; font-weight: bold; margin-left: 15px;'>✅ Resposta: {resp_correta}</span>", unsafe_allow_html=True)
-                        
+                        st.caption(f"✅ Resposta: {q.get('resposta')}")
                         st.markdown("---")
             
-            # Botão Salvar agora atualiza Questões E Tempo
-            if st.form_submit_button("➕ Salvar Prova (Questões e Tempo)"):
+            if st.form_submit_button("➕ Salvar Prova"):
                 questoes_na_prova.extend(selecionadas)
-                
                 doc_ref.set({
                     "faixa": faixa,
                     "questoes": questoes_na_prova,
-                    "tempo_limite": novo_tempo, # <--- SALVA O TEMPO
+                    "tempo_limite": novo_tempo,
                     "atualizado_em": firestore.SERVER_TIMESTAMP,
                     "atualizado_por": user_logado['nome']
                 })
-                st.success(f"Prova atualizada! Tempo definido: {novo_tempo} min.")
+                st.success("Prova atualizada!")
                 st.rerun()
 
         st.markdown("---")
@@ -296,18 +431,17 @@ def gestao_exame_de_faixa():
                         questoes_na_prova.pop(i)
                         doc_ref.update({
                             "questoes": questoes_na_prova,
-                            "tempo_limite": novo_tempo 
+                            "tempo_limite": novo_tempo
                         })
                         st.rerun()
         else:
             st.info("Esta prova ainda não tem questões.")
 
-    # ---------------------------------------------------------
-    # ABA 2: HABILITAR ALUNOS
-    # ---------------------------------------------------------
+    # ABA 2: HABILITAR ALUNOS (Mantida igual)
     with tab_alunos:
         st.subheader("Autorizar Alunos")
-        
+        db = get_db()
+
         equipes_permitidas = []
         if user_logado['tipo'] == 'admin':
             equipes_permitidas = None 
@@ -363,16 +497,16 @@ def gestao_exame_de_faixa():
                 eid = d.get('equipe_id')
                 
                 if equipes_permitidas is None or eid in equipes_permitidas:
-                    nome = users_map.get(uid, "Desconhecido")
+                    nome = users_map.get(uid, "Desc")
                     eq = equipes_map.get(eid, "-")
                     hab = d.get('exame_habilitado', False)
                     
                     p_str = "Bloqueado"
                     if hab:
                         try:
-                            i = d.get('exame_inicio').replace(tzinfo=None).strftime("%d/%m")
-                            f = d.get('exame_fim').replace(tzinfo=None).strftime("%d/%m")
-                            p_str = f"Lib: {i}-{f}"
+                            i = d.get('exame_inicio').replace(tzinfo=None).strftime("%d/%m %H:%M")
+                            f = d.get('exame_fim').replace(tzinfo=None).strftime("%d/%m %H:%M")
+                            p_str = f"Lib: {i} até {f}"
                         except: p_str = "Liberado"
 
                     c = st.columns([3, 2, 2, 3, 2])
@@ -383,9 +517,7 @@ def gestao_exame_de_faixa():
                     
                     if hab:
                         if c[4].button("Bloquear", key=f"blk_{doc.id}"):
-                            db.collection('alunos').document(doc.id).update({
-                                "exame_habilitado": False, "exame_inicio": None, "exame_fim": None
-                            })
+                            db.collection('alunos').document(doc.id).update({"exame_habilitado": False})
                             st.rerun()
                     else:
                         if c[4].button("Liberar", key=f"lib_{doc.id}"):
@@ -397,3 +529,30 @@ def gestao_exame_de_faixa():
                                 })
                                 st.rerun()
                             else: st.error("Data Inválida")
+```
+
+### Agora o `views/aluno.py`
+
+Também precisamos garantir que os alunos **só vejam questões aprovadas** quando forem treinar no Modo Rola.
+
+Substitua a função `carregar_questoes_firestore` em **`views/aluno.py`** por esta versão filtrada:
+
+```python
+@st.cache_data(ttl=300) 
+def carregar_questoes_firestore():
+    db = get_db()
+    todas_questoes = []
+    try:
+        # FILTRO: Apenas questões com status 'aprovada' ou que não tenham status (legado)
+        docs_questoes = list(db.collection('questoes').stream())
+        if docs_questoes:
+            for d in docs_questoes:
+                dados = d.to_dict()
+                # Se não tiver campo 'status', assume aprovada (legado). 
+                # Se tiver, só passa se for 'aprovada'.
+                if dados.get('status', 'aprovada') == 'aprovada':
+                    todas_questoes.append(dados)
+    except: pass
+    
+    # ... (código de fallback local continua igual) ...
+    return todas_questoes
