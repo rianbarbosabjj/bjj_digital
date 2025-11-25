@@ -5,12 +5,34 @@ import sys
 # 1. CONFIGURAÇÃO DEVE SER A PRIMEIRA LINHA DO STREAMLIT
 st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
 
+# ---------------------------------------------------------
+# MELHORIA VISUAL (ESCONDER MENU PADRÃO E RODAPÉ)
+# Funciona em Mobile e Desktop (Navegadores)
+# ---------------------------------------------------------
+st.markdown("""
+<style>
+    /* Esconde o menu do Streamlit (hambúrguer no topo direito) */
+    #MainMenu {visibility: hidden;}
+    
+    /* Esconde o rodapé padrão "Made with Streamlit" */
+    footer {visibility: hidden;}
+    
+    /* Esconde o cabeçalho decorativo colorido padrão */
+    header {visibility: hidden;}
+    
+    /* Ajuste para dispositivos móveis para remover padding excessivo no topo */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # Bloco de captura de erros de inicialização
 try:
     from streamlit_option_menu import option_menu
     
     # Importações dos Módulos Locais
-    # Colocamos dentro do try para pegar erros de importação (ex: falta de dependência)
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
     from database import get_db # Garante que o banco conecta
     from views import login, geral, aluno, professor, admin
@@ -22,7 +44,7 @@ except Exception as e:
     st.error(f"❌ Erro fatal na inicialização: {e}")
     st.stop()
 
-# CSS Global
+# CSS Global (Botões e Layout)
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
@@ -45,7 +67,7 @@ def app_principal():
         return
 
     usuario_logado = st.session_state.usuario
-    tipo_usuario = usuario_logado.get("tipo", "aluno") # .get evita erro se chave faltar
+    tipo_usuario = usuario_logado.get("tipo", "aluno") 
 
     # --- Navegação Lateral (Sidebar) ---
     def ir_para(pagina):
@@ -108,8 +130,6 @@ def app_principal():
             opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
             icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
             
-            # Verifica se exame está habilitado (lógica simplificada para evitar travamento)
-            # Se quiser reativar a verificação no banco, faça dentro do módulo aluno.py
             opcoes.insert(2, "Exame de Faixa")
             icons.insert(2, "journal-check")
 
@@ -168,4 +188,3 @@ if __name__ == "__main__":
             login.tela_login()
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado na execução: {e}")
-        # Opcional: st.exception(e) para ver o traceback completo na tela
