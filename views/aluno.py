@@ -2,7 +2,8 @@ import streamlit as st
 import random
 import os
 import json
-from datetime import datetime
+import time # Para calculos de tempo
+from datetime import datetime, timedelta
 import pandas as pd
 import plotly.express as px
 from database import get_db
@@ -109,7 +110,7 @@ def modo_rola(usuario_logado):
             st.success(f"Treino concluído! Você acertou {acertos} de {total} ({percentual}%).")
 
 # =========================================
-# EXAME DE FAIXA
+# EXAME DE FAIXA (COM CRONÔMETRO)
 # =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
@@ -139,7 +140,7 @@ def exame_de_faixa(usuario_logado):
                         else:
                             msg_bloqueio = f"Fora do período. Disponível entre {ini_tz.strftime('%d/%m %H:%M')} e {fim_tz.strftime('%d/%m %H:%M')}."
                     except:
-                        permitido = True # Fallback de data
+                        permitido = True
                 else:
                     permitido = True 
             
@@ -154,12 +155,14 @@ def exame_de_faixa(usuario_logado):
     # --- INICIALIZA ESTADO DE "PROVA EM ANDAMENTO" ---
     if 'prova_iniciada' not in st.session_state:
         st.session_state.prova_iniciada = False
+        st.session_state.fim_prova = None # Armazena datetime de fim
     
-    # Se mudou a faixa no selectbox, reseta a prova
+    # Se mudou a faixa, reseta (apenas se não estiver no meio da prova daquela faixa)
     if 'ultima_faixa_sel' not in st.session_state:
         st.session_state.ultima_faixa_sel = faixa_sel
     elif st.session_state.ultima_faixa_sel != faixa_sel:
         st.session_state.prova_iniciada = False
+        st.session_state.fim_prova = None
         st.session_state.ultima_faixa_sel = faixa_sel
 
     # --- BUSCA A PROVA (Firestore ou Local) ---
@@ -170,10 +173,12 @@ def exame_de_faixa(usuario_logado):
     if doc_exame.exists:
         dados_exame = doc_exame.to_dict()
     else:
+        # Fallback busca por query
         query = db.collection('exames').where('faixa', '==', faixa_sel).stream()
         results = list(query)
         if results: dados_exame = results[0].to_dict()
 
+    # Fallback JSON local
     if not dados_exame:
         json_path = f"exames/faixa_{faixa_sel.lower()}.json"
         if os.path.exists(json_path):
@@ -183,11 +188,11 @@ def exame_de_faixa(usuario_logado):
 
     if not dados_exame:
         st.info(f"Ainda não há prova cadastrada para a faixa {faixa_sel}.")
-        if usuario_logado["tipo"] in ["admin", "professor"]:
-            st.warning("⚠️ Professor: Cadastre a prova na Gestão de Exame.")
         return
 
     lista_questoes_prova = dados_exame.get('questoes', [])
+    tempo_limite = dados_exame.get('tempo_limite', 60) # Pega do banco ou default 60 min
+
     if not lista_questoes_prova:
         st.warning("Esta prova existe mas está vazia.")
         return
@@ -198,52 +203,103 @@ def exame_de_faixa(usuario_logado):
         with st.container(border=True):
             st.markdown(f"### 📜 Instruções para o Exame de Faixa {faixa_sel}")
             st.markdown(f"""
-            Você está prestes a iniciar sua avaliação teórica. Por favor, leia com atenção:
+            Você está prestes a iniciar sua avaliação teórica.
             
             * **Total de Questões:** {len(lista_questoes_prova)} perguntas.
-            * **Nota Mínima:** Você precisa acertar pelo menos **70%** para ser aprovado.
-            * **Tempo:** Não há limite de tempo, faça com calma.
-            * **Revisão:** Você pode revisar suas respostas antes de clicar em "Finalizar".
+            * **Tempo Limite:** ⏱️ **{tempo_limite} minutos**.
+            * **Nota Mínima:** 70% para aprovação.
             
-            Ao clicar no botão abaixo, a prova será carregada. Boa sorte! 🥋
+            Ao clicar no botão abaixo, o cronômetro iniciará e não poderá ser pausado.
             """)
             
-            if st.button("✅ Começar Agora", type="primary", use_container_width=True):
+            if st.button("✅ Começar Agora (Inicia Cronômetro)", type="primary", use_container_width=True):
                 st.session_state.prova_iniciada = True
+                # Define o horário de fim: Agora + Tempo Limite
+                st.session_state.fim_prova = datetime.now() + timedelta(minutes=tempo_limite)
                 st.rerun()
-        return # Para a execução aqui até o usuário clicar
+        return 
 
-    # --- APLICAÇÃO DA PROVA (SÓ APARECE SE INICIADA) ---
+    # --- APLICAÇÃO DA PROVA (COM CRONÔMETRO) ---
+    
+    # 1. Lógica do Tempo
+    agora = datetime.now()
+    tempo_restante = st.session_state.fim_prova - agora
+    
+    # Se o tempo acabou (negativo)
+    tempo_esgotado = tempo_restante.total_seconds() <= 0
+
+    # Exibe cronômetro no topo (Sticky se possível, mas aqui simples)
+    if not tempo_esgotado:
+        minutos = int(tempo_restante.total_seconds() // 60)
+        segundos = int(tempo_restante.total_seconds() % 60)
+        
+        # Estilo do relógio
+        cor_relogio = "#FFD700" # Amarelo
+        if minutos < 5: cor_relogio = "#FF4B4B" # Vermelho se < 5 min
+        
+        st.markdown(
+            f"""
+            <div style='padding: 10px; background-color: #262730; border-radius: 5px; text-align: center; border: 1px solid {cor_relogio}; margin-bottom: 20px;'>
+                <h3 style='color: {cor_relogio}; margin:0;'>⏱️ Tempo Restante: {minutos:02d}:{segundos:02d}</h3>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+    else:
+        st.error("⌛ TEMPO ESGOTADO! O exame será finalizado automaticamente.")
+
     st.markdown(f"### 📝 Prova de Faixa {faixa_sel}")
-    st.caption(f"Total de questões: {len(lista_questoes_prova)}")
-
+    
+    # Formulário da Prova
     respostas = {}
-    with st.form(key=f"form_prova_{faixa_sel}"):
-        for i, q in enumerate(lista_questoes_prova, 1):
-            st.markdown(f"**{i}.** {q['pergunta']}")
-            
-            if q.get("imagem"):
-                st.image(q["imagem"])
-            
-            respostas[i] = st.radio("Selecione:", q.get('opcoes', []), key=f"resp_{i}", index=None)
-            st.markdown("---")
-            
-        finalizar = st.form_submit_button("Finalizar Exame 🏁", use_container_width=True)
+    
+    # Se o tempo acabou, desabilita o form (ou força envio)
+    # No Streamlit, não conseguimos submeter o form via código facilmente sem JS.
+    # Então, se o tempo acabou, mostramos apenas um botão de "Ver Resultado" fora do form,
+    # ou bloqueamos as opções.
+    
+    if not tempo_esgotado:
+        with st.form(key=f"form_prova_{faixa_sel}"):
+            for i, q in enumerate(lista_questoes_prova, 1):
+                st.markdown(f"**{i}.** {q['pergunta']}")
+                
+                if q.get("imagem"):
+                    st.image(q["imagem"])
+                
+                respostas[i] = st.radio("Selecione:", q.get('opcoes', []), key=f"resp_{i}", index=None)
+                st.markdown("---")
+                
+            finalizar = st.form_submit_button("Finalizar Exame 🏁", use_container_width=True)
+    else:
+        # Tempo esgotado: O usuário perdeu a chance de enviar pelo form normal.
+        # Podemos dar uma chance de "Entregar o que fez" ou considerar zero.
+        # Vamos considerar que ele "Finaliza" agora com o que tiver no estado (se tiver algo salvo, o que é difícil no form).
+        # Simplificação: Tempo esgotado = Reprovado ou Zero, pois o form não salva estado parcial sem submissão.
+        finalizar = True 
+        respostas = {} # Infelizmente, sem session state por questão, perde-se as respostas no timeout
+        st.warning("Como o tempo acabou, a prova foi encerrada. Se você não clicou em enviar, suas respostas não foram salvas.")
 
+    # 5. CORREÇÃO E SALVAMENTO
     if finalizar:
         acertos = 0
         total = len(lista_questoes_prova)
         
-        for i, q in enumerate(lista_questoes_prova, 1):
-            resp_user = respostas.get(i)
-            resp_certa = q.get('resposta')
-            
-            if resp_user:
-                if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
-                    acertos += 1
+        # Só corrige se tiver respostas (tempo não esgotado)
+        if not tempo_esgotado:
+            for i, q in enumerate(lista_questoes_prova, 1):
+                resp_user = respostas.get(i)
+                resp_certa = q.get('resposta')
+                
+                if resp_user:
+                    if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
+                        acertos += 1
         
         percentual = int((acertos / total) * 100) if total > 0 else 0
         
+        # Limpa estado de prova
+        st.session_state.prova_iniciada = False
+        st.session_state.fim_prova = None
+
         if percentual >= 70:
             st.balloons()
             st.success(f"🎉 APROVADO! Nota: {percentual}% ({acertos}/{total})")
@@ -264,10 +320,11 @@ def exame_de_faixa(usuario_logado):
                 "usuario": usuario_logado["nome"], "faixa": faixa_sel,
                 "acertos": acertos, "total": total, "codigo": codigo
             }
-            # Reseta estado para que na proxima vez volte as instruções
-            st.session_state.prova_iniciada = False 
         else:
-            st.error(f"Reprovado. Nota: {percentual}%. Mínimo: 70%.")
+            if tempo_esgotado:
+                st.error(f"Reprovado por Tempo Esgotado. Nota: {percentual}%.")
+            else:
+                st.error(f"Reprovado. Nota: {percentual}%. Mínimo: 70%.")
     
     if 'certificado_temp' in st.session_state:
         dados = st.session_state['certificado_temp']
