@@ -6,6 +6,11 @@ from utils import formatar_e_validar_cpf, carregar_questoes, salvar_questoes, ca
 import os
 import json
 from datetime import datetime, time
+from firebase_admin import firestore
+
+# ... (As funções gestao_usuarios e gestao_questoes permanecem IGUAIS, vou resumir para focar na mudança) ...
+# Copie as funções gestao_usuarios e gestao_questoes do seu código anterior ou mantenha se já estiverem lá.
+# A alteração principal é na função abaixo:
 
 # =========================================
 # GESTÃO DE USUÁRIOS
@@ -94,14 +99,12 @@ def gestao_usuarios(usuario_logado):
             st.warning("Zona de Perigo")
             if st.button("🗑️ Excluir Usuário"):
                 user_ref.delete()
-                # Limpeza de vínculos
                 batch = db.batch()
                 for a_doc in db.collection('alunos').where('usuario_id', '==', user_id).stream():
                     batch.delete(a_doc.reference)
                 for p_doc in db.collection('professores').where('usuario_id', '==', user_id).stream():
                     batch.delete(p_doc.reference)
                 batch.commit()
-                
                 st.success("Usuário excluído.")
                 st.rerun()
 
@@ -109,56 +112,75 @@ def gestao_usuarios(usuario_logado):
 # GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes():
-    """Gestão de Banco de Questões (JSON)."""
-    
     user = st.session_state.usuario
     if user["tipo"] not in ["admin", "professor"]:
         st.error("Acesso negado.")
         return
     
     st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
+    db = get_db()
 
-    os.makedirs("questions", exist_ok=True)
-    temas_existentes = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
+    docs_q = list(db.collection('questoes').stream())
+    todas_questoes = []
+    temas_set = set()
+    for doc in docs_q:
+        d = doc.to_dict()
+        d['id'] = doc.id
+        todas_questoes.append(d)
+        temas_set.add(d.get('tema', 'Geral'))
+    temas_existentes = sorted(list(temas_set))
     
     c1, c2 = st.columns([3, 1])
-    tema_sel = c1.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
-    
-    tema_atual = st.text_input("Nome do novo tema:") if tema_sel == "Novo Tema" else tema_sel
-
-    questoes = carregar_questoes(tema_atual) if tema_atual else []
+    tema_sel = c1.selectbox("Filtrar/Adicionar Tema:", ["Novo Tema"] + temas_existentes)
+    tema_atual = c2.text_input("Nome do novo tema:") if tema_sel == "Novo Tema" else tema_sel
 
     with st.expander("➕ Adicionar Nova Questão", expanded=False):
         with st.form("form_add_q"):
             pergunta = st.text_area("Pergunta:")
-            cols = st.columns(5)
-            opts = [cols[i].text_input(f"Opção {l}") for i, l in enumerate("ABCDE")]
-            resp = st.selectbox("Correta:", list("ABCDE"))
-            if st.form_submit_button("Salvar"):
-                if pergunta and tema_atual:
-                    nova = {
-                        "pergunta": pergunta,
-                        "opcoes": [f"{l}) {t}" for l, t in zip("ABCDE", opts) if t],
-                        "resposta": resp
-                    }
-                    questoes.append(nova)
-                    salvar_questoes(tema_atual, questoes)
-                    st.success("Salvo!")
-                    st.rerun()
+            cols = st.columns(2)
+            op_a = cols[0].text_input("Opção A (Correta):")
+            op_b = cols[1].text_input("Opção B:")
+            cols2 = st.columns(2)
+            op_c = cols2[0].text_input("Opção C:")
+            op_d = cols2[1].text_input("Opção D:")
+            correta_letra = st.selectbox("Qual a correta?", ["A", "B", "C", "D"])
+            img = st.text_input("URL da Imagem (Opcional):")
 
-    st.markdown("### Questões Existentes")
-    if questoes:
-        for i, q in enumerate(questoes):
-            with st.expander(f"{i+1}. {q['pergunta']}"):
-                st.write(q['opcoes'])
-                st.caption(f"Resposta: {q['resposta']}")
-                if st.button("Excluir", key=f"dq_{i}"):
-                    questoes.pop(i)
-                    salvar_questoes(tema_atual, questoes)
+            if st.form_submit_button("Salvar"):
+                if pergunta and tema_atual and op_a and op_b:
+                    opcoes_raw = [op_a, op_b, op_c, op_d]
+                    opcoes_limpas = [o for o in opcoes_raw if o.strip()]
+                    mapa = {"A": op_a, "B": op_b, "C": op_c, "D": op_d}
+                    resp_texto = mapa.get(correta_letra)
+                    
+                    if not resp_texto:
+                        st.error("A opção correta não pode estar vazia.")
+                    else:
+                        nova_q = {
+                            "tema": tema_atual, "pergunta": pergunta, "opcoes": opcoes_limpas,
+                            "resposta": resp_texto, "imagem": img, "criado_por": user['nome'],
+                            "data": firestore.SERVER_TIMESTAMP
+                        }
+                        db.collection('questoes').add(nova_q)
+                        st.success("Salvo!")
+                        st.rerun()
+                else: st.warning("Preencha a pergunta e pelo menos 2 opções.")
+
+    st.markdown(f"### Questões do tema: {tema_atual}")
+    questoes_filtradas = [q for q in todas_questoes if q.get('tema') == tema_atual]
+    if not questoes_filtradas:
+        st.info("Nenhuma questão neste tema.")
+    else:
+        for q in questoes_filtradas:
+            with st.expander(f"{q['pergunta']}"):
+                st.write(f"**Opções:** {q.get('opcoes')}")
+                st.caption(f"✅ Resposta: {q.get('resposta')}")
+                if st.button("🗑️ Excluir", key=f"del_{q['id']}"):
+                    db.collection('questoes').document(q['id']).delete()
                     st.rerun()
 
 # =========================================
-# GESTÃO DE EXAME DE FAIXA (CORRIGIDO)
+# GESTÃO DE EXAME DE FAIXA (ATUALIZADO COM TEMPO)
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
@@ -174,88 +196,109 @@ def gestao_exame_de_faixa():
     # ABA 1: MONTAR PROVA
     # ---------------------------------------------------------
     with tab_prova:
-        st.subheader("Configurar Perguntas do Exame")
+        st.subheader("Configurar Perguntas e Tempo")
+        db = get_db()
         
         faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-        faixa = st.selectbox("Selecione a faixa do exame:", faixas, key="sel_faixa_prova")
+        faixa = st.selectbox("Selecione a faixa:", faixas, key="sel_faixa_prova")
 
-        exame_path = f"exames/faixa_{faixa.lower()}.json"
-        os.makedirs("exames", exist_ok=True)
+        doc_ref = db.collection('exames').document(faixa)
+        doc_prova = doc_ref.get()
         
-        try:
-            with open(exame_path, "r", encoding="utf-8") as f: exame = json.load(f)
-        except: exame = {"questoes": [], "faixa": faixa}
+        questoes_na_prova = []
+        tempo_limite_atual = 60 # Default 60 min
+        
+        if doc_prova.exists:
+            prova_data = doc_prova.to_dict()
+            questoes_na_prova = prova_data.get('questoes', [])
+            tempo_limite_atual = prova_data.get('tempo_limite', 60)
 
-        todas = carregar_todas_questoes()
-        if not todas:
-            st.warning("Cadastre questões no Banco de Questões primeiro.")
-        else:
-            temas = sorted(list(set(q["tema"] for q in todas)))
-            filtro = st.selectbox("Filtrar por tema:", ["Todos"] + temas)
-            q_exibir = [q for q in todas if q["tema"] == filtro] if filtro != "Todos" else todas
+        # --- CONFIGURAÇÃO DE TEMPO ---
+        # Agora o professor pode definir o tempo
+        col_tempo, col_vazia = st.columns([1, 3])
+        novo_tempo = col_tempo.number_input(
+            "⏱️ Tempo Limite (minutos):", 
+            min_value=10, max_value=240, value=tempo_limite_atual, step=10,
+            help="Tempo total para o aluno responder todas as questões."
+        )
+
+        # Carrega todas as questões para seleção
+        docs_q = db.collection('questoes').stream()
+        todas_q = [d.to_dict() for d in docs_q]
+        
+        temas = sorted(list(set(q.get('tema', 'Geral') for q in todas_q)))
+        filtro = st.selectbox("Filtrar banco por tema:", ["Todos"] + temas)
+        
+        q_exibir = todas_q
+        if filtro != "Todos":
+            q_exibir = [q for q in todas_q if q.get('tema') == filtro]
             
-            perguntas_no_exame = [q['pergunta'] for q in exame.get('questoes', [])]
+        perguntas_ja_add = [q['pergunta'] for q in questoes_na_prova]
 
-            with st.form("add_q_exame"):
-                st.markdown("#### Selecionar Questões Disponíveis")
-                selecionadas = []
-                
-                for i, q in enumerate(q_exibir):
-                    if q['pergunta'] not in perguntas_no_exame:
-                        c_chk, c_det = st.columns([0.5, 10])
-                        with c_chk:
-                            checked = st.checkbox("Add", key=f"chk_{i}", label_visibility="collapsed")
-                            if checked: selecionadas.append(q)
-                        with c_det:
-                            st.markdown(f"**[{q['tema']}]** {q['pergunta']}")
-                            if 'opcoes' in q:
-                                for op in q['opcoes']:
-                                    st.markdown(f"<span style='color: #aaa; margin-left: 15px;'>• {op}</span>", unsafe_allow_html=True)
-                            st.caption(f"✅ Gabarito: **{q.get('resposta', '?')}**")
-                            st.markdown("---")
-                
-                if st.form_submit_button("➕ Adicionar ao Exame"):
-                    if 'questoes' not in exame: exame['questoes'] = []
-                    exame['questoes'].extend(selecionadas)
-                    with open(exame_path, "w", encoding="utf-8") as f:
-                        json.dump(exame, f, indent=4, ensure_ascii=False)
-                    st.success("Questões adicionadas!")
-                    st.rerun()
-
-            st.markdown("---")
-            st.markdown(f"#### Questões Atuais no Exame ({len(exame.get('questoes', []))})")
-            if 'questoes' in exame and exame['questoes']:
-                for i, q in enumerate(exame['questoes']):
-                    with st.expander(f"{i+1}. {q['pergunta']} ({q.get('tema','?')})"):
+        with st.form("add_q_exame"):
+            st.markdown("#### Selecionar Questões do Banco")
+            selecionadas = []
+            
+            for i, q in enumerate(q_exibir):
+                if q['pergunta'] not in perguntas_ja_add:
+                    c_chk, c_det = st.columns([0.5, 10])
+                    with c_chk:
+                        key_id = str(hash(q['pergunta']))
+                        if st.checkbox("Add", key=f"chk_{key_id}", label_visibility="collapsed"):
+                            selecionadas.append(q)
+                    with c_det:
+                        st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                        # Mostra alternativas para facilitar escolha
                         if 'opcoes' in q:
-                            for op in q['opcoes']: st.write(f"• {op}")
-                        st.caption(f"Resposta Correta: {q.get('resposta')}")
-                        if st.button("Remover Questão", key=f"rm_ex_{i}"):
-                            exame['questoes'].pop(i)
-                            with open(exame_path, "w", encoding="utf-8") as f:
-                                json.dump(exame, f, indent=4, ensure_ascii=False)
-                            st.rerun()
-            else:
-                st.info("Nenhuma questão adicionada.")
+                            txt_opts = " | ".join(q['opcoes'])
+                            st.caption(f"Opções: {txt_opts[:100]}...")
+                        st.markdown("---")
+            
+            # Botão Salvar agora atualiza Questões E Tempo
+            if st.form_submit_button("➕ Salvar Prova (Questões e Tempo)"):
+                questoes_na_prova.extend(selecionadas)
+                
+                doc_ref.set({
+                    "faixa": faixa,
+                    "questoes": questoes_na_prova,
+                    "tempo_limite": novo_tempo, # <--- SALVA O TEMPO
+                    "atualizado_em": firestore.SERVER_TIMESTAMP,
+                    "atualizado_por": user_logado['nome']
+                })
+                st.success(f"Prova atualizada! Tempo definido: {novo_tempo} min.")
+                st.rerun()
+
+        st.markdown("---")
+        st.markdown(f"#### Questões nesta Prova ({len(questoes_na_prova)})")
+        
+        if questoes_na_prova:
+            for i, q in enumerate(questoes_na_prova):
+                with st.expander(f"{i+1}. {q['pergunta']}"):
+                    st.write(q.get('opcoes'))
+                    st.caption(f"Resp: {q.get('resposta')}")
+                    if st.button("Remover", key=f"rm_{i}"):
+                        questoes_na_prova.pop(i)
+                        doc_ref.update({
+                            "questoes": questoes_na_prova,
+                            # Mantém o tempo atual ao remover questão
+                            "tempo_limite": novo_tempo 
+                        })
+                        st.rerun()
+        else:
+            st.info("Esta prova ainda não tem questões.")
 
     # ---------------------------------------------------------
     # ABA 2: HABILITAR ALUNOS
     # ---------------------------------------------------------
     with tab_alunos:
-        st.subheader("Autorizar Alunos para o Exame")
-        db = get_db()
-
-        # --- Definição de Escopo ---
-        # Inicializa a variável aqui para evitar o erro "not defined"
-        equipes_permitidas = [] 
+        st.subheader("Autorizar Alunos")
         
+        equipes_permitidas = []
         if user_logado['tipo'] == 'admin':
-            equipes_permitidas = None # Admin vê tudo
+            equipes_permitidas = None 
         else:
-            # Professor: busca vínculos
             q1 = db.collection('equipes').where('professor_responsavel_id', '==', user_logado['id']).stream()
             equipes_permitidas = [d.id for d in q1]
-            
             q2 = db.collection('professores').where('usuario_id', '==', user_logado['id']).where('status_vinculo', '==', 'ativo').stream()
             for d in q2:
                 eid = d.to_dict().get('equipe_id')
@@ -263,88 +306,77 @@ def gestao_exame_de_faixa():
                     equipes_permitidas.append(eid)
             
             if not equipes_permitidas:
-                st.warning("Você não possui equipes vinculadas para gerenciar alunos.")
-                # Usa st.stop() em vez de return para garantir que pare o script da aba
-                st.stop()
+                st.warning("Sem equipes vinculadas.")
+                st.stop() 
 
-        # --- Busca Alunos ---
         alunos_ref = db.collection('alunos')
         if equipes_permitidas:
             query = alunos_ref.where('equipe_id', 'in', equipes_permitidas[:10])
         else:
-            query = alunos_ref # Admin
+            query = alunos_ref 
 
         docs_alunos = list(query.stream())
         
         if not docs_alunos:
-            st.info("Nenhum aluno encontrado nas suas equipes.")
+            st.info("Nenhum aluno encontrado.")
         else:
-            # Mapeamentos para exibição
             users_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('usuarios').stream()}
             equipes_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('equipes').stream()}
             
-            st.markdown("#### Configurar Período de Disponibilidade")
+            st.markdown("#### Configurar Período Disponível")
             c_ini, c_fim = st.columns(2)
             d_ini = c_ini.date_input("Início:", value=datetime.now())
-            h_ini = c_ini.time_input("Hora Início:", value=time(0, 0))
+            h_ini = c_ini.time_input("Hora:", value=time(0, 0))
             d_fim = c_fim.date_input("Fim:", value=datetime.now())
-            h_fim = c_fim.time_input("Hora Fim:", value=time(23, 59))
+            h_fim = c_fim.time_input("Hora Fin:", value=time(23, 59))
             
             dt_inicio = datetime.combine(d_ini, h_ini)
             dt_fim = datetime.combine(d_fim, h_fim)
 
-            if dt_inicio >= dt_fim:
-                st.warning("⚠️ A data de fim deve ser maior que a de início.")
-
             st.markdown("---")
             
-            # Tabela de Alunos
             h = st.columns([3, 2, 2, 3, 2])
             h[0].markdown("**Aluno**")
             h[1].markdown("**Equipe**")
             h[2].markdown("**Faixa**")
-            h[3].markdown("**Período Habilitado**")
+            h[3].markdown("**Status**")
             h[4].markdown("**Ação**")
-            st.markdown("---")
             
             for doc in docs_alunos:
                 d = doc.to_dict()
                 uid = d.get('usuario_id')
                 eid = d.get('equipe_id')
                 
-                # Filtro de segurança
                 if equipes_permitidas is None or eid in equipes_permitidas:
-                    nome_aluno = users_map.get(uid, "Desconhecido")
-                    nome_equipe = equipes_map.get(eid, "Sem Equipe")
-                    habilitado = d.get('exame_habilitado', False)
+                    nome = users_map.get(uid, "Desc")
+                    eq = equipes_map.get(eid, "-")
+                    hab = d.get('exame_habilitado', False)
                     
-                    # Formatação de Datas
-                    periodo_str = "-"
-                    if d.get('exame_inicio') and d.get('exame_fim'):
+                    p_str = "Bloqueado"
+                    if hab:
                         try:
-                            i_str = d.get('exame_inicio').replace(tzinfo=None).strftime("%d/%m %H:%M")
-                            f_str = d.get('exame_fim').replace(tzinfo=None).strftime("%d/%m %H:%M")
-                            periodo_str = f"{i_str} até {f_str}"
-                        except: pass
+                            i = d.get('exame_inicio').replace(tzinfo=None).strftime("%d/%m")
+                            f = d.get('exame_fim').replace(tzinfo=None).strftime("%d/%m")
+                            p_str = f"Lib: {i}-{f}"
+                        except: p_str = "Liberado"
 
-                    cols = st.columns([3, 2, 2, 3, 2])
-                    cols[0].write(nome_aluno)
-                    cols[1].write(nome_equipe)
-                    cols[2].write(d.get('faixa_atual'))
-                    cols[3].write(periodo_str)
+                    c = st.columns([3, 2, 2, 3, 2])
+                    c[0].write(nome)
+                    c[1].write(eq)
+                    c[2].write(d.get('faixa_atual'))
+                    c[3].write(p_str)
                     
-                    if habilitado:
-                        if cols[4].button("⛔ Bloquear", key=f"bloq_{doc.id}"):
-                            db.collection('alunos').document(doc.id).update({
-                                "exame_habilitado": False, "exame_inicio": None, "exame_fim": None
-                            })
+                    if hab:
+                        if c[4].button("Bloquear", key=f"blk_{doc.id}"):
+                            db.collection('alunos').document(doc.id).update({"exame_habilitado": False})
                             st.rerun()
                     else:
-                        if cols[4].button("✅ Habilitar", key=f"hab_{doc.id}"):
+                        if c[4].button("Liberar", key=f"lib_{doc.id}"):
                             if dt_inicio < dt_fim:
                                 db.collection('alunos').document(doc.id).update({
-                                    "exame_habilitado": True, "exame_inicio": dt_inicio, "exame_fim": dt_fim
+                                    "exame_habilitado": True, 
+                                    "exame_inicio": dt_inicio, 
+                                    "exame_fim": dt_fim
                                 })
                                 st.rerun()
-                            else:
-                                st.error("Corrija as datas antes de habilitar.")
+                            else: st.error("Data Inválida")
