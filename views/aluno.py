@@ -81,7 +81,7 @@ def modo_rola(usuario_logado):
             return
 
         random.shuffle(questoes_selecionadas)
-        questoes_treino = questoes_selecionadas[:10] 
+        questoes_treino = questões_selecionadas[:10] 
         
         acertos = 0
         respostas_usuario = {}
@@ -113,7 +113,7 @@ def modo_rola(usuario_logado):
             st.success(f"Treino concluído! {acertos}/{total} ({percentual}%).")
 
 # =========================================
-# EXAME DE FAIXA (OTIMIZADO)
+# EXAME DE FAIXA (TIMER JS CORRIGIDO)
 # =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
@@ -170,7 +170,7 @@ def exame_de_faixa(usuario_logado):
                 st.success(f"🎉 APROVADO! Nota: {res['percentual']}% ({res['acertos']}/{res['total']})")
                 st.info("Seu certificado foi gerado.")
                 
-                # Botão de Download OTIMIZADO (Usa bytes da memória, não gera de novo)
+                # Botão de Download OTIMIZADO
                 pdf_data = res.get('pdf_bytes')
                 pdf_name = res.get('pdf_name', 'certificado.pdf')
                 
@@ -184,13 +184,13 @@ def exame_de_faixa(usuario_logado):
                         key="btn_download_final"
                     )
                 else:
-                    # Fallback se algo deu errado no cache
-                    st.warning("O PDF está sendo gerado novamente...")
+                    st.warning("O PDF não foi gerado corretamente. Tentando novamente...")
                     try:
                         p = gerar_pdf(usuario_logado['nome'], res['faixa'], res['acertos'], res['total'], res['codigo'])
                         with open(p, "rb") as f:
                             st.download_button("📥 Baixar Certificado", f.read(), os.path.basename(p), "application/pdf", use_container_width=True)
-                    except: st.error("Erro ao recuperar PDF.")
+                    except Exception as e:
+                        st.error(f"Erro ao recuperar PDF: {e}")
             else:
                 msg_tempo = "Tempo Esgotado. " if res.get('tempo_esgotado') else ""
                 st.error(f"Reprovado. {msg_tempo}Nota: {res['percentual']}%. Mínimo: 70%.")
@@ -241,29 +241,42 @@ def exame_de_faixa(usuario_logado):
     tempo_esgotado = segundos_restantes <= 0
 
     if not tempo_esgotado:
-        # CRONÔMETRO COM TIMEOUT
+        # CRONÔMETRO COM POLLING (Mais robusto)
         timer_id = f"timer_{uuid.uuid4()}"
         st.markdown(
             f"""
             <div style="text-align: center; padding: 10px; border: 2px solid #FFD700; border-radius: 10px; margin-bottom: 20px; background-color: #0e2d26;">
-                <h3 id="{timer_id}" style="color: #FFD700; margin: 0;">Carregando...</h3>
+                <h3 id="{timer_id}" style="color: #FFD700; margin: 0;">Carregando tempo...</h3>
             </div>
             <script>
-            setTimeout(function() {{
+            (function() {{
                 var timeleft = {segundos_restantes};
-                var el = document.getElementById("{timer_id}");
-                if (el) {{
-                    var timer = setInterval(function(){{
-                    if(timeleft <= 0){{ clearInterval(timer); el.innerHTML = "⌛ Tempo Esgotado!"; }} 
-                    else {{
-                        var m = Math.floor(timeleft / 60);
-                        var s = timeleft % 60;
-                        el.innerHTML = "⏱️ " + m + ":" + (s < 10 ? "0" : "") + s;
-                    }}
-                    timeleft -= 1;
-                    }}, 1000);
-                }}
-            }}, 500);
+                var timerId = "{timer_id}";
+                
+                var checkExist = setInterval(function() {{
+                   var display = document.getElementById(timerId);
+                   if (display) {{
+                      clearInterval(checkExist);
+                      
+                      // Função de atualização
+                      var updateTimer = function() {{
+                          if(timeleft <= 0){{
+                              display.innerHTML = "⌛ Tempo Esgotado!";
+                          }} else {{
+                              var m = Math.floor(timeleft / 60);
+                              var s = timeleft % 60;
+                              var m_str = m < 10 ? "0" + m : m;
+                              var s_str = s < 10 ? "0" + s : s;
+                              display.innerHTML = "⏱️ " + m_str + ":" + s_str;
+                              timeleft -= 1;
+                          }}
+                      }};
+                      
+                      updateTimer(); // Atualiza já
+                      setInterval(updateTimer, 1000); // Inicia loop
+                   }}
+                }}, 100);
+            }})();
             </script>
             """,
             unsafe_allow_html=True
@@ -286,9 +299,9 @@ def exame_de_faixa(usuario_logado):
     else:
         finalizar = True 
         
-    # --- 7. FINALIZAÇÃO OTIMIZADA ---
+    # --- 7. FINALIZAÇÃO ---
     if finalizar:
-        with st.spinner("Processando resultados e gerando certificado..."):
+        with st.spinner("Processando resultados..."):
             acertos = 0
             total = len(lista_questoes)
             
@@ -322,15 +335,16 @@ def exame_de_faixa(usuario_logado):
                     })
                 except Exception as e: print(f"Erro save: {e}")
                 
-                # 3. GERA PDF AGORA (Para não travar depois)
+                # 3. GERA PDF AGORA (Com feedback de erro)
                 try:
                     pdf_path = gerar_pdf(usuario_logado['nome'], faixa_sel, acertos, total, codigo)
                     with open(pdf_path, "rb") as f:
                         pdf_bytes = f.read()
                     pdf_name = os.path.basename(pdf_path)
-                except Exception as e: print(f"Erro PDF: {e}")
+                except Exception as e:
+                     st.error(f"Erro ao gerar PDF: {e}")
             
-            # Salva tudo na sessão para exibição instantânea
+            # Salva tudo na sessão
             st.session_state.prova_concluida = True
             st.session_state.resultado_final = {
                 "usuario": usuario_logado["nome"], "faixa": faixa_sel,
@@ -341,7 +355,7 @@ def exame_de_faixa(usuario_logado):
             st.rerun()
 
 # =========================================
-# RANKING e CERTIFICADOS (Mantidos iguais)
+# RANKING
 # =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking</h1>", unsafe_allow_html=True)
