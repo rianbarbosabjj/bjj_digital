@@ -94,6 +94,14 @@ def gestao_usuarios(usuario_logado):
             st.warning("Zona de Perigo")
             if st.button("🗑️ Excluir Usuário"):
                 user_ref.delete()
+                # Limpeza de vínculos
+                batch = db.batch()
+                for a_doc in db.collection('alunos').where('usuario_id', '==', user_id).stream():
+                    batch.delete(a_doc.reference)
+                for p_doc in db.collection('professores').where('usuario_id', '==', user_id).stream():
+                    batch.delete(p_doc.reference)
+                batch.commit()
+                
                 st.success("Usuário excluído.")
                 st.rerun()
 
@@ -150,7 +158,7 @@ def gestao_questoes():
                     st.rerun()
 
 # =========================================
-# GESTÃO DE EXAME DE FAIXA (ATUALIZADO)
+# GESTÃO DE EXAME DE FAIXA (CORRIGIDO)
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
@@ -194,7 +202,7 @@ def gestao_exame_de_faixa():
                 
                 for i, q in enumerate(q_exibir):
                     if q['pergunta'] not in perguntas_no_exame:
-                        c_chk, c_det = st.columns([1, 15])
+                        c_chk, c_det = st.columns([0.5, 10])
                         with c_chk:
                             checked = st.checkbox("Add", key=f"chk_{i}", label_visibility="collapsed")
                             if checked: selecionadas.append(q)
@@ -215,7 +223,7 @@ def gestao_exame_de_faixa():
                     st.rerun()
 
             st.markdown("---")
-            st.markdown(f"#### Questões Atuais ({len(exame.get('questoes', []))})")
+            st.markdown(f"#### Questões Atuais no Exame ({len(exame.get('questoes', []))})")
             if 'questoes' in exame and exame['questoes']:
                 for i, q in enumerate(exame['questoes']):
                     with st.expander(f"{i+1}. {q['pergunta']} ({q.get('tema','?')})"):
@@ -231,22 +239,23 @@ def gestao_exame_de_faixa():
                 st.info("Nenhuma questão adicionada.")
 
     # ---------------------------------------------------------
-    # ABA 2: HABILITAR ALUNOS (CORRIGIDO)
+    # ABA 2: HABILITAR ALUNOS
     # ---------------------------------------------------------
     with tab_alunos:
         st.subheader("Autorizar Alunos para o Exame")
         db = get_db()
 
-        # --- 1. LÓGICA DE PERMISSÃO (Recuperada) ---
-        equipes_permitidas = []
+        # --- Definição de Escopo ---
+        # Inicializa a variável aqui para evitar o erro "not defined"
+        equipes_permitidas = [] 
+        
         if user_logado['tipo'] == 'admin':
             equipes_permitidas = None # Admin vê tudo
         else:
-            # Busca equipes onde é responsável
+            # Professor: busca vínculos
             q1 = db.collection('equipes').where('professor_responsavel_id', '==', user_logado['id']).stream()
             equipes_permitidas = [d.id for d in q1]
             
-            # Busca equipes onde é professor vinculado
             q2 = db.collection('professores').where('usuario_id', '==', user_logado['id']).where('status_vinculo', '==', 'ativo').stream()
             for d in q2:
                 eid = d.to_dict().get('equipe_id')
@@ -255,12 +264,12 @@ def gestao_exame_de_faixa():
             
             if not equipes_permitidas:
                 st.warning("Você não possui equipes vinculadas para gerenciar alunos.")
-                return # Encerra aqui se não tiver equipe
+                # Usa st.stop() em vez de return para garantir que pare o script da aba
+                st.stop()
 
-        # --- 2. BUSCA ALUNOS ---
+        # --- Busca Alunos ---
         alunos_ref = db.collection('alunos')
         if equipes_permitidas:
-            # Limita a 10 para evitar erro do 'in'
             query = alunos_ref.where('equipe_id', 'in', equipes_permitidas[:10])
         else:
             query = alunos_ref # Admin
@@ -270,10 +279,11 @@ def gestao_exame_de_faixa():
         if not docs_alunos:
             st.info("Nenhum aluno encontrado nas suas equipes.")
         else:
+            # Mapeamentos para exibição
             users_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('usuarios').stream()}
             equipes_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('equipes').stream()}
             
-            st.markdown("#### Configurar Período")
+            st.markdown("#### Configurar Período de Disponibilidade")
             c_ini, c_fim = st.columns(2)
             d_ini = c_ini.date_input("Início:", value=datetime.now())
             h_ini = c_ini.time_input("Hora Início:", value=time(0, 0))
@@ -284,16 +294,16 @@ def gestao_exame_de_faixa():
             dt_fim = datetime.combine(d_fim, h_fim)
 
             if dt_inicio >= dt_fim:
-                st.warning("Data fim deve ser maior que início.")
+                st.warning("⚠️ A data de fim deve ser maior que a de início.")
 
             st.markdown("---")
             
-            # Cabeçalho da Tabela
+            # Tabela de Alunos
             h = st.columns([3, 2, 2, 3, 2])
             h[0].markdown("**Aluno**")
             h[1].markdown("**Equipe**")
             h[2].markdown("**Faixa**")
-            h[3].markdown("**Período**")
+            h[3].markdown("**Período Habilitado**")
             h[4].markdown("**Ação**")
             st.markdown("---")
             
@@ -302,20 +312,18 @@ def gestao_exame_de_faixa():
                 uid = d.get('usuario_id')
                 eid = d.get('equipe_id')
                 
-                # Filtro extra para admin caso query traga tudo
+                # Filtro de segurança
                 if equipes_permitidas is None or eid in equipes_permitidas:
                     nome_aluno = users_map.get(uid, "Desconhecido")
                     nome_equipe = equipes_map.get(eid, "Sem Equipe")
                     habilitado = d.get('exame_habilitado', False)
                     
-                    # Formata datas
-                    ini_salvo = d.get('exame_inicio')
-                    fim_salvo = d.get('exame_fim')
+                    # Formatação de Datas
                     periodo_str = "-"
-                    if ini_salvo and fim_salvo:
+                    if d.get('exame_inicio') and d.get('exame_fim'):
                         try:
-                            i_str = ini_salvo.replace(tzinfo=None).strftime("%d/%m %H:%M")
-                            f_str = fim_salvo.replace(tzinfo=None).strftime("%d/%m %H:%M")
+                            i_str = d.get('exame_inicio').replace(tzinfo=None).strftime("%d/%m %H:%M")
+                            f_str = d.get('exame_fim').replace(tzinfo=None).strftime("%d/%m %H:%M")
                             periodo_str = f"{i_str} até {f_str}"
                         except: pass
 
@@ -339,4 +347,4 @@ def gestao_exame_de_faixa():
                                 })
                                 st.rerun()
                             else:
-                                st.error("Datas inválidas.")
+                                st.error("Corrija as datas antes de habilitar.")
