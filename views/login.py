@@ -1,12 +1,13 @@
 import streamlit as st
+import sqlite3
+import bcrypt
 import pandas as pd
 import os
 import requests 
-import bcrypt
 from streamlit_oauth import OAuth2Component
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
-from config import COR_DESTAQUE, COR_TEXTO
+from config import DB_PATH, COR_DESTAQUE, COR_TEXTO
 from database import get_db
 from firebase_admin import firestore
 
@@ -36,18 +37,24 @@ oauth_google = OAuth2Component(
 # =========================================
 
 def tela_login():
-    """Tela de login com autenticação local (Firebase) e Google."""
+    """Tela de login com layout otimizado e responsivo."""
     st.session_state.setdefault("modo_login", "login")
 
+    # Colunas externas para centralizar o card na tela
+    # [1, 1.5, 1] funciona bem para desktop, no mobile o Streamlit empilha
     c1, c2, c3 = st.columns([1, 1.5, 1])
+    
     with c2:
         if st.session_state["modo_login"] == "login":
             
-            # --- LOGO ---
+            # --- LOGO REDUZIDA ---
             if os.path.exists("assets/logo.png"):
-                col_l, col_c, col_r = st.columns([1, 2, 1])
+                # Ajuste de proporção: [1, 1, 1] deixa a logo menor (1/3 da largura)
+                # Se quiser menor ainda, use [2, 1, 2]
+                col_l, col_c, col_r = st.columns([1, 1, 1])
                 with col_c:
                     st.image("assets/logo.png", use_container_width=True)
+            # ---------------------
 
             with st.container(border=True):
                 st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
@@ -55,7 +62,8 @@ def tela_login():
                 user_input = st.text_input("Nome de Usuário, Email ou CPF:")
                 pwd = st.text_input("Senha:", type="password")
 
-                if st.button("Entrar", use_container_width=True, type="primary"):
+                # Botão Principal (Largo)
+                if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
                     entrada = user_input.strip()
                     if "@" in entrada:
                         entrada = entrada.lower()
@@ -71,19 +79,26 @@ def tela_login():
                     else:
                         st.error("Credenciais inválidas.")
 
-                col1, col2 = st.columns(2)
-                if col1.button("📋 Criar Conta"):
-                    st.session_state["modo_login"] = "cadastro"
-                    st.rerun()
-                if col2.button("🔑 Esqueci Senha"):
-                    st.session_state["modo_login"] = "recuperar"
-                    st.rerun()
+                # Botões Secundários (Lado a Lado e Responsivos)
+                col_b1, col_b2 = st.columns(2)
+                
+                with col_b1:
+                    if st.button("📋 Criar Conta", use_container_width=True):
+                        st.session_state["modo_login"] = "cadastro"
+                        st.rerun()
+                
+                with col_b2:
+                    if st.button("🔑 Esqueci Senha", use_container_width=True):
+                        st.session_state["modo_login"] = "recuperar"
+                        st.rerun()
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # --- LÓGICA GOOGLE (BLINDADA) ---
+                # --- LÓGICA GOOGLE ---
                 if GOOGLE_CLIENT_ID: 
                     try:
+                        # O botão do OAuth não aceita use_container_width nativamente em todas as versões,
+                        # mas ele já tende a ocupar espaço.
                         result = oauth_google.authorize_button(
                             name="Continuar com Google",
                             icon="https://www.google.com.br/favicon.ico",
@@ -136,12 +151,12 @@ def tela_login():
             if st.button("Enviar Instruções", use_container_width=True, type="primary"):
                 st.info("Funcionalidade em breve.")
             
-            if st.button("Voltar"):
+            if st.button("⬅️ Voltar", use_container_width=True):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
 
 def tela_cadastro_interno():
-    """Cadastro manual salvando no FIRESTORE com filtro dinâmico de professores."""
+    """Cadastro manual salvando no FIRESTORE."""
     st.subheader("📋 Cadastro de Novo Usuário")
     nome = st.text_input("Nome de Usuário:") 
     email = st.text_input("E-mail:")
@@ -165,55 +180,43 @@ def tela_cadastro_interno():
         mapa_equipes[nome_eq] = doc.id
     
     # 2. Carrega Nomes dos Professores
-    # Precisamos do nome para exibir no selectbox
     profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
-    mapa_nomes_profs = {} # UID -> Nome
+    mapa_nomes_profs = {} 
     for doc in profs_users_ref:
         mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
 
-    # 3. Carrega Vínculos (Quem dá aula onde)
-    # Buscamos na coleção 'professores' para saber qual usuário está em qual equipe
+    # 3. Carrega Vínculos
     vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
-    profs_por_equipe = {} # EquipeID -> [(Nome, UID)]
+    profs_por_equipe = {} 
     
     for doc in vincs_ref:
         d = doc.to_dict()
         eid = d.get('equipe_id')
         uid = d.get('usuario_id')
-        
         if eid and uid and uid in mapa_nomes_profs:
-            if eid not in profs_por_equipe:
-                profs_por_equipe[eid] = []
+            if eid not in profs_por_equipe: profs_por_equipe[eid] = []
             profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
 
-    # Lógica de Exibição dos Selectboxes
     if tipo == "Aluno":
         faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
-        
-        # Seleção de Equipe
         eq_sel = st.selectbox("Equipe:", lista_equipes)
         
-        # Filtro Dinâmico de Professores
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
         mapa_profs_final = {}
-        
         eq_id_selecionada = mapa_equipes.get(eq_sel)
         
-        # Se uma equipe válida foi selecionada e tem professores vinculados
         if eq_id_selecionada and eq_id_selecionada in profs_por_equipe:
             for p_nome, p_uid in profs_por_equipe[eq_id_selecionada]:
                 lista_profs_filtrada.append(p_nome)
                 mapa_profs_final[p_nome] = p_uid
                 
         prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
-        
     else:
         faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
         st.caption("Professores devem ser Marrom ou Preta.")
         eq_sel = st.selectbox("Equipe:", lista_equipes)
-        prof_sel = None # Professores não selecionam mestre no cadastro inicial
+        prof_sel = None 
     
-    # Endereço
     st.markdown("#### Endereço")
     if 'cad_cep' not in st.session_state: st.session_state.cad_cep = ''
     
@@ -228,8 +231,7 @@ def tela_cadastro_interno():
                 st.session_state.cad_cep = cep
                 st.session_state.cad_end = end
                 st.success("OK!")
-            else:
-                st.error("Inválido")
+            else: st.error("Inválido")
     
     end_cache = st.session_state.get('cad_end', {})
     c1, c2 = st.columns(2)
@@ -258,7 +260,6 @@ def tela_cadastro_interno():
             st.error("CPF inválido.")
             return
 
-        # Verifica duplicidade
         users_ref = db.collection('usuarios')
         if len(list(users_ref.where('email', '==', email_fin).stream())) > 0:
             st.error("Email já cadastrado.")
@@ -268,7 +269,6 @@ def tela_cadastro_interno():
             hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
             tipo_db = tipo.lower()
             
-            # Cria Usuário
             novo_user = {
                 "nome": nome_fin, "email": email_fin, "cpf": cpf_fin, 
                 "tipo_usuario": tipo_db, "senha": hashed, "auth_provider": "local", 
@@ -277,31 +277,23 @@ def tela_cadastro_interno():
                 "cidade": cid.upper(), "uf": uf.upper(), "data_criacao": firestore.SERVER_TIMESTAMP
             }
             
-            update_time, doc_ref = db.collection('usuarios').add(novo_user)
+            _, doc_ref = db.collection('usuarios').add(novo_user)
             user_id = doc_ref.id
             
-            # Vínculo
             eq_id = mapa_equipes.get(eq_sel)
-            
-            # Recupera o ID do professor do mapa filtrado (se for aluno e escolheu prof)
-            prof_id = None
-            if tipo_db == "aluno" and prof_sel and prof_sel != "Nenhum (Vínculo Pendente)":
-                prof_id = mapa_profs_final.get(prof_sel)
+            prof_id = mapa_profs_final.get(prof_sel) if (tipo_db=="aluno" and prof_sel) else None
             
             if tipo_db == "aluno":
                 db.collection('alunos').add({
                     "usuario_id": user_id, "faixa_atual": faixa, 
-                    "equipe_id": eq_id, "professor_id": prof_id,
-                    "status_vinculo": "pendente"
+                    "equipe_id": eq_id, "professor_id": prof_id, "status_vinculo": "pendente"
                 })
             else:
                 db.collection('professores').add({
-                    "usuario_id": user_id, "equipe_id": eq_id, 
-                    "status_vinculo": "pendente"
+                    "usuario_id": user_id, "equipe_id": eq_id, "status_vinculo": "pendente"
                 })
                 
-            st.success("Cadastro realizado! Faça login.")
-            
+            st.success("Cadastro realizado!")
             for k in ['cad_cep', 'cad_end']: st.session_state.pop(k, None)
             st.session_state["modo_login"] = "login"
             st.rerun()
@@ -309,17 +301,16 @@ def tela_cadastro_interno():
         except Exception as e:
             st.error(f"Erro ao gravar: {e}")
 
-    if st.button("Voltar"):
+    if st.button("Voltar", use_container_width=True):
         st.session_state["modo_login"] = "login"
         st.rerun()
 
 def tela_completar_cadastro(user_data):
-    """Completa cadastro Google com filtro dinâmico."""
+    """Completa cadastro Google no FIRESTORE."""
     st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
     
     db = get_db()
     
-    # 1. Equipes
     equipes_ref = db.collection('equipes').stream()
     lista_equipes = ["Nenhuma (Vínculo Pendente)"]
     mapa_equipes = {} 
@@ -329,13 +320,11 @@ def tela_completar_cadastro(user_data):
         lista_equipes.append(nm)
         mapa_equipes[nm] = doc.id
 
-    # 2. Professores
     profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
     mapa_nomes_profs = {} 
     for doc in profs_users_ref:
         mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
 
-    # 3. Vínculos
     vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
     profs_por_equipe = {} 
     for doc in vincs_ref:
@@ -343,16 +332,13 @@ def tela_completar_cadastro(user_data):
         eid = d.get('equipe_id')
         uid = d.get('usuario_id')
         if eid and uid and uid in mapa_nomes_profs:
-            if eid not in profs_por_equipe:
-                profs_por_equipe[eid] = []
+            if eid not in profs_por_equipe: profs_por_equipe[eid] = []
             profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
 
-    # Dados Básicos
     nome = st.text_input("Nome:", value=user_data['nome'])
     st.text_input("Email:", value=user_data['email'], disabled=True)
     tipo = st.radio("Perfil:", ["Aluno", "Professor"], horizontal=True)
     
-    # Colunas de Seleção
     c_faixa, c_eq = st.columns(2)
     
     if tipo == "Aluno":
@@ -361,7 +347,6 @@ def tela_completar_cadastro(user_data):
         with c_eq:
             eq_sel = st.selectbox("Equipe:", lista_equipes)
             
-        # Filtro Professor
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
         mapa_profs_final = {}
         eq_id_sel = mapa_equipes.get(eq_sel)
@@ -370,9 +355,7 @@ def tela_completar_cadastro(user_data):
             for p_nome, p_uid in profs_por_equipe[eq_id_sel]:
                 lista_profs_filtrada.append(p_nome)
                 mapa_profs_final[p_nome] = p_uid
-                
         prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
-        
     else:
         with c_faixa:
             faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
@@ -407,7 +390,7 @@ def tela_completar_cadastro(user_data):
     num = c5.text_input("Número:")
     comp = c6.text_input("Complemento:")
 
-    if st.button("Salvar e Acessar", type="primary"):
+    if st.button("Salvar e Acessar", type="primary", use_container_width=True):
         if not nome or not cep or not logr or not num:
             st.warning("Preencha Nome e Endereço completo.")
             return
@@ -419,7 +402,6 @@ def tela_completar_cadastro(user_data):
         if tipo_db == "aluno" and prof_sel and prof_sel != "Nenhum (Vínculo Pendente)":
             prof_id = mapa_profs_final.get(prof_sel)
         
-        # Atualiza Usuário
         db.collection('usuarios').document(user_data['id']).update({
             "nome": nome.upper(), "tipo_usuario": tipo_db, "perfil_completo": True,
             "cep": formatar_cep(cep), "logradouro": logr.upper(), "numero": num, 
@@ -427,12 +409,10 @@ def tela_completar_cadastro(user_data):
             "cidade": cid.upper(), "uf": uf.upper()
         })
         
-        # Cria Vínculo
         if tipo_db == "aluno":
             db.collection('alunos').add({
                 "usuario_id": user_data['id'], "faixa_atual": faixa, 
-                "equipe_id": eq_id, "professor_id": prof_id,
-                "status_vinculo": "pendente"
+                "equipe_id": eq_id, "professor_id": prof_id, "status_vinculo": "pendente"
             })
         else:
             db.collection('professores').add({
@@ -442,6 +422,5 @@ def tela_completar_cadastro(user_data):
             
         st.session_state.usuario = {"id": user_data['id'], "nome": nome.upper(), "tipo": tipo_db}
         
-        for k in ['goog_cep', 'goog_end', 'registration_pending']:
-            st.session_state.pop(k, None)
+        for k in ['goog_cep', 'goog_end', 'registration_pending']: st.session_state.pop(k, None)
         st.rerun()
