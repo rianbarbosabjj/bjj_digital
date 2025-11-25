@@ -1,358 +1,190 @@
 import streamlit as st
-import random
 import os
-import json
-import time
-import uuid  # Import para gerar ID único do timer
-from datetime import datetime, timedelta
-import pandas as pd
-import plotly.express as px
-from database import get_db
-from utils import gerar_codigo_verificacao, gerar_pdf
-from firebase_admin import firestore
+import sys
+
+# 1. CONFIGURAÇÃO DEVE SER A PRIMEIRA LINHA DO STREAMLIT
+st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
+
+# ---------------------------------------------------------
+# MELHORIA VISUAL (ESCONDER MENU PADRÃO E RODAPÉ)
+# Funciona em Mobile e Desktop (Navegadores)
+# ---------------------------------------------------------
+st.markdown("""
+<style>
+    /* Esconde o menu do Streamlit (hambúrguer no topo direito) */
+    #MainMenu {visibility: hidden;}
+    
+    /* Esconde o rodapé padrão "Made with Streamlit" */
+    footer {visibility: hidden;}
+    
+    /* Esconde o cabeçalho decorativo colorido padrão */
+    header {visibility: hidden;}
+    
+    /* Ajuste para dispositivos móveis para remover padding excessivo no topo */
+    .block-container {
+        padding-top: 1rem;
+        padding-bottom: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# Bloco de captura de erros de inicialização
+try:
+    from streamlit_option_menu import option_menu
+    
+    # Importações dos Módulos Locais
+    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+    from database import get_db # Garante que o banco conecta
+    from views import login, geral, aluno, professor, admin
+
+except ImportError as e:
+    st.error(f"❌ Erro crítico de importação: {e}")
+    st.stop()
+except Exception as e:
+    st.error(f"❌ Erro fatal na inicialização: {e}")
+    st.stop()
+
+# CSS Global (Botões e Layout)
+st.markdown(f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
+.stButton>button {{ background: linear-gradient(90deg, {COR_BOTAO}, #056853); color: white; font-weight: bold; border: none; padding: 0.6em 1.2em; border-radius: 10px; transition: 0.3s; }}
+.stButton>button:hover {{ background: {COR_HOVER}; color: {COR_FUNDO}; transform: scale(1.02); }}
+h1, h2, h3 {{ color: {COR_DESTAQUE}; text-align: center; font-weight: 700; }}
+div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ border-radius: 10px; }}
+</style>
+""", unsafe_allow_html=True)
 
 # =========================================
-# MODO ROLA (Treino Livre)
+# FUNÇÃO PRINCIPAL (ROTEADOR)
 # =========================================
-def modo_rola(usuario_logado):
-    st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
-    db = get_db()
-
-    todas_questoes = []
-    # Tenta carregar do Firestore
-    try:
-        docs_questoes = list(db.collection('questoes').stream())
-        if docs_questoes:
-            todas_questoes = [d.to_dict() for d in docs_questoes]
-    except: pass
-    
-    # Fallback local
-    if not todas_questoes and os.path.exists("questions"):
-        for f in os.listdir("questions"):
-            if f.endswith(".json"):
-                try:
-                    with open(f"questions/{f}", "r", encoding="utf-8") as file:
-                        q_list = json.load(file)
-                        tema_nome = f.replace(".json", "")
-                        for q in q_list: q['tema'] = tema_nome; todas_questoes.append(q)
-                except: continue
-
-    if not todas_questoes:
-        st.warning("Banco de questões vazio.")
-        return
-
-    temas = sorted(list(set(q.get('tema', 'Geral') for q in todas_questoes)))
-    temas.insert(0, "Todos os Temas")
-
-    col1, col2 = st.columns(2)
-    with col1: tema = st.selectbox("Selecione o tema:", temas)
-    with col2: faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
-
-    if st.button("Iniciar Treino 🤼", use_container_width=True):
-        if tema == "Todos os Temas":
-            questoes_selecionadas = todas_questoes
-        else:
-            questoes_selecionadas = [q for q in todas_questoes if q.get('tema') == tema]
-
-        if not questoes_selecionadas:
-            st.error("Nenhuma questão encontrada.")
-            return
-
-        random.shuffle(questoes_selecionadas)
-        questoes_treino = questoes_selecionadas[:10] 
-        
-        acertos = 0
-        respostas_usuario = {}
-        
-        st.markdown("---")
-        with st.form("form_treino"):
-            for i, q in enumerate(questoes_treino, 1):
-                st.markdown(f"**{i}.** {q['pergunta']}")
-                if q.get("imagem"): st.image(q["imagem"])
-                respostas_usuario[i] = st.radio(f"Opções {i}", options=q.get('opcoes', []), key=f"q_{i}", index=None)
-                st.markdown("---")
-            enviar = st.form_submit_button("Finalizar Treino")
-
-        if enviar:
-            total = len(questoes_treino)
-            for i, q in enumerate(questoes_treino, 1):
-                resp = respostas_usuario.get(i)
-                if resp and resp == q.get('resposta'): acertos += 1
-            
-            percentual = int((acertos / total) * 100) if total > 0 else 0
-            try:
-                db.collection('rola_resultados').add({
-                    "usuario": usuario_logado["nome"], "faixa": faixa, "tema": tema,
-                    "acertos": acertos, "total": total, "percentual": percentual,
-                    "data": firestore.SERVER_TIMESTAMP
-                })
-            except: pass
-            st.balloons()
-            st.success(f"Treino concluído! {acertos}/{total} ({percentual}%).")
-
-# =========================================
-# EXAME DE FAIXA (TIMER CORRIGIDO)
-# =========================================
-def exame_de_faixa(usuario_logado):
-    st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
-    db = get_db()
-
-    # --- 1. PERMISSÃO ---
-    if usuario_logado["tipo"] == "aluno":
-        alunos_query = db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).stream()
-        aluno_doc = next(alunos_query, None)
-        permitido = False
-        msg = "Exame não liberado."
-        
-        if aluno_doc:
-            dados = aluno_doc.to_dict()
-            if dados.get('exame_habilitado'):
-                agora = datetime.now()
-                ini = dados.get('exame_inicio')
-                fim = dados.get('exame_fim')
-                if ini and fim:
-                    try:
-                        ini = ini.replace(tzinfo=None)
-                        fim = fim.replace(tzinfo=None)
-                        if ini <= agora <= fim: permitido = True
-                        else: msg = f"Fora do prazo. ({ini.strftime('%d/%m')} - {fim.strftime('%d/%m')})"
-                    except: permitido = True
-                else: permitido = True 
-        if not permitido:
-            st.warning(f"🚫 {msg}")
-            return
-
-    # --- 2. SELEÇÃO ---
-    faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-    faixa_sel = st.selectbox("Selecione a faixa:", faixas)
-    
-    # Inicialização de Estado
-    if 'prova_iniciada' not in st.session_state: st.session_state.prova_iniciada = False
-    if 'prova_concluida' not in st.session_state: st.session_state.prova_concluida = False
-    if 'resultado_final' not in st.session_state: st.session_state.resultado_final = {}
-    
-    # Reset se mudar faixa
-    if 'ultima_faixa_sel' not in st.session_state: st.session_state.ultima_faixa_sel = faixa_sel
-    elif st.session_state.ultima_faixa_sel != faixa_sel:
-        st.session_state.prova_iniciada = False
-        st.session_state.prova_concluida = False
-        st.session_state.ultima_faixa_sel = faixa_sel
-
-    # --- 3. TELA DE RESULTADOS (Se já acabou) ---
-    if st.session_state.prova_concluida:
-        res = st.session_state.resultado_final
-        if res.get('faixa') == faixa_sel:
-            st.markdown("---")
-            if res['aprovado']:
-                st.balloons()
-                st.success(f"🎉 APROVADO! Nota: {res['percentual']}% ({res['acertos']}/{res['total']})")
-                st.info("Seu certificado foi gerado e o código de verificação registrado.")
-                
-                # Botão de Download
-                # Usamos um ID único no botão para evitar conflitos de renderização
-                try:
-                    pdf_path = gerar_pdf(
-                        usuario_logado['nome'], 
-                        res['faixa'], 
-                        res['acertos'], 
-                        res['total'], 
-                        res['codigo']
-                    )
-                    if os.path.exists(pdf_path):
-                        with open(pdf_path, "rb") as f:
-                            st.download_button(
-                                label="📥 BAIXAR CERTIFICADO AGORA",
-                                data=f.read(),
-                                file_name=os.path.basename(pdf_path),
-                                mime="application/pdf",
-                                use_container_width=True,
-                                key="btn_download_final"
-                            )
-                    else:
-                        st.error("Erro: Arquivo PDF não foi criado.")
-                except Exception as e:
-                    st.error(f"Erro ao gerar PDF: {e}")
-            else:
-                msg_tempo = "Tempo Esgotado. " if res.get('tempo_esgotado') else ""
-                st.error(f"Reprovado. {msg_tempo}Nota: {res['percentual']}%. Mínimo: 70%.")
-            
-            if st.button("🔄 Voltar ao Início"):
-                st.session_state.prova_iniciada = False
-                st.session_state.prova_concluida = False
-                st.rerun()
-            return
-
-    # --- 4. CARREGA PROVA ---
-    doc_ref = db.collection('exames').document(faixa_sel)
-    doc_exame = doc_ref.get()
-    dados_exame = doc_exame.to_dict() if doc_exame.exists else {}
-    
-    if not dados_exame:
-        json_path = f"exames/faixa_{faixa_sel.lower()}.json"
-        if os.path.exists(json_path):
-            try:
-                with open(json_path, "r") as f: dados_exame = json.load(f)
-            except: pass
-
-    if not dados_exame:
-        st.info(f"Sem prova cadastrada para {faixa_sel}.")
-        return
-
-    lista_questoes = dados_exame.get('questoes', [])
-    tempo_limite = dados_exame.get('tempo_limite', 60)
-
-    if not lista_questoes:
-        st.warning("Prova vazia.")
-        return
-
-    # --- 5. TELA DE INSTRUÇÕES ---
-    if not st.session_state.prova_iniciada:
-        st.markdown("---")
-        with st.container(border=True):
-            st.markdown(f"### 📜 Instruções - Faixa {faixa_sel}")
-            st.markdown(f"""
-            * **Questões:** {len(lista_questoes)}
-            * **Tempo Limite:** ⏱️ {tempo_limite} minutos
-            * **Aprovação:** 70% de acertos
-            
-            Ao clicar em iniciar, o tempo começará a contar.
-            """)
-            
-            if st.button("✅ Começar Agora", type="primary", use_container_width=True):
-                st.session_state.prova_iniciada = True
-                st.session_state.prova_concluida = False
-                st.session_state.fim_prova = datetime.now() + timedelta(minutes=tempo_limite)
-                st.rerun()
-        return 
-
-    # --- 6. PROVA EM ANDAMENTO ---
-    
-    # Tempo
-    agora = datetime.now()
-    tempo_restante = st.session_state.fim_prova - agora
-    segundos_restantes = int(tempo_restante.total_seconds())
-    
-    tempo_esgotado = segundos_restantes <= 0
-
-    if not tempo_esgotado:
-        # CRONÔMETRO COM ID ÚNICO PARA EVITAR CONFLITOS
-        timer_id = f"timer_{uuid.uuid4()}"
-        st.markdown(
-            f"""
-            <div style="text-align: center; padding: 10px; border: 2px solid #FFD700; border-radius: 10px; margin-bottom: 20px; background-color: #0e2d26;">
-                <h3 id="{timer_id}" style="color: #FFD700; margin: 0;">Carregando...</h3>
-            </div>
-            <script>
-            (function() {{
-                var timeleft = {segundos_restantes};
-                var timerElement = document.getElementById("{timer_id}");
-                if (timerElement) {{
-                    var downloadTimer = setInterval(function(){{
-                    if(timeleft <= 0){{
-                        clearInterval(downloadTimer);
-                        timerElement.innerHTML = "⌛ Tempo Esgotado!";
-                    }} else {{
-                        var m = Math.floor(timeleft / 60);
-                        var s = timeleft % 60;
-                        timerElement.innerHTML = "⏱️ " + m + ":" + (s < 10 ? "0" : "") + s;
-                    }}
-                    timeleft -= 1;
-                    }}, 1000);
-                }}
-            }})();
-            </script>
-            """,
-            unsafe_allow_html=True
-        )
-    else:
-        st.error("⌛ TEMPO ESGOTADO!")
-
-    # Prova
-    respostas = {}
-    finalizar = False
-    
-    if not tempo_esgotado:
-        with st.form(key=f"form_prova_{faixa_sel}"):
-            for i, q in enumerate(lista_questoes, 1):
-                st.markdown(f"**{i}.** {q['pergunta']}")
-                if q.get("imagem"): st.image(q["imagem"])
-                respostas[i] = st.radio("Alternativa:", q.get('opcoes', []), key=f"resp_{i}", index=None)
-                st.markdown("---")
-            
-            finalizar = st.form_submit_button("Finalizar Exame 🏁", use_container_width=True)
-    else:
-        finalizar = True 
-        
-    # --- 7. FINALIZAÇÃO ---
-    if finalizar:
-        acertos = 0
-        total = len(lista_questoes)
-        
-        if not tempo_esgotado:
-            for i, q in enumerate(lista_questoes, 1):
-                resp_user = respostas.get(i)
-                resp_certa = q.get('resposta')
-                if resp_user:
-                    # Verifica se a resposta contém o texto correto
-                    if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
-                        acertos += 1
-        
-        percentual = int((acertos / total) * 100) if total > 0 else 0
-        aprovado = percentual >= 70
-        
-        # Gera código (agora usando utils.py corrigido com Firestore)
-        codigo = gerar_codigo_verificacao() if aprovado else None
-
-        if aprovado:
-            try:
-                db.collection('resultados').add({
-                    "usuario": usuario_logado["nome"], "modo": "Exame de Faixa",
-                    "faixa": faixa_sel, "pontuacao": percentual,
-                    "acertos": acertos, "total_questoes": total,
-                    "data": firestore.SERVER_TIMESTAMP, "codigo_verificacao": codigo
-                })
-            except Exception as e:
-                st.error(f"Erro ao salvar resultado na nuvem: {e}")
-        
-        # Salva estado e recarrega para limpar a tela
-        st.session_state.prova_concluida = True
-        st.session_state.resultado_final = {
-            "usuario": usuario_logado["nome"], "faixa": faixa_sel,
-            "acertos": acertos, "total": total, "percentual": percentual,
-            "codigo": codigo, "aprovado": aprovado, "tempo_esgotado": tempo_esgotado
-        }
+def app_principal():
+    # Garante que a sessão de usuário existe
+    if "usuario" not in st.session_state or not st.session_state.usuario:
+        st.error("Sessão perdida. Por favor, faça login novamente.")
+        st.session_state.usuario = None
         st.rerun()
+        return
 
-# =========================================
-# RANKING
-# =========================================
-def ranking():
-    st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking</h1>", unsafe_allow_html=True)
-    db = get_db()
+    usuario_logado = st.session_state.usuario
+    tipo_usuario = usuario_logado.get("tipo", "aluno") 
+
+    # --- Navegação Lateral (Sidebar) ---
+    def ir_para(pagina):
+        st.session_state.menu_selection = pagina
+
+    with st.sidebar:
+        if os.path.exists("assets/logo.png"):
+            st.image("assets/logo.png", use_container_width=True)
+            
+        st.markdown(f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>", unsafe_allow_html=True)
+        
+        if st.button("👤 Meu Perfil", use_container_width=True):
+            ir_para("Meu Perfil")
+
+        if tipo_usuario in ["admin", "professor"]:
+            if st.button("👩‍🏫 Painel Professor", use_container_width=True):
+                ir_para("Painel do Professor")
+
+        if tipo_usuario == "admin":
+            if st.button("🔑 Gestão Usuários", use_container_width=True):
+                ir_para("Gestão de Usuários")
+
+        st.markdown("---")
+        if st.button("🚪 Sair", use_container_width=True):
+            for key in list(st.session_state.keys()):
+                del st.session_state[key]
+            st.rerun()
+
+    # --- Roteamento das Telas ---
+    if "menu_selection" not in st.session_state:
+        st.session_state.menu_selection = "Início"
+
+    pagina = st.session_state.menu_selection
+
+    # 1. Telas da Sidebar (Prioritárias - sobrepõem o menu horizontal)
+    if pagina == "Meu Perfil":
+        geral.tela_meu_perfil(usuario_logado)
+        if st.button("⬅️ Voltar ao Início"): ir_para("Início")
+            
+    elif pagina == "Gestão de Usuários":
+        admin.gestao_usuarios(usuario_logado)
+        if st.button("⬅️ Voltar ao Início"): ir_para("Início")
+            
+    elif pagina == "Painel do Professor":
+        professor.painel_professor()
+        if st.button("⬅️ Voltar ao Início"): ir_para("Início")
     
-    docs = db.collection('rola_resultados').stream()
-    data = [d.to_dict() for d in docs]
-    if not data: st.info("Ranking vazio."); return
-    df = pd.DataFrame(data)
-    if 'usuario' in df.columns:
-        rdf = df.groupby("usuario", as_index=False).agg(media=("percentual", "mean"), total=("usuario", "count")).sort_values("media", ascending=False)
-        st.dataframe(rdf, use_container_width=True)
+    # 2. Tela Inicial (SEM MENU HORIZONTAL)
+    elif pagina == "Início":
+        geral.tela_inicio()
+
+    # 3. Demais Telas (COM MENU HORIZONTAL)
+    else:
+        # Define opções do menu baseado no perfil
+        if tipo_usuario in ["admin", "professor"]:
+            opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+            icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+        else: # Aluno
+            opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
+            icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
+            
+            opcoes.insert(2, "Exame de Faixa")
+            icons.insert(2, "journal-check")
+
+        # Descobre o índice da página atual
+        try:
+            index_atual = opcoes.index(pagina)
+        except ValueError:
+            index_atual = 0
+
+        # Menu Horizontal
+        menu = option_menu(
+            menu_title=None, 
+            options=opcoes, 
+            icons=icons, 
+            default_index=index_atual,
+            orientation="horizontal",
+            styles={
+                "container": {"padding": "0!important", "background-color": COR_FUNDO},
+                "icon": {"color": COR_DESTAQUE, "font-size": "16px"},
+                "nav-link": {"font-size": "14px", "text-align": "center", "margin": "0px", "color": COR_TEXTO},
+                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
+            }
+        )
+
+        # Atualiza o estado se o usuário clicar no menu
+        if menu != pagina:
+            st.session_state.menu_selection = menu
+            st.rerun()
+
+        # Roteador do Menu Horizontal
+        if menu == "Início": geral.tela_inicio()
+        elif menu == "Modo Rola": aluno.modo_rola(usuario_logado)
+        elif menu == "Exame de Faixa": aluno.exame_de_faixa(usuario_logado)
+        elif menu == "Ranking": aluno.ranking()
+        elif menu == "Gestão de Equipes": professor.gestao_equipes()
+        elif menu == "Gestão de Questões": admin.gestao_questoes()
+        elif menu == "Gestão de Exame": admin.gestao_exame_de_faixa()
+        elif menu == "Meus Certificados": aluno.meus_certificados(usuario_logado)
 
 # =========================================
-# MEUS CERTIFICADOS
+# PONTO DE ENTRADA (Start)
 # =========================================
-def meus_certificados(usuario_logado):
-    st.markdown("<h1 style='color:#FFD700;'>📜 Meus Certificados</h1>", unsafe_allow_html=True)
-    db = get_db()
-    docs = db.collection('resultados').where('usuario', '==', usuario_logado['nome']).where('modo', '==', 'Exame de Faixa').stream()
-    
-    lista = [d.to_dict() for d in docs]
-    if not lista: st.info("Sem certificados."); return
+if __name__ == "__main__":
+    # Inicializa variáveis de sessão essenciais
+    if "usuario" not in st.session_state: st.session_state.usuario = None
+    if "token" not in st.session_state: st.session_state.token = None
+    if "registration_pending" not in st.session_state: st.session_state.registration_pending = None
 
-    for i, c in enumerate(lista):
-        with st.container(border=True):
-            st.write(f"**{c['faixa']}** | {c['pontuacao']}% | {c.get('codigo_verificacao')}")
-            try:
-                p = gerar_pdf(usuario_logado['nome'], c['faixa'], c.get('acertos',0), c.get('total_questoes',10), c.get('codigo_verificacao','-'))
-                with open(p, "rb") as f: st.download_button("Baixar", f.read(), os.path.basename(p), "application/pdf", key=f"d{i}")
-            except: pass
+    # Fluxo de Controle Principal
+    try:
+        if st.session_state.registration_pending:
+            login.tela_completar_cadastro(st.session_state.registration_pending)
+        elif st.session_state.usuario:
+            app_principal()
+        else:
+            login.tela_login()
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado na execução: {e}")
