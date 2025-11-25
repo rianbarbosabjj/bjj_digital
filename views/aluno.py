@@ -16,7 +16,6 @@ def modo_rola(usuario_logado):
     db = get_db()
 
     # 1. Carrega TEMAS disponíveis no Firestore
-    # (Buscamos todas as questões e extraímos os temas únicos)
     docs_questoes = list(db.collection('questoes').stream())
     
     if not docs_questoes:
@@ -31,11 +30,9 @@ def modo_rola(usuario_logado):
     with col1:
         tema = st.selectbox("Selecione o tema:", temas)
     with col2:
-        # A faixa aqui é apenas informativa para o registro do treino
         faixa = st.selectbox("Sua faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
 
     if st.button("Iniciar Treino 🤼", use_container_width=True):
-        # Filtra questões
         if tema == "Todos os Temas":
             questoes_selecionadas = todas_questoes
         else:
@@ -46,12 +43,7 @@ def modo_rola(usuario_logado):
             return
 
         random.shuffle(questoes_selecionadas)
-        # Limita a 10 perguntas para treino rápido (opcional)
         questoes_treino = questoes_selecionadas[:10] 
-        
-        # --- INTERFACE DO TREINO ---
-        # Como o Streamlit recarrega, precisamos usar um container ou expanders para mostrar o resultado
-        # Mas para o Modo Rola simples, vamos mostrar tudo de uma vez
         
         acertos = 0
         respostas_usuario = {}
@@ -64,7 +56,6 @@ def modo_rola(usuario_logado):
                 if q.get("imagem"):
                     st.image(q["imagem"])
                 
-                # Opções
                 opcoes = q.get('opcoes', [])
                 respostas_usuario[i] = st.radio(f"Opções {i}", options=opcoes, key=f"q_{i}", index=None)
                 st.markdown("---")
@@ -75,12 +66,11 @@ def modo_rola(usuario_logado):
             total = len(questoes_treino)
             for i, q in enumerate(questoes_treino, 1):
                 resp = respostas_usuario.get(i)
-                if resp and resp == q.get('resposta'): # Verifica se bate com a resposta correta salva
+                if resp and resp == q.get('resposta'):
                     acertos += 1
             
-            percentual = int((acertos / total) * 100)
+            percentual = int((acertos / total) * 100) if total > 0 else 0
             
-            # Salva histórico
             db.collection('rola_resultados').add({
                 "usuario": usuario_logado["nome"],
                 "faixa": faixa,
@@ -103,7 +93,6 @@ def exame_de_faixa(usuario_logado):
 
     # 1. VERIFICAÇÃO DE SEGURANÇA (NO FIRESTORE)
     if usuario_logado["tipo"] == "aluno":
-        # Busca o documento do aluno vinculado ao usuário logado
         alunos_query = db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).stream()
         aluno_doc = next(alunos_query, None)
         
@@ -113,21 +102,22 @@ def exame_de_faixa(usuario_logado):
         if aluno_doc:
             dados = aluno_doc.to_dict()
             if dados.get('exame_habilitado'):
-                # Verifica datas se existirem
                 agora = datetime.now()
                 inicio = dados.get('exame_inicio')
                 fim = dados.get('exame_fim')
                 
                 if inicio and fim:
-                    # Remove timezone para comparação simples
-                    ini_tz = inicio.replace(tzinfo=None)
-                    fim_tz = fim.replace(tzinfo=None)
-                    if ini_tz <= agora <= fim_tz:
+                    try:
+                        ini_tz = inicio.replace(tzinfo=None)
+                        fim_tz = fim.replace(tzinfo=None)
+                        if ini_tz <= agora <= fim_tz:
+                            permitido = True
+                        else:
+                            msg_bloqueio = f"Fora do período. Disponível entre {ini_tz.strftime('%d/%m %H:%M')} e {fim_tz.strftime('%d/%m %H:%M')}."
+                    except:
+                        # Se der erro de data, libera se estiver marcado como habilitado (fallback)
                         permitido = True
-                    else:
-                        msg_bloqueio = f"Fora do período. Disponível entre {ini_tz.strftime('%d/%m %H:%M')} e {fim_tz.strftime('%d/%m %H:%M')}."
                 else:
-                    # Se não tiver data configurada mas estiver habilitado, libera (ou bloqueia, dependendo da regra)
                     permitido = True 
             
         if not permitido:
@@ -138,26 +128,38 @@ def exame_de_faixa(usuario_logado):
     faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
     faixa_sel = st.selectbox("Selecione a faixa do exame:", faixas)
     
-    # 3. BUSCA A PROVA NO FIRESTORE
-    # Procuramos na coleção 'exames' um documento com o ID da faixa (ex: 'Azul')
-    doc_exame = db.collection('exames').document(faixa_sel).get()
+    # 3. BUSCA A PROVA NO FIRESTORE (Robustez Aumentada)
+    # Tenta buscar pelo ID direto (Padrão novo)
+    doc_ref = db.collection('exames').document(faixa_sel)
+    doc_exame = doc_ref.get()
     
-    if not doc_exame.exists:
+    dados_exame = {}
+    
+    if doc_exame.exists:
+        dados_exame = doc_exame.to_dict()
+    else:
+        # Fallback: Tenta buscar por campo caso o ID esteja diferente
+        query = db.collection('exames').where('faixa', '==', faixa_sel).stream()
+        results = list(query)
+        if results:
+            dados_exame = results[0].to_dict()
+            
+    if not dados_exame:
         st.info(f"Ainda não há prova cadastrada para a faixa {faixa_sel}.")
+        if usuario_logado["tipo"] in ["admin", "professor"]:
+            st.warning("⚠️ Professor: Você precisa ir em 'Gestão de Exame' e salvar as questões para esta faixa no novo banco de dados.")
         return
-        
-    dados_exame = doc_exame.to_dict()
+
     lista_questoes_prova = dados_exame.get('questoes', [])
     
     if not lista_questoes_prova:
-        st.warning("Esta prova está sem questões. Avise seu professor.")
+        st.warning("Esta prova existe mas está sem questões. Avise seu professor.")
         return
 
     st.markdown(f"### 📝 Prova de Faixa {faixa_sel}")
     st.caption(f"Total de questões: {len(lista_questoes_prova)}")
 
     # 4. APLICAÇÃO DA PROVA
-    # Usamos st.form para não recarregar a cada clique
     respostas = {}
     with st.form(key=f"form_prova_{faixa_sel}"):
         for i, q in enumerate(lista_questoes_prova, 1):
@@ -166,8 +168,6 @@ def exame_de_faixa(usuario_logado):
             if q.get("imagem"):
                 st.image(q["imagem"])
             
-            # As opções já devem vir salvas na questão
-            # O ideal é salvar a resposta certa separada ou criptografada, mas aqui vem junto no dict q
             respostas[i] = st.radio("Selecione:", q.get('opcoes', []), key=f"resp_{i}", index=None)
             st.markdown("---")
             
@@ -178,27 +178,21 @@ def exame_de_faixa(usuario_logado):
         acertos = 0
         total = len(lista_questoes_prova)
         
-        # Verifica respostas
         for i, q in enumerate(lista_questoes_prova, 1):
             resp_user = respostas.get(i)
             resp_certa = q.get('resposta')
             
-            # A resposta pode estar salva como "A" ou "A) Texto". O radio retorna o texto inteiro.
-            # Vamos assumir que 'resp_certa' é a string exata ou o prefixo.
             if resp_user:
-                # Lógica simples: se a string da resposta certa estiver contida na escolhida
-                # Ex: resp_certa="A", resp_user="A) Raspagem" -> Match
+                # Comparação flexível (texto exato ou prefixo "A)")
                 if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
                     acertos += 1
         
-        percentual = int((acertos / total) * 100)
+        percentual = int((acertos / total) * 100) if total > 0 else 0
         
-        # Resultado
         if percentual >= 70:
             st.success(f"🎉 APROVADO! Nota: {percentual}% ({acertos}/{total})")
             codigo = gerar_codigo_verificacao()
             
-            # Salva resultado
             db.collection('resultados').add({
                 "usuario": usuario_logado["nome"],
                 "modo": "Exame de Faixa",
@@ -210,7 +204,6 @@ def exame_de_faixa(usuario_logado):
                 "codigo_verificacao": codigo
             })
             
-            # Habilita download do certificado
             st.session_state['certificado_temp'] = {
                 "usuario": usuario_logado["nome"], "faixa": faixa_sel,
                 "acertos": acertos, "total": total, "codigo": codigo
@@ -218,10 +211,9 @@ def exame_de_faixa(usuario_logado):
         else:
             st.error(f"Reprovado. Nota: {percentual}%. Mínimo: 70%.")
     
-    # Botão de Download (fora do form para persistir)
     if 'certificado_temp' in st.session_state:
         dados = st.session_state['certificado_temp']
-        if dados['faixa'] == faixa_sel: # Garante que é o cert da prova atual
+        if dados['faixa'] == faixa_sel:
             try:
                 pdf_path = gerar_pdf(dados['usuario'], dados['faixa'], dados['acertos'], dados['total'], dados['codigo'])
                 with open(pdf_path, "rb") as f:
@@ -236,7 +228,6 @@ def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking</h1>", unsafe_allow_html=True)
     db = get_db()
     
-    # Busca dados do Firestore
     docs = db.collection('rola_resultados').stream()
     data = [d.to_dict() for d in docs]
     
@@ -246,7 +237,6 @@ def ranking():
 
     df = pd.DataFrame(data)
     
-    # Agrupa e calcula média
     if 'usuario' in df.columns and 'percentual' in df.columns:
         ranking_df = df.groupby("usuario", as_index=False).agg(
             media_percentual=("percentual", "mean"),
@@ -289,7 +279,6 @@ def meus_certificados(usuario_logado):
             c1.markdown(f"### 🥋 Faixa {cert.get('faixa')}")
             c1.write(f"**Nota:** {cert.get('pontuacao')}% | **Código:** {cert.get('codigo_verificacao')}")
             
-            # Recria o PDF sob demanda
             try:
                 path = gerar_pdf(
                     usuario_logado['nome'], cert.get('faixa'), 
