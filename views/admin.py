@@ -107,7 +107,7 @@ def gestao_usuarios(usuario_logado):
                 st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (COM FLUXO DE APROVAÇÃO)
+# GESTÃO DE QUESTÕES (COM AUTORIA VISÍVEL)
 # =========================================
 def gestao_questoes():
     """Gestão de Banco de Questões no Firestore."""
@@ -134,9 +134,8 @@ def gestao_questoes():
     for doc in docs_q:
         d = doc.to_dict()
         d['id'] = doc.id
-        status = d.get('status', 'aprovada') # Legado assume aprovada
+        status = d.get('status', 'aprovada') 
         
-        # Separação por Status
         if status == 'pendente':
             pendentes.append(d)
             if d.get('criado_por_id') == user['id']:
@@ -144,7 +143,6 @@ def gestao_questoes():
         else:
             aprovadas.append(d)
             temas_set.add(d.get('tema', 'Geral'))
-            # Verifica se tem pedido de correção
             if d.get('solicitacao_correcao'):
                 correcoes.append(d)
 
@@ -174,11 +172,16 @@ def gestao_questoes():
             st.info("Nenhuma questão aprovada encontrada.")
         else:
             for q in q_exibir:
-                cor_card = "#2e2e2e" if not q.get('solicitacao_correcao') else "#5c4b0b" # Destaca se tiver flag
+                cor_card = "#2e2e2e" if not q.get('solicitacao_correcao') else "#5c4b0b" 
                 with st.container(border=True):
                     # Cabeçalho da Questão
                     col_txt, col_btn = st.columns([6, 1])
                     col_txt.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                    
+                    # --- AUTORIA DISCRETA (ADICIONADO) ---
+                    autor = q.get('criado_por', 'Desconhecido').title()
+                    st.caption(f"✍️ Criado por: {autor}")
+                    # -------------------------------------
                     
                     with st.expander("Ver Detalhes / Opções"):
                         st.write(f"**Opções:** {q.get('opcoes')}")
@@ -196,7 +199,7 @@ def gestao_questoes():
                                 db.collection('questoes').document(q['id']).delete()
                                 st.rerun()
                         
-                        # Professor/Admin pode solicitar correção
+                        # Solicitação de correção
                         if not q.get('solicitacao_correcao'):
                             with c_act1.popover("🚩 Solicitar Correção"):
                                 motivo = st.text_input("Motivo:", key=f"motivo_{q['id']}")
@@ -300,9 +303,6 @@ def gestao_questoes():
                         with st.expander("Editar e Corrigir"):
                             with st.form(key=f"fix_{q['id']}"):
                                 n_perg = st.text_area("Pergunta:", value=q['pergunta'])
-                                # Simplificação: Editar apenas a pergunta e resposta aqui. 
-                                # Para editar opções, precisaria explodir a lista.
-                                # Vamos permitir limpar a flag ou excluir.
                                 
                                 c_fix1, c_fix2 = st.columns(2)
                                 salvar_fix = c_fix1.form_submit_button("Salvar e Marcar como Resolvido")
@@ -401,10 +401,16 @@ def gestao_exame_de_faixa():
                             selecionadas.append(q)
                     with c_det:
                         st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
-                        if 'opcoes' in q and q['opcoes']:
+                        
+                        # Visualização Detalhada
+                        if 'opcoes' in q:
                             for op in q['opcoes']:
                                 st.markdown(f"<span style='color: #aaaaaa; margin-left: 15px;'>• {op}</span>", unsafe_allow_html=True)
                         st.caption(f"✅ Resposta: {q.get('resposta')}")
+                        
+                        # Autoria na seleção também
+                        st.caption(f"✍️ Autor: {q.get('criado_por', 'Admin')}")
+                        
                         st.markdown("---")
             
             if st.form_submit_button("➕ Salvar Prova"):
@@ -529,30 +535,3 @@ def gestao_exame_de_faixa():
                                 })
                                 st.rerun()
                             else: st.error("Data Inválida")
-```
-
-### Agora o `views/aluno.py`
-
-Também precisamos garantir que os alunos **só vejam questões aprovadas** quando forem treinar no Modo Rola.
-
-Substitua a função `carregar_questoes_firestore` em **`views/aluno.py`** por esta versão filtrada:
-
-```python
-@st.cache_data(ttl=300) 
-def carregar_questoes_firestore():
-    db = get_db()
-    todas_questoes = []
-    try:
-        # FILTRO: Apenas questões com status 'aprovada' ou que não tenham status (legado)
-        docs_questoes = list(db.collection('questoes').stream())
-        if docs_questoes:
-            for d in docs_questoes:
-                dados = d.to_dict()
-                # Se não tiver campo 'status', assume aprovada (legado). 
-                # Se tiver, só passa se for 'aprovada'.
-                if dados.get('status', 'aprovada') == 'aprovada':
-                    todas_questoes.append(dados)
-    except: pass
-    
-    # ... (código de fallback local continua igual) ...
-    return todas_questoes
