@@ -9,7 +9,7 @@ from datetime import datetime, time
 from firebase_admin import firestore
 
 # =========================================
-# GESTÃO DE USUÁRIOS (Mantida igual)
+# GESTÃO DE USUÁRIOS
 # =========================================
 def gestao_usuarios(usuario_logado):
     """Página de gerenciamento de usuários (Admin)."""
@@ -52,13 +52,11 @@ def gestao_usuarios(usuario_logado):
         user_id = lista_usuarios[index_selecionado]['id_doc']
         
         user_ref = db.collection('usuarios').document(user_id)
-        doc_snap = user_ref.get()
-        
-        if not doc_snap.exists:
+        user_data = user_ref.get().to_dict()
+
+        if not user_data:
             st.error("Usuário não encontrado.")
             return
-
-        user_data = doc_snap.to_dict()
 
         with st.expander(f"⚙️ Editar: {user_data.get('nome')}", expanded=True):
             with st.form(key="form_edit_user_admin"):
@@ -107,7 +105,7 @@ def gestao_usuarios(usuario_logado):
                 st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (COM AUTORIA VISÍVEL)
+# GESTÃO DE QUESTÕES (COM AUTORIA E PERMISSÕES)
 # =========================================
 def gestao_questoes():
     """Gestão de Banco de Questões no Firestore."""
@@ -123,13 +121,12 @@ def gestao_questoes():
 
     # --- CARREGAMENTO INICIAL ---
     docs_q = list(db.collection('questoes').stream())
-    todas_questoes = []
-    temas_set = set()
     
     pendentes = []
     correcoes = []
     aprovadas = []
     minhas_pendentes = []
+    temas_set = set()
 
     for doc in docs_q:
         d = doc.to_dict()
@@ -172,16 +169,15 @@ def gestao_questoes():
             st.info("Nenhuma questão aprovada encontrada.")
         else:
             for q in q_exibir:
-                cor_card = "#2e2e2e" if not q.get('solicitacao_correcao') else "#5c4b0b" 
+                # Cor de fundo para destacar se tiver correção pendente
+                border_color = "#5c4b0b" if q.get('solicitacao_correcao') else None
+                
                 with st.container(border=True):
-                    # Cabeçalho da Questão
                     col_txt, col_btn = st.columns([6, 1])
                     col_txt.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
                     
-                    # --- AUTORIA DISCRETA (ADICIONADO) ---
                     autor = q.get('criado_por', 'Desconhecido').title()
                     st.caption(f"✍️ Criado por: {autor}")
-                    # -------------------------------------
                     
                     with st.expander("Ver Detalhes / Opções"):
                         st.write(f"**Opções:** {q.get('opcoes')}")
@@ -189,17 +185,15 @@ def gestao_questoes():
                         if q.get('imagem'): st.image(q['imagem'], width=200)
                         
                         st.markdown("---")
-                        
-                        # Ações
                         c_act1, c_act2 = st.columns(2)
                         
-                        # Admin pode excluir direto
+                        # --- AQUI ESTÁ A REGRA: SÓ ADMIN EXCLUI ---
                         if tipo_user == "admin":
-                            if c_act2.button("🗑️ Excluir", key=f"del_{q['id']}"):
+                            if c_act2.button("🗑️ Excluir Definitivamente", key=f"del_{q['id']}"):
                                 db.collection('questoes').document(q['id']).delete()
                                 st.rerun()
                         
-                        # Solicitação de correção
+                        # Solicitação de correção (Todos)
                         if not q.get('solicitacao_correcao'):
                             with c_act1.popover("🚩 Solicitar Correção"):
                                 motivo = st.text_input("Motivo:", key=f"motivo_{q['id']}")
@@ -226,11 +220,9 @@ def gestao_questoes():
             c_tema1, c_tema2 = st.columns([1, 1])
             tema_sel_add = c_tema1.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
             tema_novo = c_tema2.text_input("Nome do Novo Tema:") if tema_sel_add == "Novo Tema" else None
-            
             tema_final = tema_novo if tema_novo else tema_sel_add
             
             pergunta = st.text_area("Enunciado da Pergunta:")
-            
             cols = st.columns(2)
             op_a = cols[0].text_input("Opção A:")
             op_b = cols[1].text_input("Opção B:")
@@ -258,7 +250,6 @@ def gestao_questoes():
                         "solicitacao_correcao": False
                     }
                     db.collection('questoes').add(nova_q)
-                    
                     msg = "Questão salva e aprovada!" if status_inicial == "aprovada" else "Questão enviada para aprovação!"
                     st.success(msg)
                     st.rerun()
@@ -303,7 +294,6 @@ def gestao_questoes():
                         with st.expander("Editar e Corrigir"):
                             with st.form(key=f"fix_{q['id']}"):
                                 n_perg = st.text_area("Pergunta:", value=q['pergunta'])
-                                
                                 c_fix1, c_fix2 = st.columns(2)
                                 salvar_fix = c_fix1.form_submit_button("Salvar e Marcar como Resolvido")
                                 
@@ -335,12 +325,10 @@ def gestao_questoes():
                 for q in minhas_pendentes:
                     st.info(f"[{q['tema']}] {q['pergunta']}")
 
-
 # =========================================
-# GESTÃO DE EXAME DE FAIXA (Mantida igual)
+# GESTÃO DE EXAME DE FAIXA
 # =========================================
 def gestao_exame_de_faixa():
-    # ... (código anterior da gestão de exame, sem alterações) ...
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
     
     user_logado = st.session_state.usuario
@@ -375,7 +363,6 @@ def gestao_exame_de_faixa():
             min_value=10, max_value=240, value=tempo_limite_atual, step=10
         )
 
-        # CARREGA APENAS QUESTÕES APROVADAS
         docs_q = db.collection('questoes').where('status', '==', 'aprovada').stream()
         todas_q = [d.to_dict() for d in docs_q] 
         
@@ -402,15 +389,12 @@ def gestao_exame_de_faixa():
                     with c_det:
                         st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
                         
-                        # Visualização Detalhada
-                        if 'opcoes' in q:
+                        # Visualização Detalhada na Seleção
+                        if 'opcoes' in q and q['opcoes']:
                             for op in q['opcoes']:
                                 st.markdown(f"<span style='color: #aaaaaa; margin-left: 15px;'>• {op}</span>", unsafe_allow_html=True)
                         st.caption(f"✅ Resposta: {q.get('resposta')}")
-                        
-                        # Autoria na seleção também
                         st.caption(f"✍️ Autor: {q.get('criado_por', 'Admin')}")
-                        
                         st.markdown("---")
             
             if st.form_submit_button("➕ Salvar Prova"):
