@@ -3,8 +3,11 @@ import random
 import os
 import json
 import time
+import uuid
 from datetime import datetime, timedelta
-import streamlit.components.v1 as components  # Importante para o Timer
+import pandas as pd
+import plotly.express as px
+import streamlit.components.v1 as components 
 from database import get_db
 from utils import gerar_codigo_verificacao, gerar_pdf
 from firebase_admin import firestore
@@ -17,16 +20,16 @@ def carregar_questoes_firestore():
     db = get_db()
     todas_questoes = []
     try:
+        # Filtra apenas questões APROVADAS
         docs_questoes = list(db.collection('questoes').stream())
         if docs_questoes:
             for d in docs_questoes:
                 q = d.to_dict()
-                # Filtra apenas aprovadas
                 if q.get('status', 'aprovada') == 'aprovada':
                     todas_questoes.append(q)
     except: pass
     
-    # Fallback local
+    # Fallback local para testes
     if not todas_questoes and os.path.exists("questions"):
         for f in os.listdir("questions"):
             if f.endswith(".json"):
@@ -54,12 +57,11 @@ def carregar_exame_firestore(faixa_sel):
     return dados_exame
 
 # =========================================
-# MODO ROLA
+# MODO ROLA (Treino Livre)
 # =========================================
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
-    db = get_db()
-
+    
     todas_questoes = carregar_questoes_firestore()
 
     if not todas_questoes:
@@ -86,10 +88,8 @@ def modo_rola(usuario_logado):
         random.shuffle(questoes_selecionadas)
         questoes_treino = questoes_selecionadas[:10] 
         
-        acertos = 0
-        respostas_usuario = {}
-        
         st.markdown("---")
+        respostas_usuario = {}
         with st.form("form_treino"):
             for i, q in enumerate(questoes_treino, 1):
                 st.markdown(f"**{i}.** {q['pergunta']}")
@@ -99,19 +99,23 @@ def modo_rola(usuario_logado):
             enviar = st.form_submit_button("Finalizar Treino")
 
         if enviar:
-            total = len(questoes_treino)
+            acertos = 0
             for i, q in enumerate(questoes_treino, 1):
                 resp = respostas_usuario.get(i)
                 if resp and resp == q.get('resposta'): acertos += 1
             
+            total = len(questoes_treino)
             percentual = int((acertos / total) * 100) if total > 0 else 0
+            
             try:
+                db = get_db()
                 db.collection('rola_resultados').add({
                     "usuario": usuario_logado["nome"], "faixa": faixa, "tema": tema,
                     "acertos": acertos, "total": total, "percentual": percentual,
                     "data": firestore.SERVER_TIMESTAMP
                 })
             except: pass
+            
             st.balloons()
             st.success(f"Treino concluído! {acertos}/{total} ({percentual}%).")
 
@@ -122,7 +126,7 @@ def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    # --- 1. PERMISSÃO ---
+    # 1. PERMISSÃO
     if usuario_logado["tipo"] == "aluno":
         alunos_query = db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).stream()
         aluno_doc = next(alunos_query, None)
@@ -140,14 +144,14 @@ def exame_de_faixa(usuario_logado):
                         if isinstance(ini, datetime): ini = ini.replace(tzinfo=None)
                         if isinstance(fim, datetime): fim = fim.replace(tzinfo=None)
                         if ini <= agora <= fim: permitido = True
-                        else: msg = f"Fora do prazo. ({ini.strftime('%d/%m %H:%M')} - {fim.strftime('%d/%m %H:%M')})"
-                    except: permitido = True
+                        else: msg = f"Fora do prazo. ({ini.strftime('%d/%m')} - {fim.strftime('%d/%m')})"
+                    except Exception: permitido = True
                 else: permitido = True 
         if not permitido:
             st.warning(f"🚫 {msg}")
             return
 
-    # --- 2. SELEÇÃO ---
+    # 2. SELEÇÃO
     faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
     faixa_sel = st.selectbox("Selecione a faixa:", faixas)
     
@@ -163,7 +167,7 @@ def exame_de_faixa(usuario_logado):
         st.session_state.prova_concluida = False
         st.session_state.ultima_faixa_sel = faixa_sel
 
-    # --- 3. TELA DE RESULTADOS ---
+    # 3. RESULTADOS (CACHEADO NA SESSÃO)
     if st.session_state.prova_concluida:
         res = st.session_state.resultado_final
         if res.get('faixa') == faixa_sel:
@@ -171,26 +175,22 @@ def exame_de_faixa(usuario_logado):
             if res['aprovado']:
                 st.balloons()
                 st.success(f"🎉 APROVADO! Nota: {res['percentual']}% ({res['acertos']}/{res['total']})")
-                st.info("Seu certificado está pronto.")
+                st.info("Seu certificado foi gerado.")
                 
-                # GERAÇÃO ROBUSTA DO BOTÃO DE DOWNLOAD
-                # Se os bytes não estiverem na sessão, gera agora
+                # Tenta pegar PDF do cache da sessão
                 pdf_bytes = res.get('pdf_bytes')
+                pdf_name = res.get('pdf_name', 'certificado.pdf')
                 
+                # Se não tiver, gera AGORA e guarda
                 if not pdf_bytes:
                     try:
-                        pdf_path = gerar_pdf(
-                            usuario_logado['nome'], 
-                            res['faixa'], 
-                            res['acertos'], 
-                            res['total'], 
-                            res['codigo']
+                        # ATENÇÃO: Agora gerar_pdf retorna (bytes, nome) diretamente
+                        pdf_bytes, pdf_name = gerar_pdf(
+                            usuario_logado['nome'], res['faixa'], 
+                            res['acertos'], res['total'], res['codigo']
                         )
-                        with open(pdf_path, "rb") as f:
-                            pdf_bytes = f.read()
-                        # Atualiza a sessão para não gerar de novo
                         st.session_state.resultado_final['pdf_bytes'] = pdf_bytes
-                        st.session_state.resultado_final['pdf_name'] = os.path.basename(pdf_path)
+                        st.session_state.resultado_final['pdf_name'] = pdf_name
                     except Exception as e:
                         st.error(f"Erro ao gerar PDF: {e}")
 
@@ -198,10 +198,10 @@ def exame_de_faixa(usuario_logado):
                     st.download_button(
                         label="📥 BAIXAR CERTIFICADO AGORA",
                         data=pdf_bytes,
-                        file_name=res.get('pdf_name', 'certificado.pdf'),
+                        file_name=pdf_name,
                         mime="application/pdf",
                         use_container_width=True,
-                        key="btn_dl_res"
+                        key="btn_dl_final"
                     )
             else:
                 msg = "Tempo Esgotado. " if res.get('tempo_esgotado') else ""
@@ -213,7 +213,7 @@ def exame_de_faixa(usuario_logado):
                 st.rerun()
             return
 
-    # --- 4. CARREGA PROVA ---
+    # 4. CARREGA PROVA (COM CACHE)
     dados_exame = carregar_exame_firestore(faixa_sel)
     if not dados_exame:
         st.info(f"Sem prova cadastrada para {faixa_sel}.")
@@ -226,7 +226,7 @@ def exame_de_faixa(usuario_logado):
         st.warning("Prova vazia.")
         return
 
-    # --- 5. INSTRUÇÕES ---
+    # 5. INSTRUÇÕES
     if not st.session_state.prova_iniciada:
         st.markdown("---")
         with st.container(border=True):
@@ -236,58 +236,47 @@ def exame_de_faixa(usuario_logado):
             if st.button("✅ Começar Agora", type="primary", use_container_width=True):
                 st.session_state.prova_iniciada = True
                 st.session_state.prova_concluida = False
-                # Grava o timestamp exato de término (segundos desde epoch)
                 st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
                 st.rerun()
         return 
 
-    # --- 6. PROVA EM ANDAMENTO ---
+    # 6. PROVA EM ANDAMENTO
     
-    # Tempo Restante
+    # Tempo
     agora_ts = time.time()
     restante_sec = int(st.session_state.fim_prova_ts - agora_ts)
     tempo_esgotado = restante_sec <= 0
 
     if not tempo_esgotado:
-        # NOVO CRONÔMETRO (Via Componente HTML Isolado)
-        # Isso garante que o JS rode independente do ciclo do Streamlit
-        timer_html = f"""
-        <style>
-            .timer-box {{
-                text-align: center; 
-                padding: 10px; 
-                border: 2px solid #FFD700; 
-                border-radius: 10px; 
-                background-color: #0e2d26;
-                color: #FFD700;
-                font-family: sans-serif;
-                font-weight: bold;
-                font-size: 1.2rem;
-            }}
-        </style>
-        <div class="timer-box" id="timer-display">Carregando tempo...</div>
-        <script>
-            var timeLeft = {restante_sec};
-            var timerElem = document.getElementById("timer-display");
-            
-            var timerInterval = setInterval(function() {{
-                if (timeLeft <= 0) {{
-                    clearInterval(timerInterval);
-                    timerElem.innerHTML = "⌛ TEMPO ESGOTADO";
-                    timerElem.style.borderColor = "red";
-                    timerElem.style.color = "red";
-                }} else {{
-                    var m = Math.floor(timeLeft / 60);
-                    var s = timeLeft % 60;
-                    var m_s = m < 10 ? "0" + m : m;
-                    var s_s = s < 10 ? "0" + s : s;
-                    timerElem.innerHTML = "⏱️ " + m_s + ":" + s_s;
-                    timeLeft -= 1;
+        # CRONÔMETRO HTML
+        timer_id = f"timer_{uuid.uuid4()}"
+        st.markdown(
+            f"""
+            <div style="text-align: center; padding: 10px; border: 2px solid #FFD700; border-radius: 10px; margin-bottom: 20px; background-color: #0e2d26;">
+                <h3 id="{timer_id}" style="color: #FFD700; margin: 0;">Carregando...</h3>
+            </div>
+            <script>
+            setTimeout(function() {{
+                var timeleft = {restante_sec};
+                var el = document.getElementById("{timer_id}");
+                if (el) {{
+                    var timer = setInterval(function(){{
+                    if(timeleft <= 0){{ clearInterval(timer); el.innerHTML = "⌛ Tempo Esgotado!"; }} 
+                    else {{
+                        var m = Math.floor(timeleft / 60);
+                        var s = timeleft % 60;
+                        var m_str = m < 10 ? "0" + m : m;
+                        var s_str = s < 10 ? "0" + s : s;
+                        el.innerHTML = "⏱️ " + m_str + ":" + s_str;
+                    }}
+                    timeleft -= 1;
+                    }}, 1000);
                 }}
-            }}, 1000);
-        </script>
-        """
-        components.html(timer_html, height=85) # Altura fixa para não pular
+            }}, 500);
+            </script>
+            """,
+            unsafe_allow_html=True
+        )
     else:
         st.error("⌛ TEMPO ESGOTADO!")
 
@@ -305,64 +294,59 @@ def exame_de_faixa(usuario_logado):
     else:
         finalizar = True 
         
-    # --- 7. PROCESSAMENTO ---
+    # 7. PROCESSAMENTO
     if finalizar:
-        acertos = 0
-        total = len(lista_questoes)
-        
-        if not tempo_esgotado:
-            for i, q in enumerate(lista_questoes, 1):
-                resp_user = respostas.get(i)
-                resp_certa = q.get('resposta')
-                if resp_user:
-                    if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
-                        acertos += 1
-        
-        percentual = int((acertos / total) * 100) if total > 0 else 0
-        aprovado = percentual >= 70
-        codigo = None
-        pdf_bytes = None
-        pdf_name = ""
-
-        if aprovado:
-            try: codigo = gerar_codigo_verificacao()
-            except: 
-                # Fallback de código se o banco falhar
-                import random
-                codigo = f"BJJ-OFFLINE-{random.randint(1000,9999)}"
-
-            # Salva no Banco
-            try:
-                db.collection('resultados').add({
-                    "usuario": usuario_logado["nome"], "modo": "Exame de Faixa",
-                    "faixa": faixa_sel, "pontuacao": percentual,
-                    "acertos": acertos, "total_questoes": total,
-                    "data": firestore.SERVER_TIMESTAMP, "codigo_verificacao": codigo
-                })
-            except Exception as e: 
-                st.error(f"Erro ao salvar resultado na nuvem: {e}")
+        with st.spinner("Processando resultados..."):
+            acertos = 0
+            total = len(lista_questoes)
             
-            # Gera PDF Imediatamente
-            try:
-                pdf_path = gerar_pdf(usuario_logado['nome'], faixa_sel, acertos, total, codigo)
-                with open(pdf_path, "rb") as f:
-                    pdf_bytes = f.read()
-                pdf_name = os.path.basename(pdf_path)
-            except Exception as e:
-                st.error(f"Erro ao criar PDF: {e}")
-        
-        # Salva na sessão
-        st.session_state.prova_concluida = True
-        st.session_state.resultado_final = {
-            "usuario": usuario_logado["nome"], "faixa": faixa_sel,
-            "acertos": acertos, "total": total, "percentual": percentual,
-            "codigo": codigo, "aprovado": aprovado, "tempo_esgotado": tempo_esgotado,
-            "pdf_bytes": pdf_bytes, "pdf_name": pdf_name
-        }
-        st.rerun()
+            if not tempo_esgotado:
+                for i, q in enumerate(lista_questoes, 1):
+                    resp_user = respostas.get(i)
+                    resp_certa = q.get('resposta')
+                    if resp_user:
+                        if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
+                            acertos += 1
+            
+            percentual = int((acertos / total) * 100) if total > 0 else 0
+            aprovado = percentual >= 70
+            
+            codigo = None
+            pdf_bytes = None
+            pdf_name = ""
+
+            if aprovado:
+                try: codigo = gerar_codigo_verificacao()
+                except: import random; codigo = f"BJJ-{random.randint(1000,9999)}"
+
+                try:
+                    db.collection('resultados').add({
+                        "usuario": usuario_logado["nome"], "modo": "Exame de Faixa",
+                        "faixa": faixa_sel, "pontuacao": percentual,
+                        "acertos": acertos, "total_questoes": total,
+                        "data": firestore.SERVER_TIMESTAMP, "codigo_verificacao": codigo
+                    })
+                except Exception as e: print(f"Erro save: {e}")
+                
+                # GERA PDF RÁPIDO (MEMÓRIA)
+                try:
+                    pdf_bytes, pdf_name = gerar_pdf(
+                        usuario_logado['nome'], faixa_sel, 
+                        acertos, total, codigo
+                    )
+                except Exception as e: st.error(f"Erro PDF: {e}")
+            
+            st.session_state.prova_concluida = True
+            st.session_state.resultado_final = {
+                "usuario": usuario_logado["nome"], "faixa": faixa_sel,
+                "acertos": acertos, "total": total, "percentual": percentual,
+                "codigo": codigo, "aprovado": aprovado, "tempo_esgotado": tempo_esgotado,
+                "pdf_bytes": pdf_bytes, "pdf_name": pdf_name
+            }
+            st.rerun()
 
 # =========================================
-# RANKING e CERTIFICADOS
+# RANKING
 # =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking</h1>", unsafe_allow_html=True)
@@ -385,7 +369,13 @@ def meus_certificados(usuario_logado):
     for i, c in enumerate(lista):
         with st.container(border=True):
             st.write(f"**{c['faixa']}** | {c['pontuacao']}% | {c.get('codigo_verificacao')}")
+            
+            # Usa o gerador rápido
             try:
-                p = gerar_pdf(usuario_logado['nome'], c['faixa'], c.get('acertos',0), c.get('total_questoes',10), c.get('codigo_verificacao','-'))
-                with open(p, "rb") as f: st.download_button("Baixar", f.read(), os.path.basename(p), "application/pdf", key=f"d{i}")
+                pdf_bytes, pdf_name = gerar_pdf(
+                    usuario_logado['nome'], c['faixa'], 
+                    c.get('acertos',0), c.get('total_questoes',10), 
+                    c.get('codigo_verificacao','-')
+                )
+                st.download_button("Baixar", pdf_bytes, pdf_name, "application/pdf", key=f"d{i}")
             except: pass
