@@ -1,310 +1,334 @@
 import streamlit as st
 import pandas as pd
-import bcrypt
 from database import get_db
-from utils import formatar_e_validar_cpf, carregar_questoes, salvar_questoes, carregar_todas_questoes
-import os
-import json
-from datetime import datetime
 from firebase_admin import firestore
 
 # =========================================
-# GESTÃO DE USUÁRIOS (Apenas Admin)
+# PAINEL DO PROFESSOR (Aprovações)
 # =========================================
-def gestao_usuarios(usuario_logado):
-    """Página de gerenciamento de usuários (Admin)."""
+def painel_professor():
+    st.markdown("<h1 style='color:#FFD700;'>👩‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
+    db = get_db()
+    user = st.session_state.usuario
     
-    if usuario_logado["tipo"] != "admin":
-        st.error("Acesso negado. Restrito a administradores.")
+    # 1. Descobre equipes vinculadas
+    prof_query = db.collection('professores')\
+        .where('usuario_id', '==', user['id'])\
+        .where('status_vinculo', '==', 'ativo').stream()
+        
+    meus_vinculos = list(prof_query)
+    
+    if not meus_vinculos:
+        st.warning("Você não está vinculado a nenhuma equipe como professor ativo.")
+        return
+    
+    equipes_ids = [doc.to_dict().get('equipe_id') for doc in meus_vinculos]
+    
+    if not equipes_ids:
+        st.info("Nenhuma equipe vinculada.")
         return
 
-    st.markdown("<h1 style='color:#FFD700;'>🔑 Gestão de Usuários</h1>", unsafe_allow_html=True)
+    # 2. Busca alunos pendentes
+    alunos_pend_ref = db.collection('alunos')\
+        .where('equipe_id', 'in', equipes_ids[:10])\
+        .where('status_vinculo', '==', 'pendente').stream()
+        
+    lista_pend = []
+    for doc in alunos_pend_ref:
+        d = doc.to_dict()
+        
+        u_snap = db.collection('usuarios').document(d['usuario_id']).get()
+        if u_snap.exists:
+            nome_aluno = u_snap.to_dict().get('nome', 'Desconhecido')
+            
+            eq_snap = db.collection('equipes').document(d['equipe_id']).get()
+            nome_equipe = eq_snap.to_dict().get('nome', '?') if eq_snap.exists else '?'
+            
+            lista_pend.append({
+                "id_doc": doc.id,
+                "nome": nome_aluno,
+                "equipe": nome_equipe,
+                "faixa": d.get('faixa_atual')
+            })
+            
+    if not lista_pend:
+        st.info("Nenhuma solicitação de aluno pendente nas suas equipes.")
+    else:
+        st.markdown("### 🔔 Solicitações de Alunos")
+        for p in lista_pend:
+            with st.container(border=True):
+                c1, c2, c3 = st.columns([3, 1, 1])
+                c1.markdown(f"**{p['nome']}** quer entrar na equipe **{p['equipe']}** (Faixa: {p['faixa']})")
+                
+                if c2.button("✅ Aprovar", key=f"ok_{p['id_doc']}"):
+                    db.collection('alunos').document(p['id_doc']).update({
+                        "status_vinculo": "ativo",
+                        "professor_id": user['id']
+                    })
+                    st.success(f"{p['nome']} aprovado!")
+                    st.rerun()
+                    
+                if c3.button("❌ Rejeitar", key=f"no_{p['id_doc']}"):
+                    db.collection('alunos').document(p['id_doc']).update({"status_vinculo": "rejeitado"})
+                    st.warning("Rejeitado.")
+                    st.rerun()
+
+# =========================================
+# GESTÃO DE EQUIPES (COM FILTRO DE VISÃO)
+# =========================================
+def gestao_equipes():
+    st.markdown("<h1 style='color:#FFD700;'>🏛️ Gestão de Equipes</h1>", unsafe_allow_html=True)
     db = get_db()
     
-    docs = db.collection('usuarios').stream()
-    lista_usuarios = []
+    user_logado = st.session_state.usuario
+    tipo_logado = str(user_logado.get('tipo', '')).lower()
+    is_admin = tipo_logado == 'admin'
+
+    # --- 1. DEFINIR O ESCOPO ---
+    allowed_team_ids = [] 
     
-    for doc in docs:
-        d = doc.to_dict()
-        d['id_doc'] = doc.id
-        d.setdefault('cpf', '')
-        d.setdefault('tipo_usuario', 'aluno')
-        d.setdefault('auth_provider', 'local')
-        lista_usuarios.append(d)
+    if is_admin:
+        allowed_team_ids = None 
+    else:
+        q1 = db.collection('equipes').where('professor_responsavel_id', '==', user_logado['id']).stream()
+        allowed_team_ids = [d.id for d in q1]
         
-    if not lista_usuarios:
-        st.info("Nenhum usuário encontrado.")
-        return
-
-    df = pd.DataFrame(lista_usuarios)
-    
-    st.subheader("Visão Geral")
-    cols = [c for c in ['nome', 'email', 'tipo_usuario', 'cpf', 'auth_provider'] if c in df.columns]
-    st.dataframe(df[cols], use_container_width=True)
-    st.markdown("---")
-
-    st.subheader("Gerenciar Usuário")
-    opcoes_selecao = [f"{u['nome']} ({u['email']})" for u in lista_usuarios]
-    selecionado_str = st.selectbox("Selecione:", options=opcoes_selecao, index=None)
-
-    if selecionado_str:
-        index_selecionado = opcoes_selecao.index(selecionado_str)
-        user_id = lista_usuarios[index_selecionado]['id_doc']
-        
-        user_ref = db.collection('usuarios').document(user_id)
-        user_data = user_ref.get().to_dict()
-
-        if not user_data:
-            st.error("Usuário não encontrado.")
+        q2 = db.collection('professores').where('usuario_id', '==', user_logado['id']).where('status_vinculo', '==', 'ativo').stream()
+        for d in q2:
+            tid = d.to_dict().get('equipe_id')
+            if tid and tid not in allowed_team_ids:
+                allowed_team_ids.append(tid)
+                
+        if not allowed_team_ids:
+            st.warning("Você não possui permissão para gerenciar nenhuma equipe.")
             return
 
-        with st.expander(f"⚙️ Editar: {user_data.get('nome')}", expanded=True):
-            with st.form(key="form_edit_user_admin"):
-                c1, c2 = st.columns(2)
-                novo_nome = c1.text_input("Nome:", value=user_data.get('nome', ''))
-                novo_email = c2.text_input("Email:", value=user_data.get('email', ''))
-                novo_cpf = st.text_input("CPF:", value=user_data.get('cpf', ''))
-                
-                tipo_atual = user_data.get('tipo_usuario', 'aluno')
-                opcoes_tipo = ["aluno", "professor", "admin"]
-                try: idx_tipo = opcoes_tipo.index(tipo_atual)
-                except: idx_tipo = 0
-                novo_tipo = st.selectbox("Tipo:", options=opcoes_tipo, index=idx_tipo)
-                
-                if st.form_submit_button("💾 Salvar"):
-                    try:
-                        user_ref.update({
-                            "nome": novo_nome.upper(), "email": novo_email.lower().strip(),
-                            "cpf": novo_cpf, "tipo_usuario": novo_tipo
+    # --- 2. CARREGAR DADOS ---
+    equipes_map = {} 
+    lista_equipes = [] # (Nome, ID)
+    all_equipes = db.collection('equipes').stream()
+    
+    for doc in all_equipes:
+        if allowed_team_ids is None or doc.id in allowed_team_ids:
+            d = doc.to_dict()
+            equipes_map[doc.id] = d
+            lista_equipes.append((d.get('nome', 'Sem Nome'), doc.id))
+
+    allowed_student_ids = set()
+    if not is_admin and allowed_team_ids:
+        for tid in allowed_team_ids:
+            s_query = db.collection('alunos').where('equipe_id', '==', tid).stream()
+            for s in s_query:
+                allowed_student_ids.add(s.to_dict().get('usuario_id'))
+
+    users_ref = db.collection('usuarios').stream()
+    users_map = {} 
+    lista_professores_geral = [] 
+    lista_alunos_dropdown = []   
+    
+    for doc in users_ref:
+        d = doc.to_dict()
+        uid = doc.id
+        users_map[uid] = d
+        u_tipo = str(d.get('tipo_usuario', '')).lower()
+        
+        if u_tipo in ['professor', 'admin']:
+            lista_professores_geral.append((d.get('nome'), uid))
+            
+        elif u_tipo == 'aluno':
+            if is_admin:
+                lista_alunos_dropdown.append((d.get('nome'), uid))
+            elif uid in allowed_student_ids:
+                lista_alunos_dropdown.append((d.get('nome'), uid))
+
+    # Busca Professores Pendentes e Ativos para filtrar depois
+    pendentes_por_equipe = {}
+    
+    q_pend = db.collection('professores').where('status_vinculo', '==', 'pendente').stream()
+    for doc in q_pend:
+        d = doc.to_dict()
+        eid = d.get('equipe_id')
+        uid = d.get('usuario_id')
+        if eid in equipes_map and uid in users_map:
+            if eid not in pendentes_por_equipe:
+                pendentes_por_equipe[eid] = []
+            nome_prof = users_map[uid].get('nome', 'Desconhecido')
+            pendentes_por_equipe[eid].append((nome_prof, doc.id))
+
+    # --- ABAS ---
+    aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores (Apoio)", "🥋 Alunos"])
+
+    # ABA 1: EQUIPES
+    with aba1:
+        st.subheader("Gerenciar Equipes")
+        with st.expander("➕ Cadastrar Nova Equipe"):
+            nome_eq = st.text_input("Nome da equipe:")
+            desc_eq = st.text_area("Descrição:")
+            prof_opcoes = ["Nenhum"] + [p[0] for p in lista_professores_geral]
+            idx_padrao = 0
+            if not is_admin:
+                try: idx_padrao = [p[1] for p in lista_professores_geral].index(user_logado['id']) + 1
+                except: pass
+            prof_sel = st.selectbox("Professor Responsável:", prof_opcoes, index=idx_padrao)
+            if st.button("Criar Equipe"):
+                if nome_eq:
+                    prof_resp_id = None
+                    if prof_sel != "Nenhum":
+                        for nome, uid in lista_professores_geral:
+                            if nome == prof_sel: prof_resp_id = uid; break
+                    _, new_eq_ref = db.collection('equipes').add({
+                        "nome": nome_eq.upper(), "descricao": desc_eq, "professor_responsavel_id": prof_resp_id, "ativo": True
+                    })
+                    if prof_resp_id:
+                        db.collection('professores').add({
+                            "usuario_id": prof_resp_id, "equipe_id": new_eq_ref.id,
+                            "eh_responsavel": True, "pode_aprovar": True, "status_vinculo": "ativo"
                         })
-                        st.success("Atualizado!")
-                        st.rerun()
-                    except Exception as e: st.error(f"Erro: {e}")
+                    st.success("Equipe criada!"); st.rerun()
+                else: st.warning("Nome obrigatório.")
+        
+        st.markdown("---")
+        dados_tabela = []
+        for eid, data in equipes_map.items():
+            pid = data.get('professor_responsavel_id')
+            pnome = users_map.get(pid, {}).get('nome', 'Nenhum') if pid else 'Nenhum'
+            dados_tabela.append({"Equipe": data.get('nome'), "Descrição": data.get('descricao'), "Responsável": pnome, "ID": eid})
+        if dados_tabela:
+            df = pd.DataFrame(dados_tabela)
+            st.dataframe(df[['Equipe', 'Descrição', 'Responsável']], use_container_width=True)
+            eq_to_edit = st.selectbox("Editar Equipe:", [d['Equipe'] for d in dados_tabela])
+            if eq_to_edit:
+                item = next(i for i in dados_tabela if i['Equipe'] == eq_to_edit)
+                eid = item['ID']
+                original = equipes_map[eid]
+                with st.form(key=f"form_eq_{eid}"):
+                    n_nome = st.text_input("Nome:", value=original.get('nome'))
+                    n_desc = st.text_area("Descrição:", value=original.get('descricao'))
+                    p_atual = item['Responsável']
+                    try: idx_p = prof_opcoes.index(p_atual)
+                    except: idx_p = 0
+                    n_prof = st.selectbox("Responsável:", prof_opcoes, index=idx_p)
+                    c1, c2 = st.columns(2)
+                    salvar = c1.form_submit_button("💾 Salvar")
+                    excluir = c2.form_submit_button("🗑️ Excluir")
+                    if salvar:
+                        pid_new = None
+                        if n_prof != "Nenhum":
+                            for nome, uid in lista_professores_geral:
+                                if nome == n_prof: pid_new = uid; break
+                        db.collection('equipes').document(eid).update({
+                            "nome": n_nome.upper(), "descricao": n_desc, "professor_responsavel_id": pid_new
+                        })
+                        st.success("Salvo!"); st.rerun()
+                    if excluir:
+                        db.collection('equipes').document(eid).delete()
+                        st.warning("Excluído!"); st.rerun()
 
-            if user_data.get('auth_provider') == 'local':
-                st.markdown("---")
-                with st.form(key="form_reset_pass"):
-                    n_senha = st.text_input("Nova Senha:", type="password")
-                    if st.form_submit_button("Redefinir Senha"):
-                        if n_senha:
-                            h = bcrypt.hashpw(n_senha.encode(), bcrypt.gensalt()).decode()
-                            user_ref.update({"senha": h})
-                            st.success("Senha alterada.")
-
+    # ----------------------------------------------------------
+    # ABA 2: PROFESSORES (Apoio - TOTALMENTE FILTRADO)
+    # ----------------------------------------------------------
+    with aba2:
+        st.subheader("Gerenciar Professores da Equipe")
+        
+        if not lista_equipes:
+            st.warning("Nenhuma equipe encontrada.")
+        else:
+            # 1. Seletor Principal de Equipe
+            e_sel = st.selectbox("Selecione a Equipe:", [e[0] for e in lista_equipes], key="sel_eq_prof_gest")
+            eid_sel = next((eid for nome, eid in lista_equipes if nome == e_sel), None)
+            
             st.markdown("---")
-            st.warning("Zona de Perigo")
-            if st.button("🗑️ Excluir Usuário"):
-                user_ref.delete()
-                st.success("Usuário excluído.")
-                st.rerun()
-
-# =========================================
-# GESTÃO DE QUESTÕES
-# =========================================
-def gestao_questoes():
-    """Gestão de Banco de Questões (JSON)."""
-    
-    user = st.session_state.usuario
-    # Verifica permissão (Admin ou Professor)
-    if user["tipo"] not in ["admin", "professor"]:
-        st.error("Acesso negado.")
-        return
-    
-    st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
-
-    os.makedirs("questions", exist_ok=True)
-    temas_existentes = [f.replace(".json", "") for f in os.listdir("questions") if f.endswith(".json")]
-    
-    c1, c2 = st.columns([3, 1])
-    tema_sel = c1.selectbox("Tema:", ["Novo Tema"] + temas_existentes)
-    
-    tema_atual = st.text_input("Nome do novo tema:") if tema_sel == "Novo Tema" else tema_sel
-
-    questoes = carregar_questoes(tema_atual) if tema_atual else []
-
-    with st.expander("➕ Adicionar Nova Questão", expanded=False):
-        with st.form("form_add_q"):
-            pergunta = st.text_area("Pergunta:")
-            cols = st.columns(5)
-            opts = [cols[i].text_input(f"Opção {l}") for i, l in enumerate("ABCDE")]
-            resp = st.selectbox("Correta:", list("ABCDE"))
-            if st.form_submit_button("Salvar"):
-                if pergunta and tema_atual:
-                    nova = {
-                        "pergunta": pergunta,
-                        "opcoes": [f"{l}) {t}" for l, t in zip("ABCDE", opts) if t],
-                        "resposta": resp
-                    }
-                    questoes.append(nova)
-                    salvar_questoes(tema_atual, questoes)
-                    st.success("Salvo!")
-                    st.rerun()
-
-    st.markdown("### Questões Existentes")
-    if questoes:
-        for i, q in enumerate(questoes):
-            with st.expander(f"{i+1}. {q['pergunta']}"):
-                st.write(q['opcoes'])
-                st.caption(f"Resposta: {q['resposta']}")
-                if st.button("Excluir", key=f"dq_{i}"):
-                    questoes.pop(i)
-                    salvar_questoes(tema_atual, questoes)
-                    st.rerun()
-
-# =========================================
-# GESTÃO DE EXAME DE FAIXA (Montar + Habilitar)
-# =========================================
-def gestao_exame_de_faixa():
-    """
-    1. Montar a prova (selecionar questões).
-    2. Habilitar alunos aptos para o exame.
-    """
-    st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
-    
-    user_logado = st.session_state.usuario
-    # Permissão
-    if user_logado["tipo"] not in ["admin", "professor"]:
-        st.error("Acesso negado.")
-        return
-
-    tab_prova, tab_alunos = st.tabs(["📝 Montar Prova", "✅ Habilitar Alunos"])
-
-    # ---------------------------------------------------------
-    # ABA 1: MONTAR PROVA (JSON)
-    # ---------------------------------------------------------
-    with tab_prova:
-        st.subheader("Configurar Perguntas do Exame")
-        
-        faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-        faixa = st.selectbox("Selecione a faixa do exame:", faixas, key="sel_faixa_prova")
-
-        exame_path = f"exames/faixa_{faixa.lower()}.json"
-        os.makedirs("exames", exist_ok=True)
-        
-        try:
-            with open(exame_path, "r", encoding="utf-8") as f: exame = json.load(f)
-        except: exame = {"questoes": [], "faixa": faixa}
-
-        todas = carregar_todas_questoes()
-        if not todas:
-            st.warning("Cadastre questões no Banco de Questões primeiro.")
-        else:
-            # Filtro de tema
-            temas = sorted(list(set(q["tema"] for q in todas)))
-            filtro = st.selectbox("Filtrar por tema:", ["Todos"] + temas)
-            q_exibir = [q for q in todas if q["tema"] == filtro] if filtro != "Todos" else todas
             
-            perguntas_no_exame = [q['pergunta'] for q in exame['questoes']]
-
-            with st.form("add_q_exame"):
-                st.markdown("#### Selecionar Questões Disponíveis")
-                selecionadas = []
-                for i, q in enumerate(q_exibir):
-                    if q['pergunta'] not in perguntas_no_exame:
-                        if st.checkbox(f"[{q['tema']}] {q['pergunta']}", key=f"chk_{i}"):
-                            selecionadas.append(q)
-                
-                if st.form_submit_button("Adicionar ao Exame"):
-                    exame['questoes'].extend(selecionadas)
-                    with open(exame_path, "w", encoding="utf-8") as f:
-                        json.dump(exame, f, indent=4, ensure_ascii=False)
-                    st.success("Questões adicionadas!")
-                    st.rerun()
-
+            # 2. Aprovação de Pendentes (FILTRADO PELA EQUIPE SELECIONADA)
+            st.markdown("#### ⏳ Aprovar Novos Professores")
+            lista_pendentes_dropdown = []
+            mapa_pendentes = {}
+            
+            if eid_sel and eid_sel in pendentes_por_equipe:
+                for p_nome, p_doc_id in pendentes_por_equipe[eid_sel]:
+                    lista_pendentes_dropdown.append(p_nome)
+                    mapa_pendentes[p_nome] = p_doc_id
+            
+            if not lista_pendentes_dropdown:
+                st.info(f"Nenhum professor pendente em {e_sel}.")
+            else:
+                c1, c2 = st.columns([3, 1])
+                p_sel = c1.selectbox("Professor Pendente:", lista_pendentes_dropdown, key="sel_prof_pend")
+                if c2.button("✅ Aprovar"):
+                    doc_id_vinculo = mapa_pendentes.get(p_sel)
+                    if doc_id_vinculo:
+                        db.collection('professores').document(doc_id_vinculo).update({
+                            "status_vinculo": "ativo",
+                            "pode_aprovar": False,
+                            "eh_responsavel": False
+                        })
+                        st.success(f"Aprovado!"); st.rerun()
+            
             st.markdown("---")
-            st.markdown(f"#### Questões Atuais ({len(exame['questoes'])})")
-            for i, q in enumerate(exame['questoes']):
-                c1, c2 = st.columns([5, 1])
-                c1.write(f"{i+1}. {q['pergunta']}")
-                if c2.button("Remover", key=f"rm_ex_{i}"):
-                    exame['questoes'].pop(i)
-                    with open(exame_path, "w", encoding="utf-8") as f:
-                        json.dump(exame, f, indent=4, ensure_ascii=False)
-                    st.rerun()
-
-    # ---------------------------------------------------------
-    # ABA 2: HABILITAR ALUNOS (FIRESTORE)
-    # ---------------------------------------------------------
-    with tab_alunos:
-        st.subheader("Autorizar Alunos para o Exame")
-        st.caption("Selecione quem está apto a realizar a prova teórica.")
-        
-        db = get_db()
-
-        # 1. Descobrir quais alunos este usuário pode ver
-        # Admin vê tudo. Professor vê apenas das suas equipes.
-        
-        equipes_permitidas = [] # Lista de IDs
-        
-        if user_logado['tipo'] == 'admin':
-            equipes_permitidas = None # Flag para "todos"
-        else:
-            # Busca equipes onde é responsável ou professor
-            q1 = db.collection('equipes').where('professor_responsavel_id', '==', user_logado['id']).stream()
-            equipes_permitidas = [d.id for d in q1]
             
-            q2 = db.collection('professores').where('usuario_id', '==', user_logado['id']).where('status_vinculo', '==', 'ativo').stream()
-            for d in q2:
-                eid = d.to_dict().get('equipe_id')
-                if eid and eid not in equipes_permitidas:
-                    equipes_permitidas.append(eid)
+            # 3. Lista de Ativos (FILTRADO PELA EQUIPE SELECIONADA)
+            st.markdown(f"#### ✅ Professores Vinculados a {e_sel}")
             
-            if not equipes_permitidas:
-                st.warning("Você não possui equipes vinculadas para gerenciar alunos.")
-                return
-
-        # 2. Carregar Alunos do Firestore
-        # Filtra por equipe se necessário
-        alunos_ref = db.collection('alunos')
-        
-        if equipes_permitidas:
-            # Firestore 'in' limita a 10. Se for muito grande, melhor filtrar no python.
-            # Como é MVP, vamos buscar tudo e filtrar aqui se a lista for None, 
-            # ou usar query se for pequena.
-            query = alunos_ref.where('equipe_id', 'in', equipes_permitidas[:10]) # Limitando a 10 para evitar erro
-            # Se precisar de mais, teria que fazer multiplas queries ou trazer tudo e filtrar.
-        else:
-            query = alunos_ref # Traz tudo (Admin)
-
-        docs_alunos = list(query.stream())
-        
-        if not docs_alunos:
-            st.info("Nenhum aluno encontrado nas suas equipes.")
-        else:
-            # Carregar nomes de usuários e equipes para exibir bonito
-            users_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('usuarios').stream()}
-            equipes_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('equipes').stream()}
+            # Busca apenas vínculos ATIVOS desta equipe específica
+            vincs_ativos = db.collection('professores')\
+                .where('equipe_id', '==', eid_sel)\
+                .where('status_vinculo', '==', 'ativo').stream()
             
-            # Tabela de Habilitação
-            header = st.columns([3, 2, 2, 2])
-            header[0].markdown("**Aluno**")
-            header[1].markdown("**Equipe**")
-            header[2].markdown("**Faixa Atual**")
-            header[3].markdown("**Ação**")
-            
-            for doc in docs_alunos:
-                d = doc.to_dict()
+            lista_ativos = []
+            for v in vincs_ativos:
+                d = v.to_dict()
                 uid = d.get('usuario_id')
-                eid = d.get('equipe_id')
+                if uid in users_map:
+                    nome_p = users_map[uid].get('nome')
+                    func = "Responsável" if d.get('eh_responsavel') else "Apoio"
+                    lista_ativos.append({"Nome": nome_p, "Função": func, "ID_Doc": v.id, "Eh_Resp": d.get('eh_responsavel')})
+            
+            if not lista_ativos:
+                st.info("Apenas o responsável está vinculado.")
+            else:
+                c1, c2, c3 = st.columns([3, 2, 2])
+                c1.markdown("**Professor**")
+                c2.markdown("**Função**")
+                c3.markdown("**Ação**")
                 
-                # Filtro de segurança extra (caso admin tenha trazido tudo)
-                if equipes_permitidas is None or eid in equipes_permitidas:
-                    nome_aluno = users_map.get(uid, "Desconhecido")
-                    nome_equipe = equipes_map.get(eid, "Sem Equipe")
-                    habilitado = d.get('exame_habilitado', False)
+                for item in lista_ativos:
+                    c1, c2, c3 = st.columns([3, 2, 2])
+                    c1.write(item['Nome'])
+                    c2.write(item['Função'])
                     
-                    cols = st.columns([3, 2, 2, 2])
-                    cols[0].write(nome_aluno)
-                    cols[1].write(nome_equipe)
-                    cols[2].write(d.get('faixa_atual'))
-                    
-                    if habilitado:
-                        if cols[3].button("⛔ Bloquear", key=f"bloq_{doc.id}"):
-                            db.collection('alunos').document(doc.id).update({"exame_habilitado": False})
+                    # Botão desvincular (não pode desvincular o responsável principal aqui)
+                    if not item['Eh_Resp']:
+                        if c3.button("Desvincular", key=f"del_prof_{item['ID_Doc']}"):
+                            db.collection('professores').document(item['ID_Doc']).delete()
+                            st.success("Desvinculado!")
                             st.rerun()
                     else:
-                        if cols[3].button("✅ Habilitar", key=f"hab_{doc.id}"):
-                            db.collection('alunos').document(doc.id).update({"exame_habilitado": True})
-                            st.rerun()
+                        c3.caption("Principal")
+
+    # ABA 3: ALUNOS (Mantida)
+    with aba3:
+        st.subheader("Alunos da Equipe")
+        if not lista_alunos_dropdown:
+            st.info("Nenhum aluno encontrado.")
+        else:
+            a_sel = st.selectbox("Selecione o Aluno:", [a[0] for a in lista_alunos_dropdown])
+            eq_aluno_sel = st.selectbox("Mover para Equipe:", [e[0] for e in lista_equipes])
+            if st.button("Atualizar Aluno"):
+                aid = next(uid for nome, uid in lista_alunos_dropdown if nome == a_sel)
+                eid = next(uid for nome, uid in lista_equipes if nome == eq_aluno_sel)
+                aluno_docs = list(db.collection('alunos').where('usuario_id', '==', aid).stream())
+                if aluno_docs:
+                    db.collection('alunos').document(aluno_docs[0].id).update({"equipe_id": eid})
+                    st.success(f"Aluno movido!"); st.rerun()
+        st.markdown("---")
+        alunos_bd = db.collection('alunos').stream()
+        lista_a_bd = []
+        for doc in alunos_bd:
+            d = doc.to_dict()
+            if d.get('equipe_id') in equipes_map:
+                anome = users_map.get(d.get('usuario_id'), {}).get('nome', '?')
+                enome = equipes_map.get(d.get('equipe_id'), {}).get('nome', '?')
+                lista_a_bd.append({"Aluno": anome, "Equipe": enome, "Faixa": d.get('faixa_atual')})
             
-            st.caption("Nota: Apenas alunos com status 'Habilitar' poderão ver a opção de realizar o exame no painel deles.")
+        if lista_a_bd:
+            st.dataframe(pd.DataFrame(lista_a_bd), use_container_width=True)
