@@ -56,7 +56,6 @@ def gerar_codigo_verificacao():
     
     try:
         # Conta quantos documentos existem na coleção 'resultados'
-        # Usamos stream() para contar (em produção com muitos dados, usar count() aggregation é melhor)
         docs = db.collection('resultados').stream()
         total = len(list(docs))
     except Exception as e:
@@ -67,7 +66,7 @@ def gerar_codigo_verificacao():
 
     sequencial = total + 1
     ano = datetime.now().year
-    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" # Ex: BJJDIGITAL-2025-0012
+    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" 
     return codigo
 
 def normalizar_nome(nome):
@@ -264,4 +263,4 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
     caminho_pdf = os.path.abspath(f"relatorios/{nome_arquivo}")
     pdf.output(caminho_pdf)
-    return caminho
+    return caminho_pdf
