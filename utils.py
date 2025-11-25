@@ -145,17 +145,12 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 16)
     pdf.set_y(108)
-    pdf.cell(0, 8, "concluiu o exame teórico para a faixa", align="C")
+    pdf.cell(0, 8, "foi APROVADO no exame teórico para a faixa", align="C")
 
     pdf.set_text_color(*cor_faixa)
     pdf.set_font("Helvetica", "B", 20)
     pdf.set_y(118)
     pdf.cell(0, 8, faixa.upper(), align="C")
-
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 22)
-    pdf.set_y(132)
-    pdf.cell(0, 8, "APROVADO", align="C")
 
     pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 14)
