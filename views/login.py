@@ -8,9 +8,6 @@ from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
 from config import COR_DESTAQUE, COR_TEXTO
 from database import get_db
-# CORREÇÃO: Importação correta do firestore para uso de SERVER_TIMESTAMP se necessário,
-# mas preferimos usar a instância do banco já configurada em database.py ou a lib direta
-from firebase_admin import firestore 
 import firebase_admin
 from firebase_admin import firestore
 
