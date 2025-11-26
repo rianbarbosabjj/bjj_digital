@@ -10,7 +10,7 @@ from database import get_db
 import streamlit as st
 
 # =========================================
-# FUNÇÕES DE QUESTÕES
+# FUNÇÕES DE QUESTÕES (FALLBACK)
 # =========================================
 def carregar_questoes(tema):
     path = f"questions/{tema}.json"
@@ -88,13 +88,17 @@ def buscar_cep(cep):
     return None
 
 def gerar_qrcode(codigo):
+    """Gera QR Code com o link do seu domínio."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
+    
     # Cache simples de arquivo
     if os.path.exists(caminho_qr):
         return caminho_qr
         
-    link = f"https://bjjdigital.com.br/validar.html?code={codigo}"
+    # LINK ATUALIZADO PARA SEU DOMÍNIO
+    link = f"https://bjjdigital.com.br/verificar.html?code={codigo}"
+    
     qr = qrcode.QRCode(box_size=10, border=2)
     qr.add_data(link)
     qr.make(fit=True)
@@ -103,161 +107,129 @@ def gerar_qrcode(codigo):
     return caminho_qr
 
 # =========================================
-# GERADOR DE PDF (COM CACHE E NOVO LAYOUT)
+# GERADOR DE PDF (OTIMIZADO)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    """Gera certificado oficial do exame de faixa com assinatura caligráfica (Allura)."""
-    pdf = FPDF("L", "mm", "A4") # Layout paisagem
+    """
+    Gera certificado oficial.
+    Retorna: (bytes_do_pdf, nome_do_arquivo) para download rápido.
+    """
+    pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
     pdf.add_page()
 
-    # 🎨 Cores e layout base
+    # Cores
     dourado, preto, branco = (218, 165, 32), (40, 40, 40), (255, 255, 255)
-    
-    # Tratamento para divisão por zero
     percentual = int((pontuacao / total) * 100) if total > 0 else 0
-    data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+    data_hora = datetime.now().strftime("%d/%m/%Y")
 
-    # Fundo branco e moldura dourada dupla
+    # Fundo
     pdf.set_fill_color(*branco)
     pdf.rect(0, 0, 297, 210, "F")
     pdf.set_draw_color(*dourado)
     pdf.set_line_width(2)
-    pdf.rect(8, 8, 281, 194)
-    pdf.set_line_width(0.8)
-    pdf.rect(11, 11, 275, 188)
-
-    # Cabeçalho
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "BI", 30)
-    pdf.set_y(25)
-    pdf.cell(0, 10, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", align="C")
-    pdf.set_draw_color(*dourado)
-    pdf.line(30, 35, 268, 35)
+    pdf.rect(10, 10, 277, 190)
+    pdf.set_line_width(0.5)
+    pdf.rect(13, 13, 271, 184)
 
     # Logo
-    logo_path = "assets/logo.png"
-    if os.path.exists(logo_path):
-        pdf.image(logo_path, x=133, y=40, w=32)
+    if os.path.exists("assets/logo.png"):
+        pdf.image("assets/logo.png", x=130, y=20, w=35)
 
-    # ---------------------------------------------------
-    # BLOCO CENTRAL
-    # ---------------------------------------------------
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 16)
-    pdf.set_y(80)
-    pdf.cell(0, 10, "Certificamos que o(a) aluno(a)", align="C")
-
+    # Título
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 24)
-    pdf.set_y(92)
-    # Converte para evitar erro de encoding (latin-1) se tiver caracteres especiais
+    pdf.set_font("Helvetica", "B", 36)
+    pdf.set_xy(0, 60)
+    pdf.cell(297, 15, "CERTIFICADO DE CONCLUSÃO", align="C")
+    
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_text_color(*preto)
+    pdf.set_xy(0, 80)
+    pdf.cell(297, 10, "Certificamos que", align="C")
+
+    # Nome
+    pdf.set_font("Helvetica", "B", 28)
+    pdf.set_text_color(*dourado)
+    pdf.set_xy(0, 95)
     try:
+        # Tratamento para caracteres especiais
         nome_display = usuario.upper().encode('latin-1', 'replace').decode('latin-1')
     except:
         nome_display = usuario.upper()
-    pdf.cell(0, 10, nome_display, align="C")
+    pdf.cell(297, 15, nome_display, align="C")
 
+    # Faixa
     cores_faixa = {
-        "Cinza": (169, 169, 169),
-        "Amarela": (255, 215, 0),
-        "Laranja": (255, 140, 0),
-        "Verde": (0, 128, 0),
-        "Azul": (30, 144, 255),
-        "Roxa": (128, 0, 128),
-        "Marrom": (139, 69, 19),
-        "Preta": (0, 0, 0),
+        "Cinza": (169, 169, 169), "Amarela": (255, 215, 0),
+        "Laranja": (255, 140, 0), "Verde": (0, 128, 0),
+        "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
+        "Marrom": (139, 69, 19), "Preta": (0, 0, 0),
     }
-    cor_faixa = cores_faixa.get(faixa, preto)
+    r, g, b = cores_faixa.get(faixa, preto)
 
-    pdf.set_text_color(*preto)
     pdf.set_font("Helvetica", "", 16)
-    pdf.set_y(108)
-    pdf.cell(0, 8, "concluiu o exame teórico para a faixa", align="C")
-
-    pdf.set_text_color(*cor_faixa)
-    pdf.set_font("Helvetica", "B", 20)
-    pdf.set_y(118)
-    pdf.cell(0, 8, faixa.upper(), align="C")
-
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 22)
-    pdf.set_y(132)
-    pdf.cell(0, 8, "APROVADO", align="C")
-
     pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "", 14)
-    texto_final = f"obtendo {percentual}% de aproveitamento, realizado em {data_hora}."
-    pdf.set_y(142)
-    pdf.cell(0, 6, texto_final, align="C")
+    pdf.set_xy(0, 115)
+    pdf.cell(297, 10, f"concluiu com êxito o Exame Teórico para a faixa", align="C")
+    
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_text_color(r, g, b)
+    pdf.set_xy(0, 125)
+    pdf.cell(297, 10, faixa.upper(), align="C")
 
-    # ---------------------------------------------------
-    # SELO E QR CODE
-    # ---------------------------------------------------
-    selo_path = "assets/selo_dourado.png"
-    if os.path.exists(selo_path):
-        pdf.image(selo_path, x=23, y=155, w=30)
+    pdf.set_font("Helvetica", "", 12)
+    pdf.set_text_color(*preto)
+    pdf.set_xy(0, 135)
+    pdf.cell(297, 10, f"Aproveitamento: {percentual}% | Data: {data_hora}", align="C")
 
+    # Código
+    pdf.set_font("Courier", "", 10)
+    pdf.set_xy(20, 175)
+    pdf.cell(100, 5, f"Código: {codigo}", align="L")
+    
+    # QR Code e Selo
     try:
         caminho_qr = gerar_qrcode(codigo)
-        pdf.image(caminho_qr, x=245, y=155, w=25)
+        pdf.image(caminho_qr, x=250, y=155, w=25)
     except: pass
 
-    pdf.set_text_color(*preto)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_xy(220, 180)
-    pdf.cell(60, 6, f"Código: {codigo}", align="R")
+    if os.path.exists("assets/selo_dourado.png"):
+        pdf.image("assets/selo_dourado.png", x=20, y=150, w=30)
 
-    # ---------------------------------------------------
-    # ASSINATURA DO PROFESSOR (Allura)
-    # ---------------------------------------------------
+    # Assinatura
     if professor:
-        fonte_assinatura = "assets/fonts/Allura-Regular.ttf"
-        if os.path.exists(fonte_assinatura):
+        try: prof_nome = professor.encode('latin-1', 'replace').decode('latin-1')
+        except: prof_nome = professor
+        
+        fonte_ass = "assets/fonts/Allura-Regular.ttf"
+        if os.path.exists(fonte_ass):
             try:
-                pdf.add_font("Assinatura", "", fonte_assinatura, uni=True)
+                pdf.add_font("Assinatura", "", fonte_ass, uni=True)
                 pdf.set_font("Assinatura", "", 30)
-            except Exception:
-                pdf.set_font("Helvetica", "I", 18)
-        else:
-            pdf.set_font("Helvetica", "I", 18)
+            except: pdf.set_font("Helvetica", "I", 18)
+        else: pdf.set_font("Helvetica", "I", 18)
 
         pdf.set_text_color(*preto)
-        pdf.set_y(158)
+        pdf.set_y(155)
+        pdf.cell(0, 10, prof_nome, align="C")
         
-        try:
-            prof_nome = professor.encode('latin-1', 'replace').decode('latin-1')
-        except:
-            prof_nome = professor
-            
-        pdf.cell(0, 12, prof_nome, align="C")
-
         pdf.set_draw_color(*dourado)
-        pdf.line(100, 173, 197, 173)
-
+        pdf.line(100, 168, 197, 168)
         pdf.set_font("Helvetica", "", 10)
-        pdf.set_y(175)
-        pdf.cell(0, 6, "Assinatura do Professor Responsável", align="C")
+        pdf.set_y(170)
+        pdf.cell(0, 5, "Professor Responsável", align="C")
 
-    # ---------------------------------------------------
-    # RODAPÉ
-    # ---------------------------------------------------
+    # Rodapé
     pdf.set_draw_color(*dourado)
     pdf.line(30, 190, 268, 190)
     pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "I", 9)
-    pdf.set_y(190)
-    pdf.cell(0, 6, "Plataforma BJJ Digital", align="C")
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_y(192)
+    pdf.cell(0, 5, "Plataforma BJJ Digital - bjjdigital.com.br", align="C")
 
-    # ---------------------------------------------------
-    # EXPORTAÇÃO (Bytes e Nome)
-    # ---------------------------------------------------
-    os.makedirs("relatorios", exist_ok=True)
-    nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
-    
-    # Retorna os bytes do PDF (para download direto sem salvar no disco em produção)
-    # 'S' retorna como string de bytes
+    # Retorna BYTES para download rápido
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
+    nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
     
     return pdf_bytes, nome_arquivo
