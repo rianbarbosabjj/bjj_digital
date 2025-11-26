@@ -8,7 +8,7 @@ from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
 from config import COR_DESTAQUE, COR_TEXTO
 from database import get_db
-from firebase_admin import firestore
+from firebase_admin import firestore  # <--- ESSA IMPORTAÇÃO É NECESSÁRIA
 
 # =========================================
 # CONFIGURAÇÃO OAUTH (BLINDADA)
@@ -35,7 +35,7 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         print(f"Erro ao iniciar OAuth: {e}")
         oauth_google = None
 else:
-    oauth_google = None
+    oauth_google = Nonea
 
 # =========================================
 # FUNÇÕES DE TELA
