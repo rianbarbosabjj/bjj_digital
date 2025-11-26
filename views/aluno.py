@@ -56,11 +56,12 @@ def carregar_exame_firestore(faixa_sel):
     return dados_exame
 
 # =========================================
-# MODO ROLA
+# MODO ROLA (Treino Livre)
 # =========================================
 def modo_rola(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🤼 Modo Rola - Treino Livre</h1>", unsafe_allow_html=True)
-    
+    db = get_db()
+
     todas_questoes = carregar_questoes_firestore()
 
     if not todas_questoes:
@@ -85,15 +86,21 @@ def modo_rola(usuario_logado):
             return
 
         random.shuffle(questoes_selecionadas)
-        questoes_treino = questoes_selecionadas[:10] 
+        questoes_treino = questões_selecionadas[:10] 
         
         st.markdown("---")
         respostas_usuario = {}
         with st.form("form_treino"):
             for i, q in enumerate(questoes_treino, 1):
                 st.markdown(f"**{i}.** {q['pergunta']}")
+                
+                # Mostra autor discretamente
+                autor = q.get('criado_por', 'Desconhecido').title()
+                
                 if q.get("imagem"): st.image(q["imagem"])
                 respostas_usuario[i] = st.radio(f"Opções {i}", options=q.get('opcoes', []), key=f"q_{i}", index=None)
+                
+                st.caption(f"Questão elaborada por: {autor}")
                 st.markdown("---")
             enviar = st.form_submit_button("Finalizar Treino")
 
@@ -107,7 +114,6 @@ def modo_rola(usuario_logado):
             percentual = int((acertos / total) * 100) if total > 0 else 0
             
             try:
-                db = get_db()
                 db.collection('rola_resultados').add({
                     "usuario": usuario_logado["nome"], "faixa": faixa, "tema": tema,
                     "acertos": acertos, "total": total, "percentual": percentual,
@@ -119,65 +125,81 @@ def modo_rola(usuario_logado):
             st.success(f"Treino concluído! {acertos}/{total} ({percentual}%).")
 
 # =========================================
-# EXAME DE FAIXA (CORRIGIDO)
+# EXAME DE FAIXA (AUTOMÁTICO + TIMER CORRIGIDO)
 # =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    # --- 1. PERMISSÃO ---
+    # --- 1. VERIFICAÇÃO DE PERMISSÃO E FAIXA ---
+    faixa_sel = None
+    permitido = False
+    msg_bloqueio = "Acesso não autorizado."
+
     if usuario_logado["tipo"] == "aluno":
         alunos_query = db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).stream()
         aluno_doc = next(alunos_query, None)
-        permitido = False
-        msg = "Exame não liberado."
         
         if aluno_doc:
             dados = aluno_doc.to_dict()
-            # Pega a faixa liberada pelo professor
-            faixa_liberada = dados.get('faixa_exame_liberado') 
-
+            faixa_liberada = dados.get('faixa_exame_liberado') # Faixa definida pelo prof
+            
             if dados.get('exame_habilitado') and faixa_liberada:
                 agora = datetime.now()
                 ini = dados.get('exame_inicio')
                 fim = dados.get('exame_fim')
+                
+                # Checa validade da data
                 if ini and fim:
                     try:
                         if isinstance(ini, datetime): ini = ini.replace(tzinfo=None)
                         if isinstance(fim, datetime): fim = fim.replace(tzinfo=None)
-                        if ini <= agora <= fim: permitido = True
-                        else: msg = f"Fora do prazo. ({ini.strftime('%d/%m %H:%M')} - {fim.strftime('%d/%m %H:%M')})"
-                    except Exception: permitido = True
-                else: permitido = True 
+                        if ini <= agora <= fim: 
+                            permitido = True
+                            faixa_sel = faixa_liberada
+                        else: 
+                            msg_bloqueio = f"Fora do prazo. Disponível entre {ini.strftime('%d/%m %H:%M')} e {fim.strftime('%d/%m %H:%M')}."
+                    except: 
+                        # Se der erro de data mas estiver habilitado, libera (fallback)
+                        permitido = True
+                        faixa_sel = faixa_liberada
+                else:
+                    permitido = True 
+                    faixa_sel = faixa_liberada
             elif not faixa_liberada:
-                msg = "Seu professor ainda não definiu qual exame você deve fazer."
+                msg_bloqueio = "Seu professor ainda não definiu qual exame você deve fazer."
+            else:
+                msg_bloqueio = "Seu exame ainda não foi habilitado pelo professor."
+        else:
+            msg_bloqueio = "Perfil de aluno não encontrado."
+
+    elif usuario_logado["tipo"] in ["admin", "professor"]:
+        # Admin/Prof pode testar qualquer faixa
+        faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+        faixa_sel = st.selectbox("Modo Teste - Selecione a faixa:", faixas)
+        permitido = True
+
+    if not permitido:
+        st.warning(f"🚫 {msg_bloqueio}")
+        return
         
-        if not permitido:
-            st.warning(f"🚫 {msg}")
-            return
-            
-        # Seleciona automaticamente a faixa liberada
-        faixa_sel = faixa_liberada
+    # Se chegou aqui, o aluno está liberado para a faixa 'faixa_sel'
+    if usuario_logado["tipo"] == "aluno":
         st.info(f"📝 Você está realizando o **Exame de Faixa {faixa_sel}**.")
 
-    else:
-        # Se for admin/professor testando
-        faixas = ["Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca" "Amarela", "Amarela e Preta", "Laranja e Branca", "Laranja", "Laranja e Preta", "Verde e Branca", "Verde", "Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"]
-        faixa_sel = st.selectbox("Selecione a faixa (Teste):", faixas)
-    
-    # Inicialização de Estado
+    # --- 2. GESTÃO DE ESTADO ---
     if 'prova_iniciada' not in st.session_state: st.session_state.prova_iniciada = False
     if 'prova_concluida' not in st.session_state: st.session_state.prova_concluida = False
     if 'resultado_final' not in st.session_state: st.session_state.resultado_final = {}
     
-    # Reset se mudar faixa (apenas para admins que podem trocar)
+    # Reset se mudar faixa (segurança para admin/prof testando várias)
     if 'ultima_faixa_sel' not in st.session_state: st.session_state.ultima_faixa_sel = faixa_sel
     elif st.session_state.ultima_faixa_sel != faixa_sel:
         st.session_state.prova_iniciada = False
         st.session_state.prova_concluida = False
         st.session_state.ultima_faixa_sel = faixa_sel
 
-    # --- 3. TELA DE RESULTADOS (Se já acabou) ---
+    # --- 3. RESULTADOS (Se já acabou) ---
     if st.session_state.prova_concluida:
         res = st.session_state.resultado_final
         if res.get('faixa') == faixa_sel:
@@ -187,7 +209,6 @@ def exame_de_faixa(usuario_logado):
                 st.success(f"🎉 APROVADO! Nota: {res['percentual']}% ({res['acertos']}/{res['total']})")
                 st.info("Seu certificado foi gerado.")
                 
-                # Pega PDF da memória
                 pdf_data = res.get('pdf_bytes')
                 pdf_name = res.get('pdf_name', 'certificado.pdf')
                 
@@ -201,8 +222,7 @@ def exame_de_faixa(usuario_logado):
                         key="btn_dl_final"
                     )
                 else:
-                    # Fallback: tenta gerar de novo
-                    st.warning("Gerando PDF...")
+                    st.warning("Gerando PDF novamente...")
                     try:
                         p_bytes, p_name = gerar_pdf(
                             usuario_logado['nome'], res['faixa'], 
@@ -210,7 +230,7 @@ def exame_de_faixa(usuario_logado):
                         )
                         st.download_button("📥 Baixar Certificado", p_bytes, p_name, "application/pdf", use_container_width=True)
                     except Exception as e:
-                        st.error(f"Erro ao gerar PDF: {e}")
+                        st.error(f"Erro ao recuperar PDF: {e}")
             else:
                 msg_tempo = "Tempo Esgotado. " if res.get('tempo_esgotado') else ""
                 st.error(f"Reprovado. {msg_tempo}Nota: {res['percentual']}%. Mínimo: 70%.")
@@ -224,17 +244,17 @@ def exame_de_faixa(usuario_logado):
     # --- 4. CARREGA PROVA ---
     dados_exame = carregar_exame_firestore(faixa_sel)
     if not dados_exame:
-        st.info(f"Sem prova cadastrada para {faixa_sel}.")
+        st.error(f"A prova da Faixa {faixa_sel} ainda não foi criada no sistema.")
         return
 
     lista_questoes = dados_exame.get('questoes', [])
     tempo_limite = dados_exame.get('tempo_limite', 60)
 
     if not lista_questoes:
-        st.warning("Prova vazia.")
+        st.warning("Esta prova está vazia. Avise seu professor.")
         return
 
-    # --- 5. TELA DE INSTRUÇÕES ---
+    # --- 5. INSTRUÇÕES ---
     if not st.session_state.prova_iniciada:
         st.markdown("---")
         with st.container(border=True):
@@ -244,39 +264,33 @@ def exame_de_faixa(usuario_logado):
             if st.button("✅ Começar Agora", type="primary", use_container_width=True):
                 st.session_state.prova_iniciada = True
                 st.session_state.prova_concluida = False
+                # Define hora de fim
                 st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
                 st.rerun()
         return 
 
     # --- 6. PROVA EM ANDAMENTO ---
     
-    # Tempo
     agora_ts = time.time()
     restante_sec = int(st.session_state.fim_prova_ts - agora_ts)
     tempo_esgotado = restante_sec <= 0
 
     if not tempo_esgotado:
         # CRONÔMETRO OTIMIZADO
-        timer_html = f"""
-        <div style="
-            display: flex; justify-content: center; align-items: center;
-            background-color: #0e2d26; border: 2px solid #FFD700; 
-            border-radius: 10px; padding: 10px; margin-bottom: 20px;
-        ">
-            <span id="timer" style="
-                font-family: sans-serif; font-size: 24px; font-weight: bold; color: #FFD700;
-            ">
-                Carregando...
-            </span>
-        </div>
-        <script>
+        timer_id = f"timer_{uuid.uuid4()}"
+        st.components.v1.html(
+            f"""
+            <div style="text-align: center; padding: 10px; border: 2px solid #FFD700; border-radius: 10px; margin-bottom: 20px; background-color: #0e2d26;">
+                <h3 id="timer_disp" style="color: #FFD700; margin: 0; font-family: sans-serif;">Carregando...</h3>
+            </div>
+            <script>
             var timeLeft = {restante_sec};
-            var timerElem = document.getElementById('timer');
-            
-            function updateTimer() {{
+            var timerElem = document.getElementById("timer_disp");
+            var timerInterval = setInterval(function() {{
                 if (timeLeft <= 0) {{
-                    timerElem.innerHTML = "⌛ ACABOU!";
-                    timerElem.style.color = "#ff4b4b";
+                    clearInterval(timerInterval);
+                    timerElem.innerHTML = "⌛ TEMPO ESGOTADO";
+                    timerElem.style.color = "red";
                 }} else {{
                     var m = Math.floor(timeLeft / 60);
                     var s = timeLeft % 60;
@@ -285,14 +299,11 @@ def exame_de_faixa(usuario_logado):
                     timerElem.innerHTML = "⏱️ " + mStr + ":" + sStr;
                     timeLeft -= 1;
                 }}
-            }}
-            
-            // Executa imediatamente e depois a cada segundo
-            updateTimer();
-            setInterval(updateTimer, 1000);
-        </script>
-        """
-        components.html(timer_html, height=80)
+            }}, 1000);
+            </script>
+            """,
+            height=80
+        )
     else:
         st.error("⌛ TEMPO ESGOTADO!")
 
@@ -305,7 +316,12 @@ def exame_de_faixa(usuario_logado):
                 st.markdown(f"**{i}.** {q['pergunta']}")
                 if q.get("imagem"): st.image(q["imagem"])
                 respostas[i] = st.radio("Alternativa:", q.get('opcoes', []), key=f"resp_{i}", index=None)
+                
+                # Autor Discreto
+                autor_q = q.get('criado_por', 'BJJ Digital').title()
+                st.caption(f"Questão por: {autor_q}")
                 st.markdown("---")
+                
             finalizar = st.form_submit_button("Finalizar Exame 🏁", use_container_width=True)
     else:
         finalizar = True 
@@ -346,7 +362,7 @@ def exame_de_faixa(usuario_logado):
                     })
                 except Exception as e: print(f"Erro save: {e}")
                 
-                # GERA PDF (Guarda na memória)
+                # GERA PDF
                 try:
                     pdf_bytes, pdf_name = gerar_pdf(
                         usuario_logado['nome'], faixa_sel, 
@@ -354,7 +370,7 @@ def exame_de_faixa(usuario_logado):
                     )
                 except Exception as e: st.error(f"Erro PDF: {e}")
             else:
-                # Salva reprovação para controle
+                # Salva reprovação
                 try:
                     db.collection('resultados').add({
                         "usuario": usuario_logado["nome"], "modo": "Exame de Faixa",
@@ -364,7 +380,6 @@ def exame_de_faixa(usuario_logado):
                     })
                 except: pass
             
-            # Salva na sessão para exibir na próxima tela
             st.session_state.prova_concluida = True
             st.session_state.resultado_final = {
                 "usuario": usuario_logado["nome"], "faixa": faixa_sel,
@@ -374,7 +389,9 @@ def exame_de_faixa(usuario_logado):
             }
             st.rerun()
 
-# ... (Ranking e Meus Certificados mantidos iguais) ...
+# =========================================
+# RANKING E CERTIFICADOS (MANTIDOS)
+# =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking</h1>", unsafe_allow_html=True)
     db = get_db()
