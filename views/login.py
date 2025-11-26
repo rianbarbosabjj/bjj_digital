@@ -18,9 +18,9 @@ try:
     GOOGLE_CLIENT_SECRET = st.secrets["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"]
     REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
 except (FileNotFoundError, KeyError):
-    GOOGLE_CLIENT_ID = ""
-    GOOGLE_CLIENT_SECRET = ""
-    REDIRECT_URI = ""
+    GOOGLE_CLIENT_ID = "ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com"
+    GOOGLE_CLIENT_SECRET = "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"
+    REDIRECT_URI = "https://bjjdigital.streamlit.app/"
 
 oauth_google = OAuth2Component(
     client_id=GOOGLE_CLIENT_ID,
