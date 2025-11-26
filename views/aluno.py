@@ -266,11 +266,11 @@ def exame_de_faixa(usuario_logado):
             st.markdown(f"### 📜 Instruções - Faixa {faixa_sel}")
             # Instruções atualizadas conforme solicitado
             st.markdown(f"""
-            * **Questões:** {len(lista_questoes)}
-            * **Tempo:** ⏱️ {tempo_limite} minutos
-            * **Aprovação:** 70% de acertos
+            * **Sua prova contém {len(lista_questoes)} Questões:**
+            * ⏱️ O tempo limote para finalização do exame é de **{tempo_limite} minutos**
+            * ✅ Para ser aprovado, voê precisa acertar no mínimo **70%** do exame
             
-            **Atenção:** * Após clicar em **iniciar exame**, não será possível pausar ou interromper o cronômetro.
+            **ATENÇÃO:** * Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
             * Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
             * Não é permitido consulta a materiais externos.
             * Esteja em um lugar confortável e silencioso para ajudar na sua concentração.
