@@ -196,7 +196,7 @@ def tela_cadastro_interno():
     c_fx, c_eq = st.columns(2)
     with c_fx:
         if tipo == "Aluno":
-            faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+            faixa = st.selectbox("Faixa:", ["Branca", "Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca" "Amarela", "Amarela e Preta", "Laranja e Branca", "Laranja", "Laranja e Preta", "Verde e Branca", "Verde", "Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"])
         else:
             faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
             st.caption("Professores devem ser Marrom ou Preta.")
