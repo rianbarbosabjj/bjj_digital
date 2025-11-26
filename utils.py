@@ -47,14 +47,21 @@ def gerar_codigo_verificacao():
     db = get_db()
     total = 0
     try:
+        # Conta quantos documentos existem na coleção 'resultados'
+        # Usamos stream() para contar. Em produção com muitos dados, usar count() aggregation é melhor.
         docs = db.collection('resultados').stream()
         total = len(list(docs))
-    except:
+    except Exception as e:
+        print(f"Erro ao contar resultados: {e}")
+        # Fallback: gera um número aleatório para não travar se o banco falhar
         import random
         total = random.randint(1000, 9999)
+
     sequencial = total + 1
     ano = datetime.now().year
-    return f"BJJDIGITAL-{ano}-{sequencial:04d}"
+    # Formato: BJJDIGITAL-ANO-SEQUENCIAL (ex: BJJDIGITAL-2025-0012)
+    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" 
+    return codigo
 
 def normalizar_nome(nome):
     if not nome: return "sem_nome"
@@ -88,15 +95,16 @@ def buscar_cep(cep):
     return None
 
 def gerar_qrcode(codigo):
-    """Gera QR Code com o link do seu domínio."""
+    """Gera QR Code com o link do seu domínio para validação."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
     
-    # Cache simples de arquivo
+    # Cache simples de arquivo: se já existe, não recria
     if os.path.exists(caminho_qr):
         return caminho_qr
         
-    # LINK ATUALIZADO PARA SEU DOMÍNIO
+    # LINK ATUALIZADO PARA A PÁGINA DE VALIDAÇÃO
+    # Certifique-se de que a página 'verificar.html' existe e sabe ler o parâmetro '?code='
     link = f"https://bjjdigital.com.br/verificar.html?code={codigo}"
     
     qr = qrcode.QRCode(box_size=10, border=2)
@@ -159,14 +167,14 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         nome_display = usuario.upper()
     pdf.cell(297, 15, nome_display, align="C")
 
-    # Faixa
+    # Faixa e Texto
     cores_faixa = {
         "Cinza": (169, 169, 169), "Amarela": (255, 215, 0),
         "Laranja": (255, 140, 0), "Verde": (0, 128, 0),
         "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
         "Marrom": (139, 69, 19), "Preta": (0, 0, 0),
     }
-    r, g, b = cores_faixa.get(faixa, preto)
+    r, g, b = cores_faixa.get(faixa, preto) # Padrão preto se não achar
 
     pdf.set_font("Helvetica", "", 16)
     pdf.set_text_color(*preto)
@@ -176,7 +184,11 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_text_color(r, g, b)
     pdf.set_xy(0, 125)
-    pdf.cell(297, 10, faixa.upper(), align="C")
+    try:
+         faixa_display = faixa.upper().encode('latin-1', 'replace').decode('latin-1')
+    except:
+         faixa_display = faixa.upper()
+    pdf.cell(297, 10, faixa_display, align="C")
 
     pdf.set_font("Helvetica", "", 12)
     pdf.set_text_color(*preto)
@@ -186,7 +198,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     # Código
     pdf.set_font("Courier", "", 10)
     pdf.set_xy(20, 175)
-    pdf.cell(100, 5, f"Código: {codigo}", align="L")
+    pdf.cell(100, 5, f"Código de Autenticidade: {codigo}", align="L")
     
     # QR Code e Selo
     try:
