@@ -5,13 +5,12 @@ import qrcode
 import requests
 from datetime import datetime
 from fpdf import FPDF
+from firebase_admin import firestore
+from database import get_db 
 import streamlit as st
 
-# NOTA: Removemos importações de 'database' ou 'auth' do topo para evitar ciclo.
-# As funções que precisam do banco vão importar dentro delas mesmas.
-
 # =========================================
-# FUNÇÕES DE QUESTÕES
+# FUNÇÕES DE QUESTÕES (FALLBACK)
 # =========================================
 def carregar_questoes(tema):
     path = f"questions/{tema}.json"
@@ -45,20 +44,20 @@ def carregar_todas_questoes():
 # =========================================
 
 def gerar_codigo_verificacao():
-    # Importação tardia para evitar ciclo
-    from database import get_db 
-    
     db = get_db()
     total = 0
     try:
         docs = db.collection('resultados').stream()
         total = len(list(docs))
-    except:
+    except Exception as e:
+        print(f"Erro ao contar resultados: {e}")
         import random
         total = random.randint(1000, 9999)
+
     sequencial = total + 1
     ano = datetime.now().year
-    return f"BJJDIGITAL-{ano}-{sequencial:04d}"
+    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" 
+    return codigo
 
 def normalizar_nome(nome):
     if not nome: return "sem_nome"
@@ -92,12 +91,14 @@ def buscar_cep(cep):
     return None
 
 def gerar_qrcode(codigo):
+    """Gera QR Code apontando para a página estática verificar.html."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
     
     if os.path.exists(caminho_qr):
         return caminho_qr
         
+    # LINK CORRETO: Aponta para a página HTML específica
     link = f"https://bjjdigital.com.br/verificar.html?code={codigo}"
     
     qr = qrcode.QRCode(box_size=10, border=2)
@@ -112,6 +113,7 @@ def gerar_qrcode(codigo):
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
+    """Gera certificado PDF oficial."""
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
     pdf.add_page()
@@ -146,7 +148,8 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0, 95)
     try:
         nome_display = usuario.upper().encode('latin-1', 'replace').decode('latin-1')
-    except: nome_display = usuario.upper()
+    except:
+        nome_display = usuario.upper()
     pdf.cell(297, 15, nome_display, align="C")
 
     cores_faixa = {
