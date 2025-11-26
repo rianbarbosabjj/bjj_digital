@@ -11,25 +11,31 @@ from database import get_db
 from firebase_admin import firestore
 
 # =========================================
-# CONFIGURAÇÃO OAUTH
+# CONFIGURAÇÃO OAUTH (BLINDADA)
 # =========================================
 try:
-    GOOGLE_CLIENT_ID = st.secrets["ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com"]
-    GOOGLE_CLIENT_SECRET = st.secrets["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"]
+    # Tenta ler do secrets
+    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
     REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
 except (FileNotFoundError, KeyError):
-    GOOGLE_CLIENT_ID = "ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com"
-    GOOGLE_CLIENT_SECRET = "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"
-    REDIRECT_URI = "https://bjjdigital.streamlit.app/"
+    # Se falhar, define como None (nulo) para sabermos que não tem configuração
+    GOOGLE_CLIENT_ID = None
+    GOOGLE_CLIENT_SECRET = None
+    REDIRECT_URI = None
 
-oauth_google = OAuth2Component(
-    client_id="ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com",
-    client_secret="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",
-    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-    token_endpoint="https://oauth2.googleapis.com/token",
-    refresh_token_endpoint="https://oauth2.googleapis.com/token",
-    revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
-)
+# Só inicializa o componente se tivermos as chaves
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    oauth_google = OAuth2Component(
+        client_id=GOOGLE_CLIENT_ID,
+        client_secret=GOOGLE_CLIENT_SECRET,
+        authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+        token_endpoint="https://oauth2.googleapis.com/token",
+        refresh_token_endpoint="https://oauth2.googleapis.com/token",
+        revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
+    )
+else:
+    oauth_google = None
 
 # =========================================
 # FUNÇÕES DE TELA
@@ -89,8 +95,8 @@ def tela_login():
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # BOTÃO GOOGLE
-                if GOOGLE_CLIENT_ID: 
+                # BOTÃO GOOGLE (SÓ APARECE SE CONFIGURADO)
+                if oauth_google: 
                     try:
                         result = oauth_google.authorize_button(
                             name="Continuar com Google",
@@ -133,9 +139,8 @@ def tela_login():
                         except Exception as e:
                             st.error(f"Erro Google: {e}")
                 else:
-                    # Mensagem discreta se não houver chave configurada (opcional, pode remover se preferir)
-                    # st.caption("Login com Google indisponível (Chaves não configuradas)")
-                    pass
+                    # Se não tiver chaves, mostra um aviso discreto ou nada
+                    st.info("Login com Google não configurado no servidor.")
 
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
