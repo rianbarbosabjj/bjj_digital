@@ -185,7 +185,7 @@ def exame_de_faixa(usuario_logado):
         
     # Se chegou aqui, o aluno está liberado para a faixa 'faixa_sel'
     if usuario_logado["tipo"] == "aluno":
-        st.info(f"📝 Você está realizando o **Exame de Faixa {faixa_sel}**.")
+        st.info(f"📝 Você está habilitado a realizar o **Exame de Faixa {faixa_sel}**.")
 
     # --- 2. GESTÃO DE ESTADO ---
     if 'prova_iniciada' not in st.session_state: st.session_state.prova_iniciada = False
@@ -263,7 +263,7 @@ def exame_de_faixa(usuario_logado):
     if not st.session_state.prova_iniciada:
         st.markdown("---")
         with st.container(border=True):
-            st.markdown(f"### 📜 Instruções - Faixa {faixa_sel}")
+            st.markdown(f"### 📜 Instruções para a realização do Exame - Faixa {faixa_sel}")
             # Instruções atualizadas conforme solicitado
             st.markdown(f"""
             * Sua prova contém **{len(lista_questoes)} Questões:**
