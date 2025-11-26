@@ -86,7 +86,7 @@ def modo_rola(usuario_logado):
             return
 
         random.shuffle(questoes_selecionadas)
-        questoes_treino = questões_selecionadas[:10] 
+        questoes_treino = questoes_selecionadas[:10] 
         
         st.markdown("---")
         respostas_usuario = {}
@@ -125,13 +125,13 @@ def modo_rola(usuario_logado):
             st.success(f"Treino concluído! {acertos}/{total} ({percentual}%).")
 
 # =========================================
-# EXAME DE FAIXA (AUTOMÁTICO + TIMER CORRIGIDO)
+# EXAME DE FAIXA (CRONÔMETRO JS CORRIGIDO)
 # =========================================
 def exame_de_faixa(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>🥋 Exame de Faixa</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    # --- 1. VERIFICAÇÃO DE PERMISSÃO E FAIXA ---
+    # --- 1. PERMISSÃO ---
     faixa_sel = None
     permitido = False
     msg_bloqueio = "Acesso não autorizado."
@@ -202,6 +202,7 @@ def exame_de_faixa(usuario_logado):
     # --- 3. RESULTADOS (Se já acabou) ---
     if st.session_state.prova_concluida:
         res = st.session_state.resultado_final
+        # Verifica se o resultado armazenado corresponde à faixa atual selecionada
         if res.get('faixa') == faixa_sel:
             st.markdown("---")
             if res['aprovado']:
@@ -209,31 +210,35 @@ def exame_de_faixa(usuario_logado):
                 st.success(f"🎉 APROVADO! Nota: {res['percentual']}% ({res['acertos']}/{res['total']})")
                 st.info("Seu certificado foi gerado.")
                 
-                pdf_data = res.get('pdf_bytes')
+                # Tenta pegar PDF do cache da sessão
+                pdf_bytes = res.get('pdf_bytes')
                 pdf_name = res.get('pdf_name', 'certificado.pdf')
                 
-                if pdf_data:
+                # Se não tiver (raro), gera de novo e guarda
+                if not pdf_bytes:
+                    try:
+                        # ATENÇÃO: Agora gerar_pdf retorna (bytes, nome) diretamente
+                        pdf_bytes, pdf_name = gerar_pdf(
+                            usuario_logado['nome'], res['faixa'], 
+                            res['acertos'], res['total'], res['codigo']
+                        )
+                        st.session_state.resultado_final['pdf_bytes'] = pdf_bytes
+                        st.session_state.resultado_final['pdf_name'] = pdf_name
+                    except Exception as e:
+                        st.error(f"Erro ao gerar PDF: {e}")
+
+                if pdf_bytes:
                     st.download_button(
                         label="📥 BAIXAR CERTIFICADO AGORA",
-                        data=pdf_data,
+                        data=pdf_bytes,
                         file_name=pdf_name,
                         mime="application/pdf",
                         use_container_width=True,
                         key="btn_dl_final"
                     )
-                else:
-                    st.warning("Gerando PDF novamente...")
-                    try:
-                        p_bytes, p_name = gerar_pdf(
-                            usuario_logado['nome'], res['faixa'], 
-                            res['acertos'], res['total'], res['codigo']
-                        )
-                        st.download_button("📥 Baixar Certificado", p_bytes, p_name, "application/pdf", use_container_width=True)
-                    except Exception as e:
-                        st.error(f"Erro ao recuperar PDF: {e}")
             else:
-                msg_tempo = "Tempo Esgotado. " if res.get('tempo_esgotado') else ""
-                st.error(f"Reprovado. {msg_tempo}Nota: {res['percentual']}%. Mínimo: 70%.")
+                msg = "Tempo Esgotado. " if res.get('tempo_esgotado') else ""
+                st.error(f"Reprovado. {msg}Nota: {res['percentual']}%. Mínimo: 70%.")
             
             if st.button("🔄 Voltar ao Início"):
                 st.session_state.prova_iniciada = False
@@ -248,7 +253,7 @@ def exame_de_faixa(usuario_logado):
         return
 
     lista_questoes = dados_exame.get('questoes', [])
-    tempo_limite = dados_exame.get('tempo_limite', 10)
+    tempo_limite = dados_exame.get('tempo_limite', 60)
 
     if not lista_questoes:
         st.warning("Esta prova está vazia. Avise seu professor.")
@@ -259,57 +264,104 @@ def exame_de_faixa(usuario_logado):
         st.markdown("---")
         with st.container(border=True):
             st.markdown(f"### 📜 Instruções - Faixa {faixa_sel}")
-            st.markdown(f"* **Questões:** {len(lista_questoes)}\n* **Tempo:** ⏱️ {tempo_limite} minutos\n* **Aprovação:** 70%")
+            # Instruções atualizadas conforme solicitado
+            st.markdown(f"""
+            * **Questões:** {len(lista_questoes)}
+            * **Tempo:** ⏱️ {tempo_limite} minutos
+            * **Aprovação:** 70% de acertos
             
-            if st.button("✅ Começar Agora", type="primary", use_container_width=True):
+            **Atenção:** * Após clicar em **iniciar exame**, não será possível pausar ou interromper o cronômetro.
+            * Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
+            * Não é permitido consulta a materiais externos.
+            * Esteja em um lugar confortável e silencioso para ajudar na sua concentração.
+            
+            **Boa prova!** 🥋
+            """)
+            
+            if st.button("✅ Iniciar Exame", type="primary", use_container_width=True):
                 st.session_state.prova_iniciada = True
                 st.session_state.prova_concluida = False
-                # Define hora de fim
-                st.session_state.fim_prova_ts = time.time() + (tempo_limite * 10)
+                # Define o timestamp de fim da prova (tempo absoluto)
+                # time.time() retorna segundos desde epoch (UTC)
+                st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
                 st.rerun()
         return 
 
     # --- 6. PROVA EM ANDAMENTO ---
     
+    # Tempo Restante (em segundos)
     agora_ts = time.time()
     restante_sec = int(st.session_state.fim_prova_ts - agora_ts)
     tempo_esgotado = restante_sec <= 0
 
     if not tempo_esgotado:
-        # CRONÔMETRO OTIMIZADO
+        # CRONÔMETRO JAVASCRIPT ROBUSTO
+        # Passamos o tempo restante inicial para o JS começar a contar imediatamente
+        # O JS fará a contagem regressiva visualmente sem depender do Python
         timer_id = f"timer_{uuid.uuid4()}"
+        
+        # Componente HTML que contém o script do cronômetro
+        # A variável 'timeLeft' é inicializada com os segundos restantes calculados no Python
         st.components.v1.html(
             f"""
-            <div style="text-align: center; padding: 10px; border: 2px solid #FFD700; border-radius: 10px; margin-bottom: 20px; background-color: #0e2d26;">
-                <h3 id="timer_disp" style="color: #FFD700; margin: 0; font-family: sans-serif;">Carregando...</h3>
+            <div style="
+                display: flex; 
+                justify-content: center; 
+                align-items: center;
+                background-color: #0e2d26; 
+                border: 2px solid #FFD700; 
+                border-radius: 10px; 
+                padding: 10px; 
+                margin-bottom: 10px;
+                font-family: sans-serif;
+            ">
+                <span id="clock_display" style="
+                    font-size: 24px; 
+                    font-weight: bold; 
+                    color: #FFD700;
+                ">
+                    Carregando tempo...
+                </span>
             </div>
             <script>
-            var timeLeft = {restante_sec};
-            var timerElem = document.getElementById("timer_disp");
-            var timerInterval = setInterval(function() {{
-                if (timeLeft <= 0) {{
-                    clearInterval(timerInterval);
-                    timerElem.innerHTML = "⌛ TEMPO ESGOTADO";
-                    timerElem.style.color = "red";
-                }} else {{
+                // Tempo restante em segundos vindo do Python
+                var timeLeft = {restante_sec};
+                var timerElem = document.getElementById('clock_display');
+                
+                function updateDisplay() {{
+                    if (timeLeft <= 0) {{
+                        timerElem.innerHTML = "⌛ TEMPO ESGOTADO";
+                        timerElem.style.color = "#ff4b4b"; // Vermelho
+                        return;
+                    }}
+                    
                     var m = Math.floor(timeLeft / 60);
                     var s = timeLeft % 60;
+                    
+                    // Formata com zero à esquerda
                     var mStr = m < 10 ? "0" + m : m;
                     var sStr = s < 10 ? "0" + s : s;
+                    
                     timerElem.innerHTML = "⏱️ " + mStr + ":" + sStr;
                     timeLeft -= 1;
                 }}
-            }}, 1000);
+                
+                // Executa uma vez agora para tirar o "Carregando..."
+                updateDisplay();
+                
+                // Atualiza a cada segundo
+                setInterval(updateDisplay, 1000);
             </script>
             """,
-            height=80
+            height=85 # Altura suficiente para o componente não cortar
         )
     else:
-        st.error("⌛ TEMPO ESGOTADO!")
+        st.error("⌛ TEMPO ESGOTADO! O exame foi encerrado.")
 
     respostas = {}
     finalizar = False
     
+    # Se o tempo não acabou, mostra as questões
     if not tempo_esgotado:
         with st.form(key=f"form_prova_{faixa_sel}"):
             for i, q in enumerate(lista_questoes, 1):
@@ -324,18 +376,21 @@ def exame_de_faixa(usuario_logado):
                 
             finalizar = st.form_submit_button("Finalizar Exame 🏁", use_container_width=True)
     else:
+        # Se o tempo acabou, forçamos a finalização na próxima recarga da página
         finalizar = True 
         
-    # --- 7. PROCESSAMENTO ---
+    # --- 7. PROCESSAMENTO FINAL ---
     if finalizar:
-        with st.spinner("Corrigindo prova e gerando certificado..."):
+        with st.spinner("Processando resultados e gerando certificado..."):
             acertos = 0
             total = len(lista_questoes)
             
+            # Se o tempo não esgotou, corrige as respostas
             if not tempo_esgotado:
                 for i, q in enumerate(lista_questoes, 1):
                     resp_user = respostas.get(i)
                     resp_certa = q.get('resposta')
+                    # Verifica resposta
                     if resp_user:
                         if resp_user == resp_certa or resp_user.startswith(f"{resp_certa})"):
                             acertos += 1
@@ -380,6 +435,7 @@ def exame_de_faixa(usuario_logado):
                     })
                 except: pass
             
+            # Atualiza o estado da sessão
             st.session_state.prova_concluida = True
             st.session_state.resultado_final = {
                 "usuario": usuario_logado["nome"], "faixa": faixa_sel,
@@ -390,7 +446,7 @@ def exame_de_faixa(usuario_logado):
             st.rerun()
 
 # =========================================
-# RANKING E CERTIFICADOS (MANTIDOS)
+# RANKING e CERTIFICADOS (MANTIDOS)
 # =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD700;'>🏆 Ranking</h1>", unsafe_allow_html=True)
