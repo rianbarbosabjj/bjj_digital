@@ -14,8 +14,8 @@ from firebase_admin import firestore
 # CONFIGURAÇÃO OAUTH
 # =========================================
 try:
-    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
-    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+    GOOGLE_CLIENT_ID = st.secrets["209223702106-ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com"]
+    GOOGLE_CLIENT_SECRET = st.secrets["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"]
     REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
 except (FileNotFoundError, KeyError):
     GOOGLE_CLIENT_ID = ""
