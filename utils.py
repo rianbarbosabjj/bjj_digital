@@ -91,25 +91,36 @@ def buscar_cep(cep):
     return None
 
 def gerar_qrcode(codigo):
-    """Gera QR Code apontando para a página estática verificar.html."""
+    """Gera QR Code com link de verificação oficial do BJJ Digital."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
-    
+
+    # Cache simples de arquivo
     if os.path.exists(caminho_qr):
         return caminho_qr
-        
-    # LINK CORRETO: Aponta para a página HTML específica
-    link = f"https://bjjdigital.com.br/verificar.html?code={codigo}"
-    
-    qr = qrcode.QRCode(box_size=10, border=2)
-    qr.add_data(link)
+
+    # URL de verificação oficial (Atualizada para o seu domínio)
+    # Aponta para o arquivo HTML de verificação que você vai hospedar
+    base_url = "https://bjjdigital.com.br/verificar.html"
+    link_verificacao = f"{base_url}?codigo={codigo}"
+
+    # Criação do QR (Lógica original restaurada)
+    qr = qrcode.QRCode(
+        version=1,
+        box_size=10,
+        border=4,
+        error_correction=qrcode.constants.ERROR_CORRECT_H
+    )
+    qr.add_data(link_verificacao)
     qr.make(fit=True)
+
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(caminho_qr)
+
     return caminho_qr
 
 # =========================================
-# GERADOR DE PDF
+# GERADOR DE PDF (OTIMIZADO)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
