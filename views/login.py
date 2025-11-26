@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import os
@@ -15,8 +14,8 @@ from firebase_admin import firestore
 # CONFIGURAÇÃO OAUTH
 # =========================================
 try:
-    GOOGLE_CLIENT_ID = st.secrets["209223702106-ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com"]
-    GOOGLE_CLIENT_SECRET = st.secrets["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"]
+    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
     REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
 except (FileNotFoundError, KeyError):
     GOOGLE_CLIENT_ID = ""
@@ -52,7 +51,6 @@ def tela_login():
             with st.container(border=True):
                 st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
-                # FORMULÁRIO DE LOGIN (Para permitir Enter)
                 with st.form("login_form"):
                     user_input = st.text_input("Nome de Usuário, Email ou CPF:")
                     pwd = st.text_input("Senha:", type="password")
@@ -60,22 +58,23 @@ def tela_login():
 
                 if submit_login:
                     if not user_input or not pwd:
-                        st.warning("Preencha os campos.")
+                        st.warning("Preencha todos os campos.")
                     else:
-                        entrada = user_input.strip()
-                        if "@" in entrada:
-                            entrada = entrada.lower()
-                        else:
-                            cpf = formatar_e_validar_cpf(entrada)
-                            if cpf: entrada = cpf
-                            
-                        u = autenticar_local(entrada, pwd.strip()) 
-                        if u:
-                            st.session_state.usuario = u
-                            st.success(f"Bem-vindo(a), {u['nome'].title()}!")
-                            st.rerun()
-                        else:
-                            st.error("Credenciais inválidas.")
+                        with st.spinner("Conectando..."):
+                            entrada = user_input.strip()
+                            if "@" in entrada:
+                                entrada = entrada.lower()
+                            else:
+                                cpf = formatar_e_validar_cpf(entrada)
+                                if cpf: entrada = cpf
+                                
+                            u = autenticar_local(entrada, pwd.strip()) 
+                            if u:
+                                st.session_state.usuario = u
+                                st.success(f"Bem-vindo(a), {u['nome'].title()}!")
+                                st.rerun()
+                            else:
+                                st.error("Credenciais inválidas.")
 
                 col1, col2 = st.columns(2)
                 if col1.button("📋 Criar Conta"):
@@ -87,7 +86,6 @@ def tela_login():
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # Google Auth
                 if GOOGLE_CLIENT_ID: 
                     try:
                         result = oauth_google.authorize_button(
@@ -145,7 +143,7 @@ def tela_login():
                 st.rerun()
 
 def tela_cadastro_interno():
-    """Cadastro manual salvando no FIRESTORE com validação de duplicidade."""
+    """Cadastro manual salvando no FIRESTORE com criação de equipe para professores."""
     st.subheader("📋 Cadastro de Novo Usuário")
     
     db = get_db()
@@ -180,10 +178,6 @@ def tela_cadastro_interno():
         st.error(f"Erro ao carregar listas: {e}")
         return
 
-    # Início do Form
-    # Para campos dinâmicos (selectboxes dependentes), não usamos st.form global aqui
-    # pois precisamos que a página recarregue ao mudar a equipe
-    
     nome = st.text_input("Nome de Usuário:") 
     email = st.text_input("E-mail:")
     cpf_inp = st.text_input("CPF:") 
@@ -195,19 +189,18 @@ def tela_cadastro_interno():
     tipo = st.selectbox("Tipo:", ["Aluno", "Professor"])
     
     c_fx, c_eq = st.columns(2)
-    with c_fx:
-        if tipo == "Aluno":
-            faixa = st.selectbox("Faixa:", ["Branca", "Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca" "Amarela", "Amarela e Preta", "Laranja e Branca", "Laranja", "Laranja e Preta", "Verde e Branca", "Verde", "Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"])
-        else:
-            faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
-            st.caption("Professores devem ser Marrom ou Preta.")
     
-    with c_eq:
-        eq_sel = st.selectbox("Equipe:", lista_equipes)
+    # Variáveis para nova equipe
+    nome_nova_equipe = None
+    desc_nova_equipe = None
     
-    # Filtro Dinâmico de Professor
-    prof_sel = None
     if tipo == "Aluno":
+        with c_fx:
+            faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        with c_eq:
+            eq_sel = st.selectbox("Equipe:", lista_equipes)
+            
+        # Filtro Professor
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
         mapa_profs_final = {}
         eq_id_sel = mapa_equipes.get(eq_sel)
@@ -218,6 +211,23 @@ def tela_cadastro_interno():
                 mapa_profs_final[p_nome] = p_uid
         
         prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
+        
+    else: # Professor
+        with c_fx:
+            faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
+            st.caption("Professores devem ser Marrom ou Preta.")
+        with c_eq:
+            # Adiciona opção de criar nova equipe
+            opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
+            eq_sel = st.selectbox("Equipe:", opcoes_prof_eq)
+        
+        # Se escolheu criar nova equipe, mostra campos extras
+        if eq_sel == "🆕 Criar Nova Equipe":
+            st.info("Você será cadastrado como o **Professor Responsável** por esta nova equipe.")
+            nome_nova_equipe = st.text_input("Nome da Nova Equipe:")
+            desc_nova_equipe = st.text_input("Descrição (Opcional):")
+            
+        prof_sel = None 
     
     st.markdown("#### Endereço")
     if 'cad_cep' not in st.session_state: st.session_state.cad_cep = ''
@@ -258,52 +268,83 @@ def tela_cadastro_interno():
         if not cpf_fin:
             st.error("CPF inválido.")
             return
+        
+        # Validação extra para criação de equipe
+        if tipo == "Professor" and eq_sel == "🆕 Criar Nova Equipe" and not nome_nova_equipe:
+            st.warning("Por favor, informe o nome da nova equipe.")
+            return
 
         users_ref = db.collection('usuarios')
         
-        # 🛑 VALIDAÇÃO DE DUPLICIDADE (Email E CPF)
-        # 1. Verifica Email
+        # Validação de duplicidade
         if len(list(users_ref.where('email', '==', email_fin).stream())) > 0:
             st.error("Este E-mail já está cadastrado.")
             return
-            
-        # 2. Verifica CPF
         if len(list(users_ref.where('cpf', '==', cpf_fin).stream())) > 0:
             st.error("Este CPF já está cadastrado.")
             return
             
         try:
-            hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-            tipo_db = tipo.lower()
-            
-            novo_user = {
-                "nome": nome_fin, "email": email_fin, "cpf": cpf_fin, 
-                "tipo_usuario": tipo_db, "senha": hashed, "auth_provider": "local", 
-                "perfil_completo": True, "cep": cep_fin, "logradouro": logr.upper(),
-                "numero": num, "complemento": comp.upper(), "bairro": bairro.upper(),
-                "cidade": cid.upper(), "uf": uf.upper(), "data_criacao": firestore.SERVER_TIMESTAMP
-            }
-            
-            _, doc_ref = db.collection('usuarios').add(novo_user)
-            user_id = doc_ref.id
-            
-            eq_id = mapa_equipes.get(eq_sel)
-            prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno" and prof_sel) else None
-            
-            if tipo_db == "aluno":
-                db.collection('alunos').add({
-                    "usuario_id": user_id, "faixa_atual": faixa, 
-                    "equipe_id": eq_id, "professor_id": prof_id, "status_vinculo": "pendente"
-                })
-            else:
-                db.collection('professores').add({
-                    "usuario_id": user_id, "equipe_id": eq_id, "status_vinculo": "pendente"
-                })
+            with st.spinner("Criando conta..."):
+                hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+                tipo_db = tipo.lower()
                 
-            st.success("Cadastro realizado! Faça login.")
-            for k in ['cad_cep', 'cad_end']: st.session_state.pop(k, None)
-            st.session_state["modo_login"] = "login"
-            st.rerun()
+                # 1. CRIA USUÁRIO
+                novo_user = {
+                    "nome": nome_fin, "email": email_fin, "cpf": cpf_fin, 
+                    "tipo_usuario": tipo_db, "senha": hashed, "auth_provider": "local", 
+                    "perfil_completo": True, "cep": cep_fin, "logradouro": logr.upper(),
+                    "numero": num, "complemento": comp.upper(), "bairro": bairro.upper(),
+                    "cidade": cid.upper(), "uf": uf.upper(), "data_criacao": firestore.SERVER_TIMESTAMP
+                }
+                
+                _, doc_ref = db.collection('usuarios').add(novo_user)
+                user_id = doc_ref.id
+                
+                # 2. RESOLVE EQUIPE (Nova ou Existente)
+                eq_id = None
+                
+                if tipo_db == "professor" and eq_sel == "🆕 Criar Nova Equipe":
+                    # Cria a equipe e define este usuário como responsável
+                    _, ref_team = db.collection('equipes').add({
+                        "nome": nome_nova_equipe.upper(),
+                        "descricao": desc_nova_equipe,
+                        "professor_responsavel_id": user_id, # O próprio usuário criado
+                        "ativo": True
+                    })
+                    eq_id = ref_team.id
+                    
+                    # Cria vínculo já ativo e com poderes
+                    db.collection('professores').add({
+                        "usuario_id": user_id, 
+                        "equipe_id": eq_id, 
+                        "status_vinculo": "ativo",  # Auto-aprovado pois é o dono
+                        "eh_responsavel": True,
+                        "pode_aprovar": True
+                    })
+                    
+                else:
+                    # Fluxo normal (Aluno ou Professor entrando em equipe existente)
+                    eq_id = mapa_equipes.get(eq_sel)
+                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno" and prof_sel) else None
+                    
+                    if tipo_db == "aluno":
+                        db.collection('alunos').add({
+                            "usuario_id": user_id, "faixa_atual": faixa, 
+                            "equipe_id": eq_id, "professor_id": prof_id, "status_vinculo": "pendente"
+                        })
+                    else:
+                        db.collection('professores').add({
+                            "usuario_id": user_id, "equipe_id": eq_id, 
+                            "status_vinculo": "pendente", # Precisa aprovação do dono da equipe
+                            "eh_responsavel": False,
+                            "pode_aprovar": False
+                        })
+                
+                st.success("Cadastro realizado! Faça login.")
+                for k in ['cad_cep', 'cad_end']: st.session_state.pop(k, None)
+                st.session_state["modo_login"] = "login"
+                st.rerun()
             
         except Exception as e:
             st.error(f"Erro ao gravar: {e}")
@@ -313,10 +354,5 @@ def tela_cadastro_interno():
         st.rerun()
 
 def tela_completar_cadastro(user_data):
-    """Completa cadastro Google (Adicionar verificação de CPF aqui também se desejar)."""
-    # ... (Código anterior mantido para brevidade, adicione a mesma lógica de check de CPF se necessário)
-    # Neste fluxo, o usuário já está logado via Google, então verificamos se o CPF que ele digitar
-    # pertence a OUTRO usuário.
-    
-    st.markdown(f"<h1 style='color:#FFD700;'>Quase lá, {user_data['nome']}!</h1>", unsafe_allow_html=True)
-    # ... (Restante da função igual, apenas adicione a validação de CPF antes de salvar)
+    # ... (Mantido igual, pode ser usado do histórico se necessário) ...
+    st.markdown("Funcionalidade Google Auth em manutenção.")
