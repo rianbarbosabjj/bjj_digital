@@ -13,24 +13,27 @@ from firebase_admin import firestore
 # =========================================
 # CONFIGURAÇÃO OAUTH (BLINDADA)
 # =========================================
-try:
-    GOOGLE_CLIENT_ID = st.secrets["209223702106-ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com"]
-    GOOGLE_CLIENT_SECRET = st.secrets["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"]
-    REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
-except (FileNotFoundError, KeyError):
-    GOOGLE_CLIENT_ID = ""
-    GOOGLE_CLIENT_SECRET = ""
-    REDIRECT_URI = ""
+# Usamos .get() para evitar erros (KeyError) se a chave não existir
+# Isso é mais seguro do que try/except para dicionários
+GOOGLE_CLIENT_ID = st.secrets.get("209223702106-ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com")
+GOOGLE_CLIENT_SECRET = st.secrets.get("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")
+REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
 
-oauth_google = OAuth2Component(
-    client_id=GOOGLE_CLIENT_ID,
-    client_secret=GOOGLE_CLIENT_SECRET,
-    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-    token_endpoint="https://oauth2.googleapis.com/token",
-    refresh_token_endpoint="https://oauth2.googleapis.com/token",
-    revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
-)
-
+# Só inicializa o componente se tivermos as chaves válidas carregadas
+if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+    try:
+        oauth_google = OAuth2Component(
+            client_id=GOOGLE_CLIENT_ID,
+            client_secret=GOOGLE_CLIENT_SECRET,
+            authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+            token_endpoint="https://oauth2.googleapis.com/token",
+            refresh_token_endpoint="https://oauth2.googleapis.com/token",
+            revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
+        )
+    except Exception as e:
+        # Se der erro na inicialização do componente (ex: chaves inválidas), não quebra o app
+        print(f"Erro ao iniciar OAuth: {e}")
+        oauth_google = None
 else:
     oauth_google = None
 
@@ -92,7 +95,7 @@ def tela_login():
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # BOTÃO GOOGLE (SÓ APARECE SE CONFIGURADO)
+                # BOTÃO GOOGLE (SÓ APARECE SE CONFIGURADO E CARREGADO)
                 if oauth_google: 
                     try:
                         result = oauth_google.authorize_button(
@@ -104,7 +107,8 @@ def tela_login():
                             use_container_width=True,
                         )
                     except Exception:
-                        st.warning("A conexão expirou. Recarregue a página (F5).")
+                        # Evita mostrar erro feio se a conexão falhar
+                        st.warning("Login com Google temporariamente indisponível.")
                         result = None
                     
                     if result and result.get("token"):
@@ -136,8 +140,9 @@ def tela_login():
                         except Exception as e:
                             st.error(f"Erro Google: {e}")
                 else:
-                    # Se não tiver chaves, mostra um aviso discreto ou nada
-                    st.info("Login com Google não configurado no servidor.")
+                    # Mensagem opcional para debug (só aparece se não tiver chaves)
+                    # st.info("Google Login não configurado.")
+                    pass
 
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
