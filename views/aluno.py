@@ -303,7 +303,7 @@ def exame_de_faixa(usuario_logado):
         timer_placeholder.empty()
 
         # MENSAGEM PERSONALIZADA DE PROCESSAMENTO
-        with st.spinner("Seu exame está sendo corrigido. Em caso de aprovação, você poderá baixar seu certificado imediatamente..."):
+        with st.spinner("Seu exame está sendo corrigido. Caso seja aprovado, o certificado estará disponível para download imediatamente..."):
             acertos = 0
             total = len(lista_questoes)
             
