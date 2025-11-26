@@ -266,7 +266,7 @@ def exame_de_faixa(usuario_logado):
             st.markdown(f"### 📜 Instruções - Faixa {faixa_sel}")
             # Instruções atualizadas conforme solicitado
             st.markdown(f"""
-            * **Sua prova contém {len(lista_questoes)} Questões:**
+            * Sua prova contém **{len(lista_questoes)} Questões:**
             * ⏱️ O tempo limote para finalização do exame é de **{tempo_limite} minutos**
             * ✅ Para ser aprovado, voê precisa acertar no mínimo **70%** do exame
             
