@@ -357,13 +357,13 @@ def gestao_exame_de_faixa():
     tab_prova, tab_alunos = st.tabs(["📝 Montar Prova", "✅ Habilitar Alunos"])
 
     # ---------------------------------------------------------
-    # ABA 1: MONTAR PROVA (Mantida igual)
+    # ABA 1: MONTAR PROVA (Igual ao anterior)
     # ---------------------------------------------------------
     with tab_prova:
         st.subheader("Configurar Prova")
         db = get_db()
         
-        faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+        faixas = ["Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca" "Amarela", "Amarela e Preta", "Laranja e Branca", "Laranja", "Laranja e Preta", "Verde e Branca", "Verde", "Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"]
         faixa = st.selectbox("Selecione a faixa para editar:", faixas, key="sel_faixa_prova")
 
         doc_ref = db.collection('exames').document(faixa)
@@ -396,21 +396,16 @@ def gestao_exame_de_faixa():
         perguntas_ja_add = [q['pergunta'] for q in questoes_na_prova]
 
         with st.form("add_q_exame"):
-            st.markdown("#### Selecionar Questões do Banco")
+            st.markdown("#### Selecionar Questões")
             selecionadas = []
-            
             for i, q in enumerate(q_exibir):
                 if q['pergunta'] not in perguntas_ja_add:
                     c_chk, c_det = st.columns([0.5, 10])
                     with c_chk:
-                        key_id = str(hash(q['pergunta']))
-                        if st.checkbox("Add", key=f"chk_{key_id}", label_visibility="collapsed"):
+                        if st.checkbox("Add", key=f"chk_{i}", label_visibility="collapsed"):
                             selecionadas.append(q)
                     with c_det:
                         st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
-                        if 'opcoes' in q and q['opcoes']:
-                            for op in q['opcoes']:
-                                st.markdown(f"<span style='color: #aaaaaa; margin-left: 15px;'>• {op}</span>", unsafe_allow_html=True)
                         st.caption(f"✅ {q.get('resposta')}")
                         st.markdown("---")
             
@@ -426,21 +421,18 @@ def gestao_exame_de_faixa():
                 st.success("Prova atualizada!")
                 st.rerun()
 
-        st.markdown("---")
         if questoes_na_prova:
-            st.markdown(f"#### Questões nesta Prova ({len(questoes_na_prova)})")
-            for i, q in enumerate(questoes_na_prova):
-                with st.expander(f"{i+1}. {q['pergunta']}"):
-                    st.write(q.get('opcoes'))
-                    if st.button("Remover", key=f"rm_{i}"):
+            with st.expander(f"Ver Questões da Faixa {faixa} ({len(questoes_na_prova)})"):
+                for i, q in enumerate(questoes_na_prova):
+                    c1, c2 = st.columns([5, 1])
+                    c1.write(f"{i+1}. {q['pergunta']}")
+                    if c2.button("Remover", key=f"rm_{i}"):
                         questoes_na_prova.pop(i)
-                        doc_ref.update({"questoes": questoes_na_prova, "tempo_limite": novo_tempo})
+                        doc_ref.update({"questoes": questoes_na_prova})
                         st.rerun()
-        else:
-            st.info("Esta prova ainda não tem questões.")
 
     # ---------------------------------------------------------
-    # ABA 2: HABILITAR ALUNOS (ATUALIZADA)
+    # ABA 2: HABILITAR ALUNOS (COM ATRIBUIÇÃO DE FAIXA)
     # ---------------------------------------------------------
     with tab_alunos:
         st.subheader("Autorizar Alunos")
@@ -460,7 +452,7 @@ def gestao_exame_de_faixa():
             
             if not equipes_permitidas:
                 st.warning("Sem equipes vinculadas.")
-                # return # (Removido para não quebrar fluxo visual, usa lógica abaixo)
+                st.stop() 
 
         alunos_ref = db.collection('alunos')
         if equipes_permitidas:
@@ -476,7 +468,7 @@ def gestao_exame_de_faixa():
             users_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('usuarios').stream()}
             equipes_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('equipes').stream()}
             
-            st.markdown("#### 📅 Configurar Período Disponível")
+            st.markdown("#### 📅 Configurar Datas")
             c_ini, c_fim = st.columns(2)
             d_ini = c_ini.date_input("Início:", value=datetime.now())
             h_ini = c_ini.time_input("Hora:", value=time(0, 0))
@@ -487,18 +479,16 @@ def gestao_exame_de_faixa():
             dt_fim = datetime.combine(d_fim, h_fim)
 
             st.markdown("---")
-            st.write("Selecione a **Faixa do Exame** que o aluno irá prestar e clique em Habilitar.")
+            st.write("Selecione qual exame o aluno deve fazer:")
             
-            # Cabeçalho Tabela
             h = st.columns([3, 2, 2, 3, 2])
             h[0].markdown("**Aluno**")
             h[1].markdown("**Equipe**")
-            h[2].markdown("**Exame Para**") # Coluna de Seleção
+            h[2].markdown("**Atribuir Faixa**") # Nova Coluna
             h[3].markdown("**Status**")
             h[4].markdown("**Ação**")
-            st.markdown("---")
             
-            faixas_disponiveis = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+            faixas_opcoes = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
 
             for doc in docs_alunos:
                 d = doc.to_dict()
@@ -508,32 +498,24 @@ def gestao_exame_de_faixa():
                 if equipes_permitidas is None or eid in equipes_permitidas:
                     nome_aluno = users_map.get(uid, "Desconhecido")
                     nome_equipe = equipes_map.get(eid, "Sem Equipe")
-                    
                     habilitado = d.get('exame_habilitado', False)
-                    faixa_liberada = d.get('faixa_exame_liberado', 'Nenhuma')
+                    faixa_liberada = d.get('faixa_exame_liberado', 'Não def.')
                     
-                    # Status Visual
                     p_str = "Bloqueado"
                     if habilitado:
-                        try:
-                            i = d.get('exame_inicio').replace(tzinfo=None).strftime("%d/%m")
-                            f = d.get('exame_fim').replace(tzinfo=None).strftime("%d/%m")
-                            p_str = f"🟢 {faixa_liberada} ({i}-{f})"
-                        except: p_str = f"🟢 {faixa_liberada}"
+                        p_str = f"🟢 {faixa_liberada}"
 
                     c = st.columns([3, 2, 2, 3, 2])
                     c[0].write(nome_aluno)
                     c[1].write(nome_equipe)
                     
-                    # Seletor de Faixa individual para este aluno
-                    # Tenta prever a próxima faixa se possível, ou usa a atual + 1
-                    faixa_selecionada = c[2].selectbox(
-                        "Faixa", 
-                        faixas_disponiveis, 
-                        key=f"sel_fx_{doc.id}", 
-                        label_visibility="collapsed",
-                        index=0 # Padrão
-                    )
+                    # Seletor de Faixa para atribuir
+                    # Tenta adivinhar a próxima faixa ou usa a última liberada
+                    idx_f = 0
+                    if faixa_liberada in faixas_opcoes:
+                        idx_f = faixas_opcoes.index(faixa_liberada)
+                    
+                    faixa_escolhida = c[2].selectbox("Faixa", faixas_opcoes, key=f"sel_{doc.id}", index=idx_f, label_visibility="collapsed")
                     
                     c[3].write(p_str)
                     
@@ -541,9 +523,7 @@ def gestao_exame_de_faixa():
                         if c[4].button("⛔ Bloquear", key=f"blk_{doc.id}"):
                             db.collection('alunos').document(doc.id).update({
                                 "exame_habilitado": False,
-                                "exame_inicio": None,
-                                "exame_fim": None,
-                                "faixa_exame_liberado": None # Limpa a faixa liberada
+                                "faixa_exame_liberado": None
                             })
                             st.rerun()
                     else:
@@ -553,7 +533,7 @@ def gestao_exame_de_faixa():
                                     "exame_habilitado": True, 
                                     "exame_inicio": dt_inicio, 
                                     "exame_fim": dt_fim,
-                                    "faixa_exame_liberado": faixa_selecionada # Salva qual exame ele vai fazer
+                                    "faixa_exame_liberado": faixa_escolhida # Salva a faixa
                                 })
                                 st.rerun()
-                            else: st.error("Data Inválida")
+                            else: st.error("Datas inválidas")
