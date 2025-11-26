@@ -270,7 +270,8 @@ def exame_de_faixa(usuario_logado):
             * ⏱️ O tempo limite para finalização do exame é de **{tempo_limite} minutos**
             * ✅ Para ser aprovado, voê precisa acertar no mínimo **70%** do exame
             
-            **ATENÇÃO:** Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
+            **ATENÇÃO:**
+            * Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
             * Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
             * Não é permitido consulta a materiais externos.
             * Esteja em um lugar confortável e silencioso para ajudar na sua concentração.
