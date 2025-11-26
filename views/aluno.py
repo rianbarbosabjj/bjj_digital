@@ -248,7 +248,7 @@ def exame_de_faixa(usuario_logado):
         return
 
     lista_questoes = dados_exame.get('questoes', [])
-    tempo_limite = dados_exame.get('tempo_limite', 60)
+    tempo_limite = dados_exame.get('tempo_limite', 10)
 
     if not lista_questoes:
         st.warning("Esta prova está vazia. Avise seu professor.")
@@ -265,7 +265,7 @@ def exame_de_faixa(usuario_logado):
                 st.session_state.prova_iniciada = True
                 st.session_state.prova_concluida = False
                 # Define hora de fim
-                st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
+                st.session_state.fim_prova_ts = time.time() + (tempo_limite * 10)
                 st.rerun()
         return 
 
