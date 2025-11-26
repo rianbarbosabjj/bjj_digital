@@ -14,8 +14,8 @@ from firebase_admin import firestore
 # CONFIGURAÇÃO OAUTH
 # =========================================
 try:
-    GOOGLE_CLIENT_ID = st.secrets["209223702106-ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com"]
-    GOOGLE_CLIENT_SECRET = st.secrets["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"]
+    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
     REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
 except (FileNotFoundError, KeyError):
     GOOGLE_CLIENT_ID = ""
@@ -76,16 +76,20 @@ def tela_login():
                             else:
                                 st.error("Credenciais inválidas.")
 
+                # BOTÕES ALINHADOS E LARGOS
                 col1, col2 = st.columns(2)
-                if col1.button("📋 Criar Conta"):
-                    st.session_state["modo_login"] = "cadastro"
-                    st.rerun()
-                if col2.button("🔑 Esqueci Senha"):
-                    st.session_state["modo_login"] = "recuperar"
-                    st.rerun()
+                with col1:
+                    if st.button("📋 Criar Conta", use_container_width=True):
+                        st.session_state["modo_login"] = "cadastro"
+                        st.rerun()
+                with col2:
+                    if st.button("🔑 Esqueci Senha", use_container_width=True):
+                        st.session_state["modo_login"] = "recuperar"
+                        st.rerun()
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
+                # BOTÃO GOOGLE
                 if GOOGLE_CLIENT_ID: 
                     try:
                         result = oauth_google.authorize_button(
@@ -128,6 +132,10 @@ def tela_login():
                                 st.error("Falha ao obter dados do Google.")
                         except Exception as e:
                             st.error(f"Erro Google: {e}")
+                else:
+                    # Mensagem discreta se não houver chave configurada (opcional, pode remover se preferir)
+                    # st.caption("Login com Google indisponível (Chaves não configuradas)")
+                    pass
 
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
@@ -138,7 +146,7 @@ def tela_login():
             if st.button("Enviar Instruções", use_container_width=True, type="primary"):
                 st.info("Funcionalidade em breve.")
             
-            if st.button("Voltar"):
+            if st.button("Voltar", use_container_width=True):
                 st.session_state["modo_login"] = "login"
                 st.rerun()
 
@@ -349,7 +357,7 @@ def tela_cadastro_interno():
         except Exception as e:
             st.error(f"Erro ao gravar: {e}")
 
-    if st.button("Voltar"):
+    if st.button("Voltar", use_container_width=True):
         st.session_state["modo_login"] = "login"
         st.rerun()
 
