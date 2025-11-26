@@ -94,7 +94,7 @@ def gerar_qrcode(codigo):
     if os.path.exists(caminho_qr):
         return caminho_qr
         
-    link = f"https://bjjdigital.com.br/validar?code={codigo}"
+    link = f"https://bjjdigital.com.br/validar.html?code={codigo}"
     qr = qrcode.QRCode(box_size=10, border=2)
     qr.add_data(link)
     qr.make(fit=True)
