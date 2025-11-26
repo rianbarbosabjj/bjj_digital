@@ -8,8 +8,7 @@ import json
 from datetime import datetime, time
 from firebase_admin import firestore
 
-# ... (Funções gestao_usuarios e gestao_questoes mantidas iguais) ...
-# Vou focar na atualização da função gestao_exame_de_faixa abaixo
+# ... (Funções gestao_usuarios e gestao_questoes mantidas iguais, omitidas para focar na alteração) ...
 
 def gestao_usuarios(usuario_logado):
     if usuario_logado["tipo"] != "admin":
@@ -141,7 +140,7 @@ def gestao_questoes():
                     db.collection('questoes').document(q['id']).delete(); st.rerun()
 
 # =========================================
-# GESTÃO DE EXAME DE FAIXA (ATUALIZADO COM SUBDIVISÕES)
+# GESTÃO DE EXAME DE FAIXA (VISUALIZAÇÃO COMPLETA)
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
@@ -157,7 +156,6 @@ def gestao_exame_de_faixa():
     
     db = get_db()
     
-    # Lista completa de faixas para o sistema
     todas_faixas = [
         "Cinza e Branca", "Cinza", "Cinza e Preta",
         "Amarela e Branca", "Amarela", "Amarela e Preta",
@@ -167,12 +165,11 @@ def gestao_exame_de_faixa():
     ]
 
     # ---------------------------------------------------------
-    # ABA 1: EDITOR (Focado em Criação/Edição)
+    # ABA 1: EDITOR (Visualização Rica)
     # ---------------------------------------------------------
     with tab_editor:
         st.subheader("Editor de Prova")
         
-        # Seletor com todas as opções
         faixa_edit = st.selectbox("Selecione a faixa para criar/editar:", todas_faixas, key="sel_faixa_edit")
         
         doc_ref = db.collection('exames').document(faixa_edit)
@@ -180,14 +177,14 @@ def gestao_exame_de_faixa():
         
         dados_prova = doc_snap.to_dict() if doc_snap.exists else {}
         questoes_atuais = dados_prova.get('questoes', [])
-        tempo_atual = dados_prova.get('tempo_limite', 60)
+        tempo_atual = dados_prova.get('tempo_limite', 10)
 
         c_time, c_stat = st.columns([1, 3])
         novo_tempo = c_time.number_input("⏱️ Tempo Limite (min):", 10, 240, tempo_atual, 10)
         c_stat.info(f"Esta prova contém atualmente **{len(questoes_atuais)} questões**.")
 
         st.markdown("---")
-        st.markdown("#### ➕ Adicionar Questões")
+        st.markdown("#### ➕ Adicionar Questões do Banco")
         
         docs_q = db.collection('questoes').where('status', '==', 'aprovada').stream()
         todas_q = [d.to_dict() for d in docs_q] 
@@ -202,12 +199,27 @@ def gestao_exame_de_faixa():
             selecionadas = []
             count = 0
             for i, q in enumerate(q_exibir):
-                if count > 50: 
-                    st.caption("... muitos resultados. Filtre por tema para ver mais."); break
-                    
+                if count > 100: break # Paginação simples
+                
                 if q['pergunta'] not in perguntas_ja_add:
-                    ck = st.checkbox(f"**[{q.get('tema')}]** {q['pergunta']}", key=f"add_{i}")
+                    # LAYOUT DETALHADO NA SELEÇÃO
+                    st.markdown(f"**{i+1}. [{q.get('tema')}]** {q['pergunta']}")
+                    
+                    # Alternativas
+                    if q.get('opcoes'):
+                        for op in q['opcoes']:
+                            st.caption(f"• {op}")
+                    
+                    # Metadados
+                    c_meta1, c_meta2, c_meta3 = st.columns([3, 2, 1])
+                    c_meta1.markdown(f"✅ **Gabarito:** {q.get('resposta')}")
+                    c_meta2.caption(f"✍️ **Autor:** {q.get('criado_por', 'Desconhecido')}")
+                    
+                    # Checkbox
+                    ck = c_meta3.checkbox("Selecionar", key=f"add_{i}")
                     if ck: selecionadas.append(q)
+                    
+                    st.markdown("---")
                     count += 1
             
             if st.form_submit_button("Salvar Selecionadas na Prova"):
@@ -223,23 +235,22 @@ def gestao_exame_de_faixa():
                 st.rerun()
 
         if questoes_atuais:
-            st.markdown("---")
             st.markdown("#### 📋 Questões na Prova Atual")
             for i, q in enumerate(questoes_atuais):
-                c_txt, c_btn = st.columns([6, 1])
-                c_txt.markdown(f"**{i+1}.** {q['pergunta']}")
-                if c_btn.button("🗑️", key=f"rem_{i}", help="Remover da prova"):
-                    questoes_atuais.pop(i)
-                    doc_ref.update({"questoes": questoes_atuais, "tempo_limite": novo_tempo})
-                    st.rerun()
+                with st.expander(f"{i+1}. {q['pergunta']}"):
+                    st.write(q.get('opcoes'))
+                    st.info(f"Resposta: {q.get('resposta')} | Autor: {q.get('criado_por')}")
+                    if st.button("Remover da Prova", key=f"rem_{i}"):
+                        questoes_atuais.pop(i)
+                        doc_ref.update({"questoes": questoes_atuais, "tempo_limite": novo_tempo})
+                        st.rerun()
 
     # ---------------------------------------------------------
-    # ABA 2: VISUALIZAR (Com Abas Coloridas e Todas as Faixas)
+    # ABA 2: VISUALIZAR (Com Detalhes Completos)
     # ---------------------------------------------------------
     with tab_visualizar:
         st.subheader("Visualizar Provas Cadastradas")
         
-        # Categorias de Cores com TODAS as faixas solicitadas
         categorias = {
             "🔘 Cinza": ["Cinza e Branca", "Cinza", "Cinza e Preta"],
             "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
@@ -262,20 +273,22 @@ def gestao_exame_de_faixa():
                         q_list = data.get('questoes', [])
                         
                         with st.expander(f"✅ {f_nome} ({len(q_list)} questões)"):
-                            st.caption(f"Tempo limite: {data.get('tempo_limite')} min | Atualizado por: {data.get('atualizado_por', 'Admin')}")
+                            st.caption(f"Tempo: {data.get('tempo_limite')} min | Por: {data.get('atualizado_por', 'Admin')}")
                             
                             if q_list:
                                 for i, q in enumerate(q_list, 1):
-                                    st.markdown(f"**{i}.** {q['pergunta']}")
-                                    # st.caption(f"R: {q.get('resposta')}") # Opcional: mostrar resposta
+                                    st.markdown(f"**{i}. {q['pergunta']}**")
+                                    for op in q.get('opcoes', []):
+                                        st.text(f"  • {op}")
+                                    st.success(f"Resposta: {q.get('resposta')}")
+                                    st.caption(f"Autor: {q.get('criado_por', 'Desconhecido')}")
+                                    st.markdown("---")
                             else:
-                                st.warning("Prova criada mas sem questões.")
+                                st.warning("Prova vazia.")
                     else:
-                        st.info(f"⚠️ A prova para a faixa **{f_nome}** ainda não foi criada.")
+                        st.info(f"⚠️ Prova {f_nome} não criada.")
 
-    # ---------------------------------------------------------
-    # ABA 3: HABILITAR ALUNOS (Mantida)
-    # ---------------------------------------------------------
+    # ABA 3: HABILITAR ALUNOS (Mantida igual ao anterior)
     with tab_alunos:
         st.subheader("Autorizar Alunos")
         
@@ -342,7 +355,6 @@ def gestao_exame_de_faixa():
                     c[0].write(nome)
                     c[1].write(eq)
                     
-                    # Seletor com a LISTA COMPLETA
                     try: idx_f = todas_faixas.index(lib)
                     except: idx_f = 0
                     fx_sel = c[2].selectbox("Faixa", todas_faixas, index=idx_f, key=f"s_{doc.id}", label_visibility="collapsed")
