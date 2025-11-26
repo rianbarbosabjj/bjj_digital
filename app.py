@@ -1,10 +1,8 @@
 import streamlit as st
 import os
 import sys
-import streamlit.components.v1 as components
-from datetime import datetime
 
-# 1. CONFIGURAÇÃO
+# 1. CONFIGURAÇÃO DEVE SER A PRIMEIRA LINHA DO STREAMLIT
 st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
 
 # ---------------------------------------------------------
@@ -19,7 +17,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+# Importa cores do config
+try:
+    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+except ImportError:
+    # Fallback se config.py não for encontrado imediatamente
+    COR_FUNDO = "#0e2d26"
+    COR_TEXTO = "#FFFFFF"
+    COR_DESTAQUE = "#FFD770"
+    COR_BOTAO = "#078B6C"
+    COR_HOVER = "#FFD770"
+
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
@@ -36,171 +44,42 @@ div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ border-radi
 </style>
 """, unsafe_allow_html=True)
 
-# Hack para Render/Railway
+# Hack para Render/Railway (Criação de secrets.toml via Variável de Ambiente)
 if "SECRETS_TOML" in os.environ:
     if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
     with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
 
+# Importações dos Módulos
 try:
     from streamlit_option_menu import option_menu
     from database import get_db 
     from views import login, geral, aluno, professor, admin
 except ImportError as e:
-    st.error(f"❌ Erro crítico: {e}")
+    st.error(f"❌ Erro crítico na importação de módulos: {e}")
     st.stop()
-
-# =========================================
-# TELA DE VERIFICAÇÃO (HTML INJETADO)
-# =========================================
-def tela_verificacao(codigo):
-    # Limpeza do código
-    codigo_limpo = codigo.strip()
-    
-    # Busca no Firestore
-    db = get_db()
-    docs = list(db.collection('resultados').where('codigo_verificacao', '==', codigo_limpo).stream())
-    
-    if docs:
-        dados = docs[0].to_dict()
-        
-        # Dados do Banco
-        aluno_nome = dados.get('usuario', 'Desconhecido').upper()
-        faixa = dados.get('faixa', 'N/A').upper()
-        nota = dados.get('pontuacao', 0)
-        
-        data_raw = dados.get('data')
-        data_str = "N/A"
-        if data_raw:
-            try:
-                if isinstance(data_raw, datetime):
-                    data_str = data_raw.strftime("%d/%m/%Y")
-                elif isinstance(data_raw, str):
-                    data_str = datetime.fromisoformat(data_raw).strftime("%d/%m/%Y")
-            except: pass
-
-        # SEU HTML PERSONALIZADO (Adaptado para Python)
-        html_content = f"""
-        <!DOCTYPE html>
-        <html lang="pt-BR">
-        <head>
-          <meta charset="UTF-8">
-          <title>Verificação de Certificado - BJJ Digital</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
-            body {{
-              font-family: 'Poppins', sans-serif;
-              background-color: #0e2d26;
-              color: #fff;
-              text-align: center;
-              padding-top: 20px;
-            }}
-            h1 {{ color: #FFD700; }}
-            .box {{
-              border: 2px solid #FFD700;
-              border-radius: 15px;
-              display: inline-block;
-              padding: 20px 40px;
-              margin-top: 20px;
-              background-color: #113830;
-              max-width: 600px;
-              width: 90%;
-            }}
-            .codigo {{ color: #FFD700; font-weight: bold; font-size: 1.2em; letter-spacing: 1px; }}
-            .info-row {{ margin: 15px 0; border-bottom: 1px solid #2a4d43; padding-bottom: 10px; }}
-            .label {{ color: #aaa; font-size: 0.9em; text-transform: uppercase; }}
-            .value {{ font-size: 1.1em; font-weight: bold; }}
-          </style>
-        </head>
-        <body>
-          <h1>Certificado BJJ Digital</h1>
-          
-          <div class="box">
-            <p style="font-size: 1.2em;">✅ Este certificado é <strong>VÁLIDO</strong>.</p>
-            
-            <div class="info-row">
-                <div class="label">Aluno</div>
-                <div class="value">{aluno_nome}</div>
-            </div>
-            
-            <div class="info-row">
-                <div class="label">Faixa</div>
-                <div class="value" style="color: #FFD700; font-size: 1.4em;">{faixa}</div>
-            </div>
-            
-            <div class="info-row">
-                <div class="label">Data do Exame</div>
-                <div class="value">{data_str}</div>
-            </div>
-            
-            <div class="info-row">
-                <div class="label">Aproveitamento</div>
-                <div class="value">{nota}%</div>
-            </div>
-
-            <p>Código de verificação:</p>
-            <p class="codigo">{codigo_limpo}</p>
-          </div>
-        </body>
-        </html>
-        """
-        
-        # Renderiza o HTML
-        components.html(html_content, height=700, scrolling=True)
-        
-        # Botão de voltar
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c2:
-            if st.button("Ir para o Site Principal", use_container_width=True):
-                st.query_params.clear()
-                st.rerun()
-                
-    else:
-        # HTML DE ERRO
-        html_error = f"""
-        <!DOCTYPE html>
-        <html lang="pt-BR">
-        <head>
-          <style>
-             body {{ font-family: sans-serif; background-color: #0e2d26; color: white; text-align: center; padding-top: 50px; }}
-             .box-error {{ border: 2px solid #ff4b4b; border-radius: 15px; padding: 30px; display: inline-block; background-color: #2d0e0e; }}
-             h1 {{ color: #ff4b4b; }}
-             .codigo {{ color: #fff; font-weight: bold; }}
-          </style>
-        </head>
-        <body>
-            <h1>❌ Não Encontrado</h1>
-            <div class="box-error">
-                <p>O código <span class="codigo">{codigo_limpo}</span> não consta em nossa base de dados.</p>
-                <p>Verifique se foi digitado corretamente.</p>
-            </div>
-        </body>
-        </html>
-        """
-        components.html(html_error, height=400)
-        
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c2:
-            if st.button("Tentar Novamente"):
-                st.query_params.clear()
-                st.rerun()
 
 # =========================================
 # FUNÇÃO PRINCIPAL (ROTEADOR)
 # =========================================
 def app_principal():
+    # Verificação de Segurança da Sessão
     if "usuario" not in st.session_state or not st.session_state.usuario:
-        st.error("Sessão perdida.")
+        st.error("Sessão perdida. Por favor, faça login novamente.")
         st.session_state.usuario = None
         st.rerun()
         return
 
     usuario_logado = st.session_state.usuario
+    # Normaliza o tipo do usuário
     tipo_usuario = str(usuario_logado.get("tipo", "aluno")).lower()
 
     def ir_para(pagina): st.session_state.menu_selection = pagina
 
+    # --- SIDEBAR ---
     with st.sidebar:
-        if os.path.exists("assets/logo.png"): st.image("assets/logo.png", use_container_width=True)
+        if os.path.exists("assets/logo.png"): 
+            st.image("assets/logo.png", use_container_width=True)
+            
         st.markdown(f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>", unsafe_allow_html=True)
         st.markdown(f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>", unsafe_allow_html=True)
         
@@ -214,12 +93,15 @@ def app_principal():
 
         st.markdown("---")
         if st.button("🚪 Sair", use_container_width=True):
+            # Limpa sessão
             for key in list(st.session_state.keys()): del st.session_state[key]
             st.rerun()
 
+    # --- ROTEAMENTO ---
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pagina = st.session_state.menu_selection
 
+    # Telas da Sidebar (Sem menu horizontal)
     if pagina == "Meu Perfil":
         geral.tela_meu_perfil(usuario_logado)
         if st.button("⬅️ Voltar"): ir_para("Início")
@@ -229,12 +111,19 @@ def app_principal():
     elif pagina == "Painel do Professor":
         professor.painel_professor()
         if st.button("⬅️ Voltar"): ir_para("Início")
+        
+    # Tela Inicial
     elif pagina == "Início":
         geral.tela_inicio()
+        
+    # Telas do Menu Horizontal
     else:
+        # Menu Admin/Professor
         if tipo_usuario in ["admin", "professor"]:
             opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
             icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+        
+        # Menu Aluno
         else: 
             opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Meus Certificados"]
             icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "patch-check-fill"]
@@ -256,6 +145,7 @@ def app_principal():
             st.session_state.menu_selection = menu
             st.rerun()
 
+        # Router do Menu
         if menu == "Início": geral.tela_inicio()
         elif menu == "Modo Rola": aluno.modo_rola(usuario_logado)
         elif menu == "Exame de Faixa": aluno.exame_de_faixa(usuario_logado)
@@ -266,28 +156,22 @@ def app_principal():
         elif menu == "Meus Certificados": aluno.meus_certificados(usuario_logado)
 
 # =========================================
-# START
+# START (PONTO DE PARTIDA)
 # =========================================
 if __name__ == "__main__":
-    # 🚨 LÓGICA DE VERIFICAÇÃO PÚBLICA 🚨
-    query_params = st.query_params
-    codigo_verificacao = query_params.get("code", None)
+    # Inicialização de Variáveis de Estado
+    if "usuario" not in st.session_state: st.session_state.usuario = None
+    if "token" not in st.session_state: st.session_state.token = None
+    if "registration_pending" not in st.session_state: st.session_state.registration_pending = None
 
-    if codigo_verificacao:
-        # Renderiza a tela de verificação com o HTML personalizado e dados do banco
-        tela_verificacao(codigo_verificacao)
-    else:
-        # Fluxo normal do App
-        if "usuario" not in st.session_state: st.session_state.usuario = None
-        if "token" not in st.session_state: st.session_state.token = None
-        if "registration_pending" not in st.session_state: st.session_state.registration_pending = None
-
-        try:
-            if st.session_state.registration_pending:
-                login.tela_completar_cadastro(st.session_state.registration_pending)
-            elif st.session_state.usuario:
-                app_principal()
-            else:
-                login.tela_login()
-        except Exception as e:
-            st.error(f"Erro inesperado: {e}")
+    try:
+        # Roteamento de Login vs App Principal
+        if st.session_state.registration_pending:
+            login.tela_completar_cadastro(st.session_state.registration_pending)
+        elif st.session_state.usuario:
+            app_principal()
+        else:
+            login.tela_login()
+    except Exception as e:
+        st.error(f"Ocorreu um erro inesperado: {e}")
+        # st.exception(e) # Descomente para ver o erro detalhado em desenvolvimento
