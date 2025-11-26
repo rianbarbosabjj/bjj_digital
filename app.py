@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import sys
+import streamlit.components.v1 as components
 from datetime import datetime
 
 # 1. CONFIGURAÇÃO
@@ -49,7 +50,7 @@ except ImportError as e:
     st.stop()
 
 # =========================================
-# TELA DE VERIFICAÇÃO PÚBLICA (HTML PERSONALIZADO)
+# TELA DE VERIFICAÇÃO (HTML INJETADO)
 # =========================================
 def tela_verificacao(codigo):
     # Limpeza do código
@@ -62,7 +63,7 @@ def tela_verificacao(codigo):
     if docs:
         dados = docs[0].to_dict()
         
-        # Formata dados para exibição
+        # Dados do Banco
         aluno_nome = dados.get('usuario', 'Desconhecido').upper()
         faixa = dados.get('faixa', 'N/A').upper()
         nota = dados.get('pontuacao', 0)
@@ -71,113 +72,111 @@ def tela_verificacao(codigo):
         data_str = "N/A"
         if data_raw:
             try:
-                # Se for datetime (Firestore) ou string ISO
                 if isinstance(data_raw, datetime):
-                    data_str = data_raw.strftime("%d/%m/%Y às %H:%M")
+                    data_str = data_raw.strftime("%d/%m/%Y")
                 elif isinstance(data_raw, str):
                     data_str = datetime.fromisoformat(data_raw).strftime("%d/%m/%Y")
             except: pass
 
-        # HTML/CSS Personalizado (Baseado no seu pedido)
+        # SEU HTML PERSONALIZADO (Adaptado para Python)
         html_content = f"""
         <!DOCTYPE html>
         <html lang="pt-BR">
         <head>
           <meta charset="UTF-8">
+          <title>Verificação de Certificado - BJJ Digital</title>
           <style>
             @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
-            .verify-container {{
+            body {{
               font-family: 'Poppins', sans-serif;
               background-color: #0e2d26;
               color: #fff;
               text-align: center;
-              padding: 40px 20px;
-              border-radius: 15px;
-              border: 1px solid #333;
+              padding-top: 20px;
             }}
-            h1 {{ color: #FFD700; margin-bottom: 10px; }}
+            h1 {{ color: #FFD700; }}
             .box {{
               border: 2px solid #FFD700;
               border-radius: 15px;
               display: inline-block;
-              padding: 30px 50px;
+              padding: 20px 40px;
               margin-top: 20px;
               background-color: #113830;
-              box-shadow: 0 4px 15px rgba(0,0,0,0.3);
               max-width: 600px;
-              width: 100%;
+              width: 90%;
             }}
-            .valid-icon {{ font-size: 40px; margin-bottom: 10px; display: block; }}
-            .info-label {{ color: #aaa; font-size: 0.9em; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px; }}
-            .info-value {{ color: #fff; font-size: 1.2em; font-weight: bold; margin-bottom: 20px; }}
-            .codigo {{ color: #FFD700; font-weight: bold; font-family: monospace; font-size: 1.1em; letter-spacing: 2px; }}
-            .divider {{ border-top: 1px solid #3a5c53; margin: 20px 0; }}
+            .codigo {{ color: #FFD700; font-weight: bold; font-size: 1.2em; letter-spacing: 1px; }}
+            .info-row {{ margin: 15px 0; border-bottom: 1px solid #2a4d43; padding-bottom: 10px; }}
+            .label {{ color: #aaa; font-size: 0.9em; text-transform: uppercase; }}
+            .value {{ font-size: 1.1em; font-weight: bold; }}
           </style>
         </head>
         <body>
-          <div class="verify-container">
-            <h1>Certificado BJJ Digital</h1>
+          <h1>Certificado BJJ Digital</h1>
+          
+          <div class="box">
+            <p style="font-size: 1.2em;">✅ Este certificado é <strong>VÁLIDO</strong>.</p>
             
-            <div class="box">
-              <span class="valid-icon">✅</span>
-              <p style="font-size: 1.1em; margin-bottom: 30px;">
-                Este certificado é <strong>VÁLIDO</strong> e autêntico.
-              </p>
-              
-              <div class="info-label">Aluno Certificado</div>
-              <div class="info-value">{aluno_nome}</div>
-              
-              <div class="info-label">Faixa Conquistada</div>
-              <div class="info-value" style="color: #FFD700;">{faixa}</div>
-              
-              <div class="divider"></div>
-              
-              <div style="display: flex; justify-content: space-around;">
-                  <div>
-                    <div class="info-label">Aproveitamento</div>
-                    <div class="info-value">{nota}%</div>
-                  </div>
-                  <div>
-                    <div class="info-label">Data do Exame</div>
-                    <div class="info-value">{data_str}</div>
-                  </div>
-              </div>
-              
-              <div class="divider"></div>
-
-              <p class="info-label">Código de Verificação</p>
-              <p class="codigo">{codigo_limpo}</p>
+            <div class="info-row">
+                <div class="label">Aluno</div>
+                <div class="value">{aluno_nome}</div>
             </div>
             
-            <p style="margin-top: 30px; color: #888; font-size: 0.8em;">
-              Verificado digitalmente em {datetime.now().strftime("%d/%m/%Y %H:%M")}
-            </p>
+            <div class="info-row">
+                <div class="label">Faixa</div>
+                <div class="value" style="color: #FFD700; font-size: 1.4em;">{faixa}</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="label">Data do Exame</div>
+                <div class="value">{data_str}</div>
+            </div>
+            
+            <div class="info-row">
+                <div class="label">Aproveitamento</div>
+                <div class="value">{nota}%</div>
+            </div>
+
+            <p>Código de verificação:</p>
+            <p class="codigo">{codigo_limpo}</p>
           </div>
         </body>
         </html>
         """
-        # Renderiza o HTML
-        st.components.v1.html(html_content, height=800, scrolling=True)
         
-        # Botão de voltar (Nativo do Streamlit para funcionar a navegação)
+        # Renderiza o HTML
+        components.html(html_content, height=700, scrolling=True)
+        
+        # Botão de voltar
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
-            if st.button("Voltar para a Tela Inicial", use_container_width=True):
+            if st.button("Ir para o Site Principal", use_container_width=True):
                 st.query_params.clear()
                 st.rerun()
                 
     else:
-        # HTML de Erro
+        # HTML DE ERRO
         html_error = f"""
-        <div style="font-family: 'Poppins', sans-serif; text-align: center; color: white; padding: 50px;">
-            <h1 style="color: #ff4b4b;">❌ Certificado Não Encontrado</h1>
-            <div style="background-color: #2d0e0e; border: 2px solid #ff4b4b; border-radius: 15px; padding: 30px; margin: 20px auto; max-width: 500px;">
-                <p>O código <strong>{codigo_limpo}</strong> não consta em nossa base de dados.</p>
-                <p>Verifique se foi digitado corretamente ou se o certificado foi revogado.</p>
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <style>
+             body {{ font-family: sans-serif; background-color: #0e2d26; color: white; text-align: center; padding-top: 50px; }}
+             .box-error {{ border: 2px solid #ff4b4b; border-radius: 15px; padding: 30px; display: inline-block; background-color: #2d0e0e; }}
+             h1 {{ color: #ff4b4b; }}
+             .codigo {{ color: #fff; font-weight: bold; }}
+          </style>
+        </head>
+        <body>
+            <h1>❌ Não Encontrado</h1>
+            <div class="box-error">
+                <p>O código <span class="codigo">{codigo_limpo}</span> não consta em nossa base de dados.</p>
+                <p>Verifique se foi digitado corretamente.</p>
             </div>
-        </div>
+        </body>
+        </html>
         """
-        st.components.v1.html(html_error, height=400)
+        components.html(html_error, height=400)
         
         c1, c2, c3 = st.columns([1, 2, 1])
         with c2:
@@ -275,8 +274,10 @@ if __name__ == "__main__":
     codigo_verificacao = query_params.get("code", None)
 
     if codigo_verificacao:
+        # Renderiza a tela de verificação com o HTML personalizado e dados do banco
         tela_verificacao(codigo_verificacao)
     else:
+        # Fluxo normal do App
         if "usuario" not in st.session_state: st.session_state.usuario = None
         if "token" not in st.session_state: st.session_state.token = None
         if "registration_pending" not in st.session_state: st.session_state.registration_pending = None
