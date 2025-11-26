@@ -1,247 +1,212 @@
-import os
-import json
-import unicodedata
-import qrcode
-import requests
-from datetime import datetime
-from fpdf import FPDF
-from firebase_admin import firestore
-from database import get_db 
 import streamlit as st
+import os
+import sys
+
+# 1. CONFIGURAÇÃO
+st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
+
+# ---------------------------------------------------------
+# ESTILOS VISUAIS (PWA & TEMA)
+# ---------------------------------------------------------
+st.markdown("""
+<style>
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    header {visibility: hidden;}
+    .block-container {padding-top: 1rem; padding-bottom: 1rem;}
+</style>
+""", unsafe_allow_html=True)
+
+from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+st.markdown(f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
+.stButton>button {{ 
+    background: linear-gradient(90deg, {COR_BOTAO}, #056853); 
+    color: white; font-weight: bold; border: none; 
+    padding: 0.6em 1.2em; border-radius: 10px; transition: 0.3s; 
+}}
+.stButton>button:hover {{ 
+    background: {COR_HOVER}; color: {COR_FUNDO}; transform: scale(1.02); 
+}}
+h1, h2, h3 {{ color: {COR_DESTAQUE}; text-align: center; font-weight: 700; }}
+div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ border-radius: 10px; }}
+</style>
+""", unsafe_allow_html=True)
+
+# Hack para Render/Railway
+if "SECRETS_TOML" in os.environ:
+    if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
+    with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
+
+try:
+    from streamlit_option_menu import option_menu
+    from database import get_db 
+    from views import login, geral, aluno, professor, admin
+except ImportError as e:
+    st.error(f"❌ Erro: {e}")
+    st.stop()
 
 # =========================================
-# FUNÇÕES DE QUESTÕES (FALLBACK)
+# TELA DE VERIFICAÇÃO PÚBLICA
 # =========================================
-def carregar_questoes(tema):
-    path = f"questions/{tema}.json"
-    if os.path.exists(path):
-        try:
-            with open(path, "r", encoding="utf-8") as f: return json.load(f)
-        except: return []
-    return []
-
-def salvar_questoes(tema, questoes):
-    os.makedirs("questions", exist_ok=True)
-    with open(f"questions/{tema}.json", "w", encoding="utf-8") as f:
-        json.dump(questoes, f, indent=4, ensure_ascii=False)
-
-def carregar_todas_questoes():
-    todas = []
-    if not os.path.exists("questions"): return []
-    for f in os.listdir("questions"):
-        if f.endswith(".json"):
-            try:
-                tema = f.replace(".json", "")
-                q_list = carregar_questoes(tema)
-                for q in q_list:
-                    q['tema'] = tema
-                    todas.append(q)
-            except: continue
-    return todas
-
-# =========================================
-# FUNÇÕES GERAIS
-# =========================================
-
-def gerar_codigo_verificacao():
-    db = get_db()
-    total = 0
-    try:
-        # Conta quantos documentos existem na coleção 'resultados'
-        # Usamos stream() para contar. Em produção com muitos dados, usar count() aggregation é melhor.
-        docs = db.collection('resultados').stream()
-        total = len(list(docs))
-    except Exception as e:
-        print(f"Erro ao contar resultados: {e}")
-        # Fallback: gera um número aleatório para não travar se o banco falhar
-        import random
-        total = random.randint(1000, 9999)
-
-    sequencial = total + 1
-    ano = datetime.now().year
-    # Formato: BJJDIGITAL-ANO-SEQUENCIAL (ex: BJJDIGITAL-2025-0012)
-    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" 
-    return codigo
-
-def normalizar_nome(nome):
-    if not nome: return "sem_nome"
-    return "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split()).lower()
-
-def formatar_e_validar_cpf(cpf):
-    if not cpf: return None
-    cpf_limpo = ''.join(filter(str.isdigit, cpf))
-    return cpf_limpo if len(cpf_limpo) == 11 else None
-
-def formatar_cep(cep):
-    if not cep: return None
-    cep_limpo = ''.join(filter(str.isdigit, cep))
-    return cep_limpo if len(cep_limpo) == 8 else None
-
-def buscar_cep(cep):
-    cep_fmt = formatar_cep(cep)
-    if not cep_fmt: return None
-    try:
-        resp = requests.get(f"https://viacep.com.br/ws/{cep_fmt}/json/", timeout=3)
-        if resp.status_code == 200:
-            data = resp.json()
-            if "erro" not in data:
-                return {
-                    "logradouro": data.get("logradouro", ""),
-                    "bairro": data.get("bairro", ""),
-                    "cidade": data.get("localidade", ""),
-                    "uf": data.get("uf", "")
-                }
-    except: pass
-    return None
-
-def gerar_qrcode(codigo):
-    """Gera QR Code com o link do seu domínio para validação."""
-    os.makedirs("temp_qr", exist_ok=True)
-    caminho_qr = f"temp_qr/{codigo}.png"
+def tela_verificacao(codigo):
+    st.markdown("<br>", unsafe_allow_html=True)
     
-    # Cache simples de arquivo: se já existe, não recria
-    if os.path.exists(caminho_qr):
-        return caminho_qr
-        
-    # LINK ATUALIZADO PARA A PÁGINA DE VALIDAÇÃO
-    # Certifique-se de que a página 'verificar.html' existe e sabe ler o parâmetro '?code='
-    link = f"https://bjjdigital.com.br/verificar.html?code={codigo}"
-    
-    qr = qrcode.QRCode(box_size=10, border=2)
-    qr.add_data(link)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="black", back_color="white")
-    img.save(caminho_qr)
-    return caminho_qr
-
-# =========================================
-# GERADOR DE PDF (OTIMIZADO)
-# =========================================
-@st.cache_data(show_spinner=False)
-def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    """
-    Gera certificado oficial.
-    Retorna: (bytes_do_pdf, nome_do_arquivo) para download rápido.
-    """
-    pdf = FPDF("L", "mm", "A4")
-    pdf.set_auto_page_break(False)
-    pdf.add_page()
-
-    # Cores
-    dourado, preto, branco = (218, 165, 32), (40, 40, 40), (255, 255, 255)
-    percentual = int((pontuacao / total) * 100) if total > 0 else 0
-    data_hora = datetime.now().strftime("%d/%m/%Y")
-
-    # Fundo
-    pdf.set_fill_color(*branco)
-    pdf.rect(0, 0, 297, 210, "F")
-    pdf.set_draw_color(*dourado)
-    pdf.set_line_width(2)
-    pdf.rect(10, 10, 277, 190)
-    pdf.set_line_width(0.5)
-    pdf.rect(13, 13, 271, 184)
-
-    # Logo
+    # Logo centralizado
+    c1, c2, c3 = st.columns([1, 1, 1])
     if os.path.exists("assets/logo.png"):
-        pdf.image("assets/logo.png", x=130, y=20, w=35)
-
-    # Título
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "B", 36)
-    pdf.set_xy(0, 60)
-    pdf.cell(297, 15, "CERTIFICADO DE CONCLUSÃO", align="C")
+        with c2: st.image("assets/logo.png", use_container_width=True)
     
-    pdf.set_font("Helvetica", "", 14)
-    pdf.set_text_color(*preto)
-    pdf.set_xy(0, 80)
-    pdf.cell(297, 10, "Certificamos que", align="C")
-
-    # Nome
-    pdf.set_font("Helvetica", "B", 28)
-    pdf.set_text_color(*dourado)
-    pdf.set_xy(0, 95)
-    try:
-        # Tratamento para caracteres especiais
-        nome_display = usuario.upper().encode('latin-1', 'replace').decode('latin-1')
-    except:
-        nome_display = usuario.upper()
-    pdf.cell(297, 15, nome_display, align="C")
-
-    # Faixa e Texto
-    cores_faixa = {
-        "Cinza": (169, 169, 169), "Amarela": (255, 215, 0),
-        "Laranja": (255, 140, 0), "Verde": (0, 128, 0),
-        "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
-        "Marrom": (139, 69, 19), "Preta": (0, 0, 0),
-    }
-    r, g, b = cores_faixa.get(faixa, preto) # Padrão preto se não achar
-
-    pdf.set_font("Helvetica", "", 16)
-    pdf.set_text_color(*preto)
-    pdf.set_xy(0, 115)
-    pdf.cell(297, 10, f"concluiu com êxito o Exame Teórico para a faixa", align="C")
+    st.markdown(f"<h2 style='color:{COR_DESTAQUE}; text-align:center;'>Verificação de Autenticidade</h2>", unsafe_allow_html=True)
+    st.markdown("---")
     
-    pdf.set_font("Helvetica", "B", 22)
-    pdf.set_text_color(r, g, b)
-    pdf.set_xy(0, 125)
-    try:
-         faixa_display = faixa.upper().encode('latin-1', 'replace').decode('latin-1')
-    except:
-         faixa_display = faixa.upper()
-    pdf.cell(297, 10, faixa_display, align="C")
-
-    pdf.set_font("Helvetica", "", 12)
-    pdf.set_text_color(*preto)
-    pdf.set_xy(0, 135)
-    pdf.cell(297, 10, f"Aproveitamento: {percentual}% | Data: {data_hora}", align="C")
-
-    # Código
-    pdf.set_font("Courier", "", 10)
-    pdf.set_xy(20, 175)
-    pdf.cell(100, 5, f"Código de Autenticidade: {codigo}", align="L")
-    
-    # QR Code e Selo
-    try:
-        caminho_qr = gerar_qrcode(codigo)
-        pdf.image(caminho_qr, x=250, y=155, w=25)
-    except: pass
-
-    if os.path.exists("assets/selo_dourado.png"):
-        pdf.image("assets/selo_dourado.png", x=20, y=150, w=30)
-
-    # Assinatura
-    if professor:
-        try: prof_nome = professor.encode('latin-1', 'replace').decode('latin-1')
-        except: prof_nome = professor
+    with st.spinner("Verificando código na Blockchain BJJ Digital..."):
+        db = get_db()
         
-        fonte_ass = "assets/fonts/Allura-Regular.ttf"
-        if os.path.exists(fonte_ass):
-            try:
-                pdf.add_font("Assinatura", "", fonte_ass, uni=True)
-                pdf.set_font("Assinatura", "", 30)
-            except: pdf.set_font("Helvetica", "I", 18)
-        else: pdf.set_font("Helvetica", "I", 18)
-
-        pdf.set_text_color(*preto)
-        pdf.set_y(155)
-        pdf.cell(0, 10, prof_nome, align="C")
+        # Busca no Firestore
+        docs = list(db.collection('resultados').where('codigo_verificacao', '==', codigo).stream())
         
-        pdf.set_draw_color(*dourado)
-        pdf.line(100, 168, 197, 168)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_y(170)
-        pdf.cell(0, 5, "Professor Responsável", align="C")
+        if docs:
+            dados = docs[0].to_dict()
+            
+            # Cartão de Sucesso
+            st.success("✅ CERTIFICADO VÁLIDO E AUTÊNTICO")
+            
+            with st.container(border=True):
+                st.markdown(f"### 🥋 Faixa {dados.get('faixa', 'Desconhecida')}")
+                st.markdown(f"**Aluno:** {dados.get('usuario', 'N/A').upper()}")
+                
+                # Formata data
+                data_exame = dados.get('data')
+                if data_exame:
+                    try: data_str = data_exame.strftime("%d/%m/%Y")
+                    except: data_str = str(data_exame)[:10]
+                else: data_str = "-"
+                
+                c1, c2 = st.columns(2)
+                c1.write(f"**Data de Conclusão:** {data_str}")
+                c2.write(f"**Aproveitamento:** {dados.get('pontuacao')}%")
+                
+                st.markdown("---")
+                st.caption(f"Código Hash: {codigo}")
+                st.caption("Este certificado foi emitido digitalmente pela plataforma BJJ Digital e sua autenticidade foi confirmada em nosso banco de dados.")
+            
+            if st.button("Voltar para Início"):
+                st.query_params.clear() # Limpa URL
+                st.rerun()
+        else:
+            st.error("❌ CÓDIGO NÃO ENCONTRADO OU INVÁLIDO")
+            st.warning(f"O código **{codigo}** não consta em nossa base de dados oficial.")
+            if st.button("Tentar Novamente"):
+                st.query_params.clear()
+                st.rerun()
 
-    # Rodapé
-    pdf.set_draw_color(*dourado)
-    pdf.line(30, 190, 268, 190)
-    pdf.set_text_color(*dourado)
-    pdf.set_font("Helvetica", "I", 8)
-    pdf.set_y(192)
-    pdf.cell(0, 5, "Plataforma BJJ Digital - bjjdigital.com.br", align="C")
+# =========================================
+# FUNÇÃO PRINCIPAL (ROTEADOR)
+# =========================================
+def app_principal():
+    if "usuario" not in st.session_state or not st.session_state.usuario:
+        st.error("Sessão perdida.")
+        st.session_state.usuario = None
+        st.rerun()
+        return
 
-    # Retorna BYTES para download rápido
-    pdf_bytes = pdf.output(dest='S').encode('latin-1')
-    nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
-    
-    return pdf_bytes, nome_arquivo
+    usuario_logado = st.session_state.usuario
+    tipo_usuario = str(usuario_logado.get("tipo", "aluno")).lower()
+
+    def ir_para(pagina): st.session_state.menu_selection = pagina
+
+    with st.sidebar:
+        if os.path.exists("assets/logo.png"): st.image("assets/logo.png", use_container_width=True)
+        st.markdown(f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>", unsafe_allow_html=True)
+        
+        if st.button("👤 Meu Perfil", use_container_width=True): ir_para("Meu Perfil")
+
+        if tipo_usuario in ["admin", "professor"]:
+            if st.button("👩‍🏫 Painel Professor", use_container_width=True): ir_para("Painel do Professor")
+
+        if tipo_usuario == "admin":
+            if st.button("🔑 Gestão Usuários", use_container_width=True): ir_para("Gestão de Usuários")
+
+        st.markdown("---")
+        if st.button("🚪 Sair", use_container_width=True):
+            for key in list(st.session_state.keys()): del st.session_state[key]
+            st.rerun()
+
+    if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
+    pagina = st.session_state.menu_selection
+
+    if pagina == "Meu Perfil":
+        geral.tela_meu_perfil(usuario_logado)
+        if st.button("⬅️ Voltar"): ir_para("Início")
+    elif pagina == "Gestão de Usuários":
+        admin.gestao_usuarios(usuario_logado)
+        if st.button("⬅️ Voltar"): ir_para("Início")
+    elif pagina == "Painel do Professor":
+        professor.painel_professor()
+        if st.button("⬅️ Voltar"): ir_para("Início")
+    elif pagina == "Início":
+        geral.tela_inicio()
+    else:
+        if tipo_usuario in ["admin", "professor"]:
+            opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+            icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
+        else: 
+            opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Meus Certificados"]
+            icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "patch-check-fill"]
+
+        try: index_atual = opcoes.index(pagina)
+        except ValueError: index_atual = 0
+
+        menu = option_menu(
+            menu_title=None, options=opcoes, icons=icons, default_index=index_atual, orientation="horizontal",
+            styles={
+                "container": {"padding": "0!important", "background-color": COR_FUNDO},
+                "icon": {"color": COR_DESTAQUE, "font-size": "16px"},
+                "nav-link": {"font-size": "14px", "margin": "0px", "color": COR_TEXTO},
+                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
+            }
+        )
+
+        if menu != pagina:
+            st.session_state.menu_selection = menu
+            st.rerun()
+
+        if menu == "Início": geral.tela_inicio()
+        elif menu == "Modo Rola": aluno.modo_rola(usuario_logado)
+        elif menu == "Exame de Faixa": aluno.exame_de_faixa(usuario_logado)
+        elif menu == "Ranking": aluno.ranking()
+        elif menu == "Gestão de Equipes": professor.gestao_equipes()
+        elif menu == "Gestão de Questões": admin.gestao_questoes()
+        elif menu == "Gestão de Exame": admin.gestao_exame_de_faixa()
+        elif menu == "Meus Certificados": aluno.meus_certificados(usuario_logado)
+
+# =========================================
+# START
+# =========================================
+if __name__ == "__main__":
+    # 🚨 LÓGICA DE VERIFICAÇÃO PÚBLICA 🚨
+    # Verifica se existe o parâmetro ?code=XXXX na URL
+    query_params = st.query_params
+    codigo_verificacao = query_params.get("code", None)
+
+    if codigo_verificacao:
+        # Se tiver código, mostra APENAS a tela de validação (ignora login)
+        tela_verificacao(codigo_verificacao)
+    else:
+        # Fluxo normal do App
+        if "usuario" not in st.session_state: st.session_state.usuario = None
+        if "token" not in st.session_state: st.session_state.token = None
+        if "registration_pending" not in st.session_state: st.session_state.registration_pending = None
+
+        try:
+            if st.session_state.registration_pending:
+                login.tela_completar_cadastro(st.session_state.registration_pending)
+            elif st.session_state.usuario:
+                app_principal()
+            else:
+                login.tela_login()
+        except Exception as e:
+            st.error(f"Erro inesperado: {e}")
