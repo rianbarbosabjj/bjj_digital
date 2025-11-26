@@ -23,8 +23,8 @@ except (FileNotFoundError, KeyError):
     REDIRECT_URI = "https://bjjdigital.streamlit.app/"
 
 oauth_google = OAuth2Component(
-    client_id=GOOGLE_CLIENT_ID,
-    client_secret=GOOGLE_CLIENT_SECRET,
+    client_id="ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com",
+    client_secret="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",
     authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
     token_endpoint="https://oauth2.googleapis.com/token",
     refresh_token_endpoint="https://oauth2.googleapis.com/token",
