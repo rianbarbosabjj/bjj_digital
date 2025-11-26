@@ -10,7 +10,7 @@ from database import get_db
 import streamlit as st
 
 # =========================================
-# FUNÇÕES DE QUESTÕES
+# FUNÇÕES DE QUESTÕES (FALLBACK)
 # =========================================
 def carregar_questoes(tema):
     path = f"questions/{tema}.json"
@@ -49,12 +49,15 @@ def gerar_codigo_verificacao():
     try:
         docs = db.collection('resultados').stream()
         total = len(list(docs))
-    except:
+    except Exception as e:
+        print(f"Erro ao contar resultados: {e}")
         import random
         total = random.randint(1000, 9999)
+
     sequencial = total + 1
     ano = datetime.now().year
-    return f"BJJDIGITAL-{ano}-{sequencial:04d}"
+    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" 
+    return codigo
 
 def normalizar_nome(nome):
     if not nome: return "sem_nome"
@@ -88,21 +91,32 @@ def buscar_cep(cep):
     return None
 
 def gerar_qrcode(codigo):
-    """Gera QR Code apontando para a raiz do App Streamlit."""
+    """Gera QR Code com link de verificação oficial do BJJ Digital."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
     
+    # Se já existe, retorna (cache simples)
     if os.path.exists(caminho_qr):
         return caminho_qr
-        
-    # LINK CORRETO: Aponta para a raiz com o parâmetro que o app.py lê
-    link = f"https://bjjdigital.com.br/?code={codigo}"
-    
-    qr = qrcode.QRCode(box_size=10, border=2)
-    qr.add_data(link)
+
+    # URL de verificação oficial
+    # Atualizado para o seu domínio novo, mantendo a lógica antiga do QR Code
+    base_url = "https://bjjdigital.com.br/verificar.html"
+    link_verificacao = f"{base_url}?codigo={codigo}"
+
+    # Criação do QR (Lógica original restaurada com alta correção de erro)
+    qr = qrcode.QRCode(
+        version=1,
+        box_size=10,
+        border=4,
+        error_correction=qrcode.constants.ERROR_CORRECT_H
+    )
+    qr.add_data(link_verificacao)
     qr.make(fit=True)
+
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(caminho_qr)
+
     return caminho_qr
 
 # =========================================
