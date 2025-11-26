@@ -8,13 +8,14 @@ from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
 from config import COR_DESTAQUE, COR_TEXTO
 from database import get_db
-from firebase_admin import firestore  # <--- ESSA IMPORTAÇÃO É NECESSÁRIA
+# CORREÇÃO: Importação correta do firestore para uso de SERVER_TIMESTAMP se necessário,
+# mas preferimos usar a instância do banco já configurada em database.py ou a lib direta
+from firebase_admin import firestore 
 
 # =========================================
 # CONFIGURAÇÃO OAUTH (BLINDADA)
 # =========================================
 # Usamos .get() para evitar erros (KeyError) se a chave não existir
-# Isso é mais seguro do que try/except para dicionários
 GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
@@ -31,11 +32,10 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
             revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
         )
     except Exception as e:
-        # Se der erro na inicialização do componente (ex: chaves inválidas), não quebra o app
         print(f"Erro ao iniciar OAuth: {e}")
         oauth_google = None
 else:
-    oauth_google = Nonea
+    oauth_google = None
 
 # =========================================
 # FUNÇÕES DE TELA
@@ -107,7 +107,6 @@ def tela_login():
                             use_container_width=True,
                         )
                     except Exception:
-                        # Evita mostrar erro feio se a conexão falhar
                         st.warning("Login com Google temporariamente indisponível.")
                         result = None
                     
@@ -141,7 +140,6 @@ def tela_login():
                             st.error(f"Erro Google: {e}")
                 else:
                     # Mensagem opcional para debug (só aparece se não tiver chaves)
-                    # st.info("Google Login não configurado.")
                     pass
 
         elif st.session_state["modo_login"] == "cadastro":
