@@ -6,8 +6,7 @@ import sys
 st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
 
 # ---------------------------------------------------------
-# MELHORIA VISUAL (ESCONDER MENU PADRÃO E RODAPÉ)
-# Funciona em Mobile e Desktop (Navegadores)
+# ESTILOS VISUAIS (PWA & TEMA)
 # ---------------------------------------------------------
 st.markdown("""
 <style>
@@ -28,12 +27,39 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# CSS Global (Botões e Layout)
+from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+st.markdown(f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
+.stButton>button {{ 
+    background: linear-gradient(90deg, {COR_BOTAO}, #056853); 
+    color: white; 
+    font-weight: bold; 
+    border: none; 
+    padding: 0.6em 1.2em; 
+    border-radius: 10px; 
+    transition: 0.3s; 
+}}
+.stButton>button:hover {{ 
+    background: {COR_HOVER}; 
+    color: {COR_FUNDO}; 
+    transform: scale(1.02); 
+}}
+h1, h2, h3 {{ 
+    color: {COR_DESTAQUE}; 
+    text-align: center; 
+    font-weight: 700; 
+}}
+div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ border-radius: 10px; }}
+</style>
+""", unsafe_allow_html=True)
+
 # Bloco de captura de erros de inicialização
 try:
     from streamlit_option_menu import option_menu
     
     # Importações dos Módulos Locais
-    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
     from database import get_db # Garante que o banco conecta
     from views import login, geral, aluno, professor, admin
 
@@ -43,17 +69,6 @@ except ImportError as e:
 except Exception as e:
     st.error(f"❌ Erro fatal na inicialização: {e}")
     st.stop()
-
-# CSS Global (Botões e Layout)
-st.markdown(f"""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
-.stButton>button {{ background: linear-gradient(90deg, {COR_BOTAO}, #056853); color: white; font-weight: bold; border: none; padding: 0.6em 1.2em; border-radius: 10px; transition: 0.3s; }}
-.stButton>button:hover {{ background: {COR_HOVER}; color: {COR_FUNDO}; transform: scale(1.02); }}
-h1, h2, h3 {{ color: {COR_DESTAQUE}; text-align: center; font-weight: 700; }}
-div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ border-radius: 10px; }}
-</style>
-""", unsafe_allow_html=True)
 
 # =========================================
 # FUNÇÃO PRINCIPAL (ROTEADOR)
@@ -67,7 +82,8 @@ def app_principal():
         return
 
     usuario_logado = st.session_state.usuario
-    tipo_usuario = usuario_logado.get("tipo", "aluno") 
+    # Pega o tipo e normaliza para string minúscula para evitar erros
+    tipo_usuario = str(usuario_logado.get("tipo", "aluno")).lower()
 
     # --- Navegação Lateral (Sidebar) ---
     def ir_para(pagina):
@@ -93,6 +109,7 @@ def app_principal():
 
         st.markdown("---")
         if st.button("🚪 Sair", use_container_width=True):
+            # Limpa toda a sessão para garantir logout limpo
             for key in list(st.session_state.keys()):
                 del st.session_state[key]
             st.rerun()
@@ -116,22 +133,22 @@ def app_principal():
         professor.painel_professor()
         if st.button("⬅️ Voltar ao Início"): ir_para("Início")
     
-    # 2. Tela Inicial (SEM MENU HORIZONTAL)
+    # 2. Tela Inicial (SEM MENU HORIZONTAL - Menu é renderizado dentro dela como cards)
     elif pagina == "Início":
         geral.tela_inicio()
 
-    # 3. Demais Telas (COM MENU HORIZONTAL)
+    # 3. Demais Telas (COM MENU HORIZONTAL DE NAVEGAÇÃO)
     else:
         # Define opções do menu baseado no perfil
+        # Admin e Professor veem tudo
         if tipo_usuario in ["admin", "professor"]:
             opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
             icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
-        else: # Aluno
-            opcoes = ["Início", "Modo Rola", "Ranking", "Meus Certificados"]
-            icons = ["house-fill", "people-fill", "trophy-fill", "patch-check-fill"]
-            
-            opcoes.insert(2, "Exame de Faixa")
-            icons.insert(2, "journal-check")
+        
+        # Aluno vê opções limitadas
+        else: 
+            opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Meus Certificados"]
+            icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "patch-check-fill"]
 
         # Descobre o índice da página atual
         try:
@@ -188,3 +205,6 @@ if __name__ == "__main__":
             login.tela_login()
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado na execução: {e}")
+        # Em produção, você pode querer esconder o erro detalhado, 
+        # mas em desenvolvimento é bom ver:
+        # st.exception(e)
