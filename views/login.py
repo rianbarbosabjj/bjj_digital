@@ -11,25 +11,25 @@ from database import get_db
 from firebase_admin import firestore
 
 # =========================================
-# CONFIGURAÇÃO OAUTH (BLINDADA)
+# CONFIGURAÇÃO OAUTH
 # =========================================
-# Usamos .get() para evitar erros (KeyError) se a chave não existir
-# Isso é mais seguro do que try/except para dicionários
-GOOGLE_CLIENT_ID = st.secrets.get("209223702106-ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com")
-GOOGLE_CLIENT_SECRET = st.secrets.get("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")
-REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
+try:
+    GOOGLE_CLIENT_ID = st.secrets["209223702106-ct75alsn39bdr5n3i7mq844uveioi5d3.apps.googleusercontent.com"]
+    GOOGLE_CLIENT_SECRET = st.secrets["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"]
+    REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
+except (FileNotFoundError, KeyError):
+    GOOGLE_CLIENT_ID = ""
+    GOOGLE_CLIENT_SECRET = ""
+    REDIRECT_URI = ""
 
-# Só inicializa o componente se tivermos as chaves válidas carregadas
-if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-    try:
-        oauth_google = OAuth2Component(
-            client_id=GOOGLE_CLIENT_ID,
-            client_secret=GOOGLE_CLIENT_SECRET,
-            authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-            token_endpoint="https://oauth2.googleapis.com/token",
-            refresh_token_endpoint="https://oauth2.googleapis.com/token",
-            revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
-        )
+oauth_google = OAuth2Component(
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    refresh_token_endpoint="https://oauth2.googleapis.com/token",
+    revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
+)
     except Exception as e:
         # Se der erro na inicialização do componente (ex: chaves inválidas), não quebra o app
         print(f"Erro ao iniciar OAuth: {e}")
