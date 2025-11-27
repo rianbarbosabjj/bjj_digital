@@ -1,99 +1,104 @@
 import streamlit as st
+import sqlite3
+import bcrypt
 import pandas as pd
 import os
 import requests 
-import bcrypt
 from streamlit_oauth import OAuth2Component
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
-from config import COR_DESTAQUE, COR_TEXTO
+from config import DB_PATH, COR_DESTAQUE, COR_TEXTO
 from database import get_db
-from firebase_admin import firestore  # Importação essencial
+from firebase_admin import firestore
 
 # =========================================
-# CONFIGURAÇÃO OAUTH (BLINDADA)
+# CONFIGURAÇÃO OAUTH
 # =========================================
-GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
+try:
+    GOOGLE_CLIENT_ID = st.secrets["GOOGLE_CLIENT_ID"]
+    GOOGLE_CLIENT_SECRET = st.secrets["GOOGLE_CLIENT_SECRET"]
+    REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
+except (FileNotFoundError, KeyError):
+    GOOGLE_CLIENT_ID = ""
+    GOOGLE_CLIENT_SECRET = ""
+    REDIRECT_URI = ""
 
-if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
-    try:
-        oauth_google = OAuth2Component(
-            client_id=GOOGLE_CLIENT_ID,
-            client_secret=GOOGLE_CLIENT_SECRET,
-            authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-            token_endpoint="https://oauth2.googleapis.com/token",
-            refresh_token_endpoint="https://oauth2.googleapis.com/token",
-            revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
-        )
-    except Exception as e:
-        print(f"Erro ao iniciar OAuth: {e}")
-        oauth_google = None
-else:
-    oauth_google = None
+oauth_google = OAuth2Component(
+    client_id=GOOGLE_CLIENT_ID,
+    client_secret=GOOGLE_CLIENT_SECRET,
+    authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
+    token_endpoint="https://oauth2.googleapis.com/token",
+    refresh_token_endpoint="https://oauth2.googleapis.com/token",
+    revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
+)
 
 # =========================================
 # FUNÇÕES DE TELA
 # =========================================
 
 def tela_login():
-    """Tela de login com autenticação local (Firebase) e Google."""
+    """Tela de login com layout otimizado e responsivo."""
     st.session_state.setdefault("modo_login", "login")
 
+    # Colunas externas para centralizar o card na tela
+    # [1, 1.5, 1] funciona bem para desktop, no mobile o Streamlit empilha
     c1, c2, c3 = st.columns([1, 1.5, 1])
+    
     with c2:
         if st.session_state["modo_login"] == "login":
             
+            # --- LOGO REDUZIDA ---
             if os.path.exists("assets/logo.png"):
-                col_l, col_c, col_r = st.columns([1, 2, 1])
+                # Ajuste de proporção: [1, 1, 1] deixa a logo menor (1/3 da largura)
+                # Se quiser menor ainda, use [2, 1, 2]
+                col_l, col_c, col_r = st.columns([1, 1, 1])
                 with col_c:
                     st.image("assets/logo.png", use_container_width=True)
+            # ---------------------
 
             with st.container(border=True):
                 st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
-                with st.form("login_form"):
-                    user_input = st.text_input("Nome de Usuário, Email ou CPF:")
-                    pwd = st.text_input("Senha:", type="password")
-                    submit_login = st.form_submit_button("Entrar", use_container_width=True, type="primary")
+                user_input = st.text_input("Nome de Usuário, Email ou CPF:")
+                pwd = st.text_input("Senha:", type="password")
 
-                if submit_login:
-                    if not user_input or not pwd:
-                        st.warning("Preencha todos os campos.")
+                # Botão Principal (Largo)
+                if st.button("Entrar", use_container_width=True, key="entrar_btn", type="primary"):
+                    entrada = user_input.strip()
+                    if "@" in entrada:
+                        entrada = entrada.lower()
                     else:
-                        with st.spinner("Conectando..."):
-                            entrada = user_input.strip()
-                            if "@" in entrada:
-                                entrada = entrada.lower()
-                            else:
-                                cpf = formatar_e_validar_cpf(entrada)
-                                if cpf: entrada = cpf
-                                
-                            u = autenticar_local(entrada, pwd.strip()) 
-                            if u:
-                                st.session_state.usuario = u
-                                st.success(f"Bem-vindo(a), {u['nome'].title()}!")
-                                st.rerun()
-                            else:
-                                st.error("Credenciais inválidas.")
+                        cpf = formatar_e_validar_cpf(entrada)
+                        if cpf: entrada = cpf
+                        
+                    u = autenticar_local(entrada, pwd.strip()) 
+                    if u:
+                        st.session_state.usuario = u
+                        st.success(f"Bem-vindo(a), {u['nome'].title()}!")
+                        st.rerun()
+                    else:
+                        st.error("Credenciais inválidas.")
 
-                # Botões Auxiliares (Alinhados)
-                col1, col2 = st.columns(2)
-                with col1:
+                # Botões Secundários (Lado a Lado e Responsivos)
+                col_b1, col_b2 = st.columns(2)
+                
+                with col_b1:
                     if st.button("📋 Criar Conta", use_container_width=True):
                         st.session_state["modo_login"] = "cadastro"
                         st.rerun()
-                with col2:
+                
+                with col_b2:
                     if st.button("🔑 Esqueci Senha", use_container_width=True):
                         st.session_state["modo_login"] = "recuperar"
                         st.rerun()
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # Botão Google (Só aparece se configurado)
-                if oauth_google: 
+                # --- LÓGICA GOOGLE ---
+                if GOOGLE_CLIENT_ID: 
                     try:
+                        # O botão do OAuth não aceita use_container_width nativamente em todas as versões,
+                        # mas ele já tende a ocupar espaço.
                         result = oauth_google.authorize_button(
                             name="Continuar com Google",
                             icon="https://www.google.com.br/favicon.ico",
@@ -102,8 +107,8 @@ def tela_login():
                             key="google_auth_btn",
                             use_container_width=True,
                         )
-                    except:
-                        st.warning("Login com Google temporariamente indisponível.")
+                    except Exception:
+                        st.warning("A conexão expirou. Recarregue a página (F5).")
                         result = None
                     
                     if result and result.get("token"):
@@ -135,9 +140,21 @@ def tela_login():
                         except Exception as e:
                             st.error(f"Erro Google: {e}")
                 else:
-                    pass # Sem chaves, sem botão
+                    st.warning("Google Auth não configurado.")
 
         elif st.session_state["modo_login"] == "cadastro":
+            tela_cadastro_interno()
+
+        elif st.session_state["modo_login"] == "recuperar":
+            st.subheader("🔑 Recuperar Senha")
+            st.text_input("Email cadastrado:")
+            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
+                st.info("Funcionalidade em breve.")
+            
+            if st.button("⬅️ Voltar", use_container_width=True):
+                st.session_state["modo_login"] = "login"
+                st.rerun()
+
             tela_cadastro_interno()
 
         elif st.session_state["modo_login"] == "recuperar":
