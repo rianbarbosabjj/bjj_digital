@@ -49,15 +49,13 @@ def gerar_codigo_verificacao():
     try:
         docs = db.collection('resultados').stream()
         total = len(list(docs))
-    except Exception as e:
-        print(f"Erro ao contar resultados: {e}")
+    except Exception:
         import random
         total = random.randint(1000, 9999)
 
     sequencial = total + 1
     ano = datetime.now().year
-    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" 
-    return codigo
+    return f"BJJDIGITAL-{ano}-{sequencial:04d}"
 
 def normalizar_nome(nome):
     if not nome: return "sem_nome"
@@ -91,40 +89,27 @@ def buscar_cep(cep):
     return None
 
 def gerar_qrcode(codigo):
-    """Gera QR Code com link de verificação oficial do BJJ Digital."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
     
-    # Se já existe, retorna (cache simples)
     if os.path.exists(caminho_qr):
         return caminho_qr
-
-    # URL de verificação oficial
-    # Atualizado para o seu domínio novo, mantendo a lógica antiga do QR Code
-    base_url = "https://bjjdigital.com.br/verificar.html"
-    link_verificacao = f"{base_url}?codigo={codigo}"
-
-    # Criação do QR (Lógica original restaurada com alta correção de erro)
-    qr = qrcode.QRCode(
-        version=1,
-        box_size=10,
-        border=4,
-        error_correction=qrcode.constants.ERROR_CORRECT_H
-    )
-    qr.add_data(link_verificacao)
+        
+    # Link apontando para o App Streamlit (Raiz)
+    link = f"https://bjjdigital.com.br/?code={codigo}"
+    
+    qr = qrcode.QRCode(box_size=10, border=2)
+    qr.add_data(link)
     qr.make(fit=True)
-
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(caminho_qr)
-
     return caminho_qr
 
 # =========================================
-# GERADOR DE PDF
+# GERADOR DE PDF (MEMÓRIA)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
-    """Gera certificado PDF oficial."""
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
     pdf.add_page()
@@ -159,8 +144,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_xy(0, 95)
     try:
         nome_display = usuario.upper().encode('latin-1', 'replace').decode('latin-1')
-    except:
-        nome_display = usuario.upper()
+    except: nome_display = usuario.upper()
     pdf.cell(297, 15, nome_display, align="C")
 
     cores_faixa = {
@@ -215,7 +199,6 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_text_color(*preto)
         pdf.set_y(155)
         pdf.cell(0, 10, prof_nome, align="C")
-        
         pdf.set_draw_color(*dourado)
         pdf.line(100, 168, 197, 168)
         pdf.set_font("Helvetica", "", 10)
@@ -229,7 +212,7 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     pdf.set_y(192)
     pdf.cell(0, 5, "Plataforma BJJ Digital - bjjdigital.com.br", align="C")
 
+    # Retorna BYTES
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
     nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
-    
     return pdf_bytes, nome_arquivo
