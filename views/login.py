@@ -486,9 +486,234 @@ def tela_cadastro_interno():
         st.rerun()
 def tela_completar_cadastro(user_data):
     """
-    Tela para completar cadastro de usuários vindos do Google que não têm todos os dados.
-    Esta função foi fechada para evitar erros de sintaxe.
+    Tela para completar cadastro de usuários Google.
+    Usa a mesma lógica de validação e criação de vínculos do cadastro manual.
     """
-    st.subheader("Completar Cadastro (Google)")
-    st.info("Por favor, complete seus dados para acessar o sistema.")
+    st.subheader(f"👋 Olá, {user_data.get('nome', 'Usuário').title()}!")
+    st.info("Para acessar o sistema, precisamos completar seu perfil com CPF, endereço e vínculo com uma equipe.")
+
+    db = get_db()
+
+    # --- 1. CARREGAMENTO DE DADOS (Igual ao cadastro manual) ---
+    try:
+        # Carrega Equipes Ativas
+        equipes_ref = db.collection('equipes').where('ativo', '==', True).stream()
+        lista_equipes = ["Nenhuma (Vínculo Pendente)"]
+        mapa_equipes = {}
+        for doc in equipes_ref:
+            d = doc.to_dict()
+            nm = d.get('nome', 'Sem Nome')
+            lista_equipes.append(nm)
+            mapa_equipes[nm] = doc.id
+
+        # Carrega Nomes de Professores
+        profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+        mapa_nomes_profs = {}
+        for doc in profs_users_ref:
+            mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
+
+        # Carrega Vínculos para mapear quem é professor de qual equipe
+        vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
+        profs_por_equipe = {}
+        for doc in vincs_ref:
+            d = doc.to_dict()
+            eid = d.get('equipe_id')
+            uid = d.get('usuario_id')
+            if eid and uid and uid in mapa_nomes_profs:
+                if eid not in profs_por_equipe: profs_por_equipe[eid] = []
+                profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
+
+    except Exception as e:
+        st.error(f"Erro ao carregar dados do sistema: {e}")
+        return
+
+    # --- 2. FORMULÁRIO ---
     
+    # Dados Fixos/Básicos
+    c_base1, c_base2 = st.columns(2)
+    c_base1.text_input("E-mail (Google):", value=user_data.get('email'), disabled=True)
+    cpf_inp = c_base2.text_input("CPF:", help="Apenas números")
+
+    st.markdown("---")
+    
+    # Seleção de Perfil
+    tipo = st.selectbox("Você é:", ["Aluno", "Professor"], key="tipo_google")
+    
+    c_fx, c_eq = st.columns(2)
+    
+    # Variáveis de lógica de equipe
+    nome_nova_equipe = None
+    desc_nova_equipe = None
+    
+    # Lógica de Campos Específicos (Igual ao manual)
+    if tipo == "Aluno":
+        with c_fx:
+            faixa = st.selectbox("Faixa:", 
+                ["Branca", "Cinza e Branca", "Cinza", "Cinza e Preta", 
+                 "Amarela e Branca", "Amarela", "Amarela e Preta", 
+                 "Laranja e Branca", "Laranja", "Laranja e Preta", 
+                 "Verde e Branca", "Verde", "Verde e Preta", 
+                 "Azul", "Roxa", "Marrom", "Preta"], 
+                key="faixa_aluno_google"
+            )
+        with c_eq:
+            eq_sel = st.selectbox("Equipe:", lista_equipes, key="eq_aluno_google")
+            
+        # Filtro de Professores da equipe selecionada
+        lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
+        mapa_profs_final = {}
+        eq_id_sel = mapa_equipes.get(eq_sel)
+        
+        if eq_id_sel and eq_id_sel in profs_por_equipe:
+            for p_nome, p_uid in profs_por_equipe[eq_id_sel]:
+                lista_profs_filtrada.append(p_nome)
+                mapa_profs_final[p_nome] = p_uid
+        
+        prof_sel = st.selectbox("Professor Responsável:", lista_profs_filtrada, key="prof_aluno_google")
+        
+    else: # Professor
+        with c_fx:
+            faixa = st.selectbox("Faixa:", ["Marrom", "Preta"], key="faixa_prof_google")
+            st.caption("Apenas Marrom e Preta podem ser Professores.")
+        with c_eq:
+            opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
+            eq_sel = st.selectbox("Equipe:", opcoes_prof_eq, key="eq_prof_google")
+        
+        if eq_sel == "🆕 Criar Nova Equipe":
+            st.warning("Você será o **Professor Responsável** e criador desta equipe.")
+            nome_nova_equipe = st.text_input("Nome da Nova Equipe:", key="new_team_name_google")
+            desc_nova_equipe = st.text_input("Descrição (Opcional):", key="new_team_desc_google")
+            prof_sel = None
+        else:
+            prof_sel = None
+
+    # --- 3. ENDEREÇO (Com sessão separada para não conflitar) ---
+    st.markdown("#### Endereço")
+    if 'google_cep' not in st.session_state: st.session_state.google_cep = ''
+    
+    c_cep, c_btn = st.columns([3, 1])
+    cep = c_cep.text_input("CEP:", key="input_cep_google", value=st.session_state.google_cep)
+    if c_btn.button("🔍 Buscar", key="btn_cep_google"):
+        end = buscar_cep(cep)
+        if end:
+            st.session_state.google_cep = cep
+            st.session_state.google_end = end
+            st.rerun()
+        else: st.error("CEP inválido")
+    
+    end_cache = st.session_state.get('google_end', {})
+    c1, c2 = st.columns(2)
+    logr = c1.text_input("Logradouro:", value=end_cache.get('logradouro',''), key="logr_g")
+    bairro = c2.text_input("Bairro:", value=end_cache.get('bairro',''), key="bairro_g")
+    c3, c4 = st.columns(2)
+    cid = c3.text_input("Cidade:", value=end_cache.get('cidade',''), key="cid_g")
+    uf = c4.text_input("UF:", value=end_cache.get('uf',''), key="uf_g")
+    c5, c6 = st.columns(2)
+    num = c5.text_input("Número:", key="num_g")
+    comp = c6.text_input("Complemento:", key="comp_g")
+
+    # --- 4. BOTÃO SALVAR E LÓGICA DE UPDATE ---
+    if st.button("Concluir Cadastro", type="primary", use_container_width=True):
+        
+        # Formatações
+        cpf_fin = formatar_e_validar_cpf(cpf_inp)
+        cep_fin = formatar_cep(cep)
+        user_id = user_data['id'] # ID do documento criado no auth.py
+        
+        # Validações
+        if not cpf_fin:
+            st.error("CPF Inválido. Verifique os dígitos.")
+            return
+        
+        if tipo == "Professor" and eq_sel == "🆕 Criar Nova Equipe" and not nome_nova_equipe:
+            st.error("Digite o nome da nova equipe.")
+            return
+
+        # Verifica duplicidade de CPF (excluindo o próprio usuário se já tivesse, mas aqui é novo)
+        duplicado = list(db.collection('usuarios').where('cpf', '==', cpf_fin).stream())
+        if duplicado:
+            # Garante que não é um erro bizarro onde ele acha a si mesmo (pouco provável no fluxo atual)
+            if duplicado[0].id != user_id:
+                st.error("Este CPF já está em uso por outro usuário.")
+                return
+
+        try:
+            with st.spinner("Atualizando perfil e criando vínculos..."):
+                tipo_db = tipo.lower()
+                
+                # A. ATUALIZA O USUÁRIO EXISTENTE
+                db.collection('usuarios').document(user_id).update({
+                    "cpf": cpf_fin,
+                    "tipo_usuario": tipo_db,
+                    "perfil_completo": True,
+                    "cep": cep_fin,
+                    "logradouro": logr.upper(),
+                    "numero": num,
+                    "complemento": comp.upper(),
+                    "bairro": bairro.upper(),
+                    "cidade": cid.upper(),
+                    "uf": uf.upper()
+                })
+                
+                # B. CRIA VÍNCULOS (ALUNO/PROFESSOR)
+                eq_id = None
+                
+                if tipo_db == "professor" and eq_sel == "🆕 Criar Nova Equipe":
+                    # 1. Cria Equipe
+                    _, ref_team = db.collection('equipes').add({
+                        "nome": nome_nova_equipe.upper(),
+                        "descricao": desc_nova_equipe,
+                        "professor_responsavel_id": user_id,
+                        "ativo": True
+                    })
+                    eq_id = ref_team.id
+                    
+                    # 2. Cria Vínculo de Professor (Dono = Ativo)
+                    db.collection('professores').add({
+                        "usuario_id": user_id,
+                        "equipe_id": eq_id,
+                        "status_vinculo": "ativo",
+                        "eh_responsavel": True,
+                        "pode_aprovar": True
+                    })
+                    
+                else:
+                    # Entrar em equipe existente
+                    eq_id = mapa_equipes.get(eq_sel)
+                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno" and prof_sel) else None
+                    
+                    if tipo_db == "aluno":
+                        db.collection('alunos').add({
+                            "usuario_id": user_id,
+                            "faixa_atual": faixa,
+                            "equipe_id": eq_id,
+                            "professor_id": prof_id,
+                            "status_vinculo": "pendente"
+                        })
+                    else: # Professor entrando em equipe de outro
+                        db.collection('professores').add({
+                            "usuario_id": user_id,
+                            "equipe_id": eq_id,
+                            "status_vinculo": "pendente",
+                            "eh_responsavel": False,
+                            "pode_aprovar": False
+                        })
+
+                # C. FINALIZA
+                st.success("Perfil atualizado com sucesso!")
+                
+                # Atualiza sessão com os dados novos
+                user_updated = db.collection('usuarios').document(user_id).get().to_dict()
+                user_updated['id'] = user_id
+                
+                st.session_state.usuario = user_updated
+                if 'registration_pending' in st.session_state:
+                    del st.session_state.registration_pending
+                
+                # Limpa cache de form
+                for k in ['google_cep', 'google_end']: st.session_state.pop(k, None)
+                
+                st.rerun()
+
+        except Exception as e:
+            st.error(f"Erro ao salvar dados: {e}")
