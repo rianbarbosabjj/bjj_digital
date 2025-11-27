@@ -301,14 +301,12 @@ def tela_cadastro_interno():
 
     if st.button("Voltar", use_container_width=True):
         st.session_state["modo_login"] = "login"; st.rerun()
-
 # =========================================
-# TELA COMPLETAR CADASTRO (GOOGLE)
+# TELA COMPLETAR CADASTRO (GOOGLE) - COM BUSCA DE CEP
 # =========================================
 def tela_completar_cadastro(user_data):
     """
-    Tela para usuários Google completarem dados.
-    Replica a lógica de seleção de Equipe e Professor.
+    Tela para usuários Google completarem dados (Equipe, Prof e Endereço).
     """
     st.subheader(f"👋 Olá, {user_data.get('nome', 'Usuário').title()}!")
     st.info("Complete seu perfil para acessar a plataforma.")
@@ -382,19 +380,24 @@ def tela_completar_cadastro(user_data):
             desc_nova_equipe = st.text_input("Descrição (Opcional):", key="de_g")
         prof_sel = None
 
-    # Endereço
+    # Endereço (Implementado com busca automática)
     st.markdown("#### Endereço")
     if 'goog_cep' not in st.session_state: st.session_state.goog_cep = ''
     cc, cb = st.columns([3, 1])
+    # Campo CEP vinculado ao estado da sessão
     cep = cc.text_input("CEP:", key="igc", value=st.session_state.goog_cep)
+    
+    # Botão Buscar CEP
     if cb.button("Buscar", key="bgc"):
         end = buscar_cep(cep)
         if end:
             st.session_state.goog_cep = cep
             st.session_state.goog_end = end
             st.success("OK!")
+            st.rerun() # Recarrega para preencher os campos abaixo
         else: st.error("Inválido")
 
+    # Campos de endereço preenchidos automaticamente
     eg = st.session_state.get('goog_end', {})
     c1, c2 = st.columns(2)
     logr = c1.text_input("Logradouro:", value=eg.get('logradouro',''), key="lgg")
