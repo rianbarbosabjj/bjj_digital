@@ -365,25 +365,28 @@ def tela_completar_cadastro(user_data):
         prof_sel = None
 
     st.markdown("#### Endereço")
-    if 'goog_cep' not in st.session_state: st.session_state.goog_cep = ''
-    cc, cb = st.columns([3, 1])
-    cep = cc.text_input("CEP:", key="input_cep_goog", value=st.session_state.goog_cep)
-    if cb.button("Buscar", key="bgc"):
+    if 'cad_cep' not in st.session_state: st.session_state.cad_cep = ''
+    
+    c_cep, c_btn = st.columns([3, 1])
+    cep = c_cep.text_input("CEP:", key="input_cep_cad", value=st.session_state.cad_cep)
+    if c_btn.button("Buscar", key="btn_cep_cad"):
         end = buscar_cep(cep)
         if end:
-            st.session_state.goog_cep = cep; st.session_state.goog_end = end; st.success("OK!"); st.rerun()
+            st.session_state.cad_cep = cep
+            st.session_state.cad_end = end
+            st.success("OK!")
         else: st.error("Inválido")
-
-    eg = st.session_state.get('goog_end', {})
+    
+    ec = st.session_state.get('cad_end', {})
     c1, c2 = st.columns(2)
-    logr = c1.text_input("Logradouro:", value=eg.get('logradouro',''), key="lgg")
-    bairro = c2.text_input("Bairro:", value=eg.get('bairro',''), key="brg")
+    logr = c1.text_input("Logradouro:", value=ec.get('logradouro',''))
+    bairro = c2.text_input("Bairro:", value=ec.get('bairro',''))
     c3, c4 = st.columns(2)
-    cid = c3.text_input("Cidade:", value=eg.get('cidade',''), key="cdg")
-    uf = c4.text_input("UF:", value=eg.get('uf',''), key="ufg")
+    cid = c3.text_input("Cidade:", value=ec.get('cidade',''))
+    uf = c4.text_input("UF:", value=ec.get('uf',''))
     c5, c6 = st.columns(2)
-    num = c5.text_input("Número:", key="nmg")
-    comp = c6.text_input("Complemento:", key="cpg")
+    num = c5.text_input("Número:")
+    comp = c6.text_input("Complemento:")
 
     if st.button("Finalizar Cadastro", type="primary", use_container_width=True):
         cpf_fin = formatar_e_validar_cpf(cpf_inp)
