@@ -1,97 +1,88 @@
 import bcrypt
+import streamlit as st
+from firebase_admin import firestore  # <--- ESTA É A LINHA QUE FALTAVA
 from database import get_db
-from utils import formatar_e_validar_cpf
 
-def autenticar_local(usuario_email_ou_cpf, senha):
-    """
-    Autentica o usuário verificando email ou CPF no Firestore.
-    """
+def buscar_usuario_por_email(email):
+    """Busca um usuário no Firestore pelo e-mail."""
     db = get_db()
-    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf)
-    
-    users_ref = db.collection('usuarios')
-    usuario_doc = None
-
-    # 1. Tenta buscar por Email (ou nome de usuário se foi salvo assim)
-    # No Firestore, fazemos queries baseadas em campos
-    query_email = users_ref.where('email', '==', usuario_email_ou_cpf).where('auth_provider', '==', 'local').stream()
-    
-    for doc in query_email:
-        usuario_doc = doc
-        break # Pega o primeiro encontrado
-    
-    # 2. Se não achou por email, tenta buscar por CPF (se for válido)
-    if not usuario_doc and cpf_formatado:
-        query_cpf = users_ref.where('cpf', '==', cpf_formatado).where('auth_provider', '==', 'local').stream()
-        for doc in query_cpf:
-            usuario_doc = doc
-            break
+    try:
+        users_ref = db.collection('usuarios')
+        # limit(1) é mais eficiente pois só precisamos de um
+        query = users_ref.where('email', '==', email).limit(1).stream()
+        
+        for doc in query:
+            user_data = doc.to_dict()
+            user_data['id'] = doc.id # Adiciona o ID do documento ao dicionário
+            return user_data
             
-    # 3. Se não achou nada, tenta buscar por Nome (fallback)
-    if not usuario_doc:
-        query_nome = users_ref.where('nome', '==', usuario_email_ou_cpf.upper()).where('auth_provider', '==', 'local').stream()
-        for doc in query_nome:
-            usuario_doc = doc
-            break
+        return None
+    except Exception as e:
+        st.error(f"Erro ao buscar usuário: {e}")
+        return None
 
-    # Se encontrou o usuário, verifica a senha
-    if usuario_doc:
-        dados = usuario_doc.to_dict()
-        senha_hash = dados.get('senha')
-        
-        if senha_hash and bcrypt.checkpw(senha.encode(), senha_hash.encode()):
-            # Retorna os dados essenciais + o ID do documento (importante para updates)
-            return {
-                "id": usuario_doc.id, # O ID agora é a chave do documento no Firestore
-                "nome": dados.get('nome'),
-                "tipo": dados.get('tipo_usuario'),
-                "email": dados.get('email')
-            }
-        
-    return None
-
-def buscar_usuario_por_email(email_ou_cpf):
-    """Busca usuário para o fluxo do Google Auth."""
+def autenticar_local(login_input, senha):
+    """
+    Autentica usuário via Firestore usando Email ou CPF.
+    login_input: pode ser email ou cpf.
+    senha: senha em texto plano.
+    """
     db = get_db()
     users_ref = db.collection('usuarios')
-    usuario_doc = None
+    user_found = None
     
-    # Busca por email
-    query = users_ref.where('email', '==', email_ou_cpf).stream()
-    for doc in query:
-        usuario_doc = doc
-        break
+    try:
+        # 1. Tentar encontrar por E-MAIL
+        query_email = users_ref.where('email', '==', login_input).limit(1).stream()
+        for doc in query_email:
+            user_found = doc.to_dict()
+            user_found['id'] = doc.id
+            break
         
-    if usuario_doc:
-        dados = usuario_doc.to_dict()
-        return {
-            "id": usuario_doc.id,
-            "nome": dados.get('nome'),
-            "tipo": dados.get('tipo_usuario'),
-            "perfil_completo": dados.get('perfil_completo', False),
-            "email": dados.get('email')
-        }
+        # 2. Se não achou por email, tentar por CPF
+        if not user_found:
+            # Assume que o input já veio formatado do login.py, ou busca direto
+            query_cpf = users_ref.where('cpf', '==', login_input).limit(1).stream()
+            for doc in query_cpf:
+                user_found = doc.to_dict()
+                user_found['id'] = doc.id
+                break
+        
+        # 3. Verificar senha
+        if user_found:
+            stored_hash = user_found.get('senha')
+            if stored_hash:
+                # bcrypt requer bytes, então encode()
+                if bcrypt.checkpw(senha.encode(), stored_hash.encode()):
+                    return user_found
+    except Exception as e:
+        st.error(f"Erro na autenticação: {e}")
         
     return None
 
 def criar_usuario_parcial_google(email, nome):
-    """Cria o registro inicial vindo do Google."""
+    """
+    Cria um registro inicial para usuários que logaram com Google mas não existem no banco.
+    Define 'perfil_completo' como False para forçar o cadastro complementar depois.
+    """
     db = get_db()
     
-    # Prepara os dados
-    novo_usuario = {
-        "email": email,
-        "nome": nome.upper(),
-        "auth_provider": "google",
-        "perfil_completo": False,
-        "data_criacao": firestore.SERVER_TIMESTAMP
-    }
-    
-    # Adiciona ao Firestore (ele gera o ID automaticamente)
-    update_time, doc_ref = db.collection('usuarios').add(novo_usuario)
-    
-    return {
-        "id": doc_ref.id, 
-        "email": email, 
-        "nome": nome
-    }
+    try:
+        novo_user = {
+            "nome": nome.upper(),
+            "email": email,
+            "auth_provider": "google",
+            "perfil_completo": False, # Importante: flag para redirecionar para completar cadastro
+            "tipo_usuario": None,     # Será definido no completar cadastro
+            "data_criacao": firestore.SERVER_TIMESTAMP # <--- AQUI OCORRIA O ERRO
+        }
+        
+        _, doc_ref = db.collection('usuarios').add(novo_user)
+        
+        # Retorna o usuário já com o ID gerado para colocar na sessão
+        novo_user['id'] = doc_ref.id
+        return novo_user
+        
+    except Exception as e:
+        st.error(f"Erro ao criar usuário Google: {e}")
+        return None
