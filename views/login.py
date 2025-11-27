@@ -8,19 +8,15 @@ from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
 from config import COR_DESTAQUE, COR_TEXTO
 from database import get_db
-# CORREÇÃO: Importação correta do firestore para uso de SERVER_TIMESTAMP se necessário,
-# mas preferimos usar a instância do banco já configurada em database.py ou a lib direta
-from firebase_admin import firestore 
+from firebase_admin import firestore  # Importação essencial
 
 # =========================================
 # CONFIGURAÇÃO OAUTH (BLINDADA)
 # =========================================
-# Usamos .get() para evitar erros (KeyError) se a chave não existir
 GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET")
 REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
 
-# Só inicializa o componente se tivermos as chaves válidas carregadas
 if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
     try:
         oauth_google = OAuth2Component(
@@ -82,7 +78,7 @@ def tela_login():
                             else:
                                 st.error("Credenciais inválidas.")
 
-                # BOTÕES ALINHADOS E LARGOS
+                # Botões Auxiliares (Alinhados)
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("📋 Criar Conta", use_container_width=True):
@@ -95,7 +91,7 @@ def tela_login():
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # BOTÃO GOOGLE (SÓ APARECE SE CONFIGURADO E CARREGADO)
+                # Botão Google (Só aparece se configurado)
                 if oauth_google: 
                     try:
                         result = oauth_google.authorize_button(
@@ -106,7 +102,7 @@ def tela_login():
                             key="google_auth_btn",
                             use_container_width=True,
                         )
-                    except Exception:
+                    except:
                         st.warning("Login com Google temporariamente indisponível.")
                         result = None
                     
@@ -139,8 +135,7 @@ def tela_login():
                         except Exception as e:
                             st.error(f"Erro Google: {e}")
                 else:
-                    # Mensagem opcional para debug (só aparece se não tiver chaves)
-                    pass
+                    pass # Sem chaves, sem botão
 
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
@@ -367,5 +362,4 @@ def tela_cadastro_interno():
         st.rerun()
 
 def tela_completar_cadastro(user_data):
-    # ... (Mantido igual, pode ser usado do histórico se necessário) ...
     st.markdown("Funcionalidade Google Auth em manutenção.")
