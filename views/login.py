@@ -302,18 +302,18 @@ def tela_cadastro_interno():
     if st.button("Voltar", use_container_width=True):
         st.session_state["modo_login"] = "login"; st.rerun()
 # =========================================
-# TELA COMPLETAR CADASTRO (GOOGLE) - COM BUSCA DE CEP
+# TELA COMPLETAR CADASTRO (GOOGLE)
 # =========================================
 def tela_completar_cadastro(user_data):
     """
-    Tela para usuários Google completarem dados (Equipe, Prof e Endereço).
+    Tela para completar cadastro Google com preenchimento automático de CEP.
     """
     st.subheader(f"👋 Olá, {user_data.get('nome', 'Usuário').title()}!")
     st.info("Complete seu perfil para acessar a plataforma.")
 
     db = get_db()
 
-    # Carregamento de Listas (Idêntico ao cadastro manual)
+    # (Mesma lógica de carregamento de listas omitida para brevidade - usa a mesma do manual)
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
@@ -346,7 +346,6 @@ def tela_completar_cadastro(user_data):
     nome = st.text_input("Nome:", value=user_data.get('nome',''))
     st.text_input("E-mail:", value=user_data.get('email',''), disabled=True)
     
-    # CPF com sessão própria para Google
     if 'cpf_g' not in st.session_state: st.session_state.cpf_g = ''
     cpf_inp = st.text_input("CPF:", value=st.session_state.cpf_g)
     
@@ -369,7 +368,7 @@ def tela_completar_cadastro(user_data):
                 mapa_profs_final[p_nome] = p_uid
         prof_sel = st.selectbox("Professor:", lista_profs_filtrada, key="pf_g")
         
-    else: # Professor
+    else: 
         with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"], key="fx_g_p")
         with ce:
             opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
@@ -380,31 +379,36 @@ def tela_completar_cadastro(user_data):
             desc_nova_equipe = st.text_input("Descrição (Opcional):", key="de_g")
         prof_sel = None
 
-    # Endereço (Implementado com busca automática)
+    # --- ENDEREÇO COM PREENCHIMENTO AUTOMÁTICO ---
     st.markdown("#### Endereço")
-    if 'goog_cep' not in st.session_state: st.session_state.goog_cep = ''
-    cc, cb = st.columns([3, 1])
-    # Campo CEP vinculado ao estado da sessão
-    cep = cc.text_input("CEP:", key="igc", value=st.session_state.goog_cep)
     
-    # Botão Buscar CEP
-    if cb.button("Buscar", key="bgc"):
+    # Inicializa variáveis de sessão se não existirem
+    for k in ['goog_cep', 'lgg', 'brg', 'cdg', 'ufg']:
+        if k not in st.session_state: st.session_state[k] = ''
+    
+    cc, cb = st.columns([3, 1])
+    cep = cc.text_input("CEP:", key="input_cep_goog", value=st.session_state.goog_cep)
+    
+    if cb.button("🔍 Buscar", key="bgc"):
         end = buscar_cep(cep)
         if end:
             st.session_state.goog_cep = cep
-            st.session_state.goog_end = end
-            st.success("OK!")
-            st.rerun() # Recarrega para preencher os campos abaixo
+            # Atualiza chaves específicas dos widgets abaixo
+            st.session_state.lgg = end['logradouro']
+            st.session_state.brg = end['bairro']
+            st.session_state.cdg = end['cidade']
+            st.session_state.ufg = end['uf']
+            st.success("Endereço encontrado!")
+            st.rerun()
         else: st.error("Inválido")
 
-    # Campos de endereço preenchidos automaticamente
-    eg = st.session_state.get('goog_end', {})
     c1, c2 = st.columns(2)
-    logr = c1.text_input("Logradouro:", value=eg.get('logradouro',''), key="lgg")
-    bairro = c2.text_input("Bairro:", value=eg.get('bairro',''), key="brg")
+    # O uso de key="lgg" conecta o input diretamente à variável de sessão st.session_state['lgg']
+    logr = c1.text_input("Logradouro:", key="lgg")
+    bairro = c2.text_input("Bairro:", key="brg")
     c3, c4 = st.columns(2)
-    cid = c3.text_input("Cidade:", value=eg.get('cidade',''), key="cdg")
-    uf = c4.text_input("UF:", value=eg.get('uf',''), key="ufg")
+    cid = c3.text_input("Cidade:", key="cdg")
+    uf = c4.text_input("UF:", key="ufg")
     c5, c6 = st.columns(2)
     num = c5.text_input("Número:", key="nmg")
     comp = c6.text_input("Complemento:", key="cpg")
@@ -418,7 +422,6 @@ def tela_completar_cadastro(user_data):
         if tipo == "Professor" and eq_sel == "🆕 Criar Nova Equipe" and not nome_nova_equipe:
             st.warning("Nome da equipe obrigatório."); return
 
-        # Validação Duplicidade CPF
         users_ref = db.collection('usuarios')
         if len(list(users_ref.where('cpf', '==', cpf_fin).stream())) > 0:
             st.error("CPF já em uso."); return
@@ -427,7 +430,6 @@ def tela_completar_cadastro(user_data):
             tipo_db = tipo.lower()
             user_id = user_data['id']
             
-            # Update Usuário
             db.collection('usuarios').document(user_id).update({
                 "nome": nome.upper(), "cpf": cpf_fin, "tipo_usuario": tipo_db,
                 "perfil_completo": True, "cep": cep_fin, "logradouro": logr.upper(),
@@ -463,7 +465,11 @@ def tela_completar_cadastro(user_data):
             st.success("Pronto!")
             st.session_state.usuario = {"id": user_id, "nome": nome.upper(), "tipo": tipo_db}
             del st.session_state.registration_pending
-            for k in ['goog_cep', 'goog_end', 'cpf_g']: st.session_state.pop(k, None)
+            
+            # Limpa chaves de sessão usadas
+            for k in ['goog_cep', 'lgg', 'brg', 'cdg', 'ufg', 'cpf_g', 'nmg', 'cpg']:
+                if k in st.session_state: st.session_state.pop(k, None)
+                
             st.rerun()
 
         except Exception as e: st.error(f"Erro: {e}")
