@@ -8,7 +8,7 @@ from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
 from config import COR_DESTAQUE, COR_TEXTO
 from database import get_db
-from firebase_admin import firestore  # Necessário para SERVER_TIMESTAMP
+from firebase_admin import firestore
 
 # =========================================
 # CONFIGURAÇÃO OAUTH (BLINDADA)
@@ -71,7 +71,6 @@ def tela_login():
                             else:
                                 st.error("Credenciais inválidas.")
 
-                # Botões Alinhados
                 col1, col2 = st.columns(2)
                 with col1:
                     if st.button("📋 Criar Conta", use_container_width=True):
@@ -82,7 +81,6 @@ def tela_login():
 
                 st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
                 
-                # Botão Google
                 if oauth_google: 
                     try:
                         result = oauth_google.authorize_button(
@@ -144,7 +142,6 @@ def tela_cadastro_interno():
     st.subheader("📋 Cadastro de Novo Usuário")
     db = get_db()
     
-    # Listas para Dropdowns
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
@@ -186,7 +183,7 @@ def tela_cadastro_interno():
     nome_nova_equipe = None; desc_nova_equipe = None
     
     if tipo == "Aluno":
-        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca", "Amarela", "Amarela e Preta", "Laranja e Branca", "Laranja", "Laranja e Preta", "Verde e Branca", "Verde", "Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"])
+        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
@@ -198,10 +195,9 @@ def tela_cadastro_interno():
                 mapa_profs_final[p_nome] = p_uid
         prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
         
-    else: # Professor
-        with cf: 
-            faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
-            st.caption("Professores devem ser Marrom ou Preta.")
+    else: 
+        with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
+        st.caption("Professores devem ser Marrom ou Preta.")
         with ce:
             opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
             eq_sel = st.selectbox("Equipe:", opcoes_prof_eq)
@@ -214,9 +210,10 @@ def tela_cadastro_interno():
 
     st.markdown("#### Endereço")
     if 'cad_cep' not in st.session_state: st.session_state.cad_cep = ''
-    cc, cb = st.columns([3, 1])
-    cep = cc.text_input("CEP:", key="icad", value=st.session_state.cad_cep)
-    if cb.button("Buscar", key="bcad"):
+    
+    c_cep, c_btn = st.columns([3, 1])
+    cep = c_cep.text_input("CEP:", key="input_cep_cad", value=st.session_state.cad_cep)
+    if c_btn.button("Buscar", key="btn_cep_cad"):
         end = buscar_cep(cep)
         if end:
             st.session_state.cad_cep = cep
@@ -295,54 +292,45 @@ def tela_cadastro_interno():
                         })
                 
                 st.success("Sucesso!"); 
+                st.session_state.usuario = {"id": user_id, "nome": nome_fin, "tipo": tipo_db}
                 for k in ['cad_cep', 'cad_end']: st.session_state.pop(k, None)
                 st.session_state["modo_login"] = "login"; st.rerun()
         except Exception as e: st.error(f"Erro: {e}")
 
     if st.button("Voltar", use_container_width=True):
         st.session_state["modo_login"] = "login"; st.rerun()
+
 # =========================================
 # TELA COMPLETAR CADASTRO (GOOGLE)
 # =========================================
 def tela_completar_cadastro(user_data):
-    """
-    Tela para completar cadastro Google com preenchimento automático de CEP.
-    """
     st.subheader(f"👋 Olá, {user_data.get('nome', 'Usuário').title()}!")
     st.info("Complete seu perfil para acessar a plataforma.")
 
     db = get_db()
 
-    # (Mesma lógica de carregamento de listas omitida para brevidade - usa a mesma do manual)
+    # (Reutiliza lógica de listas do cadastro interno)
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
         mapa_equipes = {} 
         for doc in equipes_ref:
-            d = doc.to_dict()
-            nm = d.get('nome', 'Sem Nome')
-            lista_equipes.append(nm)
-            mapa_equipes[nm] = doc.id
+            d = doc.to_dict(); nm = d.get('nome', 'Sem Nome')
+            lista_equipes.append(nm); mapa_equipes[nm] = doc.id
         
         profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
         mapa_nomes_profs = {} 
-        for doc in profs_users_ref:
-            mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
+        for doc in profs_users_ref: mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
 
         vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
         profs_por_equipe = {} 
         for doc in vincs_ref:
-            d = doc.to_dict()
-            eid = d.get('equipe_id')
-            uid = d.get('usuario_id')
+            d = doc.to_dict(); eid = d.get('equipe_id'); uid = d.get('usuario_id')
             if eid and uid and uid in mapa_nomes_profs:
                 if eid not in profs_por_equipe: profs_por_equipe[eid] = []
                 profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
-                
-    except Exception as e:
-        st.error(f"Erro: {e}"); return
+    except Exception as e: st.error(f"Erro: {e}"); return
 
-    # Formulário
     nome = st.text_input("Nome:", value=user_data.get('nome',''))
     st.text_input("E-mail:", value=user_data.get('email',''), disabled=True)
     
@@ -356,7 +344,7 @@ def tela_completar_cadastro(user_data):
     nome_nova_equipe = None; desc_nova_equipe = None
     
     if tipo == "Aluno":
-        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca", "Amarela", "Amarela e Preta", "Laranja e Branca", "Laranja", "Laranja e Preta", "Verde e Branca", "Verde", "Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"], key="fx_g")
+        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"], key="fx_g")
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes, key="eq_g")
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
@@ -364,51 +352,35 @@ def tela_completar_cadastro(user_data):
         eq_id_sel = mapa_equipes.get(eq_sel)
         if eq_id_sel and eq_id_sel in profs_por_equipe:
             for p_nome, p_uid in profs_por_equipe[eq_id_sel]:
-                lista_profs_filtrada.append(p_nome)
-                mapa_profs_final[p_nome] = p_uid
+                lista_profs_filtrada.append(p_nome); mapa_profs_final[p_nome] = p_uid
         prof_sel = st.selectbox("Professor:", lista_profs_filtrada, key="pf_g")
-        
     else: 
         with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"], key="fx_g_p")
         with ce:
             opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
             eq_sel = st.selectbox("Equipe:", opcoes_prof_eq, key="eq_g_p")
-        
         if eq_sel == "🆕 Criar Nova Equipe":
             nome_nova_equipe = st.text_input("Nome da Nova Equipe:", key="ne_g")
             desc_nova_equipe = st.text_input("Descrição (Opcional):", key="de_g")
         prof_sel = None
 
-    # --- ENDEREÇO COM PREENCHIMENTO AUTOMÁTICO ---
     st.markdown("#### Endereço")
-    
-    # Inicializa variáveis de sessão se não existirem
-    for k in ['goog_cep', 'lgg', 'brg', 'cdg', 'ufg']:
-        if k not in st.session_state: st.session_state[k] = ''
-    
+    if 'goog_cep' not in st.session_state: st.session_state.goog_cep = ''
     cc, cb = st.columns([3, 1])
     cep = cc.text_input("CEP:", key="input_cep_goog", value=st.session_state.goog_cep)
-    
-    if cb.button("🔍 Buscar", key="bgc"):
+    if cb.button("Buscar", key="bgc"):
         end = buscar_cep(cep)
         if end:
-            st.session_state.goog_cep = cep
-            # Atualiza chaves específicas dos widgets abaixo
-            st.session_state.lgg = end['logradouro']
-            st.session_state.brg = end['bairro']
-            st.session_state.cdg = end['cidade']
-            st.session_state.ufg = end['uf']
-            st.success("Endereço encontrado!")
-            st.rerun()
+            st.session_state.goog_cep = cep; st.session_state.goog_end = end; st.success("OK!"); st.rerun()
         else: st.error("Inválido")
 
+    eg = st.session_state.get('goog_end', {})
     c1, c2 = st.columns(2)
-    # O uso de key="lgg" conecta o input diretamente à variável de sessão st.session_state['lgg']
-    logr = c1.text_input("Logradouro:", key="lgg")
-    bairro = c2.text_input("Bairro:", key="brg")
+    logr = c1.text_input("Logradouro:", value=eg.get('logradouro',''), key="lgg")
+    bairro = c2.text_input("Bairro:", value=eg.get('bairro',''), key="brg")
     c3, c4 = st.columns(2)
-    cid = c3.text_input("Cidade:", key="cdg")
-    uf = c4.text_input("UF:", key="ufg")
+    cid = c3.text_input("Cidade:", value=eg.get('cidade',''), key="cdg")
+    uf = c4.text_input("UF:", value=eg.get('uf',''), key="ufg")
     c5, c6 = st.columns(2)
     num = c5.text_input("Número:", key="nmg")
     comp = c6.text_input("Complemento:", key="cpg")
@@ -419,22 +391,18 @@ def tela_completar_cadastro(user_data):
         
         if not nome: st.warning("Nome obrigatório."); return
         if not cpf_fin: st.error("CPF inválido."); return
-        if tipo == "Professor" and eq_sel == "🆕 Criar Nova Equipe" and not nome_nova_equipe:
-            st.warning("Nome da equipe obrigatório."); return
+        if tipo == "Professor" and eq_sel == "🆕 Criar Nova Equipe" and not nome_nova_equipe: st.warning("Nome da equipe obrigatório."); return
 
         users_ref = db.collection('usuarios')
-        if len(list(users_ref.where('cpf', '==', cpf_fin).stream())) > 0:
-            st.error("CPF já em uso."); return
+        if len(list(users_ref.where('cpf', '==', cpf_fin).stream())) > 0: st.error("CPF já em uso."); return
 
         try:
             tipo_db = tipo.lower()
             user_id = user_data['id']
-            
             db.collection('usuarios').document(user_id).update({
-                "nome": nome.upper(), "cpf": cpf_fin, "tipo_usuario": tipo_db,
-                "perfil_completo": True, "cep": cep_fin, "logradouro": logr.upper(),
-                "numero": num, "complemento": comp.upper(), "bairro": bairro.upper(),
-                "cidade": cid.upper(), "uf": uf.upper()
+                "nome": nome.upper(), "cpf": cpf_fin, "tipo_usuario": tipo_db, "perfil_completo": True,
+                "cep": cep_fin, "logradouro": logr.upper(), "numero": num, "complemento": comp.upper(),
+                "bairro": bairro.upper(), "cidade": cid.upper(), "uf": uf.upper()
             })
 
             eq_id = None
@@ -451,7 +419,6 @@ def tela_completar_cadastro(user_data):
             else:
                 eq_id = mapa_equipes.get(eq_sel)
                 prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno" and prof_sel) else None
-                
                 if tipo_db == "aluno":
                     db.collection('alunos').add({
                         "usuario_id": user_id, "faixa_atual": faixa, "equipe_id": eq_id,
@@ -465,11 +432,6 @@ def tela_completar_cadastro(user_data):
             st.success("Pronto!")
             st.session_state.usuario = {"id": user_id, "nome": nome.upper(), "tipo": tipo_db}
             del st.session_state.registration_pending
-            
-            # Limpa chaves de sessão usadas
-            for k in ['goog_cep', 'lgg', 'brg', 'cdg', 'ufg', 'cpf_g', 'nmg', 'cpg']:
-                if k in st.session_state: st.session_state.pop(k, None)
-                
+            for k in ['goog_cep', 'goog_end', 'cpf_g', 'nmg', 'cpg']: st.session_state.pop(k, None)
             st.rerun()
-
         except Exception as e: st.error(f"Erro: {e}")
