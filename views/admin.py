@@ -167,121 +167,157 @@ def gestao_usuarios(usuario_logado):
                 try:
                     # Exclui o documento do usuário
                     db.collection('usuarios').document(usuario_selecionado['id']).delete()
-                    
-                    # Opcional: Aqui você poderia excluir documentos vinculados (alunos/professores) se quisesse limpar tudo
-                    # Mas apenas deletar o usuário já impede o login
-                    
                     st.toast(f"Usuário {usuario_selecionado['nome']} excluído com sucesso!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao excluir: {e}")
 
 # =========================================
-# GESTÃO DE QUESTÕES
+# GESTÃO DE QUESTÕES (FUNCIONALIDADE RESTAURADA)
 # =========================================
-def gestao_exame_de_faixa():
-    st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
+def gestao_questoes():
+    st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
     
-    user_logado = st.session_state.usuario
-    tipo_user = str(user_logado.get("tipo", "")).lower()
+    user = st.session_state.usuario
+    tipo_user = str(user.get("tipo", "")).lower()
     
+    # Validação de Segurança
     if tipo_user not in ["admin", "professor"]:
         st.error("Acesso negado.")
         return
-
-    tab_editor, tab_visualizar, tab_alunos = st.tabs(["✏️ Editor de Provas", "👁️ Visualizar Provas", "✅ Habilitar Alunos"])
-    
+        
     db = get_db()
     
-    todas_faixas = [
-        "Cinza e Branca", "Cinza", "Cinza e Preta",
-        "Amarela e Branca", "Amarela", "Amarela e Preta",
-        "Laranja e Branca", "Laranja", "Laranja e Preta",
-        "Verde e Branca", "Verde", "Verde e Preta",
-        "Azul", "Roxa", "Marrom", "Preta"
-    ]
+    # Busca todas as questões
+    docs_q = list(db.collection('questoes').stream())
+    
+    aprovadas = []
+    pendentes = []
+    temas_set = set()
 
-    # ---------------------------------------------------------
-    # ABA 1: EDITOR (Visualização Rica)
-    # ---------------------------------------------------------
-    with tab_editor:
-        st.subheader("Editor de Prova")
+    for doc in docs_q:
+        d = doc.to_dict()
+        d['id'] = doc.id
+        status = d.get('status', 'aprovada')
         
-        faixa_edit = st.selectbox("Selecione a faixa para criar/editar:", todas_faixas, key="sel_faixa_edit")
-        
-        doc_ref = db.collection('exames').document(faixa_edit)
-        doc_snap = doc_ref.get()
-        
-        dados_prova = doc_snap.to_dict() if doc_snap.exists else {}
-        questoes_atuais = dados_prova.get('questoes', [])
-        tempo_atual = dados_prova.get('tempo_limite', 10)
+        if status == 'pendente':
+            pendentes.append(d)
+        else:
+            aprovadas.append(d)
+            temas_set.add(d.get('tema', 'Geral'))
 
-        c_time, c_stat = st.columns([1, 3])
-        novo_tempo = c_time.number_input("⏱️ Tempo Limite (min):", 10, 240, tempo_atual, 10)
-        c_stat.info(f"Esta prova contém atualmente **{len(questoes_atuais)} questões**.")
+    temas_existentes = sorted(list(temas_set))
+    
+    # Configuração das Abas
+    titulos_abas = ["📚 Banco de Questões", "➕ Nova Questão"]
+    if tipo_user == "admin":
+        titulos_abas.append(f"✅ Aprovar ({len(pendentes)})")
+    
+    abas = st.tabs(titulos_abas)
+    
+    # --- ABA 1: LISTAR ---
+    with abas[0]:
+        ft = st.selectbox("Filtrar por Tema:", ["Todos"] + temas_existentes)
+        
+        # Filtragem
+        qx = [q for q in aprovadas if q.get('tema') == ft] if ft != "Todos" else aprovadas
+        
+        if not qx:
+            st.info("Nenhuma questão encontrada com os filtros atuais.")
+        else:
+            st.write(f"Total: {len(qx)} questões")
+            for q in qx:
+                with st.container(border=True):
+                    col_txt, col_btn = st.columns([6, 1])
+                    col_txt.markdown(f"**[{q.get('tema')}]** {q.get('pergunta', 'Sem texto')}")
+                    
+                    autor = q.get('criado_por', 'Desconhecido').title()
+                    st.caption(f"✍️ Criado por: {autor} | Faixa Alvo: {q.get('faixa', 'Geral')}")
+                    
+                    with st.expander("Ver Detalhes e Opções"):
+                        st.write(f"**Opções:** {q.get('opcoes')}")
+                        st.success(f"✅ Resposta Correta: {q.get('resposta')}")
+                        
+                        if tipo_user == "admin":
+                            if st.button("🗑️ Excluir Questão", key=f"del_{q['id']}"):
+                                db.collection('questoes').document(q['id']).delete()
+                                st.rerun()
 
-        st.markdown("---")
-        st.markdown("#### ➕ Adicionar Questões do Banco")
-        
-        docs_q = db.collection('questoes').where('status', '==', 'aprovada').stream()
-        todas_q = [d.to_dict() for d in docs_q] 
-        
-        temas = sorted(list(set(q.get('tema', 'Geral') for q in todas_q)))
-        filtro = st.selectbox("Filtrar Banco por Tema:", ["Todos"] + temas)
-        
-        q_exibir = [q for q in todas_q if q.get('tema') == filtro] if filtro != "Todos" else todas_q
-        perguntas_ja_add = [q['pergunta'] for q in questoes_atuais]
-
-        with st.form("form_add_questoes"):
-            selecionadas = []
-            count = 0
-            for i, q in enumerate(q_exibir):
-                if count > 100: break # Paginação simples
-                
-                if q['pergunta'] not in perguntas_ja_add:
-                    # LAYOUT DETALHADO NA SELEÇÃO
-                    st.markdown(f"**{i+1}. [{q.get('tema')}]** {q['pergunta']}")
-                    
-                    # Alternativas
-                    if q.get('opcoes'):
-                        for op in q['opcoes']:
-                            st.caption(f"• {op}")
-                    
-                    # Metadados
-                    c_meta1, c_meta2, c_meta3 = st.columns([3, 2, 1])
-                    c_meta1.markdown(f"✅ **Gabarito:** {q.get('resposta')}")
-                    c_meta2.caption(f"✍️ **Autor:** {q.get('criado_por', 'Desconhecido')}")
-                    
-                    # Checkbox
-                    ck = c_meta3.checkbox("Selecionar", key=f"add_{i}")
-                    if ck: selecionadas.append(q)
-                    
-                    st.markdown("---")
-                    count += 1
+    # --- ABA 2: CRIAR ---
+    with abas[1]:
+        st.subheader("Adicionar Nova Questão")
+        with st.form("new_q"):
+            c1, c2 = st.columns(2)
+            tema = c1.text_input("Tema (ex: História, Regras):")
+            faixa_alvo = c2.selectbox("Faixa Alvo:", ["Geral", "Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
             
-            if st.form_submit_button("Salvar Selecionadas na Prova"):
-                questoes_atuais.extend(selecionadas)
-                doc_ref.set({
-                    "faixa": faixa_edit,
-                    "questoes": questoes_atuais,
-                    "tempo_limite": novo_tempo,
-                    "atualizado_em": firestore.SERVER_TIMESTAMP,
-                    "atualizado_por": user_logado['nome']
-                })
-                st.success("Prova salva com sucesso!")
-                st.rerun()
+            perg = st.text_area("Enunciado da Pergunta:")
+            
+            st.write("Alternativas:")
+            c_op1, c_op2 = st.columns(2)
+            op1 = c_op1.text_input("Opção A")
+            op2 = c_op2.text_input("Opção B")
+            
+            c_op3, c_op4 = st.columns(2)
+            op3 = c_op3.text_input("Opção C")
+            op4 = c_op4.text_input("Opção D")
+            
+            resp_letra = st.selectbox("Qual é a alternativa CORRETA?", ["A", "B", "C", "D"])
+            
+            if st.form_submit_button("💾 Salvar Questão"):
+                # Coleta as opções preenchidas
+                ops_raw = [op1, op2, op3, op4]
+                op_limpas = [o for o in ops_raw if o.strip()]
+                
+                if len(op_limpas) < 2:
+                    st.warning("Preencha pelo menos duas opções.")
+                elif not tema or not perg:
+                    st.warning("Tema e Pergunta são obrigatórios.")
+                else:
+                    # Mapeia a letra para o texto da resposta
+                    mapa_resp = {"A": op1, "B": op2, "C": op3, "D": op4}
+                    resposta_texto = mapa_resp[resp_letra]
+                    
+                    # Se Admin cria, já aprova. Se Professor, fica pendente.
+                    st_init = "aprovada" if tipo_user == "admin" else "pendente"
+                    
+                    db.collection('questoes').add({
+                        "tema": tema,
+                        "faixa": faixa_alvo, # Importante para o filtro de exame
+                        "pergunta": perg,
+                        "opcoes": op_limpas,
+                        "resposta": resposta_texto, # Salva o texto da resposta
+                        "correta": resposta_texto,  # Redundância para compatibilidade
+                        "status": st_init,
+                        "criado_por": user['nome'],
+                        "data": firestore.SERVER_TIMESTAMP
+                    })
+                    
+                    if st_init == 'aprovada':
+                        st.success("Questão salva e disponível no banco!")
+                    else:
+                        st.info("Questão enviada para aprovação do administrador.")
+                    st.rerun()
 
-        if questoes_atuais:
-            st.markdown("#### 📋 Questões na Prova Atual")
-            for i, q in enumerate(questoes_atuais):
-                with st.expander(f"{i+1}. {q['pergunta']}"):
-                    st.write(q.get('opcoes'))
-                    st.info(f"Resposta: {q.get('resposta')} | Autor: {q.get('criado_por')}")
-                    if st.button("Remover da Prova", key=f"rem_{i}"):
-                        questoes_atuais.pop(i)
-                        doc_ref.update({"questoes": questoes_atuais, "tempo_limite": novo_tempo})
-                        st.rerun()
-
+    # --- ABA 3: APROVAR (SÓ ADMIN) ---
+    if tipo_user == "admin" and len(abas) > 2:
+        with abas[2]:
+            if not pendentes:
+                st.success("Nenhuma questão pendente de aprovação.")
+            else:
+                for q in pendentes:
+                    with st.container(border=True):
+                        st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                        st.caption(f"Por: {q.get('criado_por')} | Faixa: {q.get('faixa')}")
+                        st.write(f"Resp: {q.get('resposta')}")
+                        
+                        c1, c2 = st.columns(2)
+                        if c1.button("✅ Aprovar", key=f"ok_{q['id']}"):
+                            db.collection('questoes').document(q['id']).update({"status":"aprovada"})
+                            st.rerun()
+                        if c2.button("❌ Rejeitar", key=f"no_{q['id']}"):
+                            db.collection('questoes').document(q['id']).delete()
+                            st.rerun()
 
 # =========================================
 # GESTÃO DE EXAME
