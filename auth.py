@@ -1,121 +1,70 @@
+# auth.py
+import streamlit as st
 import bcrypt
 from database import get_db
-from utils import formatar_e_validar_cpf
 from firebase_admin import firestore
 
-def autenticar_local(usuario_email_ou_cpf, senha):
+def autenticar_local(login_input, senha_input):
     """
-    Autentica o usuário verificando email ou CPF no Firestore.
+    Autentica usuário por CPF ou Email + Senha (com hash bcrypt).
+    Retorna o dicionário do usuário ou None.
     """
     db = get_db()
-    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf)
-    
     users_ref = db.collection('usuarios')
-    usuario_doc = None
-
-    # 1. Busca por Email
-    # Nota: Buscamos 'local' para garantir, mas o ideal é buscar pelo email independente do provider
-    # para evitar duplicidade de login se o usuário mudou de método.
-    query_email = users_ref.where('email', '==', usuario_email_ou_cpf).stream()
-    for doc in query_email:
-        d = doc.to_dict()
-        if d.get('auth_provider') == 'local':
-            usuario_doc = doc
-            break
     
-    # 2. Busca por CPF (se não achou por email)
-    if not usuario_doc and cpf_formatado:
-        query_cpf = users_ref.where('cpf', '==', cpf_formatado).stream()
-        for doc in query_cpf:
-            d = doc.to_dict()
-            if d.get('auth_provider') == 'local':
-                usuario_doc = doc
-                break
-            
-    # 3. Busca por Nome (Fallback - opcional, mas útil)
-    if not usuario_doc:
-        query_nome = users_ref.where('nome', '==', usuario_email_ou_cpf.upper()).where('auth_provider', '==', 'local').stream()
-        for doc in query_nome:
-            usuario_doc = doc
-            break
-
-    if usuario_doc:
-        dados = usuario_doc.to_dict()
-        senha_hash = dados.get('senha')
+    # Tenta buscar por Email
+    query_email = list(users_ref.where('email', '==', login_input).stream())
+    
+    user_doc = None
+    
+    if query_email:
+        user_doc = query_email[0]
+    else:
+        # Se não achou por email, tenta por CPF
+        query_cpf = list(users_ref.where('cpf', '==', login_input).stream())
+        if query_cpf:
+            user_doc = query_cpf[0]
+    
+    if user_doc:
+        user_data = user_doc.to_dict()
         
-        if senha_hash and bcrypt.checkpw(senha.encode(), senha_hash.encode()):
-            # CORREÇÃO CRÍTICA AQUI:
-            # O app.py espera a chave "tipo", mas no banco salvamos como "tipo_usuario".
-            # Fazemos o mapeamento aqui para garantir que o login carregue o perfil certo.
-            tipo_perfil = dados.get('tipo_usuario')
+        # Se for login social (Google), não tem senha
+        if user_data.get("auth_provider") == "google":
+            return None
             
-            # Fallback de segurança: se estiver vazio, assume aluno
-            if not tipo_perfil:
-                tipo_perfil = 'aluno'
-
-            return {
-                "id": usuario_doc.id,
-                "nome": dados.get('nome'),
-                "tipo": tipo_perfil,  # <--- Esta é a chave que o app.py lê
-                "email": dados.get('email')
-            }
-   if not tipo_perfil:
-                tipo_perfil = 'aluno'
-
-            return {
-                "id": usuario_doc.id,
-                "nome": dados.get('nome'),
-                "tipo": tipo_perfil,
-                "email": dados.get('email'),
-                # ADICIONE A LINHA ABAIXO:
-                "precisa_trocar_senha": dados.get('precisa_trocar_senha', False) 
-            }     
+        stored_hash = user_data.get("senha")
+        if stored_hash:
+            # Verifica a senha usando bcrypt
+            # Nota: encode() transforma a string em bytes, necessário para o bcrypt
+            if bcrypt.checkpw(senha_input.encode('utf-8'), stored_hash.encode('utf-8')):
+                user_data['id'] = user_doc.id
+                return user_data
+                
     return None
 
-def buscar_usuario_por_email(email_ou_cpf):
-    """Busca usuário para o fluxo do Google Auth."""
+def buscar_usuario_por_email(email):
+    """Retorna dados do usuário se existir, ou None."""
     db = get_db()
     users_ref = db.collection('usuarios')
-    usuario_doc = None
+    results = list(users_ref.where('email', '==', email).stream())
     
-    query = users_ref.where('email', '==', email_ou_cpf).stream()
-    for doc in query:
-        usuario_doc = doc
-        break
-        
-    if usuario_doc:
-        dados = usuario_doc.to_dict()
-        
-        # Mesma correção para o Login Google
-        tipo_perfil = dados.get('tipo_usuario', 'aluno')
-        
-        return {
-            "id": usuario_doc.id,
-            "nome": dados.get('nome'),
-            "tipo": tipo_perfil,  # <--- Mapeamento correto
-            "perfil_completo": dados.get('perfil_completo', False),
-            "email": dados.get('email')
-        }
-        
+    if results:
+        data = results[0].to_dict()
+        data['id'] = results[0].id
+        return data
     return None
 
 def criar_usuario_parcial_google(email, nome):
-    """Cria o registro inicial vindo do Google."""
+    """Cria usuário vindo do Google (sem senha)."""
     db = get_db()
-    
-    novo_usuario = {
+    novo_user = {
         "email": email,
-        "nome": nome.upper(),
+        "nome": nome,
         "auth_provider": "google",
         "perfil_completo": False,
-        "tipo_usuario": "aluno", # Default até completar cadastro
-        "data_criacao": firestore.SERVER_TIMESTAMP
+        "data_criacao": firestore.SERVER_TIMESTAMP,
+        "tipo_usuario": "aluno" # Default, depois ele muda no cadastro
     }
-    
-    update_time, doc_ref = db.collection('usuarios').add(novo_usuario)
-    
-    return {
-        "id": doc_ref.id, 
-        "email": email, 
-        "nome": nome
-    }
+    _, doc_ref = db.collection('usuarios').add(novo_user)
+    novo_user['id'] = doc_ref.id
+    return novo_user
