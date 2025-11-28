@@ -50,7 +50,7 @@ def tela_login():
                 st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
                 
                 with st.form("login_form"):
-                    user_input = st.text_input("Nome de Usuário, Email ou CPF:")
+                    user_input = st.text_input("Digite seu Email ou CPF:")
                     pwd = st.text_input("Senha:", type="password")
                     submit_login = st.form_submit_button("Entrar", use_container_width=True, type="primary")
 
