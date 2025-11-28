@@ -9,13 +9,49 @@ from database import get_db
 # =========================================================
 st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
 
-# CSS e Estilos
-st.markdown("""
+# =========================================================
+# 2. CONFIGURAÇÃO VISUAL (CORES E CSS)
+# =========================================================
+
+# Definição das Cores (Verde BJJ)
+COR_FUNDO = "#0e2d26"
+COR_TEXTO = "#FFFFFF"
+COR_DESTAQUE = "#FFD770"
+COR_BOTAO = "#078B6C" # Verde Principal
+COR_HOVER = "#FFD770"
+
+# Injeção de CSS (Forçando os botões verdes)
+st.markdown(f"""
 <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .block-container {padding-top: 1rem;}
+    /* Ocultar elementos padrão do Streamlit */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    .block-container {{padding-top: 1rem;}}
+
+    /* Estilo Global dos Botões (Normais e de Formulário) */
+    div.stButton > button, div.stFormSubmitButton > button {{ 
+        background: linear-gradient(90deg, {COR_BOTAO} 0%, #056853 100%) !important; 
+        color: white !important; 
+        font-weight: bold !important;
+        border: none !important; 
+        padding: 0.6em 1.2em !important; 
+        border-radius: 10px !important; 
+        transition: 0.3s !important;
+    }}
+
+    /* Efeito Hover (Passar o mouse) */
+    div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ 
+        background: {COR_HOVER} !important; 
+        color: {COR_FUNDO} !important; 
+        transform: scale(1.02); 
+    }}
+
+    /* Títulos */
+    h1, h2, h3 {{ color: {COR_DESTAQUE}; text-align: center; font-weight: 700; }}
+    
+    /* Bordas arredondadas nos containers */
+    div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ border-radius: 10px; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -23,12 +59,10 @@ st.markdown("""
 try:
     from streamlit_option_menu import option_menu
     from views import login, geral, aluno, professor, admin
-    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO
-except ImportError:
-    COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO = "#0e2d26", "#FFFFFF", "#FFD770", "#078B6C"
+except ImportError: pass
 
 # =========================================
-# TELA DE TROCA DE SENHA OBRIGATÓRIA (VISUAL AJUSTADO)
+# TELA DE TROCA DE SENHA OBRIGATÓRIA
 # =========================================
 def tela_troca_senha_obrigatoria():
     # Colunas para centralizar o bloco no meio da tela
@@ -37,27 +71,25 @@ def tela_troca_senha_obrigatoria():
     with c2:
         # --- 1. LOGO CENTRALIZADA NO TOPO ---
         if os.path.exists("assets/logo.png"):
-            # Truque de colunas aninhadas para centralizar a imagem menor
             cl, cc, cr = st.columns([1, 1, 1]) 
             with cc:
                 st.image("assets/logo.png", use_container_width=True)
         
-        # Espaço visual
         st.write("") 
         
         # --- 2. CAIXA COM TÍTULO, AVISO E FORMULÁRIO ---
         with st.container(border=True):
             st.markdown("<h3 style='text-align:center;'>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
             
-            # O aviso fica logo abaixo do título e logo acima do formulário
+            # Aviso
             st.warning("Por segurança, redefina sua senha temporária para continuar.")
             
             with st.form("frm_troca"):
                 ns = st.text_input("Nova Senha:", type="password")
                 cs = st.text_input("Confirmar Nova Senha:", type="password")
                 
-                # Botão ocupando toda a largura
-                btn = st.form_submit_button("Atualizar Senha", type="primary", use_container_width=True)
+                # O botão agora será VERDE por causa do CSS acima
+                btn = st.form_submit_button("Atualizar Senha", use_container_width=True)
             
             if btn:
                 if ns and ns == cs:
@@ -70,7 +102,7 @@ def tela_troca_senha_obrigatoria():
                             hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
                             
                             db = get_db()
-                            # Atualiza senha e REMOVE a trava (precisa_trocar_senha = False)
+                            # Atualiza senha e REMOVE a trava
                             db.collection('usuarios').document(uid).update({
                                 "senha": hashed, 
                                 "precisa_trocar_senha": False
@@ -78,7 +110,7 @@ def tela_troca_senha_obrigatoria():
                             
                             st.success("Senha atualizada! Entrando no sistema...")
                             
-                            # Atualiza a sessão localmente para liberar o acesso instantâneo
+                            # Atualiza a sessão localmente
                             st.session_state.usuario['precisa_trocar_senha'] = False
                             st.rerun()
                         except Exception as e: 
@@ -153,11 +185,9 @@ if __name__ == "__main__":
     elif st.session_state.usuario:
         
         # ---> BLOQUEIO DE SEGURANÇA <---
-        # Se a flag for True, mostra SÓ a tela de troca
         if st.session_state.usuario.get("precisa_trocar_senha") is True:
             tela_troca_senha_obrigatoria()
         else:
-            # Se for False, libera o app principal
             app_principal()
             
     # 3. Se não está logado
