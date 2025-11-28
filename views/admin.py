@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
-import bcrypt  # <--- IMPORTANTE: Adicionado para criptografar a senha
+import bcrypt
 from datetime import datetime, time
 from database import get_db
 from firebase_admin import firestore
 
 # =========================================
-# GESTÃO DE USUÁRIOS (COM ALTERAÇÃO DE SENHA)
+# GESTÃO DE USUÁRIOS (EDITAR + EXCLUIR)
 # =========================================
 def gestao_usuarios(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>👥 Gestão de Usuários</h1>", unsafe_allow_html=True)
@@ -68,23 +68,22 @@ def gestao_usuarios(usuario_logado):
     
     st.markdown("---")
 
-    # 4. ÁREA DE EDIÇÃO COMPLETA
-    st.subheader("✏️ Editar Cadastro Completo")
+    # 4. SELEÇÃO PARA AÇÃO
+    st.subheader("🛠️ Ações de Cadastro")
     
     opcoes_usuarios = df.to_dict('records')
     usuario_selecionado = st.selectbox(
-        "Selecione o usuário para editar:", 
+        "Selecione o usuário para Editar ou Excluir:", 
         opcoes_usuarios, 
         format_func=lambda x: f"{x['nome']} ({x['email']})"
     )
     
     if usuario_selecionado:
-        with st.container(border=True):
-            st.markdown(f"#### Editando: **{usuario_selecionado['nome']}**")
-            
+        # --- ÁREA DE EDIÇÃO ---
+        with st.expander(f"✏️ Editar dados de {usuario_selecionado['nome']}", expanded=False):
             with st.form(key=f"edit_full_{usuario_selecionado['id']}"):
                 
-                # --- BLOCO 1: DADOS PESSOAIS E SISTEMA ---
+                # Bloco 1: Dados Pessoais
                 st.markdown("##### 👤 Dados Pessoais e Acesso")
                 c1, c2 = st.columns(2)
                 novo_nome = c1.text_input("Nome Completo:", value=usuario_selecionado['nome'])
@@ -103,14 +102,14 @@ def gestao_usuarios(usuario_logado):
                 
                 st.markdown("---")
                 
-                # --- BLOCO 2: SEGURANÇA (SENHA) ---
+                # Bloco 2: Segurança
                 st.markdown("##### 🔐 Segurança (Redefinição de Senha)")
                 st.caption("Deixe em branco para manter a senha atual.")
                 nova_senha_admin = st.text_input("Nova Senha:", type="password", help="Se preencher, a senha do usuário será alterada.")
                 
                 st.markdown("---")
                 
-                # --- BLOCO 3: ENDEREÇO ---
+                # Bloco 3: Endereço
                 st.markdown("##### 🏠 Endereço")
                 e1, e2 = st.columns([1, 3])
                 novo_cep = e1.text_input("CEP:", value=usuario_selecionado['cep'])
@@ -127,10 +126,8 @@ def gestao_usuarios(usuario_logado):
 
                 st.markdown("---")
                 
-                # Botão de Salvar
-                if st.form_submit_button("💾 SALVAR ALTERAÇÕES TOTAIS", type="primary", use_container_width=True):
+                if st.form_submit_button("💾 SALVAR ALTERAÇÕES", type="primary", use_container_width=True):
                     try:
-                        # 1. Prepara dados comuns
                         dados_update = {
                             "nome": novo_nome.upper(),
                             "email": novo_email.lower().strip(),
@@ -146,21 +143,38 @@ def gestao_usuarios(usuario_logado):
                             "uf": novo_uf.upper()
                         }
                         
-                        # 2. Se o admin digitou senha, criptografa e adiciona ao update
                         if nova_senha_admin:
                             hashed = bcrypt.hashpw(nova_senha_admin.encode(), bcrypt.gensalt()).decode()
                             dados_update["senha"] = hashed
-                            # Força o usuário a trocar no próximo login (Segurança)
                             dados_update["precisa_trocar_senha"] = True
-                            st.info("A senha foi alterada. O usuário deverá trocá-la no próximo login.")
+                            st.info("Senha alterada com sucesso.")
 
-                        # 3. Atualiza no Banco
                         db.collection('usuarios').document(usuario_selecionado['id']).update(dados_update)
-                        
-                        st.success(f"Dados de {novo_nome} atualizados com sucesso!")
+                        st.success(f"Cadastro de {novo_nome} atualizado!")
                         st.rerun()
                     except Exception as e:
                         st.error(f"Erro ao atualizar: {e}")
+
+        # --- ÁREA DE EXCLUSÃO (ZONA DE PERIGO) ---
+        st.write("")
+        with st.container(border=True):
+            st.markdown("#### 🗑️ Zona de Perigo")
+            c_aviso, c_botao = st.columns([3, 1])
+            
+            c_aviso.warning(f"Atenção: Deseja excluir permanentemente o usuário **{usuario_selecionado['nome']}**? Essa ação não pode ser desfeita.")
+            
+            if c_botao.button("EXCLUIR USUÁRIO", key=f"del_user_{usuario_selecionado['id']}", type="primary"):
+                try:
+                    # Exclui o documento do usuário
+                    db.collection('usuarios').document(usuario_selecionado['id']).delete()
+                    
+                    # Opcional: Aqui você poderia excluir documentos vinculados (alunos/professores) se quisesse limpar tudo
+                    # Mas apenas deletar o usuário já impede o login
+                    
+                    st.toast(f"Usuário {usuario_selecionado['nome']} excluído com sucesso!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao excluir: {e}")
 
 # =========================================
 # GESTÃO DE QUESTÕES
