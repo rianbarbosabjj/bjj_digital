@@ -1,33 +1,68 @@
+import os
+import json
 import re
 import requests
 import streamlit as st
 import smtplib
 import secrets
 import string
+import unicodedata
+import qrcode
+from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from fpdf import FPDF
+from database import get_db  # Necessário para contar resultados no gerar_codigo
 
 # =========================================
-# FUNÇÕES DE VALIDAÇÃO E FORMATAÇÃO (CPF/CEP)
+# FUNÇÕES DE QUESTÕES (GERENCIAMENTO)
 # =========================================
+def carregar_questoes(tema):
+    path = f"questions/{tema}.json"
+    if os.path.exists(path):
+        try:
+            with open(path, "r", encoding="utf-8") as f: return json.load(f)
+        except: return []
+    return []
+
+def salvar_questoes(tema, questoes):
+    os.makedirs("questions", exist_ok=True)
+    with open(f"questions/{tema}.json", "w", encoding="utf-8") as f:
+        json.dump(questoes, f, indent=4, ensure_ascii=False)
+
+def carregar_todas_questoes():
+    todas = []
+    if not os.path.exists("questions"): return []
+    for f in os.listdir("questions"):
+        if f.endswith(".json"):
+            try:
+                tema = f.replace(".json", "")
+                q_list = carregar_questoes(tema)
+                for q in q_list:
+                    q['tema'] = tema
+                    todas.append(q)
+            except: continue
+    return todas
+
+# =========================================
+# FUNÇÕES GERAIS E FORMATAÇÃO
+# =========================================
+
+def normalizar_nome(nome):
+    if not nome: return "sem_nome"
+    return "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split()).lower()
 
 def formatar_e_validar_cpf(cpf):
     """
     Remove caracteres não numéricos, valida o CPF e retorna formatado (XXX.XXX.XXX-XX).
-    Retorna None se for inválido.
+    Mantida a validação robusta para garantir integridade do login.
     """
     if not cpf: return None
-    
-    # Remove tudo que não é dígito
     cpf_limpo = re.sub(r'\D', '', str(cpf))
     
-    # Verifica tamanho
     if len(cpf_limpo) != 11: return None
-    
-    # Verifica sequências iguais (ex: 111.111.111-11)
     if cpf_limpo == cpf_limpo[0] * 11: return None
     
-    # Validação dos dígitos verificadores
     def calcular_digito(cpf_parcial):
         soma = 0
         peso = len(cpf_parcial) + 1
@@ -45,55 +80,38 @@ def formatar_e_validar_cpf(cpf):
     return None
 
 def formatar_cep(cep):
-    """Remove caracteres não numéricos do CEP."""
-    if not cep: return ""
-    return re.sub(r'\D', '', str(cep))
+    if not cep: return None
+    cep_limpo = ''.join(filter(str.isdigit, cep))
+    return cep_limpo if len(cep_limpo) == 8 else None
 
 def buscar_cep(cep):
-    """
-    Consulta a API ViaCEP e retorna um dicionário com o endereço.
-    """
-    cep_limpo = formatar_cep(cep)
-    if len(cep_limpo) != 8: return None
-    
+    cep_fmt = formatar_cep(cep)
+    if not cep_fmt: return None
     try:
-        url = f"https://viacep.com.br/ws/{cep_limpo}/json/"
-        resp = requests.get(url, timeout=5)
+        resp = requests.get(f"https://viacep.com.br/ws/{cep_fmt}/json/", timeout=3)
         if resp.status_code == 200:
-            dados = resp.json()
-            if "erro" not in dados:
+            data = resp.json()
+            if "erro" not in data:
                 return {
-                    "logradouro": dados.get("logradouro", "").upper(),
-                    "bairro": dados.get("bairro", "").upper(),
-                    "cidade": dados.get("localidade", "").upper(),
-                    "uf": dados.get("uf", "").upper()
+                    "logradouro": data.get("logradouro", "").upper(),
+                    "bairro": data.get("bairro", "").upper(),
+                    "cidade": data.get("localidade", "").upper(),
+                    "uf": data.get("uf", "").upper()
                 }
-    except Exception as e:
-        print(f"Erro ao buscar CEP: {e}")
+    except: pass
     return None
 
 # =========================================
-# FUNÇÕES DE SEGURANÇA E E-MAIL
+# FUNÇÕES DE SEGURANÇA E E-MAIL (RECUPERAÇÃO)
 # =========================================
 
-def gerar_codigo_verificacao(tamanho=6):
-    """
-    Gera um código numérico aleatório (OTP).
-    Adicionado para compatibilidade com partes antigas do código.
-    """
-    return ''.join(secrets.choice(string.digits) for i in range(tamanho))
-
 def gerar_senha_temporaria(tamanho=8):
-    """Gera uma senha aleatória segura com letras e números."""
+    """Gera senha alfanumérica segura para recuperação."""
     caracteres = string.ascii_letters + string.digits
-    # Garante mistura de letras e números
-    senha = ''.join(secrets.choice(caracteres) for i in range(tamanho))
-    return senha
+    return ''.join(secrets.choice(caracteres) for i in range(tamanho))
 
 def enviar_email_recuperacao(email_destino, nova_senha):
-    """
-    Envia a nova senha por e-mail usando SMTP configurado no secrets.toml.
-    """
+    """Envia a nova senha por e-mail usando SMTP (Zoho/Gmail)."""
     try:
         sender_email = st.secrets.get("EMAIL_SENDER")
         sender_password = st.secrets.get("EMAIL_PASSWORD")
@@ -101,11 +119,8 @@ def enviar_email_recuperacao(email_destino, nova_senha):
         smtp_port = st.secrets.get("EMAIL_PORT")
         
         if not (sender_email and sender_password):
-            print("Configurações de e-mail ausentes no secrets.toml")
             return False
-            
-    except Exception as e:
-        print(f"Secrets Error: {e}")
+    except Exception:
         return False
 
     msg = MIMEMultipart()
@@ -119,14 +134,12 @@ def enviar_email_recuperacao(email_destino, nova_senha):
         <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
             <h2 style="color: #0044cc;">BJJ Digital - Recuperação de Senha</h2>
             <p>Olá,</p>
-            <p>Recebemos uma solicitação para redefinir sua senha de acesso.</p>
+            <p>Recebemos uma solicitação para redefinir sua senha.</p>
             <p>Sua nova senha temporária é:</p>
             <div style="background-color: #f4f4f4; padding: 15px; font-size: 20px; font-weight: bold; text-align: center; border-radius: 5px; margin: 20px 0;">
                 {nova_senha}
             </div>
-            <p>Acesse a plataforma e altere sua senha o quanto antes.</p>
-            <br>
-            <p style="font-size: 12px; color: #777;">Atenciosamente,<br>Equipe BJJ Digital</p>
+            <p>Acesse a plataforma e altere sua senha.</p>
         </div>
     </body>
     </html>
@@ -134,10 +147,7 @@ def enviar_email_recuperacao(email_destino, nova_senha):
     msg.attach(MIMEText(corpo, 'html'))
 
     try:
-        # Lógica para converter a porta se vier como string do secrets
         porta = int(smtp_port) if smtp_port else 587
-        
-        # Configuração flexível para SSL (465) ou TLS (587)
         if porta == 465:
             server = smtplib.SMTP_SSL(smtp_server, porta)
         else:
@@ -150,5 +160,176 @@ def enviar_email_recuperacao(email_destino, nova_senha):
         server.quit()
         return True
     except Exception as e:
-        print(f"Erro ao enviar email SMTP: {e}")
+        print(f"Erro SMTP: {e}")
         return False
+
+# =========================================
+# GERAÇÃO DE CÓDIGOS E QR CODE
+# =========================================
+
+def gerar_codigo_verificacao():
+    """Gera código sequencial BJJDIGITAL-ANO-SEQ."""
+    db = get_db()
+    total = 0
+    try:
+        # Tenta contar documentos para sequencial
+        docs = db.collection('resultados').stream()
+        total = len(list(docs))
+    except Exception as e:
+        print(f"Erro ao contar resultados: {e}")
+        import random
+        total = random.randint(1000, 9999)
+
+    sequencial = total + 1
+    ano = datetime.now().year
+    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" 
+    return codigo
+
+def gerar_qrcode(codigo):
+    """Gera QR Code com link de verificação oficial do BJJ Digital."""
+    os.makedirs("temp_qr", exist_ok=True)
+    caminho_qr = f"temp_qr/{codigo}.png"
+    
+    if os.path.exists(caminho_qr):
+        return caminho_qr
+
+    base_url = "https://bjjdigital.com.br/verificar.html"
+    link_verificacao = f"{base_url}?codigo={codigo}"
+
+    qr = qrcode.QRCode(
+        version=1,
+        box_size=10,
+        border=4,
+        error_correction=qrcode.constants.ERROR_CORRECT_H
+    )
+    qr.add_data(link_verificacao)
+    qr.make(fit=True)
+
+    img = qr.make_image(fill_color="black", back_color="white")
+    img.save(caminho_qr)
+
+    return caminho_qr
+
+# =========================================
+# GERADOR DE CERTIFICADO (PDF)
+# =========================================
+@st.cache_data(show_spinner=False)
+def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
+    """Gera certificado PDF oficial com layout dourado."""
+    pdf = FPDF("L", "mm", "A4")
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+
+    dourado, preto, branco = (218, 165, 32), (40, 40, 40), (255, 255, 255)
+    percentual = int((pontuacao / total) * 100) if total > 0 else 0
+    data_hora = datetime.now().strftime("%d/%m/%Y")
+
+    # Fundo e Bordas
+    pdf.set_fill_color(*branco)
+    pdf.rect(0, 0, 297, 210, "F")
+    pdf.set_draw_color(*dourado)
+    pdf.set_line_width(2)
+    pdf.rect(10, 10, 277, 190)
+    pdf.set_line_width(0.5)
+    pdf.rect(13, 13, 271, 184)
+
+    if os.path.exists("assets/logo.png"):
+        pdf.image("assets/logo.png", x=130, y=20, w=35)
+
+    # Títulos
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "B", 36)
+    pdf.set_xy(0, 60)
+    pdf.cell(297, 15, "CERTIFICADO DE CONCLUSÃO", align="C")
+    
+    pdf.set_font("Helvetica", "", 14)
+    pdf.set_text_color(*preto)
+    pdf.set_xy(0, 80)
+    pdf.cell(297, 10, "Certificamos que", align="C")
+
+    # Nome do Aluno
+    pdf.set_font("Helvetica", "B", 28)
+    pdf.set_text_color(*dourado)
+    pdf.set_xy(0, 95)
+    try:
+        nome_display = usuario.upper().encode('latin-1', 'replace').decode('latin-1')
+    except:
+        nome_display = usuario.upper()
+    pdf.cell(297, 15, nome_display, align="C")
+
+    # Cores das faixas
+    cores_faixa = {
+        "Cinza": (169, 169, 169), "Amarela": (255, 215, 0),
+        "Laranja": (255, 140, 0), "Verde": (0, 128, 0),
+        "Azul": (30, 144, 255), "Roxa": (128, 0, 128),
+        "Marrom": (139, 69, 19), "Preta": (0, 0, 0),
+    }
+    r, g, b = cores_faixa.get(faixa, preto)
+
+    # Texto de conclusão
+    pdf.set_font("Helvetica", "", 16)
+    pdf.set_text_color(*preto)
+    pdf.set_xy(0, 115)
+    pdf.cell(297, 10, f"concluiu com êxito o Exame Teórico para a faixa", align="C")
+    
+    pdf.set_font("Helvetica", "B", 22)
+    pdf.set_text_color(r, g, b)
+    pdf.set_xy(0, 125)
+    try: f_disp = faixa.upper().encode('latin-1', 'replace').decode('latin-1')
+    except: f_disp = faixa.upper()
+    pdf.cell(297, 10, f_disp, align="C")
+
+    # Dados finais
+    pdf.set_font("Helvetica", "", 12)
+    pdf.set_text_color(*preto)
+    pdf.set_xy(0, 135)
+    pdf.cell(297, 10, f"Aproveitamento: {percentual}% | Data: {data_hora}", align="C")
+
+    pdf.set_font("Courier", "", 10)
+    pdf.set_xy(20, 175)
+    pdf.cell(100, 5, f"Código: {codigo}", align="L")
+    
+    # QR Code e Selo
+    try:
+        caminho_qr = gerar_qrcode(codigo)
+        pdf.image(caminho_qr, x=250, y=155, w=25)
+    except: pass
+
+    if os.path.exists("assets/selo_dourado.png"):
+        pdf.image("assets/selo_dourado.png", x=20, y=150, w=30)
+
+    # Assinatura do Professor
+    if professor:
+        try: prof_nome = professor.encode('latin-1', 'replace').decode('latin-1')
+        except: prof_nome = professor
+        
+        fonte_ass = "assets/fonts/Allura-Regular.ttf"
+        if os.path.exists(fonte_ass):
+            try:
+                pdf.add_font("Assinatura", "", fonte_ass, uni=True)
+                pdf.set_font("Assinatura", "", 30)
+            except: pdf.set_font("Helvetica", "I", 18)
+        else: pdf.set_font("Helvetica", "I", 18)
+
+        pdf.set_text_color(*preto)
+        pdf.set_y(155)
+        pdf.cell(0, 10, prof_nome, align="C")
+        
+        pdf.set_draw_color(*dourado)
+        pdf.line(100, 168, 197, 168)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_y(170)
+        pdf.cell(0, 5, "Professor Responsável", align="C")
+
+    pdf.set_draw_color(*dourado)
+    pdf.line(30, 190, 268, 190)
+    pdf.set_text_color(*dourado)
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_y(192)
+    pdf.cell(0, 5, "Plataforma BJJ Digital - bjjdigital.com.br", align="C")
+
+    # Retorna Bytes para download
+    pdf_bytes = pdf.output(dest='S').encode('latin-1')
+    nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
+    
+    return pdf_bytes, nome_arquivo
