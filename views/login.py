@@ -207,7 +207,7 @@ def tela_cadastro_interno():
     
     # --- LÓGICA DE ALUNO (ATUALIZADA) ---
     if tipo == "Aluno":
-        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
