@@ -202,7 +202,7 @@ def gestao_questoes():
                             st.markdown("#### ✏️ Editando")
                             e_tema = st.text_input("Tema:", value=q.get('tema'))
                             e_perg = st.text_area("Pergunta:", value=q.get('pergunta'))
-                            e_faixa = st.selectbox("Faixa:", ["Geral","Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"], index=["Geral","Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"].index(q.get('faixa', 'Geral')))
+                            e_faixa = st.selectbox("Faixa:", ["Geral","Branca","Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"], index=["Geral","Branca","Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"].index(q.get('faixa', 'Geral')))
                             
                             ops = q.get('opcoes', ["","","",""])
                             while len(ops) < 4: ops.append("")
@@ -258,7 +258,7 @@ def gestao_questoes():
         with st.form("new_q"):
             c1, c2 = st.columns(2)
             tema = c1.text_input("Tema:")
-            faixa = c2.selectbox("Faixa Alvo:", ["Geral", "Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+            faixa = c2.selectbox("Faixa Alvo:", ["Geral","Branca","Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"])
             perg = st.text_area("Pergunta:")
             st.write("Alternativas:")
             c_op1, c_op2 = st.columns(2)
@@ -336,7 +336,7 @@ def gestao_exame_de_faixa():
         st.info("Defina o tempo, nota mínima e quantidade de questões para cada faixa.")
         
         faixa_config = st.selectbox("Selecione a Faixa para configurar:", 
-            ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+            ["Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"]
         )
         
         # Busca config existente
@@ -417,7 +417,7 @@ def gestao_exame_de_faixa():
         cols[0].markdown("**Aluno**"); cols[1].markdown("**Equipe**"); cols[2].markdown("**Exame**"); cols[3].markdown("**Status**"); cols[4].markdown("**Ação**")
         st.markdown("---")
 
-        faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+        faixas = ["Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"]
 
         for aluno in lista_alunos:
             c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
