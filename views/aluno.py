@@ -103,7 +103,7 @@ def exame_de_faixa(usuario):
             # Texto Personalizado + Regras Técnicas
             st.markdown(f"""
             **ATENÇÃO:**
-            * Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
+            * Após clicar em **✅ Li e Concordo. INICIAR EXAME**, não será possível pausar ou interromper o cronômetro.
             * Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
             * Não é permitido consulta a materiais externos.
             * Esteja em um lugar confortável e silencioso para ajudar na sua concentração.
