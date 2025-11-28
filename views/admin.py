@@ -231,7 +231,7 @@ def gestao_questoes():
             tema = st.text_input("Tema:")
             perg = st.text_area("Pergunta:")
             ops = [st.text_input(f"Opção {x}") for x in "ABCD"]
-            resp = st.selectbox("Correta:", "ABCD")
+            resp = st.selectbox("Correta:", "A", "B", "C", "D")
             if st.form_submit_button("Salvar"):
                 op_limpas = [o for o in ops if o.strip()]
                 if len(op_limpas) >= 2:
