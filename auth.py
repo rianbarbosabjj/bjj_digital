@@ -42,7 +42,16 @@ def autenticar_local(usuario_email_ou_cpf, senha):
                 "email": dados.get('email'),
                 "precisa_trocar_senha": dados.get('precisa_trocar_senha', False)
             }
-        
+            return {
+                "id": usuario_doc.id,
+                "nome": dados.get('nome'),
+                "tipo": tipo_perfil,
+                "email": dados.get('email'),
+                # ADICIONE A LINHA ABAIXO:
+                "precisa_trocar_senha": dados.get('precisa_trocar_senha', False) 
+            }      
+   
+    
     return None
 
 def buscar_usuario_por_email(email_ou_cpf):
