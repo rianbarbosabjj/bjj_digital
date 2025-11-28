@@ -6,13 +6,13 @@ from database import get_db
 from firebase_admin import firestore
 
 # =========================================
-# GESTÃO DE USUÁRIOS (EDITAR + EXCLUIR)
+# 1. GESTÃO DE USUÁRIOS (COMPLETA)
 # =========================================
 def gestao_usuarios(usuario_logado):
     st.markdown("<h1 style='color:#FFD700;'>👥 Gestão de Usuários</h1>", unsafe_allow_html=True)
     db = get_db()
     
-    # 1. Carrega usuários
+    # Carrega usuários
     users_ref = db.collection('usuarios').stream()
     lista_users = []
     
@@ -25,7 +25,6 @@ def gestao_usuarios(usuario_logado):
             "cpf": d.get('cpf', '-'),
             "tipo_usuario": d.get('tipo_usuario', 'aluno'),
             "faixa_atual": d.get('faixa_atual', 'Branca'),
-            "auth_provider": d.get('auth_provider', 'local'),
             # Endereço
             "cep": d.get('cep', ''),
             "logradouro": d.get('logradouro', ''),
@@ -41,7 +40,7 @@ def gestao_usuarios(usuario_logado):
         st.warning("Nenhum usuário encontrado.")
         return
 
-    # 2. Filtros
+    # Filtros
     filtro = st.text_input("🔍 Buscar por Nome, Email ou CPF:")
     df = pd.DataFrame(lista_users)
     
@@ -53,78 +52,54 @@ def gestao_usuarios(usuario_logado):
             df['cpf'].str.contains(f)
         ]
 
-    # 3. Tabela Resumo
+    # Tabela
     st.dataframe(
         df[['nome', 'email', 'tipo_usuario', 'faixa_atual']], 
         use_container_width=True,
-        hide_index=True,
-        column_config={
-            "nome": "Nome",
-            "email": "E-mail",
-            "tipo_usuario": "Perfil",
-            "faixa_atual": "Faixa"
-        }
+        hide_index=True
     )
     
     st.markdown("---")
 
-    # 4. SELEÇÃO PARA AÇÃO
-    st.subheader("🛠️ Ações de Cadastro")
+    # Área de Edição
+    st.subheader("🛠️ Editar ou Excluir Usuário")
     
     opcoes_usuarios = df.to_dict('records')
     usuario_selecionado = st.selectbox(
-        "Selecione o usuário para Editar ou Excluir:", 
+        "Selecione o usuário:", 
         opcoes_usuarios, 
         format_func=lambda x: f"{x['nome']} ({x['email']})"
     )
     
     if usuario_selecionado:
-        # --- ÁREA DE EDIÇÃO ---
         with st.expander(f"✏️ Editar dados de {usuario_selecionado['nome']}", expanded=False):
             with st.form(key=f"edit_full_{usuario_selecionado['id']}"):
                 
-                # Bloco 1: Dados Pessoais
-                st.markdown("##### 👤 Dados Pessoais e Acesso")
+                st.markdown("##### 👤 Dados Pessoais")
                 c1, c2 = st.columns(2)
-                novo_nome = c1.text_input("Nome Completo:", value=usuario_selecionado['nome'])
+                novo_nome = c1.text_input("Nome:", value=usuario_selecionado['nome'])
                 novo_email = c2.text_input("E-mail:", value=usuario_selecionado['email'])
                 
                 c3, c4 = st.columns(2)
                 novo_cpf = c3.text_input("CPF:", value=usuario_selecionado['cpf'])
                 
-                tipos_possiveis = ["aluno", "professor", "admin"]
-                idx_tipo = tipos_possiveis.index(usuario_selecionado['tipo_usuario']) if usuario_selecionado['tipo_usuario'] in tipos_possiveis else 0
-                novo_tipo = c4.selectbox("Perfil de Acesso:", tipos_possiveis, index=idx_tipo)
+                tipos = ["aluno", "professor", "admin"]
+                idx_t = tipos.index(usuario_selecionado['tipo_usuario']) if usuario_selecionado['tipo_usuario'] in tipos else 0
+                novo_tipo = c4.selectbox("Perfil:", tipos, index=idx_t)
 
-                faixas_possiveis = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
-                idx_faixa = faixas_possiveis.index(usuario_selecionado['faixa_atual']) if usuario_selecionado['faixa_atual'] in faixas_possiveis else 0
-                novo_faixa = st.selectbox("Faixa Atual:", faixas_possiveis, index=idx_faixa)
+                faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+                idx_f = faixas.index(usuario_selecionado['faixa_atual']) if usuario_selecionado['faixa_atual'] in faixas else 0
+                novo_faixa = st.selectbox("Faixa Atual:", faixas, index=idx_f)
                 
                 st.markdown("---")
-                
-                # Bloco 2: Segurança
-                st.markdown("##### 🔐 Segurança (Redefinição de Senha)")
-                st.caption("Deixe em branco para manter a senha atual.")
-                nova_senha_admin = st.text_input("Nova Senha:", type="password", help="Se preencher, a senha do usuário será alterada.")
+                st.markdown("##### 🔐 Alterar Senha (Opcional)")
+                nova_senha_admin = st.text_input("Nova Senha:", type="password", help="Preencha apenas se quiser alterar.")
                 
                 st.markdown("---")
-                
-                # Bloco 3: Endereço
                 st.markdown("##### 🏠 Endereço")
                 e1, e2 = st.columns([1, 3])
                 novo_cep = e1.text_input("CEP:", value=usuario_selecionado['cep'])
                 novo_logr = e2.text_input("Logradouro:", value=usuario_selecionado['logradouro'])
-                
-                e3, e4, e5 = st.columns([1, 2, 1])
-                novo_num = e3.text_input("Número:", value=usuario_selecionado['numero'])
-                novo_comp = e4.text_input("Complemento:", value=usuario_selecionado['complemento'])
-                novo_bairro = e5.text_input("Bairro:", value=usuario_selecionado['bairro'])
-                
-                e6, e7 = st.columns(2)
-                novo_cid = e6.text_input("Cidade:", value=usuario_selecionado['cidade'])
-                novo_uf = e7.text_input("UF:", value=usuario_selecionado['uf'])
-
-                st.markdown("---")
                 
                 if st.form_submit_button("💾 SALVAR ALTERAÇÕES", type="primary", use_container_width=True):
                     try:
@@ -135,45 +110,33 @@ def gestao_usuarios(usuario_logado):
                             "tipo_usuario": novo_tipo,
                             "faixa_atual": novo_faixa,
                             "cep": novo_cep,
-                            "logradouro": novo_logr.upper(),
-                            "numero": novo_num,
-                            "complemento": novo_comp.upper(),
-                            "bairro": novo_bairro.upper(),
-                            "cidade": novo_cid.upper(),
-                            "uf": novo_uf.upper()
+                            "logradouro": novo_logr.upper()
                         }
                         
                         if nova_senha_admin:
                             hashed = bcrypt.hashpw(nova_senha_admin.encode(), bcrypt.gensalt()).decode()
                             dados_update["senha"] = hashed
                             dados_update["precisa_trocar_senha"] = True
-                            st.info("Senha alterada com sucesso.")
+                            st.info("Senha alterada! Usuário deverá trocar no próximo login.")
 
                         db.collection('usuarios').document(usuario_selecionado['id']).update(dados_update)
-                        st.success(f"Cadastro de {novo_nome} atualizado!")
+                        st.success("Atualizado com sucesso!")
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Erro ao atualizar: {e}")
+                        st.error(f"Erro: {e}")
 
-        # --- ÁREA DE EXCLUSÃO (ZONA DE PERIGO) ---
+        # Zona de Perigo (Exclusão)
         st.write("")
         with st.container(border=True):
-            st.markdown("#### 🗑️ Zona de Perigo")
             c_aviso, c_botao = st.columns([3, 1])
-            
-            c_aviso.warning(f"Atenção: Deseja excluir permanentemente o usuário **{usuario_selecionado['nome']}**? Essa ação não pode ser desfeita.")
-            
-            if c_botao.button("EXCLUIR USUÁRIO", key=f"del_user_{usuario_selecionado['id']}", type="primary"):
-                try:
-                    # Exclui o documento do usuário
-                    db.collection('usuarios').document(usuario_selecionado['id']).delete()
-                    st.toast(f"Usuário {usuario_selecionado['nome']} excluído com sucesso!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro ao excluir: {e}")
+            c_aviso.warning(f"Deseja excluir **{usuario_selecionado['nome']}** permanentemente?")
+            if c_botao.button("🗑️ EXCLUIR", key=f"del_u_{usuario_selecionado['id']}", type="primary"):
+                db.collection('usuarios').document(usuario_selecionado['id']).delete()
+                st.toast("Usuário excluído.")
+                st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (FUNCIONALIDADE RESTAURADA)
+# 2. GESTÃO DE QUESTÕES (BANCO COMPLETO)
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -181,16 +144,14 @@ def gestao_questoes():
     user = st.session_state.usuario
     tipo_user = str(user.get("tipo", "")).lower()
     
-    # Validação de Segurança
     if tipo_user not in ["admin", "professor"]:
         st.error("Acesso negado.")
         return
         
     db = get_db()
     
-    # Busca todas as questões
+    # Busca questões
     docs_q = list(db.collection('questoes').stream())
-    
     aprovadas = []
     pendentes = []
     temas_set = set()
@@ -208,38 +169,31 @@ def gestao_questoes():
 
     temas_existentes = sorted(list(temas_set))
     
-    # Configuração das Abas
-    titulos_abas = ["📚 Banco de Questões", "➕ Nova Questão"]
+    # Abas
+    titulos = ["📚 Listar Questões", "➕ Nova Questão"]
     if tipo_user == "admin":
-        titulos_abas.append(f"✅ Aprovar ({len(pendentes)})")
+        titulos.append(f"✅ Aprovar ({len(pendentes)})")
     
-    abas = st.tabs(titulos_abas)
+    abas = st.tabs(titulos)
     
     # --- ABA 1: LISTAR ---
     with abas[0]:
         ft = st.selectbox("Filtrar por Tema:", ["Todos"] + temas_existentes)
-        
-        # Filtragem
         qx = [q for q in aprovadas if q.get('tema') == ft] if ft != "Todos" else aprovadas
         
         if not qx:
-            st.info("Nenhuma questão encontrada com os filtros atuais.")
+            st.info("Nenhuma questão encontrada.")
         else:
             st.write(f"Total: {len(qx)} questões")
             for q in qx:
                 with st.container(border=True):
-                    col_txt, col_btn = st.columns([6, 1])
-                    col_txt.markdown(f"**[{q.get('tema')}]** {q.get('pergunta', 'Sem texto')}")
-                    
-                    autor = q.get('criado_por', 'Desconhecido').title()
-                    st.caption(f"✍️ Criado por: {autor} | Faixa Alvo: {q.get('faixa', 'Geral')}")
-                    
-                    with st.expander("Ver Detalhes e Opções"):
-                        st.write(f"**Opções:** {q.get('opcoes')}")
-                        st.success(f"✅ Resposta Correta: {q.get('resposta')}")
-                        
+                    st.markdown(f"**[{q.get('tema')}]** {q.get('pergunta')}")
+                    st.caption(f"Faixa: {q.get('faixa', 'Geral')} | Autor: {q.get('criado_por')}")
+                    with st.expander("Ver Detalhes"):
+                        st.write(f"Opções: {q.get('opcoes')}")
+                        st.success(f"Resposta: {q.get('resposta')}")
                         if tipo_user == "admin":
-                            if st.button("🗑️ Excluir Questão", key=f"del_{q['id']}"):
+                            if st.button("Excluir", key=f"del_q_{q['id']}"):
                                 db.collection('questoes').document(q['id']).delete()
                                 st.rerun()
 
@@ -248,89 +202,62 @@ def gestao_questoes():
         st.subheader("Adicionar Nova Questão")
         with st.form("new_q"):
             c1, c2 = st.columns(2)
-            tema = c1.text_input("Tema (ex: História, Regras):")
-            faixa_alvo = c2.selectbox("Faixa Alvo:", ["Geral", "Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
-            
-            perg = st.text_area("Enunciado da Pergunta:")
+            tema = c1.text_input("Tema:")
+            faixa = c2.selectbox("Faixa Alvo:", ["Geral", "Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+            perg = st.text_area("Pergunta:")
             
             st.write("Alternativas:")
             c_op1, c_op2 = st.columns(2)
-            op1 = c_op1.text_input("Opção A")
-            op2 = c_op2.text_input("Opção B")
+            op1 = c_op1.text_input("A)")
+            op2 = c_op2.text_input("B)")
+            op3 = c_op3.text_input("C)")
+            op4 = c_op4.text_input("D)")
             
-            c_op3, c_op4 = st.columns(2)
-            op3 = c_op3.text_input("Opção C")
-            op4 = c_op4.text_input("Opção D")
+            resp_letra = st.selectbox("Correta:", ["A", "B", "C", "D"])
             
-            resp_letra = st.selectbox("Qual é a alternativa CORRETA?", ["A", "B", "C", "D"])
-            
-            if st.form_submit_button("💾 Salvar Questão"):
-                # Coleta as opções preenchidas
-                ops_raw = [op1, op2, op3, op4]
-                op_limpas = [o for o in ops_raw if o.strip()]
-                
-                if len(op_limpas) < 2:
-                    st.warning("Preencha pelo menos duas opções.")
-                elif not tema or not perg:
-                    st.warning("Tema e Pergunta são obrigatórios.")
+            if st.form_submit_button("💾 Salvar"):
+                ops = [op1, op2, op3, op4]
+                limpas = [o for o in ops if o.strip()]
+                if len(limpas) < 2 or not tema or not perg:
+                    st.warning("Preencha corretamente.")
                 else:
-                    # Mapeia a letra para o texto da resposta
-                    mapa_resp = {"A": op1, "B": op2, "C": op3, "D": op4}
-                    resposta_texto = mapa_resp[resp_letra]
-                    
-                    # Se Admin cria, já aprova. Se Professor, fica pendente.
+                    mapa = {"A": op1, "B": op2, "C": op3, "D": op4}
                     st_init = "aprovada" if tipo_user == "admin" else "pendente"
                     
                     db.collection('questoes').add({
-                        "tema": tema,
-                        "faixa": faixa_alvo, # Importante para o filtro de exame
-                        "pergunta": perg,
-                        "opcoes": op_limpas,
-                        "resposta": resposta_texto, # Salva o texto da resposta
-                        "correta": resposta_texto,  # Redundância para compatibilidade
-                        "status": st_init,
-                        "criado_por": user['nome'],
-                        "data": firestore.SERVER_TIMESTAMP
+                        "tema": tema, "faixa": faixa, "pergunta": perg,
+                        "opcoes": limpas, "resposta": mapa[resp_letra],
+                        "correta": mapa[resp_letra], "status": st_init,
+                        "criado_por": user['nome'], "data": firestore.SERVER_TIMESTAMP
                     })
-                    
-                    if st_init == 'aprovada':
-                        st.success("Questão salva e disponível no banco!")
-                    else:
-                        st.info("Questão enviada para aprovação do administrador.")
+                    st.success("Questão salva!")
                     st.rerun()
 
-    # --- ABA 3: APROVAR (SÓ ADMIN) ---
+    # --- ABA 3: APROVAR ---
     if tipo_user == "admin" and len(abas) > 2:
         with abas[2]:
-            if not pendentes:
-                st.success("Nenhuma questão pendente de aprovação.")
-            else:
-                for q in pendentes:
-                    with st.container(border=True):
-                        st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
-                        st.caption(f"Por: {q.get('criado_por')} | Faixa: {q.get('faixa')}")
-                        st.write(f"Resp: {q.get('resposta')}")
-                        
-                        c1, c2 = st.columns(2)
-                        if c1.button("✅ Aprovar", key=f"ok_{q['id']}"):
-                            db.collection('questoes').document(q['id']).update({"status":"aprovada"})
-                            st.rerun()
-                        if c2.button("❌ Rejeitar", key=f"no_{q['id']}"):
-                            db.collection('questoes').document(q['id']).delete()
-                            st.rerun()
+            if not pendentes: st.success("Nada pendente.")
+            for q in pendentes:
+                with st.container(border=True):
+                    st.write(f"**{q['pergunta']}**")
+                    c1, c2 = st.columns(2)
+                    if c1.button("✅ Aprovar", key=f"ok_{q['id']}"):
+                        db.collection('questoes').document(q['id']).update({"status":"aprovada"}); st.rerun()
+                    if c2.button("❌ Rejeitar", key=f"no_{q['id']}"):
+                        db.collection('questoes').document(q['id']).delete(); st.rerun()
 
 # =========================================
-# GESTÃO DE EXAME
+# 3. GESTÃO DE EXAME (LIBERAÇÃO)
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
     db = get_db()
 
     with st.container(border=True):
-        st.subheader("🗓️ Configurar Período do Exame")
+        st.subheader("🗓️ Configurar Período")
         c1, c2 = st.columns(2)
-        d_inicio = c1.date_input("Data Início:", datetime.now())
-        d_fim = c2.date_input("Data Fim:", datetime.now())
+        d_inicio = c1.date_input("Início:", datetime.now())
+        d_fim = c2.date_input("Fim:", datetime.now())
         c3, c4 = st.columns(2)
         h_inicio = c3.time_input("Hora Início:", time(0, 0))
         h_fim = c4.time_input("Hora Fim:", time(23, 59))
@@ -338,96 +265,64 @@ def gestao_exame_de_faixa():
         dt_fim = datetime.combine(d_fim, h_fim)
 
     st.write("") 
-
     st.subheader("Autorizar Alunos")
+    
     alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
     lista_alunos = []
-    
     for doc in alunos_ref:
-        d = doc.to_dict()
-        d['id'] = doc.id
-        nome_equipe = "Sem Equipe"
+        d = doc.to_dict(); d['id'] = doc.id
+        nome_eq = "Sem Equipe"
         vinculo = list(db.collection('alunos').where('usuario_id', '==', doc.id).limit(1).stream())
         if vinculo:
-            eq_id = vinculo[0].to_dict().get('equipe_id')
-            if eq_id:
-                eq_doc = db.collection('equipes').document(eq_id).get()
-                if eq_doc.exists:
-                    nome_equipe = eq_doc.to_dict().get('nome')
-        d['nome_equipe'] = nome_equipe
+            eid = vinculo[0].to_dict().get('equipe_id')
+            if eid:
+                eq = db.collection('equipes').document(eid).get()
+                if eq.exists: nome_eq = eq.to_dict().get('nome')
+        d['nome_equipe'] = nome_eq
         lista_alunos.append(d)
 
-    if not lista_alunos:
-        st.info("Nenhum aluno cadastrado.")
-        return
+    if not lista_alunos: st.info("Sem alunos."); return
 
     cols = st.columns([3, 2, 2, 3, 1])
-    cols[0].markdown("**Aluno**")
-    cols[1].markdown("**Equipe**")
-    cols[2].markdown("**Exame (Faixa)**")
-    cols[3].markdown("**Status Atual**")
-    cols[4].markdown("**Ação**")
+    cols[0].markdown("**Aluno**"); cols[1].markdown("**Equipe**"); cols[2].markdown("**Exame**"); cols[3].markdown("**Status**"); cols[4].markdown("**Ação**")
     st.markdown("---")
 
-    faixas_opcoes = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+    faixas = ["Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
 
     for aluno in lista_alunos:
         c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
-        c1.write(f"**{aluno.get('nome', 'Sem Nome')}**")
+        c1.write(f"**{aluno.get('nome')}**")
         c2.write(aluno['nome_equipe'])
         
-        key_faixa = f"sel_fx_{aluno['id']}"
-        idx_padrao = 0
-        faixa_salva = aluno.get('faixa_exame')
-        if faixa_salva in faixas_opcoes:
-            idx_padrao = faixas_opcoes.index(faixa_salva)
-            
-        faixa_selecionada = c3.selectbox("Faixa", faixas_opcoes, index=idx_padrao, key=key_faixa, label_visibility="collapsed")
+        idx = 0
+        if aluno.get('faixa_exame') in faixas: idx = faixas.index(aluno.get('faixa_exame'))
+        fx_sel = c3.selectbox("Faixa", faixas, index=idx, key=f"fx_{aluno['id']}", label_visibility="collapsed")
 
         habilitado = aluno.get('exame_habilitado', False)
-        status_prova = aluno.get('status_exame', 'pendente')
+        status = aluno.get('status_exame', 'pendente')
         
         if habilitado:
-            msg_status = "🟢 Liberado"
-            raw_fim = aluno.get('exame_fim')
-            if raw_fim:
-                try:
-                    if isinstance(raw_fim, str): 
-                        fim_fmt = datetime.fromisoformat(raw_fim).strftime('%d/%m')
-                    else: 
-                        fim_fmt = raw_fim.strftime('%d/%m')
-                    msg_status += f" (até {fim_fmt})"
-                except: pass
-
-            if status_prova == 'aprovado': msg_status = "🏆 Aprovado"
-            elif status_prova == 'reprovado': msg_status = "🔴 Reprovado"
-            elif status_prova == 'bloqueado': msg_status = "⛔ Bloqueado"
-            
-            c4.caption(msg_status)
-            
-            if c5.button("⛔", key=f"btn_off_{aluno['id']}", help="Cancelar"):
+            msg = "🟢 Liberado"
+            if status == 'aprovado': msg = "🏆 Aprovado"
+            elif status == 'bloqueado': msg = "⛔ Bloqueado"
+            elif status == 'reprovado': msg = "🔴 Reprovado"
+            c4.caption(msg)
+            if c5.button("⛔", key=f"off_{aluno['id']}"):
                 db.collection('usuarios').document(aluno['id']).update({
-                    "exame_habilitado": False,
-                    "exame_inicio": firestore.DELETE_FIELD,
-                    "exame_fim": firestore.DELETE_FIELD,
-                    "faixa_exame": firestore.DELETE_FIELD,
-                    "status_exame": "pendente",
-                    "motivo_bloqueio": firestore.DELETE_FIELD
+                    "exame_habilitado": False, "exame_inicio": firestore.DELETE_FIELD,
+                    "exame_fim": firestore.DELETE_FIELD, "faixa_exame": firestore.DELETE_FIELD,
+                    "status_exame": "pendente", "motivo_bloqueio": firestore.DELETE_FIELD
                 })
                 st.rerun()
         else:
             c4.caption("⚪ Não autorizado")
-            if c5.button("✅", key=f"btn_on_{aluno['id']}", help="Autorizar"):
-                dados_update = {
-                    "exame_habilitado": True,
-                    "faixa_exame": faixa_selecionada,
-                    "exame_inicio": dt_inicio.isoformat(),
-                    "exame_fim": dt_fim.isoformat(),
-                    "status_exame": "pendente",
-                    "status_exame_em_andamento": False,
+            if c5.button("✅", key=f"on_{aluno['id']}"):
+                db.collection('usuarios').document(aluno['id']).update({
+                    "exame_habilitado": True, "faixa_exame": fx_sel,
+                    "exame_inicio": dt_inicio.isoformat(), "exame_fim": dt_fim.isoformat(),
+                    "status_exame": "pendente", "status_exame_em_andamento": False,
                     "motivo_bloqueio": firestore.DELETE_FIELD
-                }
-                db.collection('usuarios').document(aluno['id']).update(dados_update)
-                st.toast(f"Exame liberado para {aluno.get('nome')}!")
+                })
+                st.toast(f"Liberado para {aluno.get('nome')}!")
                 st.rerun()
         st.markdown("---")
