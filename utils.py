@@ -12,7 +12,7 @@ from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fpdf import FPDF
-from database import get_db  # Necessário para contar resultados no gerar_codigo
+from database import get_db
 
 # =========================================
 # FUNÇÕES DE QUESTÕES (GERENCIAMENTO)
@@ -53,10 +53,6 @@ def normalizar_nome(nome):
     return "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split()).lower()
 
 def formatar_e_validar_cpf(cpf):
-    """
-    Remove caracteres não numéricos, valida o CPF e retorna formatado (XXX.XXX.XXX-XX).
-    Mantida a validação robusta para garantir integridade do login.
-    """
     if not cpf: return None
     cpf_limpo = re.sub(r'\D', '', str(cpf))
     
@@ -102,16 +98,14 @@ def buscar_cep(cep):
     return None
 
 # =========================================
-# FUNÇÕES DE SEGURANÇA E E-MAIL (RECUPERAÇÃO)
+# FUNÇÕES DE SEGURANÇA E E-MAIL
 # =========================================
 
 def gerar_senha_temporaria(tamanho=8):
-    """Gera senha alfanumérica segura para recuperação."""
     caracteres = string.ascii_letters + string.digits
     return ''.join(secrets.choice(caracteres) for i in range(tamanho))
 
 def enviar_email_recuperacao(email_destino, nova_senha):
-    """Envia a nova senha por e-mail usando SMTP (Zoho/Gmail)."""
     try:
         sender_email = st.secrets.get("EMAIL_SENDER")
         sender_password = st.secrets.get("EMAIL_PASSWORD")
@@ -131,12 +125,10 @@ def enviar_email_recuperacao(email_destino, nova_senha):
     corpo = f"""
     <html>
     <body>
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
             <h2 style="color: #0044cc;">BJJ Digital - Recuperação de Senha</h2>
-            <p>Olá,</p>
-            <p>Recebemos uma solicitação para redefinir sua senha.</p>
             <p>Sua nova senha temporária é:</p>
-            <div style="background-color: #f4f4f4; padding: 15px; font-size: 20px; font-weight: bold; text-align: center; border-radius: 5px; margin: 20px 0;">
+            <div style="background-color: #f4f4f4; padding: 15px; font-weight: bold; font-size: 18px;">
                 {nova_senha}
             </div>
             <p>Acesse a plataforma e altere sua senha.</p>
@@ -168,46 +160,30 @@ def enviar_email_recuperacao(email_destino, nova_senha):
 # =========================================
 
 def gerar_codigo_verificacao():
-    """Gera código sequencial BJJDIGITAL-ANO-SEQ."""
     db = get_db()
     total = 0
     try:
-        # Tenta contar documentos para sequencial
         docs = db.collection('resultados').stream()
         total = len(list(docs))
-    except Exception as e:
-        print(f"Erro ao contar resultados: {e}")
+    except:
         import random
         total = random.randint(1000, 9999)
 
     sequencial = total + 1
     ano = datetime.now().year
-    codigo = f"BJJDIGITAL-{ano}-{sequencial:04d}" 
-    return codigo
+    return f"BJJDIGITAL-{ano}-{sequencial:04d}" 
 
 def gerar_qrcode(codigo):
-    """Gera QR Code com link de verificação oficial do BJJ Digital."""
     os.makedirs("temp_qr", exist_ok=True)
     caminho_qr = f"temp_qr/{codigo}.png"
-    
-    if os.path.exists(caminho_qr):
-        return caminho_qr
+    if os.path.exists(caminho_qr): return caminho_qr
 
     base_url = "https://bjjdigital.com.br/verificar.html"
-    link_verificacao = f"{base_url}?codigo={codigo}"
-
-    qr = qrcode.QRCode(
-        version=1,
-        box_size=10,
-        border=4,
-        error_correction=qrcode.constants.ERROR_CORRECT_H
-    )
-    qr.add_data(link_verificacao)
+    qr = qrcode.QRCode(version=1, box_size=10, border=4)
+    qr.add_data(f"{base_url}?codigo={codigo}")
     qr.make(fit=True)
-
     img = qr.make_image(fill_color="black", back_color="white")
     img.save(caminho_qr)
-
     return caminho_qr
 
 # =========================================
