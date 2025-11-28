@@ -132,59 +132,155 @@ def gestao_questoes():
         return
         
     db = get_db()
+    
+    # Busca TODAS as questões
     docs_q = list(db.collection('questoes').stream())
-    aprovadas = []; pendentes = []; temas_set = set()
+    
+    aprovadas = []
+    pendentes = [] # Novas questões
+    edicoes_pendentes = [] # Edições de professores
+    temas_set = set()
 
     for doc in docs_q:
-        d = doc.to_dict(); d['id'] = doc.id
+        d = doc.to_dict()
+        d['id'] = doc.id
         status = d.get('status', 'aprovada')
-        if status == 'pendente': pendentes.append(d)
-        else: aprovadas.append(d); temas_set.add(d.get('tema', 'Geral'))
+        
+        if status == 'pendente':
+            pendentes.append(d)
+        elif status == 'pendente_edicao':
+            edicoes_pendentes.append(d)
+        else:
+            aprovadas.append(d)
+            temas_set.add(d.get('tema', 'Geral'))
 
     temas_existentes = sorted(list(temas_set))
+    
+    # Abas
     titulos = ["📚 Listar Questões", "➕ Nova Questão"]
-    if tipo_user == "admin": titulos.append(f"✅ Aprovar ({len(pendentes)})")
+    if tipo_user == "admin":
+        count_p = len(pendentes) + len(edicoes_pendentes)
+        titulos.append(f"✅ Aprovar ({count_p})")
     
     abas = st.tabs(titulos)
     
-    # --- ABA 1: LISTAR ---
+    # --- ABA 1: LISTAR E EDITAR ---
     with abas[0]:
         ft = st.selectbox("Filtrar por Tema:", ["Todos"] + temas_existentes)
         qx = [q for q in aprovadas if q.get('tema') == ft] if ft != "Todos" else aprovadas
         
-        if not qx: st.info("Nenhuma questão encontrada.")
+        if not qx:
+            st.info("Nenhuma questão encontrada.")
         else:
             st.write(f"Total: {len(qx)} questões")
             for q in qx:
                 with st.container(border=True):
-                    st.markdown(f"**[{q.get('tema')}]** {q.get('pergunta')}")
-                    st.caption(f"Faixa: {q.get('faixa', 'Geral')} | Autor: {q.get('criado_por')}")
+                    c_txt, c_btn = st.columns([5, 1])
+                    c_txt.markdown(f"**[{q.get('tema')}]** {q.get('pergunta')}")
+                    c_txt.caption(f"Faixa: {q.get('faixa', 'Geral')} | Autor: {q.get('criado_por')}")
+                    
+                    # Botão Editar
+                    if c_btn.button("✏️", key=f"edit_btn_{q['id']}", help="Editar questão"):
+                        st.session_state[f"editing_{q['id']}"] = True
+                    
+                    # Formulário de Edição (Expandido se clicou)
+                    if st.session_state.get(f"editing_{q['id']}"):
+                        with st.form(key=f"form_edit_{q['id']}"):
+                            st.markdown("#### ✏️ Editando Questão")
+                            
+                            # Carrega valores atuais
+                            ops_atuais = q.get('opcoes', ["","","",""])
+                            # Garante 4 opções para não quebrar
+                            while len(ops_atuais) < 4: ops_atuais.append("")
+                            
+                            e_tema = st.text_input("Tema:", value=q.get('tema'))
+                            e_perg = st.text_area("Pergunta:", value=q.get('pergunta'))
+                            e_faixa = st.selectbox("Faixa:", ["Geral","Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"], index=["Geral","Branca","Cinza","Amarela","Laranja","Verde","Azul","Roxa","Marrom","Preta"].index(q.get('faixa', 'Geral')))
+                            
+                            c1, c2 = st.columns(2)
+                            e_op1 = c1.text_input("A)", value=ops_atuais[0])
+                            e_op2 = c2.text_input("B)", value=ops_atuais[1])
+                            e_op3 = c1.text_input("C)", value=ops_atuais[2])
+                            e_op4 = c2.text_input("D)", value=ops_atuais[3])
+                            
+                            # Tenta descobrir qual era a correta original
+                            resp_map_inv = {ops_atuais[0]: "A", ops_atuais[1]: "B", ops_atuais[2]: "C", ops_atuais[3]: "D"}
+                            idx_correta = ["A", "B", "C", "D"].index(resp_map_inv.get(q.get('resposta'), "A"))
+                            e_correta = st.selectbox("Correta:", ["A", "B", "C", "D"], index=idx_correta)
+                            
+                            # Justificativa (Obrigatória para Professor)
+                            justificativa = ""
+                            if tipo_user != "admin":
+                                st.markdown("---")
+                                justificativa = st.text_area("Justificativa da Edição (Obrigatório):", placeholder="Explique o motivo da alteração...")
+                            
+                            c_save, c_cancel = st.columns(2)
+                            salvar = c_save.form_submit_button("💾 Salvar Alterações", type="primary")
+                            cancelar = c_cancel.form_submit_button("Cancelar")
+                            
+                            if salvar:
+                                ops_novas = [e_op1, e_op2, e_op3, e_op4]
+                                limpas = [o for o in ops_novas if o.strip()]
+                                
+                                if len(limpas) < 2:
+                                    st.warning("Mínimo 2 opções.")
+                                elif tipo_user != "admin" and not justificativa.strip():
+                                    st.warning("Professor deve justificar a edição.")
+                                else:
+                                    mapa = {"A": e_op1, "B": e_op2, "C": e_op3, "D": e_op4}
+                                    
+                                    novos_dados = {
+                                        "tema": e_tema, "faixa": e_faixa, "pergunta": e_perg,
+                                        "opcoes": limpas, "resposta": mapa[e_correta],
+                                        "correta": mapa[e_correta], # Compatibilidade
+                                        "editado_por": user['nome'],
+                                        "data_edicao": firestore.SERVER_TIMESTAMP
+                                    }
+                                    
+                                    if tipo_user == "admin":
+                                        # Admin altera direto
+                                        db.collection('questoes').document(q['id']).update(novos_dados)
+                                        st.success("Questão atualizada!")
+                                        del st.session_state[f"editing_{q['id']}"]
+                                        st.rerun()
+                                    else:
+                                        # Professor cria solicitação
+                                        novos_dados["status"] = "pendente_edicao"
+                                        novos_dados["id_original"] = q['id'] # Link com a original
+                                        novos_dados["justificativa"] = justificativa
+                                        
+                                        db.collection('questoes').add(novos_dados)
+                                        st.info("Edição enviada para aprovação do Admin.")
+                                        del st.session_state[f"editing_{q['id']}"]
+                                        st.rerun()
+                            
+                            if cancelar:
+                                del st.session_state[f"editing_{q['id']}"]
+                                st.rerun()
+
                     with st.expander("Ver Detalhes"):
-                        st.write(f"Opções: {q.get('opcoes')}")
-                        st.success(f"Resposta: {q.get('resposta')}")
+                        st.write(f"**Opções:** {q.get('opcoes')}")
+                        st.success(f"✅ Resposta: {q.get('resposta')}")
                         if tipo_user == "admin":
-                            if st.button("Excluir", key=f"del_q_{q['id']}"):
+                            if st.button("🗑️ Excluir", key=f"del_q_{q['id']}"):
                                 db.collection('questoes').document(q['id']).delete(); st.rerun()
 
-    # --- ABA 2: CRIAR (CORREÇÃO DA VARIÁVEL c_op3) ---
+    # --- ABA 2: CRIAR ---
     with abas[1]:
+        # (Código de criação mantido igual)
         st.subheader("Adicionar Nova Questão")
         with st.form("new_q"):
             c1, c2 = st.columns(2)
             tema = c1.text_input("Tema:")
-            faixa = c2.selectbox("Faixa Alvo:", ["Geral","Branca", "Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"])
+            faixa = c2.selectbox("Faixa Alvo:", ["Geral", "Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
             perg = st.text_area("Pergunta:")
-            
             st.write("Alternativas:")
             c_op1, c_op2 = st.columns(2)
             op1 = c_op1.text_input("A)")
             op2 = c_op2.text_input("B)")
-            
-            # CORREÇÃO AQUI: Definindo explicitamente as colunas antes de usar
             c_op3, c_op4 = st.columns(2)
             op3 = c_op3.text_input("C)")
             op4 = c_op4.text_input("D)")
-            
             resp_letra = st.selectbox("Correta:", ["A", "B", "C", "D"])
             
             if st.form_submit_button("💾 Salvar"):
@@ -197,24 +293,70 @@ def gestao_questoes():
                     st_init = "aprovada" if tipo_user == "admin" else "pendente"
                     db.collection('questoes').add({
                         "tema": tema, "faixa": faixa, "pergunta": perg,
-                        "opcoes": limpas, "resposta": mapa[resp_letra],
-                        "correta": mapa[resp_letra], "status": st_init,
-                        "criado_por": user['nome'], "data": firestore.SERVER_TIMESTAMP
+                        "opcoes": limpas, "resposta": mapa[resp_letra], "correta": mapa[resp_letra],
+                        "status": st_init, "criado_por": user['nome'], "data": firestore.SERVER_TIMESTAMP
                     })
-                    st.success("Questão salva!"); st.rerun()
+                    st.success("Salvo!"); st.rerun()
 
-    # --- ABA 3: APROVAR ---
+    # --- ABA 3: APROVAR (ADMIN ONLY) ---
     if tipo_user == "admin" and len(abas) > 2:
         with abas[2]:
-            if not pendentes: st.success("Nada pendente.")
-            for q in pendentes:
-                with st.container(border=True):
-                    st.write(f"**{q['pergunta']}**")
-                    c1, c2 = st.columns(2)
-                    if c1.button("✅ Aprovar", key=f"ok_{q['id']}"):
-                        db.collection('questoes').document(q['id']).update({"status":"aprovada"}); st.rerun()
-                    if c2.button("❌ Rejeitar", key=f"no_{q['id']}"):
-                        db.collection('questoes').document(q['id']).delete(); st.rerun()
+            if not pendentes and not edicoes_pendentes:
+                st.success("Nada pendente.")
+            
+            # 1. Novas Questões
+            if pendentes:
+                st.markdown("#### 🆕 Novas Questões")
+                for q in pendentes:
+                    with st.container(border=True):
+                        st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                        st.caption(f"Por: {q.get('criado_por')} | Faixa: {q.get('faixa')}")
+                        st.write(f"Resp: {q.get('resposta')}")
+                        c1, c2 = st.columns(2)
+                        if c1.button("✅ Aprovar", key=f"ok_{q['id']}"):
+                            db.collection('questoes').document(q['id']).update({"status":"aprovada"}); st.rerun()
+                        if c2.button("❌ Rejeitar", key=f"no_{q['id']}"):
+                            db.collection('questoes').document(q['id']).delete(); st.rerun()
+            
+            # 2. Edições de Professores
+            if edicoes_pendentes:
+                st.markdown("---")
+                st.markdown("#### ✏️ Edições Pendentes")
+                for ed in edicoes_pendentes:
+                    with st.container(border=True):
+                        st.info(f"Justificativa: {ed.get('justificativa')}")
+                        st.markdown(f"**[{ed.get('tema')}]** {ed.get('pergunta')}")
+                        st.caption(f"Editado por: {ed.get('editado_por')}")
+                        
+                        # Mostra o original para comparação (se existir)
+                        id_orig = ed.get('id_original')
+                        if id_orig:
+                            doc_orig = db.collection('questoes').document(id_orig).get()
+                            if doc_orig.exists:
+                                orig = doc_orig.to_dict()
+                                with st.expander("Comparar com Original"):
+                                    st.write(f"**Antes:** {orig.get('pergunta')}")
+                                    st.write(f"**Resp Antiga:** {orig.get('resposta')}")
+                        
+                        c1, c2 = st.columns(2)
+                        if c1.button("✅ Aceitar Edição", key=f"ok_ed_{ed['id']}"):
+                            # Atualiza a original com os dados da edição
+                            dados_finais = ed.copy()
+                            # Remove campos de controle da edição antes de salvar na original
+                            dados_finais.pop('id', None); dados_finais.pop('status', None)
+                            dados_finais.pop('id_original', None); dados_finais.pop('justificativa', None)
+                            dados_finais['status'] = 'aprovada' # Garante status
+                            
+                            # Atualiza a original
+                            db.collection('questoes').document(id_orig).update(dados_finais)
+                            # Apaga a solicitação de edição
+                            db.collection('questoes').document(ed['id']).delete()
+                            st.success("Edição aplicada!"); st.rerun()
+                            
+                        if c2.button("❌ Rejeitar Edição", key=f"no_ed_{ed['id']}"):
+                            # Apenas apaga a solicitação, mantendo a original intacta
+                            db.collection('questoes').document(ed['id']).delete()
+                            st.warning("Edição rejeitada."); st.rerun()
 
 # =========================================
 # 3. GESTÃO DE EXAME (LIBERAÇÃO)
