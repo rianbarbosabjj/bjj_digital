@@ -41,7 +41,6 @@ def formatar_e_validar_cpf(cpf):
     digito2 = calcular_digito(cpf_limpo[:10])
     
     if cpf_limpo[-2:] == digito1 + digito2:
-        # Retorna formatado
         return f"{cpf_limpo[:3]}.{cpf_limpo[3:6]}.{cpf_limpo[6:9]}-{cpf_limpo[9:]}"
     return None
 
@@ -53,7 +52,6 @@ def formatar_cep(cep):
 def buscar_cep(cep):
     """
     Consulta a API ViaCEP e retorna um dicionário com o endereço.
-    Retorna None se falhar ou não encontrar.
     """
     cep_limpo = formatar_cep(cep)
     if len(cep_limpo) != 8: return None
@@ -75,30 +73,38 @@ def buscar_cep(cep):
     return None
 
 # =========================================
-# FUNÇÕES DE SEGURANÇA E E-MAIL (RECUPERAÇÃO)
+# FUNÇÕES DE SEGURANÇA E E-MAIL
 # =========================================
+
+def gerar_codigo_verificacao(tamanho=6):
+    """
+    Gera um código numérico aleatório (OTP).
+    Adicionado para compatibilidade com partes antigas do código.
+    """
+    return ''.join(secrets.choice(string.digits) for i in range(tamanho))
 
 def gerar_senha_temporaria(tamanho=8):
     """Gera uma senha aleatória segura com letras e números."""
     caracteres = string.ascii_letters + string.digits
-    # Garante pelo menos uma letra e um número
+    # Garante mistura de letras e números
     senha = ''.join(secrets.choice(caracteres) for i in range(tamanho))
     return senha
 
 def enviar_email_recuperacao(email_destino, nova_senha):
     """
     Envia a nova senha por e-mail usando SMTP configurado no secrets.toml.
-    Compatível com Zoho, Gmail, etc.
     """
-    # Tenta pegar as configurações do secrets.toml
-    # Se não existirem, retorna False para evitar crash
     try:
-        sender_email = st.secrets["EMAIL_SENDER"]
-        sender_password = st.secrets["EMAIL_PASSWORD"]
-        smtp_server = st.secrets["EMAIL_SERVER"]
-        smtp_port = st.secrets["EMAIL_PORT"]
+        sender_email = st.secrets.get("EMAIL_SENDER")
+        sender_password = st.secrets.get("EMAIL_PASSWORD")
+        smtp_server = st.secrets.get("EMAIL_SERVER")
+        smtp_port = st.secrets.get("EMAIL_PORT")
+        
+        if not (sender_email and sender_password):
+            print("Configurações de e-mail ausentes no secrets.toml")
+            return False
+            
     except Exception as e:
-        st.error("Erro de configuração: Verifique o arquivo .streamlit/secrets.toml")
         print(f"Secrets Error: {e}")
         return False
 
@@ -128,11 +134,14 @@ def enviar_email_recuperacao(email_destino, nova_senha):
     msg.attach(MIMEText(corpo, 'html'))
 
     try:
+        # Lógica para converter a porta se vier como string do secrets
+        porta = int(smtp_port) if smtp_port else 587
+        
         # Configuração flexível para SSL (465) ou TLS (587)
-        if smtp_port == 465:
-            server = smtplib.SMTP_SSL(smtp_server, smtp_port)
+        if porta == 465:
+            server = smtplib.SMTP_SSL(smtp_server, porta)
         else:
-            server = smtplib.SMTP(smtp_server, smtp_port)
+            server = smtplib.SMTP(smtp_server, porta)
             server.starttls()
 
         server.login(sender_email, sender_password)
