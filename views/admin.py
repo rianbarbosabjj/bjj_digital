@@ -87,7 +87,6 @@ def gestao_usuarios(usuario_logado):
                 idx_t = tipos.index(usuario_selecionado['tipo_usuario']) if usuario_selecionado['tipo_usuario'] in tipos else 0
                 novo_tipo = c4.selectbox("Perfil:", tipos, index=idx_t)
 
-                # Usa a lista completa global
                 idx_f = FAIXAS_COMPLETAS.index(usuario_selecionado['faixa_atual']) if usuario_selecionado['faixa_atual'] in FAIXAS_COMPLETAS else 0
                 novo_faixa = st.selectbox("Faixa Atual:", FAIXAS_COMPLETAS, index=idx_f)
                 
@@ -161,7 +160,7 @@ def gestao_questoes():
     
     abas = st.tabs(titulos)
     
-    # Lista de faixas para questões (inclui "Geral")
+    # Lista de faixas para questões
     faixas_questoes = ["Geral"] + FAIXAS_COMPLETAS
 
     # ABA 1: LISTAR
@@ -276,7 +275,6 @@ def gestao_questoes():
                 for q in pendentes:
                     with st.container(border=True):
                         st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
-                        st.caption(f"Por: {q.get('criado_por')}")
                         c1, c2 = st.columns(2)
                         if c1.button("✅ Aprovar", key=f"ok_{q['id']}"):
                             db.collection('questoes').document(q['id']).update({"status":"aprovada"}); st.rerun()
@@ -307,15 +305,16 @@ def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2 = st.tabs(["⚙️ Editor de Provas", "👥 Autorizar Alunos"])
+    tab1, tab2 = st.tabs(["📝 Criar e Editar Provas", "👥 Autorizar Alunos"])
 
     # --- ABA 1: EDITOR DE PROVAS ---
     with tab1:
         st.subheader("Configurar Regras da Prova")
         
-        # Usa lista completa
-        faixa_config = st.selectbox("Selecione a Faixa:", FAIXAS_COMPLETAS)
+        # Opção "Todas" adicionada
+        faixa_config = st.selectbox("Selecione a Faixa:", ["Todas"] + FAIXAS_COMPLETAS)
         
+        # Busca config
         config_ref = db.collection('config_exames').where('faixa', '==', faixa_config).stream()
         config_atual = {}
         doc_id_config = None
@@ -324,11 +323,23 @@ def gestao_exame_de_faixa():
             doc_id_config = doc.id
             break
             
-        q_query = db.collection('questoes').where('faixa', '==', faixa_config).where('status', '==', 'aprovada').stream()
-        lista_questoes_obj = [q.to_dict() for q in q_query]
+        # --- BUSCA DE QUESTÕES ATUALIZADA ---
+        if faixa_config == "Todas":
+            # Pega TUDO
+            q_query = db.collection('questoes').where('status', '==', 'aprovada').stream()
+            lista_questoes_obj = [q.to_dict() for q in q_query]
+        else:
+            # Pega Específica + Geral (Lógica anterior)
+            q_spec = list(db.collection('questoes').where('faixa', '==', faixa_config).where('status', '==', 'aprovada').stream())
+            q_geral = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
+            # Combina por ID
+            questoes_map = {}
+            for q in q_spec + q_geral:
+                questoes_map[q.id] = q.to_dict()
+            lista_questoes_obj = list(questoes_map.values())
+            
         qtd_disponivel = len(lista_questoes_obj)
-        
-        st.info(f"Questões disponíveis para **{faixa_config}**: **{qtd_disponivel}**")
+        st.info(f"Questões disponíveis: **{qtd_disponivel}**")
         
         modo_atual = config_atual.get('modo_selecao', "🎲 Aleatório (Sorteio)")
         modo_selecao = st.radio("Modo de Seleção:", ["🎲 Aleatório (Sorteio)", "🖐️ Manual (Fixa)"], index=0 if "Aleatório" in modo_atual else 1)
@@ -437,7 +448,6 @@ def gestao_exame_de_faixa():
             c2.write(aluno['nome_equipe'])
             
             idx = 0
-            # Usa lista completa aqui também
             if aluno.get('faixa_exame') in FAIXAS_COMPLETAS: idx = FAIXAS_COMPLETAS.index(aluno.get('faixa_exame'))
             fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_{aluno['id']}", label_visibility="collapsed")
 
