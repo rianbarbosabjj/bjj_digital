@@ -180,8 +180,81 @@ def gestao_usuarios(usuario_logado):
 # GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes():
-    st.markdown("<h1 style='color:#FFD700;'>🧠 Gestão de Questões</h1>", unsafe_allow_html=True)
-    st.info("Funcionalidade de edição de banco de questões em desenvolvimento.")
+    st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
+    
+    user = st.session_state.usuario
+    tipo_user = str(user.get("tipo", "")).lower()
+    if tipo_user not in ["admin", "professor"]:
+        st.error("Acesso negado."); return
+        
+    db = get_db()
+    docs_q = list(db.collection('questoes').stream())
+    aprovadas = []; pendentes = []; temas_set = set()
+
+    for doc in docs_q:
+        d = doc.to_dict(); d['id'] = doc.id
+        status = d.get('status', 'aprovada')
+        if status == 'pendente': pendentes.append(d)
+        else:
+            aprovadas.append(d)
+            temas_set.add(d.get('tema', 'Geral'))
+
+    temas_existentes = sorted(list(temas_set))
+    
+    titulos_abas = ["📚 Banco de Questões", "➕ Nova Questão"]
+    if tipo_user == "admin": titulos_abas.append(f"✅ Aprovar ({len(pendentes)})")
+    
+    abas = st.tabs(titulos_abas)
+    
+    # Aba 1: Listar
+    with abas[0]:
+        ft = st.selectbox("Filtrar Tema:", ["Todos"] + temas_existentes)
+        qx = [q for q in aprovadas if q.get('tema') == ft] if ft != "Todos" else aprovadas
+        if not qx: st.info("Nada encontrado.")
+        else:
+            for q in qx:
+                with st.container(border=True):
+                    col_txt, col_btn = st.columns([6, 1])
+                    col_txt.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                    autor = q.get('criado_por', 'Desconhecido').title()
+                    st.caption(f"✍️ Criado por: {autor}")
+                    
+                    with st.expander("Ver Detalhes"):
+                        st.write(f"**Opções:** {q.get('opcoes')}")
+                        st.caption(f"✅ Resposta: {q.get('resposta')}")
+                        if tipo_user == "admin" and st.button("Excluir", key=f"del_{q['id']}"):
+                            db.collection('questoes').document(q['id']).delete(); st.rerun()
+
+    # Aba 2: Criar
+    with abas[1]:
+        with st.form("new_q"):
+            tema = st.text_input("Tema:")
+            perg = st.text_area("Pergunta:")
+            ops = [st.text_input(f"Opção {x}") for x in "ABCD"]
+            resp = st.selectbox("Correta:", "ABCD")
+            if st.form_submit_button("Salvar"):
+                op_limpas = [o for o in ops if o.strip()]
+                if len(op_limpas) >= 2:
+                    mapa = dict(zip("ABCD", ops))
+                    st_init = "aprovada" if tipo_user == "admin" else "pendente"
+                    db.collection('questoes').add({
+                        "tema": tema, "pergunta": perg, "opcoes": op_limpas,
+                        "resposta": mapa[resp], "status": st_init,
+                        "criado_por": user['nome'], "data": firestore.SERVER_TIMESTAMP
+                    })
+                    st.success("Salvo!"); st.rerun()
+                else: st.warning("Preencha tudo.")
+
+    # Aba 3: Aprovar
+    if tipo_user == "admin" and len(abas) > 2:
+        with abas[2]:
+            for q in pendentes:
+                st.write(f"**{q['pergunta']}**"); st.caption(f"Por: {q.get('criado_por')}")
+                c1,c2 = st.columns(2)
+                if c1.button("✅", key=f"ok_{q['id']}"):
+                    db.collection('questoes').document(q['id']).update({"status":"aprovada"}); st.rerun()
+                if c2.button("❌", key=f"no_{q['id']}"):
+                    db.collection('questoes').document(q['id']).delete(); st.rerun()
 
 # =========================================
 # GESTÃO DE EXAME
