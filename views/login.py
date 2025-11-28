@@ -4,13 +4,12 @@ import os
 import requests 
 import bcrypt
 from streamlit_oauth import OAuth2Component
+# Importações locais
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
-from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
+from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep, gerar_senha_temporaria, enviar_email_recuperacao
 from config import COR_DESTAQUE, COR_TEXTO
 from database import get_db
 from firebase_admin import firestore
-import bcrypt
-from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep, gerar_senha_temporaria, enviar_email_recuperacao
 
 # =========================================
 # CONFIGURAÇÃO OAUTH (BLINDADA)
@@ -34,13 +33,14 @@ if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
         print(f"Erro ao iniciar OAuth: {e}")
 
 # =========================================
-# TELA DE LOGIN
+# TELA DE LOGIN PRINCIPAL
 # =========================================
 def tela_login():
     st.session_state.setdefault("modo_login", "login")
 
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
+        # --- MODO: LOGIN ---
         if st.session_state["modo_login"] == "login":
             if os.path.exists("assets/logo.png"):
                 col_l, col_c, col_r = st.columns([1, 2, 1])
@@ -126,10 +126,12 @@ def tela_login():
                         except Exception as e:
                             st.error(f"Erro Google: {e}")
 
+        # --- MODO: CADASTRO ---
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
 
-elif st.session_state["modo_login"] == "recuperar":
+        # --- MODO: RECUPERAR SENHA (NOVO CÓDIGO AQUI) ---
+        elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
             st.markdown("Informe seu e-mail cadastrado. Enviaremos uma senha temporária.")
             
@@ -175,7 +177,6 @@ elif st.session_state["modo_login"] == "recuperar":
                                     
                                     if enviou:
                                         st.success("✅ Sucesso! Verifique seu e-mail (e a caixa de spam) para pegar a nova senha.")
-                                        # Opcional: botão para voltar ao login manualmente ou aguardar
                                     else:
                                         st.error("Erro ao conectar com servidor de e-mail. Tente novamente.")
                                         
@@ -188,7 +189,7 @@ elif st.session_state["modo_login"] == "recuperar":
                 st.session_state["modo_login"] = "login"; st.rerun()
 
 # =========================================
-# TELA CADASTRO INTERNO
+# TELA CADASTRO INTERNO (AUXILIAR)
 # =========================================
 def tela_cadastro_interno():
     st.subheader("📋 Cadastro de Novo Usuário")
@@ -361,7 +362,6 @@ def tela_completar_cadastro(user_data):
 
     db = get_db()
 
-    # (Reutiliza lógica de listas do cadastro interno)
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
