@@ -1,6 +1,8 @@
 import streamlit as st
 import os
 import sys
+import bcrypt # <--- Adicionado para a troca de senha
+from database import get_db # <--- Garantindo importação do DB
 
 # 1. CONFIGURAÇÃO DEVE SER A PRIMEIRA LINHA DO STREAMLIT
 st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
@@ -52,11 +54,59 @@ if "SECRETS_TOML" in os.environ:
 # Importações dos Módulos
 try:
     from streamlit_option_menu import option_menu
-    from database import get_db 
     from views import login, geral, aluno, professor, admin
 except ImportError as e:
     st.error(f"❌ Erro crítico na importação de módulos: {e}")
     st.stop()
+
+# =========================================
+# FUNÇÃO: TELA DE TROCA DE SENHA OBRIGATÓRIA
+# =========================================
+def tela_troca_senha_obrigatoria():
+    """Exibe formulário forçando a troca da senha temporária."""
+    
+    # Centralização
+    c1, c2, c3 = st.columns([1, 2, 1])
+    
+    with c2:
+        if os.path.exists("assets/logo.png"):
+            col_l, col_c, col_r = st.columns([1, 1, 1])
+            with col_c: st.image("assets/logo.png", use_container_width=True)
+
+        with st.container(border=True):
+            st.markdown("<h3 style='text-align:center;'>🔒 Troca de Senha Necessária</h3>", unsafe_allow_html=True)
+            st.warning("Por motivos de segurança, você deve redefinir sua senha temporária para continuar.")
+            
+            with st.form("form_nova_senha"):
+                nova_s = st.text_input("Nova Senha:", type="password")
+                conf_s = st.text_input("Confirmar Nova Senha:", type="password")
+                btn_salvar = st.form_submit_button("Atualizar Senha", type="primary", use_container_width=True)
+                
+            if btn_salvar:
+                if not nova_s:
+                    st.error("A senha não pode ser vazia.")
+                elif nova_s != conf_s:
+                    st.error("As senhas não conferem.")
+                else:
+                    db = get_db()
+                    uid = st.session_state.usuario['id']
+                    hashed = bcrypt.hashpw(nova_s.encode(), bcrypt.gensalt()).decode()
+                    
+                    try:
+                        # Atualiza a senha e REMOVE a obrigatoriedade
+                        db.collection('usuarios').document(uid).update({
+                            "senha": hashed,
+                            "precisa_trocar_senha": False
+                        })
+                        
+                        st.success("Senha atualizada com sucesso! Redirecionando...")
+                        
+                        # Atualiza a sessão para liberar o acesso imediatamente
+                        st.session_state.usuario['precisa_trocar_senha'] = False
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Erro ao salvar: {e}")
 
 # =========================================
 # FUNÇÃO PRINCIPAL (ROTEADOR)
@@ -165,13 +215,23 @@ if __name__ == "__main__":
     if "registration_pending" not in st.session_state: st.session_state.registration_pending = None
 
     try:
-        # Roteamento de Login vs App Principal
+        # 1. Se estiver pendente de cadastro (Google)
         if st.session_state.registration_pending:
             login.tela_completar_cadastro(st.session_state.registration_pending)
+        
+        # 2. Se estiver logado
         elif st.session_state.usuario:
-            app_principal()
+            # 2.1 Verifica se precisa trocar senha (SEGURANÇA)
+            if st.session_state.usuario.get("precisa_trocar_senha") is True:
+                tela_troca_senha_obrigatoria()
+            # 2.2 Se não precisar, entra no app normal
+            else:
+                app_principal()
+        
+        # 3. Se não estiver logado
         else:
             login.tela_login()
+
     except Exception as e:
         st.error(f"Ocorreu um erro inesperado: {e}")
         # st.exception(e) # Descomente para ver o erro detalhado em desenvolvimento
