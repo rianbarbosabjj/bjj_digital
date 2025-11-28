@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 import sys
-import bcrypt # Necessário para a troca de senha
+import bcrypt
 from database import get_db
 
 # =========================================================
@@ -10,7 +10,7 @@ from database import get_db
 st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS RESTAURADO + BOTÕES VERDES)
+# 2. ESTILOS VISUAIS (CSS CORRIGIDO PARA O FUNDO)
 # =========================================================
 st.markdown("""
 <style>
@@ -25,23 +25,44 @@ st.markdown("""
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
-    COR_FUNDO = "#0e2d26"
+    COR_FUNDO = "#0e2d26"  # Verde Escuro (Fundo)
     COR_TEXTO = "#FFFFFF"
-    COR_DESTAQUE = "#FFD770"
+    COR_DESTAQUE = "#FFD770" # Dourado
     COR_BOTAO = "#078B6C"
     COR_HOVER = "#FFD770"
 
-# CSS COMBINADO: Fontes originais + Forçar Botões Verdes
+# CSS COMBINADO: Força Fundo, Sidebar e Botões
 st.markdown(f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
 
-/* Força TODOS os botões a serem verdes (gradiente BJJ) */
+/* 1. FORÇAR O FUNDO GERAL (COR DA MARCA) */
+.stApp {{
+    background-color: {COR_FUNDO} !important;
+}}
+
+/* 2. FORÇAR A BARRA LATERAL (UM POUCO MAIS ESCURA OU IGUAL) */
+[data-testid="stSidebar"] {{
+    background-color: #091f1a !important; /* Variação levemente mais escura do fundo */
+    border-right: 1px solid #FFD770; /* Linha dourada sutil separando */
+}}
+
+/* 3. AJUSTAR COR DOS TEXTOS GERAIS PARA BRANCO */
+h1, h2, h3, h4, h5, h6, p, li, label, div {{
+    color: {COR_TEXTO};
+}}
+h1, h2, h3 {{ 
+    color: {COR_DESTAQUE} !important; 
+    text-align: center; 
+    font-weight: 700; 
+}}
+
+/* 4. BOTÕES VERDES (GRADIENTE) */
 div.stButton > button, div.stFormSubmitButton > button {{ 
     background: linear-gradient(90deg, {COR_BOTAO} 0%, #056853 100%) !important; 
     color: white !important; 
     font-weight: bold !important;
-    border: none !important; 
+    border: 1px solid #056853 !important; 
     padding: 0.6em 1.2em !important; 
     border-radius: 10px !important; 
     transition: 0.3s !important;
@@ -49,12 +70,23 @@ div.stButton > button, div.stFormSubmitButton > button {{
 
 div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ 
     background: {COR_HOVER} !important; 
-    color: {COR_FUNDO} !important; 
+    color: #0e2d26 !important; /* Texto escuro no hover dourado fica melhor */
+    border-color: {COR_DESTAQUE} !important;
     transform: scale(1.02); 
 }}
 
-h1, h2, h3 {{ color: {COR_DESTAQUE}; text-align: center; font-weight: 700; }}
-div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ border-radius: 10px; }}
+/* 5. INPUTS E CAIXAS (Para não ficarem cinzas demais) */
+div[data-baseweb="input"] {{
+    background-color: #1a4038 !important;
+    color: white !important;
+    border-radius: 8px;
+}}
+div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ 
+    background-color: rgba(0,0,0,0.2); /* Fundo translúcido nos cards */
+    border: 1px solid #1f4f44;
+    border-radius: 10px; 
+}}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -90,7 +122,6 @@ def tela_troca_senha_obrigatoria():
             with st.form("frm_troca"):
                 ns = st.text_input("Nova Senha:", type="password")
                 cs = st.text_input("Confirmar Nova Senha:", type="password")
-                # Botão verde automático pelo CSS acima
                 btn = st.form_submit_button("Atualizar Senha", use_container_width=True)
             
             if btn:
@@ -111,7 +142,7 @@ def tela_troca_senha_obrigatoria():
                 else: st.error("As senhas não conferem.")
 
 # =========================================
-# APP PRINCIPAL (LÓGICA ORIGINAL RESTAURADA)
+# APP PRINCIPAL
 # =========================================
 def app_principal():
     # Verificação de Segurança
@@ -124,16 +155,15 @@ def app_principal():
     usuario_logado = st.session_state.usuario
     tipo_usuario = str(usuario_logado.get("tipo", "aluno")).lower()
 
-    # Função auxiliar de navegação (Restaurada)
     def ir_para(pagina): st.session_state.menu_selection = pagina
 
-    # --- SIDEBAR (Restaurada) ---
+    # --- SIDEBAR ---
     with st.sidebar:
         if os.path.exists("assets/logo.png"): 
             st.image("assets/logo.png", use_container_width=True)
             
         st.markdown(f"<h3 style='color:{COR_DESTAQUE};'>{usuario_logado['nome'].title()}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<small style='color:#ccc;'>Perfil: {tipo_usuario.capitalize()}</small>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color:#ccc; text-align:center;'>Perfil: {tipo_usuario.capitalize()}</p>", unsafe_allow_html=True)
         
         if st.button("👤 Meu Perfil", use_container_width=True): ir_para("Meu Perfil")
 
@@ -152,7 +182,7 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pagina = st.session_state.menu_selection
 
-    # Telas da Sidebar (Sem menu horizontal)
+    # Telas da Sidebar
     if pagina == "Meu Perfil":
         geral.tela_meu_perfil(usuario_logado)
         if st.button("⬅️ Voltar"): ir_para("Início")
@@ -167,14 +197,11 @@ def app_principal():
     elif pagina == "Início":
         geral.tela_inicio()
         
-    # Telas do Menu Horizontal (Option Menu Restaurado)
+    # Menu Horizontal
     else:
-        # Menu Admin/Professor
         if tipo_usuario in ["admin", "professor"]:
             opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
             icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "cpu-fill", "building-fill", "file-earmark-check-fill"]
-        
-        # Menu Aluno
         else: 
             opcoes = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Meus Certificados"]
             icons = ["house-fill", "people-fill", "journal-check", "trophy-fill", "patch-check-fill"]
@@ -182,14 +209,14 @@ def app_principal():
         try: index_atual = opcoes.index(pagina)
         except ValueError: index_atual = 0
 
-        # Menu com estilos personalizados (Restaurado)
+        # Menu com estilos atualizados para combinar com o fundo verde
         menu = option_menu(
             menu_title=None, options=opcoes, icons=icons, default_index=index_atual, orientation="horizontal",
             styles={
-                "container": {"padding": "0!important", "background-color": COR_FUNDO},
+                "container": {"padding": "0!important", "background-color": "transparent"}, # Transparente para pegar o fundo da página
                 "icon": {"color": COR_DESTAQUE, "font-size": "16px"},
-                "nav-link": {"font-size": "14px", "margin": "0px", "color": COR_TEXTO},
-                "nav-link-selected": {"background-color": COR_BOTAO, "color": COR_DESTAQUE},
+                "nav-link": {"font-size": "14px", "margin": "0px", "color": "white"},
+                "nav-link-selected": {"background-color": COR_BOTAO, "color": "white", "border": f"1px solid {COR_DESTAQUE}"},
             }
         )
 
@@ -197,7 +224,6 @@ def app_principal():
             st.session_state.menu_selection = menu
             st.rerun()
 
-        # Router do Menu
         if menu == "Início": geral.tela_inicio()
         elif menu == "Modo Rola": aluno.modo_rola(usuario_logado)
         elif menu == "Exame de Faixa": aluno.exame_de_faixa(usuario_logado)
@@ -208,7 +234,7 @@ def app_principal():
         elif menu == "Meus Certificados": aluno.meus_certificados(usuario_logado)
 
 # =========================================
-# START (MAIN)
+# START
 # =========================================
 if __name__ == "__main__":
     if "usuario" not in st.session_state: st.session_state.usuario = None
@@ -220,11 +246,10 @@ if __name__ == "__main__":
             login.tela_completar_cadastro(st.session_state.registration_pending)
             
         elif st.session_state.usuario:
-            # ---> BLOQUEIO DE TROCA DE SENHA <---
             if st.session_state.usuario.get("precisa_trocar_senha") is True:
                 tela_troca_senha_obrigatoria()
             else:
-                app_principal() # Chama seu app original restaurado
+                app_principal()
                 
         else:
             login.tela_login()
