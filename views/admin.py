@@ -160,7 +160,7 @@ def gestao_questoes():
     
     abas = st.tabs(titulos)
     
-    # Lista de faixas para questões
+    # Lista de faixas para cadastro
     faixas_questoes = ["Geral"] + FAIXAS_COMPLETAS
 
     # ABA 1: LISTAR
@@ -305,14 +305,14 @@ def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
     db = get_db()
 
+    # NOME DA ABA ATUALIZADO
     tab1, tab2 = st.tabs(["📝 Criar e Editar Provas", "👥 Autorizar Alunos"])
 
     # --- ABA 1: EDITOR DE PROVAS ---
     with tab1:
         st.subheader("Configurar Regras da Prova")
         
-        # Opção "Todas" adicionada
-        faixa_config = st.selectbox("Selecione a Faixa:", ["Todas"] + FAIXAS_COMPLETAS)
+        faixa_config = st.selectbox("Selecione a Faixa:", FAIXAS_COMPLETAS)
         
         # Busca config
         config_ref = db.collection('config_exames').where('faixa', '==', faixa_config).stream()
@@ -323,23 +323,21 @@ def gestao_exame_de_faixa():
             doc_id_config = doc.id
             break
             
-        # --- BUSCA DE QUESTÕES ATUALIZADA ---
-        if faixa_config == "Todas":
-            # Pega TUDO
-            q_query = db.collection('questoes').where('status', '==', 'aprovada').stream()
-            lista_questoes_obj = [q.to_dict() for q in q_query]
-        else:
-            # Pega Específica + Geral (Lógica anterior)
-            q_spec = list(db.collection('questoes').where('faixa', '==', faixa_config).where('status', '==', 'aprovada').stream())
-            q_geral = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
-            # Combina por ID
-            questoes_map = {}
-            for q in q_spec + q_geral:
-                questoes_map[q.id] = q.to_dict()
-            lista_questoes_obj = list(questoes_map.values())
+        # --- CORREÇÃO DE BUSCA (ESPECÍFICA + GERAL) ---
+        # 1. Busca específicas da faixa
+        q_spec = list(db.collection('questoes').where('faixa', '==', faixa_config).where('status', '==', 'aprovada').stream())
+        # 2. Busca gerais
+        q_geral = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
+        
+        # Combina e remove duplicatas (por ID)
+        questoes_map = {}
+        for q in q_spec + q_geral:
+            questoes_map[q.id] = q.to_dict()
             
+        lista_questoes_obj = list(questoes_map.values())
         qtd_disponivel = len(lista_questoes_obj)
-        st.info(f"Questões disponíveis: **{qtd_disponivel}**")
+        
+        st.info(f"Questões disponíveis (Faixa {faixa_config} + Geral): **{qtd_disponivel}**")
         
         modo_atual = config_atual.get('modo_selecao', "🎲 Aleatório (Sorteio)")
         modo_selecao = st.radio("Modo de Seleção:", ["🎲 Aleatório (Sorteio)", "🖐️ Manual (Fixa)"], index=0 if "Aleatório" in modo_atual else 1)
@@ -351,6 +349,7 @@ def gestao_exame_de_faixa():
             if qtd_disponivel == 0:
                 st.warning("Não há questões para selecionar.")
             else:
+                # Cria labels únicos com parte da pergunta
                 opcoes_txt = [f"{q['pergunta'][:100]}..." for q in lista_questoes_obj]
                 
                 default_sel = []
