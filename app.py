@@ -57,7 +57,45 @@ try:
 except ImportError as e:
     st.error(f"❌ Erro crítico na importação de módulos: {e}")
     st.stop()
-
+# --- NOVA FUNÇÃO PARA A TELA DE TROCA ---
+def tela_troca_senha_obrigatoria():
+    # Centraliza o formulário
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.warning("🔒 Por segurança, redefina sua senha temporária para continuar.")
+        
+        with st.form("form_troca_senha"):
+            nova_senha = st.text_input("Nova Senha:", type="password")
+            conf_senha = st.text_input("Confirmar Nova Senha:", type="password")
+            submit = st.form_submit_button("Atualizar Senha", use_container_width=True, type="primary")
+            
+        if submit:
+            if not nova_senha:
+                st.error("A senha não pode ser vazia.")
+            elif nova_senha != conf_senha:
+                st.error("As senhas não conferem.")
+            else:
+                try:
+                    # Criptografa a nova senha
+                    hashed = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+                    
+                    # Atualiza no banco e remove a obrigatoriedade
+                    db = get_db()
+                    uid = st.session_state.usuario['id']
+                    
+                    db.collection('usuarios').document(uid).update({
+                        "senha": hashed,
+                        "precisa_trocar_senha": False
+                    })
+                    
+                    st.success("Senha atualizada! Redirecionando...")
+                    
+                    # Atualiza a sessão para liberar o acesso IMEDIATAMENTE
+                    st.session_state.usuario['precisa_trocar_senha'] = False
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
 # =========================================
 # FUNÇÃO PRINCIPAL (ROTEADOR)
 # =========================================
@@ -159,19 +197,29 @@ def app_principal():
 # START (PONTO DE PARTIDA)
 # =========================================
 if __name__ == "__main__":
-    # Inicialização de Variáveis de Estado
+    # Inicializa variáveis
     if "usuario" not in st.session_state: st.session_state.usuario = None
-    if "token" not in st.session_state: st.session_state.token = None
     if "registration_pending" not in st.session_state: st.session_state.registration_pending = None
 
     try:
-        # Roteamento de Login vs App Principal
+        # 1. Pendência de cadastro Google
         if st.session_state.registration_pending:
             login.tela_completar_cadastro(st.session_state.registration_pending)
+        
+        # 2. Usuário Logado
         elif st.session_state.usuario:
-            app_principal()
+            
+            # --- VERIFICAÇÃO DE TROCA DE SENHA (AQUI ESTÁ A MÁGICA) ---
+            if st.session_state.usuario.get("precisa_trocar_senha") is True:
+                # Se for True, mostra SÓ isso e não carrega o resto do app
+                tela_troca_senha_obrigatoria()
+            else:
+                # Se for False, carrega o app normal
+                app_principal()
+                
+        # 3. Usuário Deslogado
         else:
             login.tela_login()
+            
     except Exception as e:
-        st.error(f"Ocorreu um erro inesperado: {e}")
-        # st.exception(e) # Descomente para ver o erro detalhado em desenvolvimento
+        st.error(f"Erro crítico: {e}")
