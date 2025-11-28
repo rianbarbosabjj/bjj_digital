@@ -74,7 +74,7 @@ def gestao_usuarios(usuario_logado):
                 tipos = ["aluno", "professor", "admin"]
                 idx_t = tipos.index(usuario_selecionado['tipo_usuario']) if usuario_selecionado['tipo_usuario'] in tipos else 0
                 novo_tipo = c4.selectbox("Perfil:", tipos, index=idx_t)
-                faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
+                faixas = ["Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"]
                 idx_f = faixas.index(usuario_selecionado['faixa_atual']) if usuario_selecionado['faixa_atual'] in faixas else 0
                 novo_faixa = st.selectbox("Faixa Atual:", faixas, index=idx_f)
                 
