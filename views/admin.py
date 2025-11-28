@@ -10,7 +10,7 @@ from firebase_admin import firestore
 # LISTA PADRÃO DE FAIXAS (GLOBAL)
 # =========================================
 FAIXAS_COMPLETAS = [
-    "",
+    "Branca",
     "Cinza e Branca", "Cinza", "Cinza e Preta",
     "Amarela e Branca", "Amarela", "Amarela e Preta",
     "Laranja e Branca", "Laranja", "Laranja e Preta",
