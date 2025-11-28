@@ -336,7 +336,7 @@ def gestao_exame_de_faixa():
         st.info("Defina o tempo, nota mínima e quantidade de questões para cada faixa.")
         
         faixa_config = st.selectbox("Selecione a Faixa para configurar:", 
-            ["Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"]
+            ["","Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"]
         )
         
         # Busca config existente
