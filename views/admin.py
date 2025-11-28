@@ -25,7 +25,6 @@ def gestao_usuarios(usuario_logado):
             "cpf": d.get('cpf', '-'),
             "tipo_usuario": d.get('tipo_usuario', 'aluno'),
             "faixa_atual": d.get('faixa_atual', 'Branca'),
-            # Endereço
             "cep": d.get('cep', ''),
             "logradouro": d.get('logradouro', ''),
             "numero": d.get('numero', ''),
@@ -40,7 +39,6 @@ def gestao_usuarios(usuario_logado):
         st.warning("Nenhum usuário encontrado.")
         return
 
-    # Filtros
     filtro = st.text_input("🔍 Buscar por Nome, Email ou CPF:")
     df = pd.DataFrame(lista_users)
     
@@ -52,7 +50,6 @@ def gestao_usuarios(usuario_logado):
             df['cpf'].str.contains(f)
         ]
 
-    # Tabela
     st.dataframe(
         df[['nome', 'email', 'tipo_usuario', 'faixa_atual']], 
         use_container_width=True,
@@ -61,32 +58,22 @@ def gestao_usuarios(usuario_logado):
     
     st.markdown("---")
 
-    # Área de Edição
     st.subheader("🛠️ Editar ou Excluir Usuário")
-    
     opcoes_usuarios = df.to_dict('records')
-    usuario_selecionado = st.selectbox(
-        "Selecione o usuário:", 
-        opcoes_usuarios, 
-        format_func=lambda x: f"{x['nome']} ({x['email']})"
-    )
+    usuario_selecionado = st.selectbox("Selecione o usuário:", opcoes_usuarios, format_func=lambda x: f"{x['nome']} ({x['email']})")
     
     if usuario_selecionado:
         with st.expander(f"✏️ Editar dados de {usuario_selecionado['nome']}", expanded=False):
             with st.form(key=f"edit_full_{usuario_selecionado['id']}"):
-                
                 st.markdown("##### 👤 Dados Pessoais")
                 c1, c2 = st.columns(2)
                 novo_nome = c1.text_input("Nome:", value=usuario_selecionado['nome'])
                 novo_email = c2.text_input("E-mail:", value=usuario_selecionado['email'])
-                
                 c3, c4 = st.columns(2)
                 novo_cpf = c3.text_input("CPF:", value=usuario_selecionado['cpf'])
-                
                 tipos = ["aluno", "professor", "admin"]
                 idx_t = tipos.index(usuario_selecionado['tipo_usuario']) if usuario_selecionado['tipo_usuario'] in tipos else 0
                 novo_tipo = c4.selectbox("Perfil:", tipos, index=idx_t)
-
                 faixas = ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"]
                 idx_f = faixas.index(usuario_selecionado['faixa_atual']) if usuario_selecionado['faixa_atual'] in faixas else 0
                 novo_faixa = st.selectbox("Faixa Atual:", faixas, index=idx_f)
@@ -112,20 +99,16 @@ def gestao_usuarios(usuario_logado):
                             "cep": novo_cep,
                             "logradouro": novo_logr.upper()
                         }
-                        
                         if nova_senha_admin:
                             hashed = bcrypt.hashpw(nova_senha_admin.encode(), bcrypt.gensalt()).decode()
                             dados_update["senha"] = hashed
                             dados_update["precisa_trocar_senha"] = True
-                            st.info("Senha alterada! Usuário deverá trocar no próximo login.")
-
+                            st.info("Senha alterada!")
                         db.collection('usuarios').document(usuario_selecionado['id']).update(dados_update)
                         st.success("Atualizado com sucesso!")
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
+                    except Exception as e: st.error(f"Erro: {e}")
 
-        # Zona de Perigo (Exclusão)
         st.write("")
         with st.container(border=True):
             c_aviso, c_botao = st.columns([3, 1])
@@ -136,7 +119,7 @@ def gestao_usuarios(usuario_logado):
                 st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES (BANCO COMPLETO)
+# 2. GESTÃO DE QUESTÕES (CORRIGIDO)
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -149,30 +132,18 @@ def gestao_questoes():
         return
         
     db = get_db()
-    
-    # Busca questões
     docs_q = list(db.collection('questoes').stream())
-    aprovadas = []
-    pendentes = []
-    temas_set = set()
+    aprovadas = []; pendentes = []; temas_set = set()
 
     for doc in docs_q:
-        d = doc.to_dict()
-        d['id'] = doc.id
+        d = doc.to_dict(); d['id'] = doc.id
         status = d.get('status', 'aprovada')
-        
-        if status == 'pendente':
-            pendentes.append(d)
-        else:
-            aprovadas.append(d)
-            temas_set.add(d.get('tema', 'Geral'))
+        if status == 'pendente': pendentes.append(d)
+        else: aprovadas.append(d); temas_set.add(d.get('tema', 'Geral'))
 
     temas_existentes = sorted(list(temas_set))
-    
-    # Abas
     titulos = ["📚 Listar Questões", "➕ Nova Questão"]
-    if tipo_user == "admin":
-        titulos.append(f"✅ Aprovar ({len(pendentes)})")
+    if tipo_user == "admin": titulos.append(f"✅ Aprovar ({len(pendentes)})")
     
     abas = st.tabs(titulos)
     
@@ -181,8 +152,7 @@ def gestao_questoes():
         ft = st.selectbox("Filtrar por Tema:", ["Todos"] + temas_existentes)
         qx = [q for q in aprovadas if q.get('tema') == ft] if ft != "Todos" else aprovadas
         
-        if not qx:
-            st.info("Nenhuma questão encontrada.")
+        if not qx: st.info("Nenhuma questão encontrada.")
         else:
             st.write(f"Total: {len(qx)} questões")
             for q in qx:
@@ -194,10 +164,9 @@ def gestao_questoes():
                         st.success(f"Resposta: {q.get('resposta')}")
                         if tipo_user == "admin":
                             if st.button("Excluir", key=f"del_q_{q['id']}"):
-                                db.collection('questoes').document(q['id']).delete()
-                                st.rerun()
+                                db.collection('questoes').document(q['id']).delete(); st.rerun()
 
-    # --- ABA 2: CRIAR ---
+    # --- ABA 2: CRIAR (CORREÇÃO DA VARIÁVEL c_op3) ---
     with abas[1]:
         st.subheader("Adicionar Nova Questão")
         with st.form("new_q"):
@@ -210,6 +179,9 @@ def gestao_questoes():
             c_op1, c_op2 = st.columns(2)
             op1 = c_op1.text_input("A)")
             op2 = c_op2.text_input("B)")
+            
+            # CORREÇÃO AQUI: Definindo explicitamente as colunas antes de usar
+            c_op3, c_op4 = st.columns(2)
             op3 = c_op3.text_input("C)")
             op4 = c_op4.text_input("D)")
             
@@ -223,15 +195,13 @@ def gestao_questoes():
                 else:
                     mapa = {"A": op1, "B": op2, "C": op3, "D": op4}
                     st_init = "aprovada" if tipo_user == "admin" else "pendente"
-                    
                     db.collection('questoes').add({
                         "tema": tema, "faixa": faixa, "pergunta": perg,
                         "opcoes": limpas, "resposta": mapa[resp_letra],
                         "correta": mapa[resp_letra], "status": st_init,
                         "criado_por": user['nome'], "data": firestore.SERVER_TIMESTAMP
                     })
-                    st.success("Questão salva!")
-                    st.rerun()
+                    st.success("Questão salva!"); st.rerun()
 
     # --- ABA 3: APROVAR ---
     if tipo_user == "admin" and len(abas) > 2:
