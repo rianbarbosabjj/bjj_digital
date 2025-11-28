@@ -59,7 +59,17 @@ def autenticar_local(usuario_email_ou_cpf, senha):
                 "tipo": tipo_perfil,  # <--- Esta é a chave que o app.py lê
                 "email": dados.get('email')
             }
-        
+   if not tipo_perfil:
+                tipo_perfil = 'aluno'
+
+            return {
+                "id": usuario_doc.id,
+                "nome": dados.get('nome'),
+                "tipo": tipo_perfil,
+                "email": dados.get('email'),
+                # ADICIONE A LINHA ABAIXO:
+                "precisa_trocar_senha": dados.get('precisa_trocar_senha', False) 
+            }     
     return None
 
 def buscar_usuario_por_email(email_ou_cpf):
