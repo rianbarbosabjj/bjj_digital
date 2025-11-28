@@ -9,6 +9,8 @@ from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep
 from config import COR_DESTAQUE, COR_TEXTO
 from database import get_db
 from firebase_admin import firestore
+import bcrypt
+from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep, gerar_senha_temporaria, enviar_email_recuperacao
 
 # =========================================
 # CONFIGURAÇÃO OAUTH (BLINDADA)
@@ -127,11 +129,61 @@ def tela_login():
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
 
-        elif st.session_state["modo_login"] == "recuperar":
+elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
-            st.text_input("Email cadastrado:")
-            if st.button("Enviar Instruções", use_container_width=True, type="primary"):
-                st.info("Funcionalidade em breve.")
+            st.markdown("Informe seu e-mail cadastrado. Enviaremos uma senha temporária.")
+            
+            email_rec = st.text_input("Email cadastrado:")
+            
+            if st.button("Enviar Nova Senha", use_container_width=True, type="primary"):
+                if not email_rec:
+                    st.warning("Por favor, informe o e-mail.")
+                else:
+                    db = get_db()
+                    email_clean = email_rec.lower().strip()
+                    
+                    # 1. Buscar usuário pelo email no Firestore
+                    users_ref = db.collection('usuarios')
+                    # Nota: stream() retorna um gerador, convertemos para lista para ver se tem algo
+                    query = list(users_ref.where('email', '==', email_clean).stream())
+                    
+                    if len(query) > 0:
+                        doc = query[0] # Pega o primeiro usuário encontrado
+                        usuario_encontrado = doc.to_dict()
+                        doc_id = doc.id
+                        
+                        # 2. Verificar se é conta Google (não tem senha para recuperar)
+                        if usuario_encontrado.get("auth_provider") == "google":
+                            st.error("Este e-mail usa login social (Google). Clique em 'Continuar com Google' na tela inicial.")
+                        else:
+                            with st.spinner("Gerando senha e enviando e-mail..."):
+                                # 3. Gerar senha temporária aleatória
+                                nova_senha = gerar_senha_temporaria()
+                                
+                                # 4. Criptografar a senha (Hash) para salvar no banco
+                                hashed_nova = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
+                                
+                                # 5. Atualizar no Firestore e Enviar E-mail
+                                try:
+                                    # Atualiza banco
+                                    db.collection('usuarios').document(doc_id).update({
+                                        "senha": hashed_nova
+                                    })
+                                    
+                                    # Envia E-mail (usando a função do utils configurada com Zoho)
+                                    enviou = enviar_email_recuperacao(email_clean, nova_senha)
+                                    
+                                    if enviou:
+                                        st.success("✅ Sucesso! Verifique seu e-mail (e a caixa de spam) para pegar a nova senha.")
+                                        # Opcional: botão para voltar ao login manualmente ou aguardar
+                                    else:
+                                        st.error("Erro ao conectar com servidor de e-mail. Tente novamente.")
+                                        
+                                except Exception as e:
+                                    st.error(f"Erro interno: {e}")
+                    else:
+                        st.error("E-mail não encontrado na nossa base de dados.")
+
             if st.button("Voltar", use_container_width=True):
                 st.session_state["modo_login"] = "login"; st.rerun()
 
