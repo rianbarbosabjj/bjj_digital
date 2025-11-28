@@ -130,7 +130,7 @@ def tela_login():
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
 
-        # --- MODO: RECUPERAR SENHA (NOVO CÓDIGO AQUI) ---
+        # --- MODO: RECUPERAR SENHA (ATUALIZADO) ---
         elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
             st.markdown("Informe seu e-mail cadastrado. Enviaremos uma senha temporária.")
@@ -146,15 +146,14 @@ def tela_login():
                     
                     # 1. Buscar usuário pelo email no Firestore
                     users_ref = db.collection('usuarios')
-                    # Nota: stream() retorna um gerador, convertemos para lista para ver se tem algo
                     query = list(users_ref.where('email', '==', email_clean).stream())
                     
                     if len(query) > 0:
-                        doc = query[0] # Pega o primeiro usuário encontrado
+                        doc = query[0]
                         usuario_encontrado = doc.to_dict()
                         doc_id = doc.id
                         
-                        # 2. Verificar se é conta Google (não tem senha para recuperar)
+                        # 2. Verificar se é conta Google
                         if usuario_encontrado.get("auth_provider") == "google":
                             st.error("Este e-mail usa login social (Google). Clique em 'Continuar com Google' na tela inicial.")
                         else:
@@ -162,17 +161,17 @@ def tela_login():
                                 # 3. Gerar senha temporária aleatória
                                 nova_senha = gerar_senha_temporaria()
                                 
-                                # 4. Criptografar a senha (Hash) para salvar no banco
+                                # 4. Criptografar a senha (Hash)
                                 hashed_nova = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
                                 
-                                # 5. Atualizar no Firestore e Enviar E-mail
+                                # 5. Atualizar no Firestore com FLAG DE TROCA DE SENHA
                                 try:
-                                    # Atualiza banco
                                     db.collection('usuarios').document(doc_id).update({
-                                        "senha": hashed_nova
+                                        "senha": hashed_nova,
+                                        "precisa_trocar_senha": True  # <--- NOVA LINHA IMPORTANTE
                                     })
                                     
-                                    # Envia E-mail (usando a função do utils configurada com Zoho)
+                                    # Envia E-mail
                                     enviou = enviar_email_recuperacao(email_clean, nova_senha)
                                     
                                     if enviou:
