@@ -172,7 +172,7 @@ def gestao_questoes():
         with st.form("new_q"):
             c1, c2 = st.columns(2)
             tema = c1.text_input("Tema:")
-            faixa = c2.selectbox("Faixa Alvo:", ["Geral", "Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+            faixa = c2.selectbox("Faixa Alvo:", ["Geral","Branca", "Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca","Amarela","Amarela e Preta", "Laranja e Branca","Laranja","Laranja e Preta", "Verde e Branca","Verde","Verde e Preta", "Azul", "Roxa", "Marrom", "Preta""])
             perg = st.text_area("Pergunta:")
             
             st.write("Alternativas:")
