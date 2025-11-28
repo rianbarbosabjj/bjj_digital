@@ -219,63 +219,6 @@ def exame_de_faixa(usuario):
                 
                 time.sleep(3)
                 st.rerun()
-3. Atualizar views/professor.py (Botão de Liberar)
-O professor precisa de um botão para "perdoar" o aluno que foi bloqueado ou zerar o tempo de 72h se for uma exceção.
-
-Adicione uma aba ou seção na gestao_equipes:
-
-Python
-
-import streamlit as st
-import pandas as pd
-from database import get_db
-from datetime import datetime
-
-def painel_professor():
-    # ... (seu código existente) ...
-    pass
-
-def gestao_equipes():
-    st.subheader("🏛️ Gestão de Equipes e Alunos")
-    
-    db = get_db()
-    
-    # --- LISTA DE ALUNOS PARA DESBLOQUEIO ---
-    st.markdown("### 🔓 Liberação de Exames")
-    
-    # Busca alunos que estão bloqueados ou reprovados
-    # (Pode otimizar essa query conforme seu banco cresce)
-    users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
-    
-    lista_alunos = []
-    for doc in users_ref:
-        d = doc.to_dict()
-        d['id'] = doc.id
-        # Filtra quem tem status bloqueado ou reprovado
-        status = d.get('status_exame')
-        if status in ['bloqueado', 'reprovado']:
-            lista_alunos.append(d)
-            
-    if not lista_alunos:
-        st.success("Nenhum aluno precisando de liberação no momento.")
-    else:
-        df = pd.DataFrame(lista_alunos)
-        # Mostra tabela simples
-        st.dataframe(df[['nome', 'email', 'status_exame', 'data_ultimo_exame']])
-        
-        # Formulário de Ação
-        c1, c2 = st.columns(2)
-        aluno_sel = c1.selectbox("Selecione o Aluno:", lista_alunos, format_func=lambda x: f"{x['nome']} ({x['status_exame']})")
-        
-        if c2.button("🔓 Liberar Nova Tentativa", type="primary"):
-            # Reseta o status do aluno para 'pendente' e permite fazer na hora
-            db.collection('usuarios').document(aluno_sel['id']).update({
-                "status_exame": "pendente",
-                "status_exame_em_andamento": False,
-                # Opcional: manter histórico em outra collection antes de apagar
-            })
-            st.success(f"Aluno {aluno_sel['nome']} liberado para fazer o exame imediatamente!")
-            st.rerun()
 
 # =========================================
 # RANKING e CERTIFICADOS (MANTIDOS)
