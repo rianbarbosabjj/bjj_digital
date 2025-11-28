@@ -130,7 +130,7 @@ def tela_login():
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
 
-        # --- MODO: RECUPERAR SENHA (ATUALIZADO) ---
+# --- MODO: RECUPERAR SENHA (ATUALIZADO COM TROCA OBRIGATÓRIA) ---
         elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
             st.markdown("Informe seu e-mail cadastrado. Enviaremos uma senha temporária.")
@@ -153,7 +153,7 @@ def tela_login():
                         usuario_encontrado = doc.to_dict()
                         doc_id = doc.id
                         
-                        # 2. Verificar se é conta Google
+                        # 2. Verificar se é conta Google (não tem senha para recuperar)
                         if usuario_encontrado.get("auth_provider") == "google":
                             st.error("Este e-mail usa login social (Google). Clique em 'Continuar com Google' na tela inicial.")
                         else:
@@ -161,14 +161,15 @@ def tela_login():
                                 # 3. Gerar senha temporária aleatória
                                 nova_senha = gerar_senha_temporaria()
                                 
-                                # 4. Criptografar a senha (Hash)
+                                # 4. Criptografar a senha (Hash) para salvar no banco
                                 hashed_nova = bcrypt.hashpw(nova_senha.encode(), bcrypt.gensalt()).decode()
                                 
-                                # 5. Atualizar no Firestore com FLAG DE TROCA DE SENHA
+                                # 5. Atualizar no Firestore e Enviar E-mail
                                 try:
+                                    # Atualiza banco com a senha E a flag de troca obrigatória
                                     db.collection('usuarios').document(doc_id).update({
                                         "senha": hashed_nova,
-                                        "precisa_trocar_senha": True  # <--- NOVA LINHA IMPORTANTE
+                                        "precisa_trocar_senha": True  # <--- ISSO FORÇA A TELA DE TROCA
                                     })
                                     
                                     # Envia E-mail
