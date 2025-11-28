@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import bcrypt
+import random
 from datetime import datetime, time
 from database import get_db
 from firebase_admin import firestore
@@ -9,7 +10,7 @@ from firebase_admin import firestore
 # LISTA PADRÃO DE FAIXAS (GLOBAL)
 # =========================================
 FAIXAS_COMPLETAS = [
-    "Branca",
+    "",
     "Cinza e Branca", "Cinza", "Cinza e Preta",
     "Amarela e Branca", "Amarela", "Amarela e Preta",
     "Laranja e Branca", "Laranja", "Laranja e Preta",
@@ -160,7 +161,6 @@ def gestao_questoes():
     
     abas = st.tabs(titulos)
     
-    # Lista de faixas para cadastro
     faixas_questoes = ["Geral"] + FAIXAS_COMPLETAS
 
     # ABA 1: LISTAR
@@ -299,22 +299,21 @@ def gestao_questoes():
                             db.collection('questoes').document(ed['id']).delete(); st.rerun()
 
 # =========================================
-# 3. GESTÃO DE EXAME
+# 3. GESTÃO DE EXAME (AGORA COM SORTEIO + EDIÇÃO)
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    # NOME DA ABA ATUALIZADO
     tab1, tab2 = st.tabs(["📝 Criar e Editar Provas", "👥 Autorizar Alunos"])
 
     # --- ABA 1: EDITOR DE PROVAS ---
     with tab1:
         st.subheader("Configurar Regras da Prova")
         
-        faixa_config = st.selectbox("Selecione a Faixa:", FAIXAS_COMPLETAS)
+        faixa_config = st.selectbox("Selecione a Faixa:", ["Todas"] + FAIXAS_COMPLETAS)
         
-        # Busca config
+        # Busca Config Atual
         config_ref = db.collection('config_exames').where('faixa', '==', faixa_config).stream()
         config_atual = {}
         doc_id_config = None
@@ -323,86 +322,112 @@ def gestao_exame_de_faixa():
             doc_id_config = doc.id
             break
             
-        # --- CORREÇÃO DE BUSCA (ESPECÍFICA + GERAL) ---
-        # 1. Busca específicas da faixa
-        q_spec = list(db.collection('questoes').where('faixa', '==', faixa_config).where('status', '==', 'aprovada').stream())
-        # 2. Busca gerais
-        q_geral = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
-        
-        # Combina e remove duplicatas (por ID)
-        questoes_map = {}
-        for q in q_spec + q_geral:
-            questoes_map[q.id] = q.to_dict()
+        # Busca Questões Disponíveis no Banco
+        if faixa_config == "Todas":
+            q_query = db.collection('questoes').where('status', '==', 'aprovada').stream()
+            lista_questoes_obj = [q.to_dict() for q in q_query]
+        else:
+            q_spec = list(db.collection('questoes').where('faixa', '==', faixa_config).where('status', '==', 'aprovada').stream())
+            q_geral = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
+            questoes_map = {}
+            for q in q_spec + q_geral:
+                d = q.to_dict(); d['id'] = q.id # IMPORTANTE: Guarda o ID
+                questoes_map[q.id] = d
+            lista_questoes_obj = list(questoes_map.values())
             
-        lista_questoes_obj = list(questoes_map.values())
         qtd_disponivel = len(lista_questoes_obj)
+        st.info(f"Questões disponíveis no banco para **{faixa_config}**: **{qtd_disponivel}**")
         
-        st.info(f"Questões disponíveis (Faixa {faixa_config} + Geral): **{qtd_disponivel}**")
+        # --- LÓGICA DE SELEÇÃO E RASCUNHO ---
         
-        modo_atual = config_atual.get('modo_selecao', "🎲 Aleatório (Sorteio)")
-        modo_selecao = st.radio("Modo de Seleção:", ["🎲 Aleatório (Sorteio)", "🖐️ Manual (Fixa)"], index=0 if "Aleatório" in modo_atual else 1)
+        # Recupera o que já está salvo no banco como ponto de partida
+        questoes_salvas = config_atual.get('questoes', [])
         
-        questoes_escolhidas_manual = []
-        qtd_final = 0
+        # Chave única para o session state deste rascunho
+        key_draft = f"rascunho_prova_{faixa_config}"
         
-        if modo_selecao == "🖐️ Manual (Fixa)":
-            if qtd_disponivel == 0:
-                st.warning("Não há questões para selecionar.")
-            else:
-                # Cria labels únicos com parte da pergunta
-                opcoes_txt = [f"{q['pergunta'][:100]}..." for q in lista_questoes_obj]
-                
-                default_sel = []
-                if config_atual.get('questoes'):
-                    perguntas_salvas = [q['pergunta'][:100]+"..." for q in config_atual['questoes']]
-                    default_sel = [p for p in perguntas_salvas if p in opcoes_txt]
+        # Se não existe rascunho em memória, carrega do banco
+        if key_draft not in st.session_state:
+            st.session_state[key_draft] = questoes_salvas
 
-                selecionadas_txt = st.multiselect("Selecione as Questões:", options=opcoes_txt, default=default_sel)
-                
-                for txt in selecionadas_txt:
-                    idx = opcoes_txt.index(txt)
-                    questoes_escolhidas_manual.append(lista_questoes_obj[idx])
-                
-                qtd_final = len(questoes_escolhidas_manual)
-                st.caption(f"**{qtd_final}** questões selecionadas.")
+        # Botão de Sorteio (Preenche o rascunho)
+        c_qtd, c_btn = st.columns([1, 2])
+        qtd_sorteio = c_qtd.number_input("Qtd para sortear:", min_value=1, max_value=max(qtd_disponivel, 1), value=min(10, qtd_disponivel))
+        
+        if c_btn.button("🎲 Gerar/Atualizar Sugestão Aleatória"):
+            if qtd_disponivel > 0:
+                # Sorteia e atualiza o rascunho
+                nova_selecao = random.sample(lista_questoes_obj, min(qtd_sorteio, qtd_disponivel))
+                st.session_state[key_draft] = nova_selecao
+                st.rerun()
+            else:
+                st.warning("Sem questões disponíveis para sortear.")
+
+        st.markdown("---")
+        st.markdown("#### 📋 Questões Selecionadas (Edite se quiser)")
+        
+        # MULTISELECT COM O RASCUNHO ATUAL
+        # Precisamos criar uma lista de "labels" para o multiselect
+        # E mapear de volta para os objetos
+        
+        # Dicionário auxiliar: Texto -> Objeto Questão
+        mapa_texto_obj = {f"{q['pergunta'][:100]}...": q for q in lista_questoes_obj}
+        todas_opcoes_txt = list(mapa_texto_obj.keys())
+        
+        # Quais estão selecionadas no rascunho?
+        selecionadas_txt = []
+        for q_sel in st.session_state[key_draft]:
+            texto_chave = f"{q_sel['pergunta'][:100]}..."
+            if texto_chave in todas_opcoes_txt:
+                selecionadas_txt.append(texto_chave)
+        
+        # O Multiselect poderoso
+        selecao_final_txt = st.multiselect(
+            "Adicione ou Remova questões da prova:",
+            options=todas_opcoes_txt,
+            default=selecionadas_txt
+        )
+        
+        # Reconstrói a lista de objetos baseada no que ficou no multiselect
+        questoes_finais_para_salvar = [mapa_texto_obj[txt] for txt in selecao_final_txt]
+        
+        # Atualiza o rascunho em tempo real (para persistir se mudar de aba)
+        st.session_state[key_draft] = questoes_finais_para_salvar
+        
+        st.caption(f"Total de questões nesta prova: **{len(questoes_finais_para_salvar)}**")
         
         st.markdown("---")
-        c1, c2, c3 = st.columns(3)
-        tempo = c1.number_input("⏱️ Tempo (min):", min_value=10, value=int(config_atual.get('tempo_limite', 45)))
-        nota = c3.number_input("✅ Nota Mínima (%):", min_value=50, max_value=100, value=int(config_atual.get('aprovacao_minima', 70)))
         
-        if modo_selecao == "🎲 Aleatório (Sorteio)":
-            max_val = max(qtd_disponivel, 1)
-            val_padrao = int(config_atual.get('qtd_questoes', min(10, max_val)))
-            qtd_final = c2.number_input("📝 Qtd. Questões:", min_value=1, max_value=max_val, value=min(val_padrao, max_val))
-        else:
-            c2.text_input("📝 Qtd. Questões:", value=qtd_final, disabled=True)
-
+        # Configurações Finais
+        c1, c2 = st.columns(2)
+        tempo = c1.number_input("⏱️ Tempo Limite (min):", min_value=10, value=int(config_atual.get('tempo_limite', 45)))
+        nota = c2.number_input("✅ Nota Mínima (%):", min_value=50, max_value=100, value=int(config_atual.get('aprovacao_minima', 70)))
+        
         st.write("")
-        if st.button("💾 Salvar Configuração", type="primary"):
+        if st.button("💾 Salvar Prova Oficial", type="primary"):
+            if not questoes_finais_para_salvar:
+                st.error("A prova não pode ficar vazia. Selecione questões.")
+                st.stop()
+                
             dados_config = {
                 "faixa": faixa_config,
                 "tempo_limite": tempo,
-                "qtd_questoes": qtd_final,
+                "qtd_questoes": len(questoes_finais_para_salvar), # Salva a qtd real
                 "aprovacao_minima": nota,
-                "modo_selecao": modo_selecao,
+                "questoes": questoes_finais_para_salvar, # Salva a lista EXATA
+                "modo_selecao": "Manual/Sorteio", # Agora é sempre fixo
                 "atualizado_em": firestore.SERVER_TIMESTAMP
             }
-            
-            if modo_selecao == "🖐️ Manual (Fixa)":
-                if not questoes_escolhidas_manual:
-                    st.error("Selecione pelo menos uma questão.")
-                    st.stop()
-                dados_config['questoes'] = questoes_escolhidas_manual
-            else:
-                dados_config['questoes'] = [] 
             
             if doc_id_config:
                 db.collection('config_exames').document(doc_id_config).update(dados_config)
             else:
                 db.collection('config_exames').add(dados_config)
                 
-            st.success(f"Configuração salva para Faixa {faixa_config}!")
+            st.success(f"Prova da Faixa {faixa_config} salva com {len(questoes_finais_para_salvar)} questões!")
+            
+            # Limpa rascunho para recarregar do banco na proxima vez
+            del st.session_state[key_draft]
             st.rerun()
 
     # --- ABA 2: AUTORIZAR ALUNOS ---
