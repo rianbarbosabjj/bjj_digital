@@ -7,19 +7,17 @@ from database import get_db
 # =========================================================
 # 1. CONFIGURAÇÃO (PRIMEIRA LINHA OBRIGATÓRIA)
 # =========================================================
-st.set_page_config(page_title="BJJ Digital", page_icon="assets/logo.png", layout="wide")
+# initial_sidebar_state="expanded" faz a barra começar aberta no PC
+st.set_page_config(
+    page_title="BJJ Digital", 
+    page_icon="assets/logo.png", 
+    layout="wide",
+    initial_sidebar_state="expanded" 
+)
 
 # =========================================================
 # 2. ESTILOS VISUAIS (CSS PREMIUM - TEMA BJJ)
 # =========================================================
-st.markdown("""
-<style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .block-container {padding-top: 1rem; padding-bottom: 1rem;}
-</style>
-""", unsafe_allow_html=True)
 
 # Importa cores do config (ou define fallback)
 try:
@@ -31,72 +29,95 @@ except ImportError:
     COR_BOTAO = "#078B6C"
     COR_HOVER = "#FFD770"
 
-# CSS COMBINADO: Fundo Verde, Sidebar, Botões e Cards com Profundidade
 st.markdown(f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;700&display=swap');
 
-/* 1. FORÇAR O FUNDO GERAL (COR DA MARCA) */
-.stApp {{
-    background-color: {COR_FUNDO} !important;
-}}
-
-/* 2. FORÇAR A BARRA LATERAL */
-[data-testid="stSidebar"] {{
-    background-color: #091f1a !important; /* Variação levemente mais escura */
-    border-right: 1px solid rgba(255, 215, 112, 0.1); /* Linha dourada bem sutil */
-}}
-
-/* 3. TIPOGRAFIA GERAL */
-h1, h2, h3, h4, h5, h6, p, li, label, div {{
-    color: {COR_TEXTO};
-}}
-h1, h2, h3 {{ 
-    color: {COR_DESTAQUE} !important; 
-    text-align: center; 
-    font-weight: 700; 
-}}
-
-/* 4. BOTÕES VERDES (GRADIENTE) */
-div.stButton > button, div.stFormSubmitButton > button {{ 
-    background: linear-gradient(90deg, {COR_BOTAO} 0%, #056853 100%) !important; 
-    color: white !important; 
-    font-weight: bold !important;
-    border: 1px solid #056853 !important; 
-    padding: 0.6em 1.2em !important; 
-    border-radius: 10px !important; 
-    transition: 0.3s !important;
-}}
-
-div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ 
-    background: {COR_HOVER} !important; 
-    color: #0e2d26 !important; 
-    border-color: {COR_DESTAQUE} !important;
-    transform: scale(1.02); 
-}}
-
-/* 5. INPUTS (CAMPOS DE TEXTO) */
-div[data-baseweb="input"] {{
-    background-color: #1a4038 !important; /* Verde um pouco mais claro */
-    color: white !important;
-    border: 1px solid #2a6054;
-    border-radius: 8px;
-}}
-
-/* 6. CARDS (ESTILO ATUALIZADO COM PROFUNDIDADE) */
-div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ 
-    /* Fundo levemente mais claro que a página para destacar (Elevação) */
-    background-color: rgba(255, 255, 255, 0.05); 
+    /* --- CORREÇÃO DO MENU LATERAL (HAMBÚRGUER/SETA) --- */
     
-    /* Borda dourada muito sutil */
-    border: 1px solid rgba(255, 215, 112, 0.2); 
+    /* Esconde menu de opções (3 pontinhos na direita) e rodapé */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
     
-    /* Sombra para dar efeito 3D */
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    /* Esconde a barra de decoração colorida do topo */
+    [data-testid="stDecoration"] {{display: none;}}
     
-    border-radius: 12px; 
-    padding: 10px; /* Um pouco de respiro interno */
-}}
+    /* Pinta o cabeçalho inteiro de Verde (para camuflar) */
+    header[data-testid="stHeader"] {{
+        background-color: {COR_FUNDO} !important;
+        z-index: 1;
+    }}
+
+    /* Estiliza o botão de abrir/fechar (Seta ou Hambúrguer) */
+    [data-testid="collapsedControl"] {{
+        color: {COR_DESTAQUE} !important; /* Dourado */
+        display: block !important; /* Garante que apareça */
+    }}
+    
+    /* Garante que o ícone dentro do botão também seja dourado */
+    [data-testid="collapsedControl"] svg {{
+        fill: {COR_DESTAQUE} !important;
+    }}
+
+    /* --- FIM CORREÇÃO MENU --- */
+
+    .block-container {{padding-top: 3rem; padding-bottom: 1rem;}}
+
+    /* 1. FORÇAR O FUNDO GERAL (COR DA MARCA) */
+    .stApp {{
+        background-color: {COR_FUNDO} !important;
+    }}
+
+    /* 2. FORÇAR A BARRA LATERAL */
+    section[data-testid="stSidebar"] {{
+        background-color: #091f1a !important; /* Variação levemente mais escura */
+        border-right: 1px solid rgba(255, 215, 112, 0.1); /* Linha dourada bem sutil */
+    }}
+
+    /* 3. TIPOGRAFIA GERAL */
+    h1, h2, h3, h4, h5, h6, p, li, label, div {{
+        color: {COR_TEXTO};
+    }}
+    h1, h2, h3 {{ 
+        color: {COR_DESTAQUE} !important; 
+        text-align: center; 
+        font-weight: 700; 
+    }}
+
+    /* 4. BOTÕES VERDES (GRADIENTE) */
+    div.stButton > button, div.stFormSubmitButton > button {{ 
+        background: linear-gradient(90deg, {COR_BOTAO} 0%, #056853 100%) !important; 
+        color: white !important; 
+        font-weight: bold !important;
+        border: 1px solid #056853 !important; 
+        padding: 0.6em 1.2em !important; 
+        border-radius: 10px !important; 
+        transition: 0.3s !important;
+    }}
+
+    div.stButton > button:hover, div.stFormSubmitButton > button:hover {{ 
+        background: {COR_HOVER} !important; 
+        color: #0e2d26 !important; 
+        border-color: {COR_DESTAQUE} !important;
+        transform: scale(1.02); 
+    }}
+
+    /* 5. INPUTS (CAMPOS DE TEXTO) */
+    div[data-baseweb="input"] {{
+        background-color: #1a4038 !important; /* Verde um pouco mais claro */
+        color: white !important;
+        border: 1px solid #2a6054;
+        border-radius: 8px;
+    }}
+
+    /* 6. CARDS (ESTILO ATUALIZADO COM PROFUNDIDADE) */
+    div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ 
+        background-color: rgba(255, 255, 255, 0.05); 
+        border: 1px solid rgba(255, 215, 112, 0.2); 
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        border-radius: 12px; 
+        padding: 10px; 
+    }}
 
 </style>
 """, unsafe_allow_html=True)
