@@ -8,7 +8,7 @@ import secrets
 import string
 import unicodedata
 import qrcode
-from datetime import datetime
+from datetime import datetime, timedelta  # Adicionado timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fpdf import FPDF
@@ -309,3 +309,71 @@ def gerar_pdf(usuario, faixa, pontuacao, total, codigo, professor=None):
     nome_arquivo = f"Certificado_{normalizar_nome(usuario)}_{normalizar_nome(faixa)}.pdf"
     
     return pdf_bytes, nome_arquivo
+
+# =========================================
+# FUNÇÕES DE CONTROLE DE EXAME (REGRAS DE NEGÓCIO)
+# =========================================
+
+def verificar_elegibilidade_exame(usuario_data):
+    """
+    Verifica se o aluno pode fazer o exame.
+    Regras:
+    1. Não está bloqueado (por fraude ou abandono).
+    2. Não está aprovado (já passou).
+    3. Se reprovado, aguardar 72h.
+    """
+    status = usuario_data.get("status_exame", "pendente")
+    ultima_tentativa = usuario_data.get("data_ultimo_exame")
+    
+    # 1. Bloqueio por infração
+    if status == "bloqueado":
+        return False, "🚫 Exame bloqueado por segurança. Contate seu professor."
+
+    # 2. Já aprovado
+    if status == "aprovado":
+        return False, "✅ Você já foi aprovado neste exame!"
+
+    # 3. Reprovado (Carência de 72h)
+    if status == "reprovado" and ultima_tentativa:
+        try:
+            # Tenta converter se vier com fuso horário ou formato diferente
+            dt_ultima = ultima_tentativa.replace(tzinfo=None)
+        except:
+            dt_ultima = ultima_tentativa # Assume que já é datetime naive ou compatível
+            
+        if isinstance(dt_ultima, datetime):
+            agora = datetime.now()
+            diferenca = agora - dt_ultima
+            
+            if diferenca < timedelta(hours=72):
+                horas_restantes = 72 - (diferenca.total_seconds() / 3600)
+                return False, f"⏳ Aguarde 72h após reprovação. Liberado em {int(horas_restantes)} horas."
+
+    return True, "OK"
+
+def registrar_inicio_exame(user_id):
+    """Marca o início para detectar abandono."""
+    db = get_db()
+    db.collection('usuarios').document(user_id).update({
+        "status_exame": "em_andamento",
+        "inicio_exame_temp": datetime.now()
+    })
+
+def registrar_fim_exame(user_id, aprovado):
+    """Finaliza o exame e define status."""
+    db = get_db()
+    status = "aprovado" if aprovado else "reprovado"
+    
+    db.collection('usuarios').document(user_id).update({
+        "status_exame": status,
+        "data_ultimo_exame": datetime.now(),
+        "status_exame_em_andamento": False # Remove flag de andamento
+    })
+
+def bloquear_por_abandono(user_id):
+    """Bloqueia o aluno se detectar saída da página."""
+    db = get_db()
+    db.collection('usuarios').document(user_id).update({
+        "status_exame": "bloqueado",
+        "motivo_bloqueio": "Saída da página durante a prova"
+    })
