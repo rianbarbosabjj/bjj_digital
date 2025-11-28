@@ -1,70 +1,83 @@
-# auth.py
 import streamlit as st
 import bcrypt
 from database import get_db
+from utils import formatar_e_validar_cpf
 from firebase_admin import firestore
 
-def autenticar_local(login_input, senha_input):
-    """
-    Autentica usuário por CPF ou Email + Senha (com hash bcrypt).
-    Retorna o dicionário do usuário ou None.
-    """
+def autenticar_local(usuario_email_ou_cpf, senha):
     db = get_db()
+    cpf_formatado = formatar_e_validar_cpf(usuario_email_ou_cpf)
+    
     users_ref = db.collection('usuarios')
+    usuario_doc = None
+
+    # Busca por Email
+    query_email = users_ref.where('email', '==', usuario_email_ou_cpf).stream()
+    for doc in query_email:
+        d = doc.to_dict()
+        if d.get('auth_provider') == 'local':
+            usuario_doc = doc
+            break
     
-    # Tenta buscar por Email
-    query_email = list(users_ref.where('email', '==', login_input).stream())
-    
-    user_doc = None
-    
-    if query_email:
-        user_doc = query_email[0]
-    else:
-        # Se não achou por email, tenta por CPF
-        query_cpf = list(users_ref.where('cpf', '==', login_input).stream())
-        if query_cpf:
-            user_doc = query_cpf[0]
-    
-    if user_doc:
-        user_data = user_doc.to_dict()
-        
-        # Se for login social (Google), não tem senha
-        if user_data.get("auth_provider") == "google":
-            return None
+    # Busca por CPF
+    if not usuario_doc and cpf_formatado:
+        query_cpf = users_ref.where('cpf', '==', cpf_formatado).stream()
+        for doc in query_cpf:
+            d = doc.to_dict()
+            if d.get('auth_provider') == 'local':
+                usuario_doc = doc
+                break
             
-        stored_hash = user_data.get("senha")
-        if stored_hash:
-            # Verifica a senha usando bcrypt
-            # Nota: encode() transforma a string em bytes, necessário para o bcrypt
-            if bcrypt.checkpw(senha_input.encode('utf-8'), stored_hash.encode('utf-8')):
-                user_data['id'] = user_doc.id
-                return user_data
-                
+    if usuario_doc:
+        dados = usuario_doc.to_dict()
+        senha_hash = dados.get('senha')
+        
+        if senha_hash and bcrypt.checkpw(senha.encode(), senha_hash.encode()):
+            tipo_perfil = dados.get('tipo_usuario', 'aluno')
+            
+            return {
+                "id": usuario_doc.id,
+                "nome": dados.get('nome'),
+                "tipo": tipo_perfil,
+                "email": dados.get('email'),
+                "precisa_trocar_senha": dados.get('precisa_trocar_senha', False)
+            }
+        
     return None
 
-def buscar_usuario_por_email(email):
-    """Retorna dados do usuário se existir, ou None."""
+def buscar_usuario_por_email(email_ou_cpf):
     db = get_db()
     users_ref = db.collection('usuarios')
-    results = list(users_ref.where('email', '==', email).stream())
+    usuario_doc = None
     
-    if results:
-        data = results[0].to_dict()
-        data['id'] = results[0].id
-        return data
+    query = users_ref.where('email', '==', email_ou_cpf).stream()
+    for doc in query:
+        usuario_doc = doc
+        break
+        
+    if usuario_doc:
+        dados = usuario_doc.to_dict()
+        tipo_perfil = dados.get('tipo_usuario', 'aluno')
+        
+        return {
+            "id": usuario_doc.id,
+            "nome": dados.get('nome'),
+            "tipo": tipo_perfil,
+            "perfil_completo": dados.get('perfil_completo', False),
+            "email": dados.get('email')
+        }
+        
     return None
 
 def criar_usuario_parcial_google(email, nome):
-    """Cria usuário vindo do Google (sem senha)."""
     db = get_db()
-    novo_user = {
+    novo_usuario = {
         "email": email,
-        "nome": nome,
+        "nome": nome.upper(),
         "auth_provider": "google",
         "perfil_completo": False,
-        "data_criacao": firestore.SERVER_TIMESTAMP,
-        "tipo_usuario": "aluno" # Default, depois ele muda no cadastro
+        "tipo_usuario": "aluno",
+        "data_criacao": firestore.SERVER_TIMESTAMP
     }
-    _, doc_ref = db.collection('usuarios').add(novo_user)
-    novo_user['id'] = doc_ref.id
-    return novo_user
+    _, doc_ref = db.collection('usuarios').add(novo_usuario)
+    return {"id": doc_ref.id, "email": email, "nome": nome}
