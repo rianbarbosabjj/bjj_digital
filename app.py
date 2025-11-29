@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CORREÇÃO DE MENU E MOLDURAS)
+# 2. ESTILOS VISUAIS (CSS TURBINADO - DARK MODE FORÇADO)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -30,81 +30,84 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-    /* --- FORÇAR TEXTO BRANCO EM TUDO --- */
-    html, body, [class*="css"], .stMarkdown, .stMarkdown p, .stText, label, .stCaption, h1, h2, h3, h4, h5, h6 {{
+    /* --- 1. FORÇAR TEXTO BRANCO EM TUDO (GLOBAL) --- */
+    /* Isso garante que mesmo no modo Light do celular, o texto apareça no fundo verde */
+    html, body, [class*="css"], .stMarkdown, p, h1, h2, h3, h4, h5, h6, span, label, .stCaption {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
     
-    /* Exceção: Inputs devem ter texto escuro ou visível */
-    input, textarea, select {{
-        color: #333 !important;
-    }}
-
-    /* --- CORREÇÃO MENU MOBILE --- */
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    [data-testid="stDecoration"] {{display: none;}}
-    
-    header[data-testid="stHeader"] {{
-        background-color: {COR_FUNDO} !important;
-        z-index: 1;
-    }}
-    [data-testid="collapsedControl"] {{
-        color: {COR_DESTAQUE} !important; 
-        display: block !important; 
-    }}
-    [data-testid="collapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
-    }}
-
-    /* --- BACKGROUND E SIDEBAR --- */
+    /* --- 2. FUNDO DA PÁGINA --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
+        background-image: linear-gradient(to bottom, #0e2d26, #051a15);
     }}
+
+    /* --- 3. SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
-        border-right: 1px solid rgba(255, 215, 112, 0.1);
+        border-right: 1px solid rgba(255, 215, 112, 0.15);
     }}
 
-    /* --- TÍTULOS --- */
-    h1, h2, h3 {{ 
-        color: {COR_DESTAQUE} !important; 
-        text-align: center; 
-        font-weight: 700; 
-        text-transform: uppercase;
+    /* --- 4. MOLDURAS, CARDS E FORMULÁRIOS (CORREÇÃO VISUAL) --- */
+    /* Aplica fundo escuro translúcido em containers e forms para destacar do fundo */
+    div[data-testid="stContainer"], div[data-testid="stForm"] {{
+        background-color: rgba(0, 0, 0, 0.25) !important; 
+        border: 1px solid rgba(255, 215, 112, 0.15) !important; 
+        border-radius: 15px; 
+        padding: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3);
     }}
-
-    /* --- BOTÕES --- */
+    
+    /* Expander (Acordeão) */
+    .streamlit-expanderHeader {{
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        color: {COR_DESTAQUE} !important;
+        border-radius: 8px;
+    }}
+    
+    /* --- 5. BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
-        border: 1px solid rgba(255,255,255,0.1) !important; 
+        border: none !important; 
         padding: 0.6em 1.2em !important; 
+        font-weight: bold !important;
         border-radius: 8px !important; 
     }}
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
-        border-color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- MOLDURAS (CARDS) CORRIGIDAS --- */
-    div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ 
-        background-color: rgba(0, 0, 0, 0.2) !important; /* Fundo escuro translúcido */
-        border: 1px solid rgba(255, 215, 112, 0.15) !important; /* Borda dourada sutil */
-        border-radius: 12px; 
-        padding: 20px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+    /* --- 6. INPUTS (CAMPOS DE TEXTO) --- */
+    /* Garante que o fundo do input seja claro o suficiente para ler o texto preto, ou escuro com texto branco */
+    input, textarea, select {{
+        background-color: #1a3b32 !important;
+        color: white !important;
+        border: 1px solid {COR_BOTAO} !important;
     }}
+    /* Texto dentro dos selects/dropdowns */
+    div[data-baseweb="select"] > div {{
+        background-color: #1a3b32 !important;
+        color: white !important;
+    }}
+
+    /* --- 7. COMPONENTES ESPECÍFICOS --- */
+    /* Títulos Dourados */
+    h1, h2, h3 {{ color: {COR_DESTAQUE} !important; text-transform: uppercase; }}
     
-    /* Correção específica para Metrics (números grandes) */
-    [data-testid="stMetricValue"] {{
-        color: {COR_DESTAQUE} !important;
-    }}
-    [data-testid="stMetricLabel"] {{
-        color: #ccc !important;
-    }}
+    /* Métricas (Timer) */
+    [data-testid="stMetricValue"] {{ color: {COR_DESTAQUE} !important; }}
+    [data-testid="stMetricLabel"] {{ color: #ccc !important; }}
+
+    /* --- 8. CORREÇÃO MENU MOBILE --- */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    [data-testid="stDecoration"] {{display: none;}}
+    header[data-testid="stHeader"] {{ background-color: {COR_FUNDO} !important; z-index: 1; }}
+    [data-testid="collapsedControl"] {{ color: {COR_DESTAQUE} !important; display: block !important; }}
+    [data-testid="collapsedControl"] svg {{ fill: {COR_DESTAQUE} !important; }}
 
 </style>
 """, unsafe_allow_html=True)
@@ -185,7 +188,7 @@ def app_principal():
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL (CONFIGURAÇÃO DE ESTILO AQUI)
+    # MENU HORIZONTAL
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
@@ -197,7 +200,7 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
-    # --- AQUI ESTÁ A CORREÇÃO DO MENU ---
+    # --- MENU ESTILIZADO ---
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -205,17 +208,17 @@ def app_principal():
         default_index=idx, 
         orientation="horizontal",
         styles={
-            "container": {"padding": "5px", "background-color": "#0e2d26"}, # Fundo Verde Escuro
+            "container": {"padding": "5px", "background-color": "#0e2d26"},
             "icon": {"color": COR_DESTAQUE, "font-size": "16px"},
             "nav-link": {
                 "font-size": "14px", 
                 "text-align": "center", 
                 "margin": "0px", 
-                "color": "white" # Texto Branco
+                "color": "white"
             },
             "nav-link-selected": {
-                "background-color": COR_DESTAQUE, # Selecionado Dourado
-                "color": "#0e2d26", # Texto do selecionado Escuro (contraste)
+                "background-color": COR_DESTAQUE, 
+                "color": "#0e2d26", 
                 "font-weight": "bold"
             },
         }
