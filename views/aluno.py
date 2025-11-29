@@ -19,9 +19,6 @@ from firebase_admin import firestore
 # CARREGADOR DE EXAME (INTELIGENTE)
 # =========================================
 def carregar_exame_especifico(faixa_alvo):
-    """
-    Busca a prova específica autorizada pelo professor.
-    """
     db = get_db()
     faixa_norm = faixa_alvo.strip().lower()
     
@@ -29,7 +26,7 @@ def carregar_exame_especifico(faixa_alvo):
     tempo = 45
     nota = 70
 
-    # 1. Busca na coleção de configurações (config_exames)
+    # 1. Busca Configurações
     configs = db.collection('config_exames').stream()
     config_achada = None
     
@@ -43,7 +40,7 @@ def carregar_exame_especifico(faixa_alvo):
                 questoes_finais = d.get('questoes')
             break
             
-    # 2. Se não achou questões na config, busca no banco geral 'questoes'
+    # 2. Busca no banco geral se não achou na config
     if not questoes_finais:
         todas_refs = db.collection('questoes').stream()
         pool = []
@@ -60,7 +57,7 @@ def carregar_exame_especifico(faixa_alvo):
             else:
                 questoes_finais = pool
 
-    # 3. Fallback JSON local (último caso para não travar)
+    # 3. Fallback JSON
     if not questoes_finais:
         todas_json = carregar_todas_questoes()
         questoes_finais = [q for q in todas_json if q.get('faixa', '').lower() == faixa_norm]
@@ -79,7 +76,6 @@ def modo_rola(usuario):
 def meus_certificados(usuario):
     st.markdown(f"## 🏅 Meus Certificados")
     db = get_db()
-    
     docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
     lista = [d.to_dict() for d in docs]
     
@@ -104,6 +100,10 @@ def ranking():
 def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
     
+    # 0. INICIALIZA SESSÃO IMEDIATAMENTE (CORREÇÃO DE BUG)
+    if "exame_iniciado" not in st.session_state:
+        st.session_state.exame_iniciado = False
+
     db = get_db()
     doc_ref = db.collection('usuarios').document(usuario['id'])
     doc = doc_ref.get()
@@ -114,9 +114,7 @@ def exame_de_faixa(usuario):
         
     dados = doc.to_dict()
     
-    # -----------------------------------------------------------
     # 1. VERIFICAÇÃO DE AUTORIZAÇÃO
-    # -----------------------------------------------------------
     esta_habilitado = dados.get('exame_habilitado', False)
     faixa_alvo = dados.get('faixa_exame', None)
     
@@ -125,9 +123,7 @@ def exame_de_faixa(usuario):
         st.caption("Aguarde a liberação na área de Gestão de Exames.")
         return
 
-    # -----------------------------------------------------------
     # 2. VERIFICAÇÃO DE PRAZO
-    # -----------------------------------------------------------
     try:
         data_inicio = dados.get('exame_inicio')
         data_fim = dados.get('exame_fim')
@@ -142,17 +138,13 @@ def exame_de_faixa(usuario):
         if data_inicio and agora < data_inicio:
             st.warning(f"⏳ O exame estará liberado a partir de: **{data_inicio.strftime('%d/%m/%Y às %H:%M')}**")
             return
-            
         if data_fim and agora > data_fim:
             st.error(f"🚫 O prazo para este exame expirou em: **{data_fim.strftime('%d/%m/%Y às %H:%M')}**")
             return
-            
     except Exception as e:
-        print(f"Erro de data: {e}")
+        print(f"Aviso data: {e}")
 
-    # -----------------------------------------------------------
-    # 3. VERIFICAÇÃO DE STATUS & ANTI-FRAUDE
-    # -----------------------------------------------------------
+    # 3. VERIFICAÇÃO DE STATUS & ANTI-FRAUDE (LÓGICA BLINDADA)
     status_atual = dados.get('status_exame', 'pendente')
     
     if status_atual == 'aprovado':
@@ -164,39 +156,56 @@ def exame_de_faixa(usuario):
         st.warning("Motivo: Saída da página ou interrupção. Contate o professor para desbloqueio.")
         return
 
-    # CORREÇÃO DO PROBLEMA DO VÍDEO AQUI:
-    # Só bloqueia se o banco diz "em_andamento" MAS a sessão local diz que NÃO começou.
-    # Isso diferencia um "Refresh de Página (F5)" de um "Clique no botão Iniciar".
-    
-    sessao_iniciada = st.session_state.get('exame_iniciado', False)
-    
-    if dados.get("status_exame") == "em_andamento" and not sessao_iniciada:
-        bloquear_por_abandono(usuario['id'])
-        st.error("🚨 DETECÇÃO DE INFRAÇÃO: Você saiu da página ou recarregou durante o exame.")
-        st.stop()
+    # --- CORREÇÃO DO BLOQUEIO (TOLERÂNCIA DE INÍCIO) ---
+    if dados.get("status_exame") == "em_andamento":
+        
+        # Verifica se o exame começou HÁ POUCO TEMPO (ex: menos de 30 segundos)
+        # Isso permite o reload da página logo após clicar no botão sem bloquear
+        inicio_real = dados.get("inicio_exame_temp")
+        eh_inicio_legitimo = False
+        
+        if inicio_real:
+            try:
+                # Normaliza data do banco
+                if isinstance(inicio_real, str): inicio_real = datetime.fromisoformat(inicio_real)
+                inicio_real = inicio_real.replace(tzinfo=None)
+                
+                # Calcula segundos passados
+                segundos_decorridos = (datetime.now() - inicio_real).total_seconds()
+                
+                # Se faz menos de 30s que começou, consideramos legítimo (é o refresh do botão)
+                if segundos_decorridos < 30:
+                    eh_inicio_legitimo = True
+                    # Força a restauração da sessão para não cair no else
+                    st.session_state.exame_iniciado = True 
+                    
+            except Exception as e:
+                print(f"Erro check tempo: {e}")
 
-    # -----------------------------------------------------------
+        # Se NÃO foi um início recente E a sessão local está vazia -> AÍ SIM BLOQUEIA
+        if not eh_inicio_legitimo and not st.session_state.exame_iniciado:
+            bloquear_por_abandono(usuario['id'])
+            st.error("🚨 DETECÇÃO DE INFRAÇÃO: Você saiu da página ou recarregou durante o exame.")
+            st.stop()
+
     # 4. CARREGAMENTO DO EXAME
-    # -----------------------------------------------------------
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd_questoes = len(lista_questoes)
 
-    # JS Anti-Cola
-    html_anti_cola = """
-    <script>
-    document.addEventListener("visibilitychange", function() {
-        if (document.hidden) {
-            document.body.innerHTML = "<h1 style='color:red; text-align:center; margin-top:20%; font-family:sans-serif;'>🚨 BLOQUEADO POR MUDANÇA DE ABA 🚨</h1>";
-        }
-    });
-    </script>
-    """
-    st.components.v1.html(html_anti_cola, height=0, width=0)
+    # JS Anti-Cola (Só ativa se estiver iniciado para não bugar o menu)
+    if st.session_state.exame_iniciado:
+        html_anti_cola = """
+        <script>
+        document.addEventListener("visibilitychange", function() {
+            if (document.hidden) {
+                document.body.innerHTML = "<h1 style='color:red; text-align:center; margin-top:20%; font-family:sans-serif;'>🚨 BLOQUEADO POR MUDANÇA DE ABA 🚨</h1>";
+            }
+        });
+        </script>
+        """
+        st.components.v1.html(html_anti_cola, height=0, width=0)
 
     # 5. TELA DE INÍCIO
-    if "exame_iniciado" not in st.session_state:
-        st.session_state.exame_iniciado = False
-
     if not st.session_state.exame_iniciado:
         
         st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
@@ -225,16 +234,12 @@ def exame_de_faixa(usuario):
 
         if qtd_questoes > 0:
             if st.button("✅ Li e Concordo. INICIAR EXAME", type="primary", use_container_width=True):
-                # Marca no banco
+                # Marca no banco AGORA
                 registrar_inicio_exame(usuario['id'])
                 
-                # Marca na sessão (CRUCIAL PARA O ANTI-FRAUDE)
+                # Configura sessão
                 st.session_state.exame_iniciado = True
-                
-                # Timestamp absoluto do fim
                 st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
-                
-                # Salva dados
                 st.session_state.questoes_prova = lista_questoes 
                 st.session_state.params_prova = {"tempo": tempo_limite, "min_aprovacao": min_aprovacao}
                 st.rerun()
@@ -246,7 +251,6 @@ def exame_de_faixa(usuario):
         questoes = st.session_state.get('questoes_prova', [])
         params = st.session_state.get('params_prova', {"tempo": 45, "min_aprovacao": 70})
         
-        # Cálculo do Tempo Restante
         agora_ts = time.time()
         restante_sec = int(st.session_state.fim_prova_ts - agora_ts)
         tempo_esgotado = restante_sec <= 0
@@ -258,7 +262,7 @@ def exame_de_faixa(usuario):
             time.sleep(3)
             st.rerun()
 
-        # Cronômetro Visual (JS)
+        # Cronômetro Visual
         st.components.v1.html(
             f"""
             <div style="background:#0e2d26; border:2px solid #FFD700; border-radius:10px; padding:10px; text-align:center; color:#FFD700; font-family:sans-serif; font-size:24px; font-weight:bold;">
@@ -305,7 +309,6 @@ def exame_de_faixa(usuario):
                 registrar_fim_exame(usuario['id'], aprovado)
                 st.session_state.exame_iniciado = False
                 
-                # Salva Histórico no Banco
                 try:
                     codigo = gerar_codigo_verificacao() if aprovado else None
                     db.collection('resultados').add({
@@ -330,4 +333,3 @@ def exame_de_faixa(usuario):
                 
                 time.sleep(5)
                 st.rerun()
-
