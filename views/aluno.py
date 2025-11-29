@@ -1,9 +1,6 @@
-
 import streamlit as st
 import time
 import random
-import os
-import json
 from datetime import datetime
 from database import get_db
 from utils import (
@@ -11,8 +8,8 @@ from utils import (
     registrar_fim_exame, 
     bloquear_por_abandono,
     carregar_todas_questoes,
-    normalizar_nome,
-    gerar_codigo_verificacao
+    gerar_codigo_verificacao,
+    gerar_pdf
 )
 from firebase_admin import firestore
 
@@ -22,48 +19,37 @@ from firebase_admin import firestore
 def carregar_exame_especifico(faixa_alvo):
     db = get_db()
     faixa_norm = faixa_alvo.strip().lower()
-    
     questoes_finais = []
     tempo = 45
     nota = 70
 
-    # 1. Configurações salvas
     configs = db.collection('config_exames').stream()
     config_achada = None
-    
     for doc in configs:
         d = doc.to_dict()
         if d.get('faixa', '').strip().lower() == faixa_norm:
             config_achada = d
             tempo = int(d.get('tempo_limite', 45))
             nota = int(d.get('aprovacao_minima', 70))
-            if d.get('questoes'):
-                questoes_finais = d.get('questoes')
+            if d.get('questoes'): questoes_finais = d.get('questoes')
             break
             
-    # 2. Banco geral
     if not questoes_finais:
         todas_refs = db.collection('questoes').stream()
         pool = []
         for doc in todas_refs:
             q = doc.to_dict()
             q_faixa = q.get('faixa', '').strip().lower()
-            if q_faixa == faixa_norm or q_faixa == 'geral':
-                pool.append(q)
-        
+            if q_faixa == faixa_norm or q_faixa == 'geral': pool.append(q)
         if pool:
             qtd = int(config_achada.get('qtd_questoes', 10)) if config_achada else 10
-            if len(pool) > qtd:
-                questoes_finais = random.sample(pool, qtd)
-            else:
-                questoes_finais = pool
+            if len(pool) > qtd: questoes_finais = random.sample(pool, qtd)
+            else: questoes_finais = pool
 
-    # 3. Fallback
     if not questoes_finais:
         todas_json = carregar_todas_questoes()
         questoes_finais = [q for q in todas_json if q.get('faixa', '').lower() == faixa_norm]
-        if not questoes_finais and todas_json:
-             questoes_finais = todas_json[:10]
+        if not questoes_finais and todas_json: questoes_finais = todas_json[:10]
 
     return questoes_finais, tempo, nota
 
@@ -72,188 +58,186 @@ def carregar_exame_especifico(faixa_alvo):
 # =========================================
 def modo_rola(usuario):
     st.markdown(f"## 🥋 Modo Rola - Treino Livre")
-    st.info("Em breve: Aqui você poderá treinar com questões aleatórias sem valer nota.")
-
-def meus_certificados(usuario):
-    st.markdown(f"## 🏅 Meus Certificados")
-    db = get_db()
-    docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
-    lista = [d.to_dict() for d in docs]
-    
-    if not lista:
-        st.info("Você ainda não possui certificados emitidos nesta plataforma.")
-        return
-
-    for cert in lista:
-        with st.container(border=True):
-            c1, c2 = st.columns([3, 1])
-            c1.markdown(f"**Faixa {cert.get('faixa')}**")
-            c1.caption(f"Data: {cert.get('data').strftime('%d/%m/%Y') if cert.get('data') else '-'} | Código: {cert.get('codigo_verificacao')}")
-            c2.success(f"Nota: {cert.get('pontuacao')}%")
+    st.info("Em breve...")
 
 def ranking():
     st.markdown("## 🏆 Ranking da Equipe")
     st.info("O ranking será atualizado em breve.")
 
 # =========================================
-# EXAME DE FAIXA (PRINCIPAL)
+# MEUS CERTIFICADOS (CORRIGIDO)
+# =========================================
+def meus_certificados(usuario):
+    st.markdown(f"## 🏅 Meus Certificados")
+    db = get_db()
+    
+    # Busca no banco
+    try:
+        # Atenção: O campo no banco é 'usuario' (nome) ou 'usuario_id'? 
+        # No exame_de_faixa estamos salvando 'usuario': usuario['nome']. Vamos buscar por nome.
+        docs = db.collection('resultados')\
+                 .where('usuario', '==', usuario['nome'])\
+                 .where('aprovado', '==', True).stream()
+        
+        lista_cert = [d.to_dict() for d in docs]
+    except Exception as e:
+        st.error(f"Erro ao buscar certificados: {e}")
+        return
+
+    if not lista_cert:
+        st.info("Você ainda não possui certificados emitidos.")
+        return
+
+    st.success(f"Você possui {len(lista_cert)} certificado(s)!")
+
+    for i, cert in enumerate(lista_cert):
+        with st.container(border=True):
+            c1, c2 = st.columns([3, 2])
+            
+            # Data formatada
+            data_str = "-"
+            if cert.get('data'):
+                try: data_str = cert.get('data').strftime('%d/%m/%Y')
+                except: pass
+            
+            c1.markdown(f"### 🥋 Faixa {cert.get('faixa')}")
+            c1.caption(f"Data: {data_str} | Nota: {cert.get('pontuacao')}% | Código: {cert.get('codigo_verificacao')}")
+            
+            # Botão de Download
+            pdf_bytes, pdf_name = gerar_pdf(
+                usuario_nome=usuario['nome'],
+                faixa=cert.get('faixa'),
+                pontuacao=cert.get('acertos', 0), # Passa acertos
+                total=cert.get('total', 10),      # Passa total
+                codigo=cert.get('codigo_verificacao')
+            )
+            
+            if pdf_bytes:
+                c2.download_button(
+                    label="📄 Baixar PDF",
+                    data=pdf_bytes,
+                    file_name=pdf_name,
+                    mime="application/pdf",
+                    key=f"btn_cert_{i}",
+                    use_container_width=True
+                )
+            else:
+                c2.error("Erro ao gerar PDF")
+
+# =========================================
+# EXAME DE FAIXA (CORRIGIDO BOTÃO FINAL)
 # =========================================
 def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
     
-    # Inicializa sessão se não existir
-    if "exame_iniciado" not in st.session_state:
-        st.session_state.exame_iniciado = False
+    if "exame_iniciado" not in st.session_state: st.session_state.exame_iniciado = False
+    if "resultado_prova" not in st.session_state: st.session_state.resultado_prova = None
 
     db = get_db()
     doc_ref = db.collection('usuarios').document(usuario['id'])
     doc = doc_ref.get()
     
-    if not doc.exists:
-        st.error("Erro ao carregar perfil.")
-        return
-        
+    if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
-    # 1. VERIFICAÇÃO DE AUTORIZAÇÃO
+    # 1. CHECAGEM DE RESULTADO RECENTE (MOSTRAR BOTÃO SE ACABOU DE FAZER)
+    if st.session_state.resultado_prova:
+        res = st.session_state.resultado_prova
+        st.balloons()
+        st.success(f"PARABÉNS! Aprovado com {res['nota']:.1f}%!")
+        
+        # Botão de Download Imediato
+        pdf_bytes, pdf_name = gerar_pdf(
+            usuario['nome'], res['faixa'], res['acertos'], res['total'], res['codigo']
+        )
+        if pdf_bytes:
+            st.download_button("📥 BAIXAR CERTIFICADO AGORA", pdf_bytes, pdf_name, "application/pdf", use_container_width=True)
+        
+        if st.button("Voltar ao Início"):
+            st.session_state.resultado_prova = None
+            st.rerun()
+        return # Para a execução aqui para não mostrar o resto
+
+    # 2. REGRAS DE BLOQUEIO
     esta_habilitado = dados.get('exame_habilitado', False)
     faixa_alvo = dados.get('faixa_exame', None)
     
     if not esta_habilitado or not faixa_alvo:
-        st.warning("🔒 Nenhum exame autorizado pelo professor.")
-        st.caption("Aguarde a liberação na área de Gestão de Exames.")
-        return
+        st.warning("🔒 Nenhum exame autorizado."); return
 
-    # 2. VERIFICAÇÃO DE PRAZO
+    # Datas
     try:
         data_inicio = dados.get('exame_inicio')
         data_fim = dados.get('exame_fim')
         agora = datetime.now()
-        
         if isinstance(data_inicio, str): data_inicio = datetime.fromisoformat(data_inicio)
         if isinstance(data_fim, str): data_fim = datetime.fromisoformat(data_fim)
-        
         if data_inicio: data_inicio = data_inicio.replace(tzinfo=None)
         if data_fim: data_fim = data_fim.replace(tzinfo=None)
         
         if data_inicio and agora < data_inicio:
-            st.warning(f"⏳ O exame estará liberado a partir de: **{data_inicio.strftime('%d/%m/%Y às %H:%M')}**")
-            return
+            st.warning(f"⏳ Início: {data_inicio.strftime('%d/%m/%Y %H:%M')}"); return
         if data_fim and agora > data_fim:
-            st.error(f"🚫 O prazo expirou em: **{data_fim.strftime('%d/%m/%Y às %H:%M')}**")
-            return
-    except Exception as e: print(f"Aviso data: {e}")
+            st.error("🚫 Prazo expirado."); return
+    except: pass
 
-    # 3. VERIFICAÇÃO DE STATUS
     status_atual = dados.get('status_exame', 'pendente')
     if status_atual == 'aprovado':
-        st.success(f"✅ Você já foi aprovado no exame de Faixa {faixa_alvo}!")
+        st.success(f"✅ Você já foi aprovado na Faixa {faixa_alvo}!")
+        st.info("Vá em 'Meus Certificados' para baixar.")
         return
-    if status_atual == 'bloqueado':
-        st.error("🚫 Exame BLOQUEADO por segurança.")
-        st.warning("Motivo: Saída da página ou interrupção. Contate o professor.")
-        return
-
-    # ==============================================================================
-    # 4. LÓGICA DE RECUPERAÇÃO E ANTI-FRAUDE (SOLUÇÃO DEFINITIVA)
-    # ==============================================================================
-    if dados.get("status_exame") == "em_andamento":
         
-        # Se a sessão local diz que NÃO começou, mas o banco diz que SIM...
+    if status_atual == 'bloqueado':
+        st.error("🚫 Exame BLOQUEADO."); return
+
+    # Anti-Fraude
+    if dados.get("status_exame") == "em_andamento":
         if not st.session_state.exame_iniciado:
-            
-            # Verifica quando começou
             inicio_real = dados.get("inicio_exame_temp")
             recuperavel = False
-            
             if inicio_real:
                 try:
                     if isinstance(inicio_real, str): inicio_real = datetime.fromisoformat(inicio_real)
                     inicio_real = inicio_real.replace(tzinfo=None)
-                    segundos_decorridos = (datetime.now() - inicio_real).total_seconds()
-                    
-                    # TOLERÂNCIA DE 2 MINUTOS (120s) PARA RECARREGAR A PÁGINA
-                    # Isso cobre o tempo do 'rerun' e pequenos refreshes acidentais
-                    if segundos_decorridos < 120:
-                        recuperavel = True
+                    if (datetime.now() - inicio_real).total_seconds() < 120: recuperavel = True
                 except: pass
             
             if recuperavel:
-                # --- AUTO-RECUPERAÇÃO ---
-                # O sistema percebe que foi um reload rápido e restaura o estado
-                st.toast("🔄 Restaurando sessão do exame...")
-                
-                # Recarrega os dados da prova
+                st.toast("🔄 Restaurando sessão...")
                 lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
-                
-                # Restaura variáveis de sessão
                 st.session_state.exame_iniciado = True
-                # O inicio_prova deve ser o original do banco, não agora
-                st.session_state.inicio_prova = inicio_real 
+                st.session_state.inicio_prova = inicio_real
                 st.session_state.questoes_prova = lista_questoes 
                 st.session_state.params_prova = {"tempo": tempo_limite, "min_aprovacao": min_aprovacao}
-                
-                # Define o fim baseado no início original
                 st.session_state.fim_prova_ts = inicio_real.timestamp() + (tempo_limite * 60)
-                
-                st.rerun() # Recarrega para entrar na tela da prova
-                
+                st.rerun()
             else:
-                # Se passou muito tempo e a sessão sumiu -> BLOQUEIA
                 bloquear_por_abandono(usuario['id'])
-                st.error("🚨 DETECÇÃO DE INFRAÇÃO: Sessão perdida ou saída da página.")
-                st.stop()
+                st.error("🚨 INFRAÇÃO: Sessão perdida."); st.stop()
 
-    # 5. CARREGAMENTO INICIAL (Apenas visualização antes de iniciar)
+    # 3. CARREGAMENTO
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd_questoes = len(lista_questoes)
 
     # JS Anti-Cola
     if st.session_state.exame_iniciado:
-        html_anti_cola = """
-        <script>
-        document.addEventListener("visibilitychange", function() {
-            if (document.hidden) {
-                document.body.innerHTML = "<h1 style='color:red; text-align:center; margin-top:20%; font-family:sans-serif;'>🚨 BLOQUEADO POR MUDANÇA DE ABA 🚨</h1>";
-            }
-        });
-        </script>
-        """
+        html_anti_cola = """<script>document.addEventListener("visibilitychange", function() {if (document.hidden) {document.body.innerHTML = "<h1 style='color:red;text-align:center;margin-top:20%'>🚨 BLOQUEADO 🚨</h1>";}});</script>"""
         st.components.v1.html(html_anti_cola, height=0, width=0)
 
-    # TELA DE INSTRUÇÕES
+    # 4. TELA DE INÍCIO
     if not st.session_state.exame_iniciado:
-        
         st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
-        st.caption("Leia atentamente as instruções antes de iniciar.")
-        
         with st.container(border=True):
             c1, c2, c3 = st.columns(3)
             c1.markdown(f"📝 **{qtd_questoes} Questões**")
             c2.markdown(f"⏱️ **{tempo_limite} min**")
             c3.markdown(f"✅ **{min_aprovacao}%**")
-            
             st.markdown("---")
-            st.markdown(f"""
-            * Sua prova contém **{qtd_questoes} Questões** sobre a faixa **{faixa_alvo}**.
-            * ⏱️ O tempo limite é de **{tempo_limite} minutos**.
-            * ✅ Nota mínima para aprovação: **{min_aprovacao}%**.
+            st.write("Regras: Sem pausa, sem consulta. Se sair da tela, bloqueia.")
             
-            **ATENÇÃO:**
-            * Após clicar em **Iniciar**, o cronômetro não para.
-            * Não é permitido consulta externa.
-            * **REGRAS DE SEGURANÇA:** Se mudar de aba ou minimizar, **a prova será bloqueada**.
-            * **Falhas:** Se o computador desligar, peça desbloqueio ao professor.
-
-            **Boa prova!** 🥋
-            """)
-
         if qtd_questoes > 0:
-            if st.button("✅ Li e Concordo. INICIAR EXAME", type="primary", use_container_width=True):
-                # Marca no banco
+            if st.button("✅ INICIAR EXAME", type="primary", use_container_width=True):
                 registrar_inicio_exame(usuario['id'])
-                
-                # Configura sessão
                 st.session_state.exame_iniciado = True
                 st.session_state.inicio_prova = datetime.now()
                 st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
@@ -261,62 +245,38 @@ def exame_de_faixa(usuario):
                 st.session_state.params_prova = {"tempo": tempo_limite, "min_aprovacao": min_aprovacao}
                 st.rerun()
         else:
-            st.warning(f"⚠️ Erro: Nenhuma questão encontrada para a faixa **{faixa_alvo}**. Contate o professor.")
+            st.warning("Erro: Sem questões.")
 
-    # TELA DA PROVA
+    # 5. PROVA EM ANDAMENTO
     else:
         questoes = st.session_state.get('questoes_prova', [])
         params = st.session_state.get('params_prova', {"tempo": 45, "min_aprovacao": 70})
         
-        # Timer
         agora_ts = time.time()
-        # Se fim_prova_ts não existir (recuperação), recalcula
-        if 'fim_prova_ts' not in st.session_state:
-             st.session_state.fim_prova_ts = agora_ts + (params['tempo'] * 60)
-
-        restante_sec = int(st.session_state.fim_prova_ts - agora_ts)
-        tempo_esgotado = restante_sec <= 0
+        if 'fim_prova_ts' not in st.session_state: st.session_state.fim_prova_ts = agora_ts + (params['tempo']*60)
         
-        if tempo_esgotado:
-            st.error("⌛ Tempo esgotado!")
+        restante = int(st.session_state.fim_prova_ts - agora_ts)
+        if restante <= 0:
+            st.error("Tempo esgotado!")
             registrar_fim_exame(usuario['id'], False)
             st.session_state.exame_iniciado = False
             time.sleep(3); st.rerun()
 
-        # Cronômetro Visual
-        st.components.v1.html(
-            f"""
-            <div style="background:#0e2d26; border:2px solid #FFD700; border-radius:10px; padding:10px; text-align:center; color:#FFD700; font-family:sans-serif; font-size:24px; font-weight:bold;">
-                <span id="timer">Carregando...</span>
-            </div>
-            <script>
-                var timeLeft = {restante_sec};
-                setInterval(function() {{
-                    if (timeLeft <= 0) {{ document.getElementById('timer').innerHTML = "⌛ ACABOU"; return; }}
-                    var m = Math.floor(timeLeft / 60);
-                    var s = timeLeft % 60;
-                    document.getElementById('timer').innerHTML = "⏱️ " + (m<10?"0"+m:m) + ":" + (s<10?"0"+s:s);
-                    timeLeft--;
-                }}, 1000);
-            </script>
-            """, height=70
-        )
+        st.metric("Tempo Restante", f"{int(restante/60)}:{restante%60:02d}")
         
         with st.form("form_exame"):
             respostas_usuario = {}
             for i, q in enumerate(questoes):
-                txt_p = q.get('pergunta') or q.get('enunciado') or "Questão sem texto"
-                st.markdown(f"**{i+1}. {txt_p}**")
+                st.markdown(f"**{i+1}. {q.get('pergunta') or 'Questão'}**")
                 if q.get('imagem'): st.image(q['imagem'])
-                opcoes = q.get('opcoes') or q.get('alternativas') or ['V', 'F']
-                respostas_usuario[i] = st.radio("Resposta:", opcoes, key=f"q_{i}", index=None, label_visibility="collapsed")
+                respostas_usuario[i] = st.radio("Resp:", q.get('opcoes', ['V','F']), key=f"q_{i}", index=None)
                 st.markdown("---")
             
             if st.form_submit_button("Finalizar Prova", type="primary", use_container_width=True):
                 acertos = 0
                 for i, q in enumerate(questoes):
-                    correta = q.get('correta') or q.get('resposta')
-                    if str(respostas_usuario.get(i)).strip().lower() == str(correta).strip().lower():
+                    gabarito = q.get('correta') or q.get('resposta')
+                    if str(respostas_usuario.get(i)).strip().lower() == str(gabarito).strip().lower():
                         acertos += 1
                 
                 nota = (acertos / len(questoes)) * 100
@@ -325,17 +285,26 @@ def exame_de_faixa(usuario):
                 registrar_fim_exame(usuario['id'], aprovado)
                 st.session_state.exame_iniciado = False
                 
+                codigo = None
+                if aprovado:
+                    codigo = gerar_codigo_verificacao()
+                    # SALVA NA SESSÃO PARA MOSTRAR NA PROXIMA TELA
+                    st.session_state.resultado_prova = {
+                        "nota": nota, "aprovado": True, "faixa": faixa_alvo,
+                        "acertos": acertos, "total": len(questoes), "codigo": codigo
+                    }
+                
+                # Salva no banco de resultados
                 try:
-                    codigo = gerar_codigo_verificacao() if aprovado else None
                     db.collection('resultados').add({
                         "usuario": usuario['nome'], "faixa": faixa_alvo, "pontuacao": nota,
                         "acertos": acertos, "total": len(questoes), "aprovado": aprovado,
                         "codigo_verificacao": codigo, "data": firestore.SERVER_TIMESTAMP
                     })
                 except: pass
-
-                if aprovado:
-                    st.balloons(); st.success(f"PARABÉNS! Aprovado com {nota:.1f}%!")
-                else:
+                
+                if not aprovado:
                     st.error(f"Reprovado. Nota: {nota:.1f}%.")
-                time.sleep(5); st.rerun()
+                    time.sleep(4)
+                
+                st.rerun()
