@@ -64,7 +64,6 @@ def carregar_exame_especifico(faixa_alvo):
     if not questoes_finais:
         todas_json = carregar_todas_questoes()
         questoes_finais = [q for q in todas_json if q.get('faixa', '').lower() == faixa_norm]
-        # Se ainda vazio, pega aleatórias dummy
         if not questoes_finais and todas_json:
              questoes_finais = todas_json[:10]
 
@@ -81,7 +80,6 @@ def meus_certificados(usuario):
     st.markdown(f"## 🏅 Meus Certificados")
     db = get_db()
     
-    # Busca certificados no histórico
     docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
     lista = [d.to_dict() for d in docs]
     
@@ -107,7 +105,6 @@ def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
     
     db = get_db()
-    # Pega dados atualizados do usuário
     doc_ref = db.collection('usuarios').document(usuario['id'])
     doc = doc_ref.get()
     
@@ -118,7 +115,7 @@ def exame_de_faixa(usuario):
     dados = doc.to_dict()
     
     # -----------------------------------------------------------
-    # 1. VERIFICAÇÃO DE AUTORIZAÇÃO (ADMIN)
+    # 1. VERIFICAÇÃO DE AUTORIZAÇÃO
     # -----------------------------------------------------------
     esta_habilitado = dados.get('exame_habilitado', False)
     faixa_alvo = dados.get('faixa_exame', None)
@@ -129,18 +126,16 @@ def exame_de_faixa(usuario):
         return
 
     # -----------------------------------------------------------
-    # 2. VERIFICAÇÃO DE PRAZO (DATAS)
+    # 2. VERIFICAÇÃO DE PRAZO
     # -----------------------------------------------------------
     try:
         data_inicio = dados.get('exame_inicio')
         data_fim = dados.get('exame_fim')
         agora = datetime.now()
         
-        # Parse ISO format (string -> datetime)
         if isinstance(data_inicio, str): data_inicio = datetime.fromisoformat(data_inicio)
         if isinstance(data_fim, str): data_fim = datetime.fromisoformat(data_fim)
         
-        # Remove timezone para comparação segura
         if data_inicio: data_inicio = data_inicio.replace(tzinfo=None)
         if data_fim: data_fim = data_fim.replace(tzinfo=None)
         
@@ -153,10 +148,10 @@ def exame_de_faixa(usuario):
             return
             
     except Exception as e:
-        print(f"Erro de data: {e}") # Log interno, não trava o aluno
+        print(f"Erro de data: {e}")
 
     # -----------------------------------------------------------
-    # 3. VERIFICAÇÃO DE STATUS
+    # 3. VERIFICAÇÃO DE STATUS & ANTI-FRAUDE
     # -----------------------------------------------------------
     status_atual = dados.get('status_exame', 'pendente')
     
@@ -169,10 +164,15 @@ def exame_de_faixa(usuario):
         st.warning("Motivo: Saída da página ou interrupção. Contate o professor para desbloqueio.")
         return
 
-    # Anti-Fraude: Se estava "em_andamento" e recarregou a página -> BLOQUEIA
-    if dados.get("status_exame") == "em_andamento":
+    # CORREÇÃO DO PROBLEMA DO VÍDEO AQUI:
+    # Só bloqueia se o banco diz "em_andamento" MAS a sessão local diz que NÃO começou.
+    # Isso diferencia um "Refresh de Página (F5)" de um "Clique no botão Iniciar".
+    
+    sessao_iniciada = st.session_state.get('exame_iniciado', False)
+    
+    if dados.get("status_exame") == "em_andamento" and not sessao_iniciada:
         bloquear_por_abandono(usuario['id'])
-        st.error("🚨 DETECÇÃO DE INFRAÇÃO: Saída da página durante o exame.")
+        st.error("🚨 DETECÇÃO DE INFRAÇÃO: Você saiu da página ou recarregou durante o exame.")
         st.stop()
 
     # -----------------------------------------------------------
@@ -225,12 +225,16 @@ def exame_de_faixa(usuario):
 
         if qtd_questoes > 0:
             if st.button("✅ Li e Concordo. INICIAR EXAME", type="primary", use_container_width=True):
+                # Marca no banco
                 registrar_inicio_exame(usuario['id'])
+                
+                # Marca na sessão (CRUCIAL PARA O ANTI-FRAUDE)
                 st.session_state.exame_iniciado = True
-                # Timestamp absoluto do fim (Current Time + Minutos)
+                
+                # Timestamp absoluto do fim
                 st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
                 
-                # Salva na sessão
+                # Salva dados
                 st.session_state.questoes_prova = lista_questoes 
                 st.session_state.params_prova = {"tempo": tempo_limite, "min_aprovacao": min_aprovacao}
                 st.rerun()
@@ -242,7 +246,7 @@ def exame_de_faixa(usuario):
         questoes = st.session_state.get('questoes_prova', [])
         params = st.session_state.get('params_prova', {"tempo": 45, "min_aprovacao": 70})
         
-        # Cálculo do Tempo Restante (Baseado no timestamp de fim calculado no início)
+        # Cálculo do Tempo Restante
         agora_ts = time.time()
         restante_sec = int(st.session_state.fim_prova_ts - agora_ts)
         tempo_esgotado = restante_sec <= 0
@@ -326,3 +330,4 @@ def exame_de_faixa(usuario):
                 
                 time.sleep(5)
                 st.rerun()
+
