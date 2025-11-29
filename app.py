@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CORREÇÃO DE CONTRASTE)
+# 2. ESTILOS VISUAIS (CORREÇÃO DE MENU E MOLDURAS)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -30,13 +30,13 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-    /* --- FORÇAR TEXTO BRANCO EM TUDO (CORRIGE O BUG DO MODO CLARO) --- */
-    html, body, [class*="css"], .stMarkdown, .stMarkdown p, .stText, label, .stCaption {{
+    /* --- FORÇAR TEXTO BRANCO EM TUDO --- */
+    html, body, [class*="css"], .stMarkdown, .stMarkdown p, .stText, label, .stCaption, h1, h2, h3, h4, h5, h6 {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
     
-    /* Exceção: Textos dentro de inputs devem ser escuros ou visíveis */
+    /* Exceção: Inputs devem ter texto escuro ou visível */
     input, textarea, select {{
         color: #333 !important;
     }}
@@ -79,22 +79,33 @@ st.markdown(f"""
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
-        border: none !important; 
+        border: 1px solid rgba(255,255,255,0.1) !important; 
         padding: 0.6em 1.2em !important; 
         border-radius: 8px !important; 
     }}
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
+        border-color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- CARDS E CONTAINERS --- */
+    /* --- MOLDURAS (CARDS) CORRIGIDAS --- */
     div[data-testid="stVerticalBlock"] div[data-testid="stContainer"] {{ 
-        background: rgba(255, 255, 255, 0.05); 
-        border: 1px solid rgba(255, 255, 255, 0.1); 
-        border-radius: 16px; 
-        padding: 20px; 
+        background-color: rgba(0, 0, 0, 0.2) !important; /* Fundo escuro translúcido */
+        border: 1px solid rgba(255, 215, 112, 0.15) !important; /* Borda dourada sutil */
+        border-radius: 12px; 
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }}
+    
+    /* Correção específica para Metrics (números grandes) */
+    [data-testid="stMetricValue"] {{
+        color: {COR_DESTAQUE} !important;
+    }}
+    [data-testid="stMetricLabel"] {{
+        color: #ccc !important;
+    }}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -148,6 +159,7 @@ def app_principal():
     usuario = st.session_state.usuario
     tipo = str(usuario.get("tipo", "aluno")).lower()
 
+    # SIDEBAR
     with st.sidebar:
         if os.path.exists("assets/logo.png"): st.image("assets/logo.png", use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
@@ -167,12 +179,13 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
+    # Roteamento Sidebar
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Início": geral.tela_inicio(); return
 
-    # Menu Horizontal
+    # MENU HORIZONTAL (CONFIGURAÇÃO DE ESTILO AQUI)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
@@ -184,8 +197,29 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
-    menu = option_menu(None, ops, icons=icns, default_index=idx, orientation="horizontal",
-        styles={"container": {"background-color": "transparent"}, "icon": {"color": COR_DESTAQUE}, "nav-link": {"color": "white"}})
+    # --- AQUI ESTÁ A CORREÇÃO DO MENU ---
+    menu = option_menu(
+        menu_title=None, 
+        options=ops, 
+        icons=icns, 
+        default_index=idx, 
+        orientation="horizontal",
+        styles={
+            "container": {"padding": "5px", "background-color": "#0e2d26"}, # Fundo Verde Escuro
+            "icon": {"color": COR_DESTAQUE, "font-size": "16px"},
+            "nav-link": {
+                "font-size": "14px", 
+                "text-align": "center", 
+                "margin": "0px", 
+                "color": "white" # Texto Branco
+            },
+            "nav-link-selected": {
+                "background-color": COR_DESTAQUE, # Selecionado Dourado
+                "color": "#0e2d26", # Texto do selecionado Escuro (contraste)
+                "font-weight": "bold"
+            },
+        }
+    )
 
     if menu != pg: st.session_state.menu_selection = menu; st.rerun()
 
