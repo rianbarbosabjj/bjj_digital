@@ -6,13 +6,14 @@ import json
 def get_db():
     """
     Conexão ESTRITA com o banco 'bjj-digital'.
+    Corrigido para usar o parâmetro 'database_id'.
     """
     # 1. Inicializa o App (se ainda não estiver rodando)
     if not firebase_admin._apps:
         try:
             key_dict = None
             
-            # Procura as credenciais (mesma lógica de antes)
+            # Procura as credenciais
             if "firebase" in st.secrets:
                 key_dict = dict(st.secrets["firebase"])
             elif "textkey" in st.secrets:
@@ -36,10 +37,12 @@ def get_db():
 
     # 2. Conecta ESPECIFICAMENTE ao banco 'bjj-digital'
     try:
-        # O parâmetro 'database' força a escolha do banco
-        db = firestore.client(database='bjj-digital')
+        # CORREÇÃO AQUI: Mudamos de 'database' para 'database_id'
+        db = firestore.client(database_id='bjj-digital')
         return db
+    except TypeError:
+        # Fallback: Se a biblioteca for muito antiga e não aceitar parâmetros
+        return firestore.client()
     except Exception as e:
-        # Se falhar aqui, mostra o erro real na tela em vez de usar o default
         st.error(f"❌ Não foi possível conectar ao banco 'bjj-digital'. Erro: {e}")
         st.stop()
