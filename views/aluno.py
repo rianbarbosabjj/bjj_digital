@@ -6,6 +6,9 @@ import json
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components 
 from database import get_db
+from firebase_admin import firestore
+
+# Importações do Utils (Certifique-se que estas funções existem no seu utils.py)
 from utils import (
     registrar_inicio_exame, 
     registrar_fim_exame, 
@@ -14,7 +17,6 @@ from utils import (
     gerar_codigo_verificacao,
     gerar_pdf
 )
-from firebase_admin import firestore
 
 # =========================================
 # CARREGADOR DE EXAME (CORRIGIDO E ROBUSTO)
@@ -32,7 +34,6 @@ def carregar_exame_especifico(faixa_alvo):
     qtd_alvo = 10
 
     # 1. Tenta buscar a CONFIGURAÇÃO DO EXAME para essa faixa
-    # Usa where direto para ser exato
     configs = db.collection('config_exames').where('faixa', '==', faixa_alvo).limit(1).stream()
     
     config_doc = None
@@ -218,9 +219,9 @@ def exame_de_faixa(usuario):
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd = len(lista_questoes)
 
-    # JS Anti-Cola
+    # JS Anti-Cola (CORRIGIDO: components.html em vez de components.v1.html)
     if st.session_state.exame_iniciado:
-        components.v1.html("""<script>document.addEventListener("visibilitychange", function() {if(document.hidden){document.body.innerHTML="<h1 style='color:red;text-align:center;margin-top:20%'>🚨 BLOQUEADO 🚨</h1>"}});</script>""", height=0)
+        components.html("""<script>document.addEventListener("visibilitychange", function() {if(document.hidden){document.body.innerHTML="<h1 style='color:red;text-align:center;margin-top:20%'>🚨 BLOQUEADO 🚨</h1>"}});</script>""", height=0)
 
     # --- 6. TELA DE INÍCIO ---
     if not st.session_state.exame_iniciado:
