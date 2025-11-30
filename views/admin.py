@@ -3,7 +3,7 @@ import pandas as pd
 import bcrypt
 import random
 from datetime import datetime, time
-import time  # Adicionei esta importação faltante
+import time as time_lib  # CORREÇÃO: Renomeado para evitar conflito com o 'time' do datetime
 from database import get_db
 from firebase_admin import firestore
 
@@ -490,7 +490,7 @@ def gestao_exame_de_faixa():
                     else:
                         db.collection('config_exames').add(dados_config)
                     st.success(f"Salvo para Faixa {faixa_config}!")
-                    time.sleep(1)
+                    time_lib.sleep(1) # CORREÇÃO: Usando a biblioteca renomeada
                     st.rerun()
             else:
                 dados_config['questoes'] = [] 
@@ -499,7 +499,7 @@ def gestao_exame_de_faixa():
                 else:
                     db.collection('config_exames').add(dados_config)
                 st.success(f"Salvo para Faixa {faixa_config}!")
-                time.sleep(1)
+                time_lib.sleep(1) # CORREÇÃO: Usando a biblioteca renomeada
                 st.rerun()
 
     # --- ABA 2: VISUALIZAR PROVAS (VISUAL COLORIDO RESTAURADO) ---
@@ -560,8 +560,11 @@ def gestao_exame_de_faixa():
             d_inicio = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
             d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
             c3, c4 = st.columns(2)
+            
+            # AGORA FUNCIONA: O 'time' aqui refere-se à classe do datetime, pois renomeamos o import da biblioteca
             h_inicio = c3.time_input("Hora Início:", time(0, 0), key="hora_inicio_exame")
             h_fim = c4.time_input("Hora Fim:", time(23, 59), key="hora_fim_exame")
+            
             dt_inicio = datetime.combine(d_inicio, h_inicio)
             dt_fim = datetime.combine(d_fim, h_fim)
 
