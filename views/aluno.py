@@ -17,45 +17,69 @@ from utils import (
 from firebase_admin import firestore
 
 # =========================================
-# CARREGADOR DE EXAME
+# CARREGADOR DE EXAME (CORRIGIDO E ROBUSTO)
 # =========================================
 def carregar_exame_especifico(faixa_alvo):
+    """
+    Busca a prova específica configurada pelo professor.
+    Prioridade: 1. Configuração Manual -> 2. Sorteio no Banco -> 3. Fallback
+    """
     db = get_db()
-    faixa_norm = faixa_alvo.strip().lower()
     
     questoes_finais = []
     tempo = 45
     nota = 70
+    qtd_alvo = 10
 
-    # 1. Busca Configuração
-    configs = db.collection('config_exames').stream()
+    # 1. Tenta buscar a CONFIGURAÇÃO DO EXAME para essa faixa
+    # Usa where direto para ser exato
+    configs = db.collection('config_exames').where('faixa', '==', faixa_alvo).limit(1).stream()
+    
+    config_doc = None
     for doc in configs:
-        d = doc.to_dict()
-        if d.get('faixa', '').strip().lower() == faixa_norm:
-            tempo = int(d.get('tempo_limite', 45))
-            nota = int(d.get('aprovacao_minima', 70))
-            if d.get('questoes'): questoes_finais = d.get('questoes')
-            break
-            
-    # 2. Busca no banco (Aleatório)
+        config_doc = doc.to_dict()
+        break
+    
+    if config_doc:
+        # Se achou configuração, pega as regras
+        tempo = int(config_doc.get('tempo_limite', 45))
+        nota = int(config_doc.get('aprovacao_minima', 70))
+        qtd_alvo = int(config_doc.get('qtd_questoes', 10))
+        
+        # SE FOR MODO MANUAL: As questões já estão salvas dentro da config
+        if config_doc.get('questoes') and len(config_doc.get('questoes')) > 0:
+            questoes_finais = config_doc.get('questoes')
+            return questoes_finais, tempo, nota
+
+    # 2. SE FOR MODO ALEATÓRIO (ou se não achou config): Busca no Banco de Questões
     if not questoes_finais:
-        todas_refs = db.collection('questoes').where('status', '==', 'aprovada').stream()
+        # Busca questões da Faixa Específica
+        q_spec = list(db.collection('questoes').where('faixa', '==', faixa_alvo).where('status', '==', 'aprovada').stream())
+        # Busca questões Gerais
+        q_geral = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
+        
         pool = []
-        for doc in todas_refs:
-            q = doc.to_dict()
-            q_faixa = q.get('faixa', '').strip().lower()
-            if q_faixa == faixa_norm or q_faixa == 'geral': pool.append(q)
+        ids_vistos = set()
+        
+        # Junta as listas removendo duplicatas
+        for doc in q_spec + q_geral:
+            if doc.id not in ids_vistos:
+                pool.append(doc.to_dict())
+                ids_vistos.add(doc.id)
         
         if pool:
-            qtd_alvo = int(d.get('qtd_questoes', 10)) if 'd' in locals() else 10
-            if len(pool) > qtd_alvo: questoes_finais = random.sample(pool, qtd_alvo)
-            else: questoes_finais = pool
+            if len(pool) > qtd_alvo:
+                questoes_finais = random.sample(pool, qtd_alvo)
+            else:
+                questoes_finais = pool
 
-    # 3. Fallback
+    # 3. FALLBACK (JSON Local) - Último recurso
     if not questoes_finais:
         todas_json = carregar_todas_questoes()
-        pool_json = [q for q in todas_json if q.get('faixa', '').lower() in [faixa_norm, 'geral']]
-        if pool_json: questoes_finais = pool_json[:10]
+        faixa_norm = faixa_alvo.strip().lower()
+        pool_json = [q for q in todas_json if q.get('faixa', '').strip().lower() in [faixa_norm, 'geral']]
+        if pool_json:
+            questoes_finais = pool_json[:qtd_alvo]
 
     return questoes_finais, tempo, nota
 
@@ -69,26 +93,25 @@ def modo_rola(usuario):
 def meus_certificados(usuario):
     st.markdown(f"## 🏅 Meus Certificados")
     db = get_db()
-    docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
-    lista = [d.to_dict() for d in docs]
     
-    if not lista:
+    docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
+    lista_cert = [d.to_dict() for d in docs]
+    
+    if not lista_cert:
         st.info("Você ainda não possui certificados emitidos.")
         return
 
-    for i, cert in enumerate(lista):
+    for i, cert in enumerate(lista_cert):
         with st.container(border=True):
             c1, c2 = st.columns([3, 1])
             c1.markdown(f"**Faixa {cert.get('faixa')}**")
             
-            data_formatada = "-"
+            d_str = "-"
             if cert.get('data'):
-                # Verifica se é datetime ou string e formata
-                ts = cert.get('data')
-                if hasattr(ts, 'strftime'):
-                    data_formatada = ts.strftime('%d/%m/%Y')
-                
-            c1.caption(f"Data: {data_formatada} | Nota: {cert.get('pontuacao')}%")
+                try: d_str = cert.get('data').strftime('%d/%m/%Y')
+                except: pass
+            
+            c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao')}%")
             
             try:
                 pdf_bytes, pdf_name = gerar_pdf(
@@ -120,7 +143,7 @@ def exame_de_faixa(usuario):
     if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
-    # 0. Resultado Imediato
+    # --- 0. RESULTADO IMEDIATO ---
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons()
@@ -132,7 +155,7 @@ def exame_de_faixa(usuario):
             st.session_state.resultado_prova = None; st.rerun()
         return
 
-    # 1. Permissões
+    # --- 1. PERMISSÕES ---
     esta_habilitado = dados.get('exame_habilitado', False)
     faixa_alvo = dados.get('faixa_exame', None)
     
@@ -140,11 +163,11 @@ def exame_de_faixa(usuario):
         st.warning("🔒 Nenhum exame autorizado pelo professor.")
         return
 
-    # 2. Datas (Fuso Horário Ajustado)
+    # --- 2. DATAS (Fuso Horário -3h) ---
     try:
         data_inicio = dados.get('exame_inicio')
         data_fim = dados.get('exame_fim')
-        agora = datetime.utcnow() - timedelta(hours=3) # UTC-3 (Brasília)
+        agora = datetime.utcnow() - timedelta(hours=3) 
         
         if isinstance(data_inicio, str): data_inicio = datetime.fromisoformat(data_inicio)
         if isinstance(data_fim, str): data_fim = datetime.fromisoformat(data_fim)
@@ -160,14 +183,12 @@ def exame_de_faixa(usuario):
             return
     except: pass
 
-    # 3. Status
+    # --- 3. STATUS ---
     status = dados.get('status_exame', 'pendente')
-    if status == 'aprovado':
-        st.success(f"✅ Você já foi aprovado na Faixa {faixa_alvo}!"); return
-    if status == 'bloqueado':
-        st.error("🚫 Exame BLOQUEADO por segurança."); return
+    if status == 'aprovado': st.success(f"✅ Já aprovado na Faixa {faixa_alvo}!"); return
+    if status == 'bloqueado': st.error("🚫 Exame BLOQUEADO."); return
 
-    # 4. Anti-Fraude (Auto-Recuperação)
+    # --- 4. AUTO-RECUPERAÇÃO (Anti-Fraude Tolerante) ---
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
         inicio_real = dados.get("inicio_exame_temp")
         recuperavel = False
@@ -175,7 +196,7 @@ def exame_de_faixa(usuario):
             try:
                 if isinstance(inicio_real, str): inicio_real = datetime.fromisoformat(inicio_real)
                 inicio_real = inicio_real.replace(tzinfo=None)
-                # Tolerância de 2 min
+                # 2 minutos de tolerância
                 if (datetime.utcnow() - timedelta(hours=3) - inicio_real).total_seconds() < 120:
                     recuperavel = True
             except: pass
@@ -185,7 +206,7 @@ def exame_de_faixa(usuario):
             l, t, m = carregar_exame_especifico(faixa_alvo)
             st.session_state.exame_iniciado = True
             st.session_state.inicio_prova = inicio_real
-            st.session_state.questoes_prova = l 
+            st.session_state.questoes_prova = l
             st.session_state.params_prova = {"tempo": t, "min": m}
             st.session_state.fim_prova_ts = inicio_real.timestamp() + (t * 60)
             st.rerun()
@@ -193,15 +214,15 @@ def exame_de_faixa(usuario):
             bloquear_por_abandono(usuario['id'])
             st.error("🚨 Bloqueado por saída da página."); st.stop()
 
-    # 5. Carregamento
+    # --- 5. CARREGAMENTO ---
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd = len(lista_questoes)
 
     # JS Anti-Cola
     if st.session_state.exame_iniciado:
-        components.v1.html("""<script>document.addEventListener("visibilitychange", function() {if(document.hidden){document.body.innerHTML="<h1 style='color:red;text-align:center;margin-top:20%'>BLOQUEADO</h1>"}});</script>""", height=0)
+        components.v1.html("""<script>document.addEventListener("visibilitychange", function() {if(document.hidden){document.body.innerHTML="<h1 style='color:red;text-align:center;margin-top:20%'>🚨 BLOQUEADO 🚨</h1>"}});</script>""", height=0)
 
-    # Tela Inicial
+    # --- 6. TELA DE INÍCIO ---
     if not st.session_state.exame_iniciado:
         st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
         with st.container(border=True):
@@ -210,15 +231,10 @@ def exame_de_faixa(usuario):
             c2.markdown(f"⏱️ **{tempo_limite} min**")
             c3.markdown(f"✅ **{min_aprovacao}%**")
             st.markdown("---")
-            st.markdown("""
-            **ATENÇÃO:**
-            * O cronômetro não para.
-            * Proibido mudar de aba (Bloqueio Imediato).
-            * Reprovação exige espera de 72h.
-            """)
+            st.markdown("**ATENÇÃO:** O cronômetro não para. Não saia da tela.")
         
         if qtd > 0:
-            if st.button("✅ Li e Concordo. INICIAR EXAME", type="primary", use_container_width=True):
+            if st.button("✅ INICIAR EXAME", type="primary", use_container_width=True):
                 registrar_inicio_exame(usuario['id'])
                 st.session_state.exame_iniciado = True
                 st.session_state.inicio_prova = datetime.utcnow() - timedelta(hours=3)
@@ -227,9 +243,9 @@ def exame_de_faixa(usuario):
                 st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
                 st.rerun()
         else:
-            st.warning(f"⚠️ Sem questões para **{faixa_alvo}**.")
+            st.warning(f"⚠️ Sem questões encontradas para **{faixa_alvo}**.")
 
-    # Prova
+    # --- 7. PROVA ---
     else:
         questoes = st.session_state.get('questoes_prova', [])
         params = st.session_state.get('params_prova', {})
