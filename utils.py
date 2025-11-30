@@ -8,7 +8,7 @@ import secrets
 import string
 import unicodedata
 import qrcode
-import random  # GARANTINDO O IMPORT AQUI
+import random
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -140,14 +140,24 @@ def enviar_email_recuperacao(email_destino, nova_senha):
     except: return False
 
 # =========================================
-# 4. CÓDIGOS E QR CODE (CORRIGIDO AQUI)
+# 4. CÓDIGOS E QR CODE (FORMATO NOVO)
 # =========================================
-def gerar_codigo_verificacao(tamanho=8):
-    # Importação local para garantir que não falhe
-    import random
-    import string
-    chars = string.ascii_uppercase + string.digits
-    return ''.join(random.choice(chars) for _ in range(tamanho))
+def gerar_codigo_verificacao():
+    """Gera código no formato BJJDIGITAL-{ANO}-{SEQUENCIA}"""
+    try:
+        db = get_db()
+        # Tenta contar quantos certificados já existem para gerar sequencial
+        docs = db.collection('resultados').count().get()
+        total = docs[0][0].value
+    except:
+        # Fallback se der erro no banco: gera número aleatório
+        total = random.randint(1000, 9999)
+    
+    sequencia = total + 1
+    ano_atual = datetime.now().year
+    
+    # Formato: BJJDIGITAL-2025-0042
+    return f"BJJDIGITAL-{ano_atual}-{sequencia:04d}"
 
 def gerar_qrcode(codigo):
     import os
@@ -164,7 +174,7 @@ def gerar_qrcode(codigo):
     return caminho_qr
 
 # =========================================
-# 5. PDF MODERNO
+# 5. PDF MODERNO (LAYOUT AJUSTADO)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
@@ -179,37 +189,41 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         cor_cinza = (100, 100, 100)
         cor_fundo = (252, 252, 250)
 
+        # Fundo
         pdf.set_fill_color(*cor_fundo)
         pdf.rect(0, 0, 297, 210, "F")
 
+        # Barra Lateral
         largura_barra = 60
         pdf.set_fill_color(*cor_preto)
         pdf.rect(0, 0, largura_barra, 210, "F")
         pdf.set_fill_color(*cor_dourado)
         pdf.rect(largura_barra, 0, 2, 210, "F")
 
+        # Logo
         if os.path.exists("assets/logo.png"):
             try: pdf.image("assets/logo.png", x=10, y=30, w=40)
             except: pass
         
+        # Configuração da Área de Texto
         x_inicio = largura_barra + 10 
         largura_util = 297 - x_inicio - 10 
 
-        pdf.set_xy(x_inicio, 40)
+        # Título Principal
+        pdf.set_xy(x_inicio, 35) # Subi um pouco (era 40)
         pdf.set_font("Helvetica", "B", 32)
         pdf.set_text_color(*cor_dourado)
-        pdf.cell(largura_util, 15, "CERTIFICADO", ln=1, align="C")
+        pdf.cell(largura_util, 15, "CERTIFICADO DE DE EXAME TEÓRICO DE FAIXA"", ln=1, align="C")
         
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(*cor_cinza)
-        pdf.cell(largura_util, 8, "DE CONCLUSÃO DE EXAME DE FAIXA", ln=1, align="C")
-
-        pdf.ln(15)
+        pdf.ln(12) 
+        
+        # Texto Introdutório
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*cor_preto)
         pdf.cell(largura_util, 10, "Certificamos que o(a) aluno(a)", ln=1, align="C")
 
-        pdf.ln(5)
+        # Nome do Aluno (Auto-Ajuste)
+        pdf.ln(2)
         try: nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
         except: nome_limpo = usuario_nome.upper()
 
@@ -220,51 +234,64 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
             pdf.set_font("Helvetica", "B", tamanho_fonte)
         
         pdf.set_text_color(*cor_dourado)
-        pdf.cell(largura_util, 15, nome_limpo, ln=1, align="C")
+        pdf.cell(largura_util, 16, nome_limpo, ln=1, align="C")
         
+        # Linha decorativa
         x_linha = x_inicio + 20
         y_linha = pdf.get_y()
         pdf.set_draw_color(*cor_cinza)
         pdf.set_line_width(0.2)
         pdf.line(x_linha, y_linha, 297 - 20, y_linha)
 
-        pdf.ln(10)
+        pdf.ln(8)
+
+        # Texto de Conclusão
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*cor_preto)
-        pdf.cell(largura_util, 10, "Concluiu com êxito os requisitos técnicos e teóricos para a:", ln=1, align="C")
+        pdf.cell(largura_util, 10, "Concluiu com êxito o exame teóricos para a:", ln=1, align="C")
 
-        pdf.ln(5)
+        # Faixa
+        pdf.ln(2)
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_text_color(*cor_preto)
-        pdf.cell(largura_util, 10, f"FAIXA {str(faixa).upper()}", ln=1, align="C")
+        pdf.cell(largura_util, 12, f"FAIXA {str(faixa).upper()}", ln=1, align="C")
 
-        pdf.ln(15)
+        # Detalhes (Data e Nota) - Mais organizados
+        pdf.ln(10)
         pdf.set_font("Helvetica", "", 11)
         pdf.set_text_color(*cor_cinza)
         try: percentual = int((pontuacao / total) * 100) if total > 0 else 0
         except: percentual = 0
         data_fmt = datetime.now().strftime("%d/%m/%Y")
 
-        pdf.cell(largura_util, 6, f"Data de Emissão: {data_fmt}", ln=1, align="C")
-        pdf.cell(largura_util, 6, f"Aproveitamento no Exame: {percentual}%", ln=1, align="C")
+        pdf.cell(largura_util, 6, f"Data de Emissão: {data_fmt}  |  Aproveitamento: {percentual}%", ln=1, align="C")
 
-        y_qr = 155; x_qr = 245; tamanho_qr = 25
+        # Rodapé (Assinatura e QR Code)
+        y_rodape = 165 # Posição Y fixa para o rodapé
+        
+        # Assinatura (Esquerda da área branca)
+        pdf.set_xy(x_inicio + 20, y_rodape + 10)
+        pdf.set_draw_color(*cor_preto)
+        pdf.line(x_inicio + 20, y_rodape + 10, x_inicio + 90, y_rodape + 10) # Linha da assinatura
+        pdf.set_xy(x_inicio + 20, y_rodape + 11)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(70, 5, "Professor Responsável", align="C")
+
+        # QR Code e Hash (Direita da área branca)
+        y_qr = 155
+        x_qr = 245
+        tamanho_qr = 25
+        
         try:
             caminho_qr = gerar_qrcode(codigo)
             pdf.image(caminho_qr, x=x_qr, y=y_qr, w=tamanho_qr)
         except: pass
 
-        pdf.set_xy(x_qr - 10, y_qr + tamanho_qr + 2)
-        pdf.set_font("Courier", "", 8)
+        # Hash logo abaixo do QR Code
+        pdf.set_xy(x_qr - 15, y_qr + tamanho_qr + 2) # Ajustei o X para centralizar melhor o texto longo
+        pdf.set_font("Courier", "", 8) # Fonte Courier fica melhor para ler códigos
         pdf.set_text_color(*cor_cinza)
-        pdf.cell(45, 4, f"Cod: {codigo}", align="C")
-        
-        pdf.set_xy(x_inicio + 20, 175)
-        pdf.set_draw_color(*cor_preto)
-        pdf.line(x_inicio + 20, 175, x_inicio + 90, 175)
-        pdf.set_xy(x_inicio + 20, 176)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.cell(70, 5, "Professor Responsável", align="C")
+        pdf.cell(55, 4, f"{codigo}", align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
     except Exception as e:
@@ -275,7 +302,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
 # 6. REGRAS DO EXAME
 # =========================================
 def verificar_elegibilidade_exame(usuario_data):
-    return True, "OK" # Simplificado para evitar bloqueios indesejados no teste
+    return True, "OK" 
 
 def registrar_inicio_exame(usuario_id):
     try:
