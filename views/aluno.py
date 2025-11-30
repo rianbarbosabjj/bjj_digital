@@ -3,7 +3,7 @@ import time
 import random
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import streamlit.components.v1 as components 
 from database import get_db
 from utils import (
@@ -161,11 +161,13 @@ def exame_de_faixa(usuario):
         st.caption("Aguarde a liberação na área de Gestão de Exames.")
         return
 
-    # Datas
+    # --- 2. VERIFICAÇÃO DE PRAZO (COM AJUSTE DE FUSO HORÁRIO) ---
     try:
         data_inicio = dados.get('exame_inicio')
         data_fim = dados.get('exame_fim')
-        agora = datetime.now()
+        
+        # Ajuste para Horário de Brasília (-3h em relação ao servidor UTC)
+        agora = datetime.now() - timedelta(hours=3)
         
         if isinstance(data_inicio, str): data_inicio = datetime.fromisoformat(data_inicio)
         if isinstance(data_fim, str): data_fim = datetime.fromisoformat(data_fim)
@@ -174,26 +176,31 @@ def exame_de_faixa(usuario):
         if data_fim: data_fim = data_fim.replace(tzinfo=None)
         
         if data_inicio and agora < data_inicio:
-            st.warning(f"⏳ O exame começa em: **{data_inicio.strftime('%d/%m/%Y %H:%M')}**")
+            st.warning(f"⏳ O exame estará liberado a partir de: **{data_inicio.strftime('%d/%m/%Y às %H:%M')}**")
             return
+            
         if data_fim and agora > data_fim:
-            st.error(f"🚫 O prazo expirou em: **{data_fim.strftime('%d/%m/%Y %H:%M')}**")
+            st.error(f"🚫 O prazo para este exame expirou em: **{data_fim.strftime('%d/%m/%Y às %H:%M')}**")
+            st.caption(f"Horário atual do sistema: {agora.strftime('%d/%m/%Y %H:%M')}")
             return
-    except: pass
+            
+    except Exception as e:
+        # Log interno apenas, fail-open para não travar o aluno por erro de conversão
+        print(f"Aviso data: {e}")
 
-    # Status
-    status = dados.get('status_exame', 'pendente')
-    if status == 'aprovado':
+    # --- 3. VERIFICAÇÃO DE STATUS ---
+    status_atual = dados.get('status_exame', 'pendente')
+    if status_atual == 'aprovado':
         st.success(f"✅ Você já foi aprovado na Faixa {faixa_alvo}!")
         st.info("Acesse 'Meus Certificados' para baixar.")
         return
-    if status == 'bloqueado':
+    if status_atual == 'bloqueado':
         st.error("🚫 Exame BLOQUEADO por segurança.")
         st.warning("Motivo: Saída da página ou interrupção. Contate o professor.")
         return
 
     # ==============================================================================
-    # 2. LÓGICA DE RECUPERAÇÃO INTELIGENTE (ANTI-FRAUDE TOLERANTE)
+    # 4. LÓGICA DE RECUPERAÇÃO INTELIGENTE (ANTI-FRAUDE TOLERANTE)
     # ==============================================================================
     if dados.get("status_exame") == "em_andamento":
         
@@ -228,7 +235,7 @@ def exame_de_faixa(usuario):
                 st.error("🚨 DETECÇÃO DE INFRAÇÃO: Sessão perdida ou saída da página.")
                 st.stop()
 
-    # --- 3. CARREGAMENTO INICIAL ---
+    # --- 5. CARREGAMENTO INICIAL ---
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd_questoes = len(lista_questoes)
 
@@ -236,7 +243,7 @@ def exame_de_faixa(usuario):
     if st.session_state.exame_iniciado:
         components.v1.html("""<script>document.addEventListener("visibilitychange", function() {if(document.hidden){document.body.innerHTML="<h1 style='color:red;text-align:center;margin-top:20%'>🚨 BLOQUEADO POR MUDANÇA DE ABA 🚨</h1>"}});</script>""", height=0)
 
-    # --- 4. TELA DE INSTRUÇÕES ---
+    # --- 6. TELA DE INSTRUÇÕES ---
     if not st.session_state.exame_iniciado:
         st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
         
@@ -246,7 +253,12 @@ def exame_de_faixa(usuario):
             c2.markdown(f"⏱️ **{tempo_limite} min**")
             c3.markdown(f"✅ **{min_aprovacao}%**")
             st.markdown("---")
-            st.markdown("**ATENÇÃO:** O cronômetro não para. Não saia desta tela.")
+            st.markdown("""
+            **ATENÇÃO:**
+            * O cronômetro não para.
+            * Proibido mudar de aba (Bloqueio Imediato).
+            * Reprovação exige espera de 72h (salvo liberação do professor).
+            """)
         
         if qtd_questoes > 0:
             if st.button("✅ Li e Concordo. INICIAR EXAME", type="primary", use_container_width=True):
@@ -260,7 +272,7 @@ def exame_de_faixa(usuario):
         else:
             st.warning(f"⚠️ Erro: Nenhuma questão encontrada para **{faixa_alvo}**. Professor, verifique o cadastro.")
 
-    # --- 5. PROVA EM ANDAMENTO ---
+    # --- 7. PROVA EM ANDAMENTO ---
     else:
         questoes = st.session_state.get('questoes_prova', [])
         params = st.session_state.get('params_prova', {"tempo": 45, "min_aprovacao": 70})
