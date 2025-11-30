@@ -322,8 +322,6 @@ def gestao_exame_de_faixa():
             doc_id_config = doc.id
             break
             
-        # --- CORREÇÃO DO ERRO AQUI ---
-        # Lemos o stream uma única vez e convertemos para lista de dicionários já com ID
         if faixa_config == "Todas":
             snapshots = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         else:
@@ -331,16 +329,13 @@ def gestao_exame_de_faixa():
             s2 = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
             snapshots = s1 + s2
 
-        # Monta lista limpa com ID injetado
         questoes_map = {}
         for doc in snapshots:
-            d = doc.to_dict()
-            d['id'] = doc.id # ID garantido
+            d = doc.to_dict(); d['id'] = doc.id
             questoes_map[doc.id] = d
-            
         lista_questoes_obj = list(questoes_map.values())
+            
         qtd_disponivel = len(lista_questoes_obj)
-        
         st.info(f"Questões disponíveis: **{qtd_disponivel}**")
         
         modo_atual = config_atual.get('modo_selecao', "🎲 Aleatório (Sorteio)")
@@ -362,19 +357,14 @@ def gestao_exame_de_faixa():
 
                 with st.container(height=400):
                     for i, q in enumerate(lista_questoes_obj):
-                        # Chave segura com índice 'i' para evitar Duplicate Key Error
                         is_checked = (q.get('id') in ids_salvos) or (q.get('pergunta') in ids_salvos)
                         c_chk, c_txt = st.columns([0.5, 10])
                         selecionado = c_chk.checkbox("", value=is_checked, key=f"chk_{faixa_config}_{q.get('id','no_id')}_{i}")
-                        
-                        if selecionado:
-                            questoes_escolhidas_manual.append(q)
-                            
+                        if selecionado: questoes_escolhidas_manual.append(q)
                         with c_txt:
                             st.markdown(f"**{q.get('pergunta')}**")
                             st.caption(f"✅ {q.get('resposta')} | Autor: {q.get('criado_por', '?')}")
                             st.markdown("---")
-
                 qtd_final = len(questoes_escolhidas_manual)
                 st.success(f"**{qtd_final}** questões selecionadas.")
         
@@ -393,70 +383,61 @@ def gestao_exame_de_faixa():
         st.write("")
         if st.button("💾 Salvar Configuração", type="primary"):
             dados_config = {
-                "faixa": faixa_config,
-                "tempo_limite": tempo,
-                "qtd_questoes": qtd_final,
-                "aprovacao_minima": nota,
-                "modo_selecao": modo_selecao,
+                "faixa": faixa_config, "tempo_limite": tempo, "qtd_questoes": qtd_final,
+                "aprovacao_minima": nota, "modo_selecao": modo_selecao,
                 "atualizado_em": firestore.SERVER_TIMESTAMP
             }
-            
             if modo_selecao == "🖐️ Manual (Fixa)":
-                if not questoes_escolhidas_manual:
-                    st.error("Selecione pelo menos uma questão.")
-                    st.stop()
+                if not questoes_escolhidas_manual: st.error("Selecione questões."); st.stop()
                 dados_config['questoes'] = questoes_escolhidas_manual
-            else:
-                dados_config['questoes'] = [] 
+            else: dados_config['questoes'] = [] 
             
-            if doc_id_config:
-                db.collection('config_exames').document(doc_id_config).update(dados_config)
-            else:
-                db.collection('config_exames').add(dados_config)
-                
-            st.success(f"Configuração salva para Faixa {faixa_config}!")
-            time.sleep(1)
-            st.rerun()
+            if doc_id_config: db.collection('config_exames').document(doc_id_config).update(dados_config)
+            else: db.collection('config_exames').add(dados_config)
+            st.success(f"Salvo para Faixa {faixa_config}!"); time.sleep(1); st.rerun()
 
     # --- ABA 2: VISUALIZAR PROVAS (RESTAURADO) ---
     with tab2:
-        st.subheader("Status das Provas")
+        st.subheader("Status das Provas por Faixa")
         
+        # Busca todas as configurações salvas
         configs_all = list(db.collection('config_exames').stream())
         mapa_configs = {d.to_dict()['faixa']: d.to_dict() for d in configs_all}
 
-        grupos = {
+        # Categorias de Cores para organização visual
+        categorias = {
             "⚪ Iniciante": ["Branca", "Cinza e Branca", "Cinza", "Cinza e Preta"],
             "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
             "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
             "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
             "🔵 Avançado": ["Azul", "Roxa", "Marrom", "Preta"]
         }
-
-        for nome_grp, lista_fx in grupos.items():
-            with st.expander(nome_grp, expanded=True):
-                for fx in lista_fx:
+        
+        for nome_grupo, lista_faixas in categorias.items():
+            with st.expander(f"{nome_grupo}", expanded=True):
+                for fx in lista_faixas:
                     c1, c2 = st.columns([0.5, 10])
                     tem_config = fx in mapa_configs
                     
-                    with c1: st.markdown("🟢" if tem_config else "🔴")
+                    with c1:
+                        st.markdown("🟢" if tem_config else "🔴")
+                    
                     with c2:
                         if tem_config:
-                            d = mapa_configs[fx]
-                            modo = d.get('modo_selecao', 'Sorteio')
-                            qtd = d.get('qtd_questoes', 0)
+                            data = mapa_configs[fx]
+                            modo = data.get('modo_selecao', 'Sorteio')
+                            qtd = data.get('qtd_questoes', 0)
+                            st.markdown(f"**{fx}**: Configurada ({modo} - {qtd} questões)")
                             
-                            if modo == "🖐️ Manual (Fixa)":
-                                st.markdown(f"**{fx}**: Manual ({qtd} questões fixas)")
-                                with st.expander(f"Ver questões de {fx}"):
-                                    for i, q in enumerate(d.get('questoes', []), 1):
+                            # Se for manual, mostra as questões
+                            if modo == "🖐️ Manual (Fixa)" and data.get('questoes'):
+                                with st.expander("Ver Questões"):
+                                    for i, q in enumerate(data['questoes'], 1):
                                         st.markdown(f"**{i}. {q.get('pergunta')}**")
-                                        st.caption(f"✅ {q.get('resposta')}")
+                                        st.caption(f"Resp: {q.get('resposta')}")
                                         st.divider()
-                            else:
-                                st.markdown(f"**{fx}**: Sorteio ({qtd} questões do banco)")
                         else:
-                            st.markdown(f"**{fx}**: Pendente")
+                            st.markdown(f"**{fx}**: Pendente (Não configurada)")
 
     # --- ABA 3: AUTORIZAR ALUNOS ---
     with tab3:
@@ -518,7 +499,6 @@ def gestao_exame_de_faixa():
                 if status == 'aprovado': msg = "🏆 Aprovado"
                 elif status == 'bloqueado': msg = "⛔ Bloqueado"
                 elif status == 'reprovado': msg = "🔴 Reprovado"
-                
                 c4.caption(msg)
                 if c5.button("⛔", key=f"off_{aluno['id']}"):
                     db.collection('usuarios').document(aluno['id']).update({
