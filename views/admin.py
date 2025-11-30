@@ -87,7 +87,10 @@ def gestao_usuarios(usuario_logado):
                 idx_t = tipos.index(usuario_selecionado['tipo_usuario']) if usuario_selecionado['tipo_usuario'] in tipos else 0
                 novo_tipo = c4.selectbox("Perfil:", tipos, index=idx_t)
 
-                idx_f = FAIXAS_COMPLETAS.index(usuario_selecionado['faixa_atual']) if usuario_selecionado['faixa_atual'] in FAIXAS_COMPLETAS else 0
+                # Faixa do Aluno (Perfil)
+                idx_f = 0
+                if usuario_selecionado['faixa_atual'] in FAIXAS_COMPLETAS:
+                    idx_f = FAIXAS_COMPLETAS.index(usuario_selecionado['faixa_atual'])
                 novo_faixa = st.selectbox("Faixa Atual:", FAIXAS_COMPLETAS, index=idx_f)
                 
                 st.markdown("---")
@@ -304,15 +307,17 @@ def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
     db = get_db()
 
+    # Abas: EDITOR e AUTORIZAÇÃO (Separados para clareza)
     tab1, tab2 = st.tabs(["📝 Criar e Editar Provas", "👥 Autorizar Alunos"])
 
     # --- ABA 1: EDITOR DE PROVAS ---
     with tab1:
         st.subheader("Configurar Regras da Prova")
         
+        # Seleciona a faixa
         faixa_config = st.selectbox("Selecione a Faixa:", ["Todas"] + FAIXAS_COMPLETAS)
         
-        # Busca config
+        # Busca config existente no banco (para carregar o estado atual)
         config_ref = db.collection('config_exames').where('faixa', '==', faixa_config).stream()
         config_atual = {}
         doc_id_config = None
@@ -321,40 +326,39 @@ def gestao_exame_de_faixa():
             doc_id_config = doc.id
             break
             
-        # Busca Questões (CORREÇÃO DE ID)
+        # Busca Questões disponíveis no banco
         if faixa_config == "Todas":
             q_query = db.collection('questoes').where('status', '==', 'aprovada').stream()
-            lista_questoes_obj = []
-            for q in q_query:
-                d = q.to_dict()
-                d['id'] = q.id # Garante que o ID venha do documento
-                lista_questoes_obj.append(d)
+            lista_questoes_obj = [q.to_dict() for q in q_query]
         else:
             q_spec = list(db.collection('questoes').where('faixa', '==', faixa_config).where('status', '==', 'aprovada').stream())
             q_geral = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
             questoes_map = {}
+            # Garante ID
             for q in q_spec + q_geral:
                 d = q.to_dict()
-                d['id'] = q.id # Garante que o ID venha do documento
+                d['id'] = q.id 
                 questoes_map[q.id] = d
             lista_questoes_obj = list(questoes_map.values())
             
         qtd_disponivel = len(lista_questoes_obj)
-        st.info(f"Questões disponíveis: **{qtd_disponivel}**")
+        st.info(f"Questões disponíveis para **{faixa_config}**: **{qtd_disponivel}**")
         
+        # Modo de Seleção
         modo_atual = config_atual.get('modo_selecao', "🎲 Aleatório (Sorteio)")
         modo_selecao = st.radio("Modo de Seleção:", ["🎲 Aleatório (Sorteio)", "🖐️ Manual (Fixa)"], index=0 if "Aleatório" in modo_atual else 1)
         
         questoes_escolhidas_manual = []
         qtd_final = 0
         
-        # SELEÇÃO MANUAL (CARDS COM CHAVE ÚNICA CORRIGIDA)
+        # SELEÇÃO MANUAL
         if modo_selecao == "🖐️ Manual (Fixa)":
             if qtd_disponivel == 0:
                 st.warning("Não há questões para selecionar.")
             else:
                 st.markdown("##### Selecione as questões:")
                 
+                # Recupera o que já estava salvo
                 ids_salvos = set()
                 if config_atual.get('questoes'):
                     for q_salva in config_atual['questoes']:
@@ -362,13 +366,13 @@ def gestao_exame_de_faixa():
                         else: ids_salvos.add(q_salva.get('pergunta'))
 
                 with st.container(height=400):
-                    # Adicionado enumerate para garantir chave única com 'i'
                     for i, q in enumerate(lista_questoes_obj):
+                        # Verifica se está marcado
                         is_checked = (q.get('id') in ids_salvos) or (q.get('pergunta') in ids_salvos)
                         
                         c_chk, c_txt = st.columns([0.5, 10])
-                        # Chave blindada com índice
-                        selecionado = c_chk.checkbox("", value=is_checked, key=f"chk_{faixa_config}_{q.get('id','no_id')}_{i}")
+                        # Chave única usando índice para evitar duplicidade
+                        selecionado = c_chk.checkbox("", value=is_checked, key=f"chk_{faixa_config}_{q.get('id','no')}_{i}")
                         
                         if selecionado:
                             questoes_escolhidas_manual.append(q)
@@ -382,10 +386,13 @@ def gestao_exame_de_faixa():
                 st.success(f"**{qtd_final}** questões selecionadas.")
         
         st.markdown("---")
+        
+        # Campos de Tempo e Nota
         c1, c2, c3 = st.columns(3)
         tempo = c1.number_input("⏱️ Tempo (min):", min_value=10, value=int(config_atual.get('tempo_limite', 45)))
         nota = c3.number_input("✅ Nota Mínima (%):", min_value=50, max_value=100, value=int(config_atual.get('aprovacao_minima', 70)))
         
+        # Campo de Quantidade (Auto ou Manual)
         if modo_selecao == "🎲 Aleatório (Sorteio)":
             max_val = max(qtd_disponivel, 1)
             val_padrao = int(config_atual.get('qtd_questoes', min(10, max_val)))
@@ -410,8 +417,9 @@ def gestao_exame_de_faixa():
                     st.stop()
                 dados_config['questoes'] = questoes_escolhidas_manual
             else:
-                dados_config['questoes'] = [] 
+                dados_config['questoes'] = [] # Limpa se for sorteio
             
+            # Salva no banco
             if doc_id_config:
                 db.collection('config_exames').document(doc_id_config).update(dados_config)
             else:
@@ -437,6 +445,7 @@ def gestao_exame_de_faixa():
         st.write("") 
         st.subheader("Lista de Alunos")
         
+        # Busca alunos
         alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
         lista_alunos = []
         for doc in alunos_ref:
@@ -493,6 +502,7 @@ def gestao_exame_de_faixa():
             else:
                 c4.caption("⚪ Não autorizado")
                 if c5.button("✅", key=f"on_{aluno['id']}"):
+                    # Salva tudo no usuário
                     db.collection('usuarios').document(aluno['id']).update({
                         "exame_habilitado": True, "faixa_exame": fx_sel,
                         "exame_inicio": dt_inicio.isoformat(), "exame_fim": dt_fim.isoformat(),
