@@ -403,7 +403,6 @@ def gestao_exame_de_faixa():
             doc_id_config = doc.id
             break
             
-        # Busca Questões (CORREÇÃO DE ID)
         if faixa_config == "Todas":
             snapshots = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         else:
@@ -435,20 +434,15 @@ def gestao_exame_de_faixa():
                 ids_salvos = set()
                 if config_atual.get('questoes'):
                     for q_salva in config_atual['questoes']:
-                        if q_salva.get('id'): 
-                            ids_salvos.add(q_salva.get('id'))
-                        else: 
-                            # Para compatibilidade com versões antigas
-                            ids_salvos.add(q_salva.get('pergunta'))
+                        if q_salva.get('id'): ids_salvos.add(q_salva.get('id'))
+                        else: ids_salvos.add(q_salva.get('pergunta'))
 
                 with st.container(height=400):
                     for i, q in enumerate(lista_questoes_obj):
                         is_checked = (q.get('id') in ids_salvos) or (q.get('pergunta') in ids_salvos)
                         c_chk, c_txt = st.columns([0.5, 10])
-                        # Chave única
                         selecionado = c_chk.checkbox("", value=is_checked, key=f"chk_{faixa_config}_{q.get('id','no_id')}_{i}")
-                        if selecionado: 
-                            questoes_escolhidas_manual.append(q)
+                        if selecionado: questoes_escolhidas_manual.append(q)
                         with c_txt:
                             st.markdown(f"**{q.get('pergunta')}**")
                             st.caption(f"✅ {q.get('resposta')} | Autor: {q.get('criado_por', '?')}")
@@ -485,28 +479,22 @@ def gestao_exame_de_faixa():
                     st.error("Selecione pelo menos uma questão para o modo manual.")
                 else:
                     dados_config['questoes'] = questoes_escolhidas_manual
-                    if doc_id_config:
-                        db.collection('config_exames').document(doc_id_config).update(dados_config)
-                    else:
-                        db.collection('config_exames').add(dados_config)
+                    if doc_id_config: db.collection('config_exames').document(doc_id_config).update(dados_config)
+                    else: db.collection('config_exames').add(dados_config)
                     st.success(f"Salvo para Faixa {faixa_config}!")
-                    time_lib.sleep(1) # CORREÇÃO: Usando a biblioteca renomeada
+                    time_lib.sleep(1)
                     st.rerun()
             else:
                 dados_config['questoes'] = [] 
-                if doc_id_config:
-                    db.collection('config_exames').document(doc_id_config).update(dados_config)
-                else:
-                    db.collection('config_exames').add(dados_config)
+                if doc_id_config: db.collection('config_exames').document(doc_id_config).update(dados_config)
+                else: db.collection('config_exames').add(dados_config)
                 st.success(f"Salvo para Faixa {faixa_config}!")
-                time_lib.sleep(1) # CORREÇÃO: Usando a biblioteca renomeada
+                time_lib.sleep(1)
                 st.rerun()
 
-    # --- ABA 2: VISUALIZAR PROVAS (VISUAL COLORIDO RESTAURADO) ---
+    # --- ABA 2: VISUALIZAR PROVAS ---
     with tab2:
         st.subheader("Status das Provas Cadastradas")
-        
-        # Carrega configurações da coleção nova
         configs_stream = db.collection('config_exames').stream()
         mapa_configs = {}
         for doc in configs_stream:
@@ -518,41 +506,32 @@ def gestao_exame_de_faixa():
             "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
             "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
             "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
-            "🔵 Azul": ["Azul"],
-            "🟣 Roxa": ["Roxa"],
-            "🟤 Marrom": ["Marrom"],
-            "⚫ Preta": ["Preta"]
+            "🔵 Azul": ["Azul"], "🟣 Roxa": ["Roxa"], "🟤 Marrom": ["Marrom"], "⚫ Preta": ["Preta"]
         }
 
         abas_cores = st.tabs(list(categorias.keys()))
-
         for aba, (cor_nome, lista_faixas) in zip(abas_cores, categorias.items()):
             with aba:
                 for f_nome in lista_faixas:
                     data = mapa_configs.get(f_nome)
-                    
                     if data:
-                        # Prova Configurada
                         modo = data.get('modo_selecao', 'Sorteio')
                         qtd = data.get('qtd_questoes', 0)
                         tempo = data.get('tempo_limite', 0)
                         nota = data.get('aprovacao_minima', 0)
-                        
                         with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
                             st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
-                            
-                            # Se for Manual, mostra as questões detalhadas
                             if modo == "🖐️ Manual (Fixa)" and data.get('questoes'):
                                 for i, q in enumerate(data['questoes'], 1):
                                     st.markdown(f"**{i}. {q.get('pergunta')}**")
                                     st.caption(f"Resposta: {q.get('resposta')}")
                                     st.markdown("---")
                             elif modo == "🎲 Aleatório (Sorteio)":
-                                st.info(f"Esta prova sorteia {qtd} questões do banco '{f_nome}' e 'Geral' no momento do exame.")
+                                st.info(f"Sorteia {qtd} questões.")
                     else:
-                        st.warning(f"⚠️ A prova para a faixa **{f_nome}** ainda não foi configurada.")
+                        st.warning(f"⚠️ {f_nome} não configurada.")
 
-    # --- ABA 3: AUTORIZAR ALUNOS ---
+    # --- ABA 3: AUTORIZAR ALUNOS (CORREÇÃO DE FUSO AQUI) ---
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
@@ -560,11 +539,10 @@ def gestao_exame_de_faixa():
             d_inicio = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
             d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
             c3, c4 = st.columns(2)
-            
-            # AGORA FUNCIONA: O 'time' aqui refere-se à classe do datetime, pois renomeamos o import da biblioteca
             h_inicio = c3.time_input("Hora Início:", time(0, 0), key="hora_inicio_exame")
             h_fim = c4.time_input("Hora Fim:", time(23, 59), key="hora_fim_exame")
             
+            # Cria objetos datetime baseados no input (Considera hora local de quem está operando)
             dt_inicio = datetime.combine(d_inicio, h_inicio)
             dt_fim = datetime.combine(d_fim, h_fim)
 
@@ -572,15 +550,11 @@ def gestao_exame_de_faixa():
         st.subheader("Lista de Alunos")
         
         try:
-            # Buscar alunos
             alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
             lista_alunos = []
             
             for doc in alunos_ref:
-                d = doc.to_dict()
-                d['id'] = doc.id
-                
-                # Buscar equipe do aluno - com tratamento de erro
+                d = doc.to_dict(); d['id'] = doc.id
                 nome_eq = "Sem Equipe"
                 try:
                     vinculo = list(db.collection('alunos').where('usuario_id', '==', doc.id).limit(1).stream())
@@ -588,18 +562,14 @@ def gestao_exame_de_faixa():
                         eid = vinculo[0].to_dict().get('equipe_id')
                         if eid:
                             eq_doc = db.collection('equipes').document(eid).get()
-                            if eq_doc.exists:
-                                nome_eq = eq_doc.to_dict().get('nome', 'Sem Nome')
-                except Exception as e:
-                    st.error(f"Erro ao buscar equipe: {e}")
-                
+                            if eq_doc.exists: nome_eq = eq_doc.to_dict().get('nome', 'Sem Nome')
+                except: pass
                 d['nome_equipe'] = nome_eq
                 lista_alunos.append(d)
 
             if not lista_alunos: 
-                st.info("Nenhum aluno cadastrado no sistema.")
+                st.info("Nenhum aluno cadastrado.")
             else:
-                # Cabeçalho da tabela
                 cols = st.columns([3, 2, 2, 3, 1])
                 cols[0].markdown("**Aluno**")
                 cols[1].markdown("**Equipe**")
@@ -608,41 +578,23 @@ def gestao_exame_de_faixa():
                 cols[4].markdown("**Ação**")
                 st.markdown("---")
 
-                # Lista de alunos
                 for aluno in lista_alunos:
                     try:
-                        # Garantir que temos os dados necessários
                         aluno_id = aluno.get('id', 'unknown')
                         aluno_nome = aluno.get('nome', 'Sem Nome')
                         faixa_exame_atual = aluno.get('faixa_exame', '')
                         
                         c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
-                        
-                        # Coluna 1: Nome do aluno
                         c1.write(f"**{aluno_nome}**")
-                        
-                        # Coluna 2: Equipe
                         c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
                         
-                        # Coluna 3: Seletor de faixa para exame
-                        idx = 0
-                        if faixa_exame_atual and faixa_exame_atual in FAIXAS_COMPLETAS:
-                            idx = FAIXAS_COMPLETAS.index(faixa_exame_atual)
+                        idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
+                        fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
                         
-                        fx_sel = c3.selectbox(
-                            "Faixa", 
-                            FAIXAS_COMPLETAS, 
-                            index=idx, 
-                            key=f"fx_select_{aluno_id}",
-                            label_visibility="collapsed"
-                        )
-                        
-                        # Coluna 4: Status
                         habilitado = aluno.get('exame_habilitado', False)
                         status = aluno.get('status_exame', 'pendente')
                         
                         if habilitado:
-                            # Aluno habilitado para exame
                             msg = "🟢 Liberado"
                             try:
                                 raw_fim = aluno.get('exame_fim')
@@ -650,71 +602,41 @@ def gestao_exame_de_faixa():
                                     if isinstance(raw_fim, str):
                                         dt_obj = datetime.fromisoformat(raw_fim.replace('Z', '+00:00'))
                                         msg += f" (até {dt_obj.strftime('%d/%m/%Y %H:%M')})"
-                                    elif hasattr(raw_fim, 'strftime'):
-                                        msg += f" (até {raw_fim.strftime('%d/%m/%Y %H:%M')})"
-                            except Exception as e:
-                                st.error(f"Erro ao processar data: {e}")
+                            except: pass
                             
-                            # Status específicos
-                            if status == 'aprovado': 
-                                msg = "🏆 Aprovado"
-                            elif status == 'bloqueado': 
-                                msg = "⛔ Bloqueado"
-                            elif status == 'reprovado': 
-                                msg = "🔴 Reprovado"
-                            elif status == 'em_andamento':
-                                msg = "🟡 Em Andamento"
+                            if status == 'aprovado': msg = "🏆 Aprovado"
+                            elif status == 'bloqueado': msg = "⛔ Bloqueado"
+                            elif status == 'reprovado': msg = "🔴 Reprovado"
+                            elif status == 'em_andamento': msg = "🟡 Em Andamento"
                             
                             c4.write(msg)
-                            
-                            # Coluna 5: Botão desabilitar
                             if c5.button("⛔", key=f"off_btn_{aluno_id}"):
-                                try:
-                                    update_data = {
-                                        "exame_habilitado": False,
-                                        "status_exame": "pendente"
-                                    }
-                                    # Remover campos opcionais se existirem
-                                    campos_para_remover = [
-                                        "exame_inicio", "exame_fim", "faixa_exame", 
-                                        "motivo_bloqueio", "status_exame_em_andamento"
-                                    ]
-                                    
-                                    for campo in campos_para_remover:
-                                        if campo in aluno:
-                                            update_data[campo] = firestore.DELETE_FIELD
-                                    
-                                    db.collection('usuarios').document(aluno_id).update(update_data)
-                                    st.success(f"Exame desabilitado para {aluno_nome}")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Erro ao desabilitar: {e}")
+                                update_data = {"exame_habilitado": False, "status_exame": "pendente"}
+                                for campo in ["exame_inicio", "exame_fim", "faixa_exame", "motivo_bloqueio", "status_exame_em_andamento"]:
+                                    if campo in aluno: update_data[campo] = firestore.DELETE_FIELD
+                                db.collection('usuarios').document(aluno_id).update(update_data)
+                                st.rerun()
                         else:
-                            # Aluno não habilitado
                             c4.write("⚪ Não autorizado")
-                            
-                            # Coluna 5: Botão habilitar
                             if c5.button("✅", key=f"on_btn_{aluno_id}"):
-                                try:
-                                    db.collection('usuarios').document(aluno_id).update({
-                                        "exame_habilitado": True,
-                                        "faixa_exame": fx_sel,
-                                        "exame_inicio": firestore.SERVER_TIMESTAMP,
-                                        "exame_fim": dt_fim.isoformat(),
-                                        "status_exame": "pendente",
-                                        "status_exame_em_andamento": False
-                                    })
-                                    st.success(f"Exame habilitado para {aluno_nome} até {dt_fim.strftime('%d/%m/%Y %H:%M')}")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Erro ao habilitar: {e}")
-                        
+                                db.collection('usuarios').document(aluno_id).update({
+                                    "exame_habilitado": True,
+                                    "faixa_exame": fx_sel,
+                                    
+                                    # --- CORREÇÃO PRINCIPAL AQUI ---
+                                    # Antes estava: firestore.SERVER_TIMESTAMP (Hora de Londres/UTC)
+                                    # Agora: dt_inicio.isoformat() (Hora que você escolheu no input)
+                                    "exame_inicio": dt_inicio.isoformat(), 
+                                    
+                                    "exame_fim": dt_fim.isoformat(),
+                                    "status_exame": "pendente",
+                                    "status_exame_em_andamento": False
+                                })
+                                st.success(f"Liberado!")
+                                time_lib.sleep(0.5)
+                                st.rerun()
                         st.markdown("---")
-                        
                     except Exception as e:
-                        st.error(f"Erro ao processar aluno {aluno.get('nome', 'Unknown')}: {str(e)}")
-                        st.markdown("---")
-                        
+                        st.error(f"Erro aluno: {e}")
         except Exception as e:
-            st.error(f"Erro ao carregar lista de alunos: {str(e)}")
-            st.info("Verifique a conexão com o banco de dados.")
+            st.error(f"Erro lista: {e}")
