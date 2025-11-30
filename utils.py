@@ -191,92 +191,156 @@ def gerar_qrcode(codigo):
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
-    """Gera certificado PDF oficial."""
+    """Gera certificado PDF moderno com ajuste automático de nome."""
     try:
+        # Configuração Inicial
         pdf = FPDF("L", "mm", "A4")
         pdf.set_auto_page_break(False)
         pdf.add_page()
 
-        # Cores
-        dourado = (218, 165, 32)
-        preto = (40, 40, 40)
-        branco = (255, 255, 255)
-        
-        # Cálculos
-        try:
-            percentual = int((pontuacao / total) * 100) if total > 0 else 0
-        except: percentual = 0
-        
-        data_hora = datetime.now().strftime("%d/%m/%Y")
+        # --- PALETA DE CORES ---
+        # Dourado mais elegante (Ouro Velho)
+        cor_dourado = (184, 134, 11) 
+        # Preto Suave (Carvão)
+        cor_preto = (25, 25, 25)
+        # Cinza para textos secundários
+        cor_cinza = (100, 100, 100)
+        # Branco
+        cor_branco = (255, 255, 255)
+        # Fundo Off-white (creme bem suave)
+        cor_fundo = (252, 252, 250)
 
-        # Fundo
-        pdf.set_fill_color(*branco)
+        # --- 1. FUNDO E DESIGN MODERNO ---
+        pdf.set_fill_color(*cor_fundo)
         pdf.rect(0, 0, 297, 210, "F")
-        
-        # Bordas
-        pdf.set_draw_color(*dourado)
-        pdf.set_line_width(2)
-        pdf.rect(10, 10, 277, 190)
-        
-        # Logo (Verifica se existe)
+
+        # Barra Lateral Esquerda (Estilo Moderno)
+        largura_barra = 60
+        pdf.set_fill_color(*cor_preto)
+        pdf.rect(0, 0, largura_barra, 210, "F")
+
+        # Linha de destaque Dourada vertical
+        pdf.set_fill_color(*cor_dourado)
+        pdf.rect(largura_barra, 0, 2, 210, "F")
+
+        # --- 2. LOGO (Na barra escura) ---
         if os.path.exists("assets/logo.png"):
-            try: pdf.image("assets/logo.png", x=130, y=20, w=35)
+            # Centraliza a logo na barra lateral de 60mm
+            # x = (60 - 40) / 2 = 10
+            try: 
+                pdf.image("assets/logo.png", x=10, y=30, w=40)
             except: pass
-
-        # Textos
-        pdf.set_text_color(*dourado)
-        pdf.set_font("Helvetica", "B", 36)
-        pdf.set_xy(0, 60)
-        pdf.cell(297, 15, "CERTIFICADO DE CONCLUSÃO", align="C")
         
-        pdf.set_font("Helvetica", "", 14)
-        pdf.set_text_color(*preto)
-        pdf.set_xy(0, 80)
-        pdf.cell(297, 10, "Certificamos que", align="C")
+        # --- 3. CONTEÚDO PRINCIPAL (Lado Direito) ---
+        # Definir margem esquerda para o conteúdo (pula a barra)
+        x_inicio = largura_barra + 10 
+        largura_util = 297 - x_inicio - 10 # Largura da página - barra - margem direita
 
-        # Nome do Aluno (Tratamento de caracteres)
-        pdf.set_font("Helvetica", "B", 28)
-        pdf.set_text_color(*dourado)
-        pdf.set_xy(0, 95)
+        # TÍTULO
+        pdf.set_xy(x_inicio, 40)
+        pdf.set_font("Helvetica", "B", 32)
+        pdf.set_text_color(*cor_dourado)
+        pdf.cell(largura_util, 15, "CERTIFICADO", ln=1, align="C")
+        
+        pdf.set_font("Helvetica", "", 12)
+        pdf.set_text_color(*cor_cinza)
+        pdf.cell(largura_util, 8, "DE CONCLUSÃO DE EXAME DE FAIXA", ln=1, align="C")
+
+        pdf.ln(15) # Espaço
+
+        # TEXTO INTRODUTÓRIO
+        pdf.set_font("Helvetica", "", 14)
+        pdf.set_text_color(*cor_preto)
+        pdf.cell(largura_util, 10, "Certificamos que o(a) aluno(a)", ln=1, align="C")
+
+        # --- 4. ALGORITMO DE NOME GRANDE (AJUSTE AUTOMÁTICO) ---
+        pdf.ln(5)
+        
+        # Tratamento de caracteres
         try:
-            # Tenta limpar caracteres estranhos
             nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
         except:
             nome_limpo = usuario_nome.upper()
-        pdf.cell(297, 15, nome_limpo, align="C")
 
-        # Texto Meio
-        pdf.set_font("Helvetica", "", 16)
-        pdf.set_text_color(*preto)
-        pdf.set_xy(0, 115)
-        pdf.cell(297, 10, f"concluiu com êxito o Exame Teórico para a faixa", align="C")
+        # Lógica de Redução de Fonte
+        tamanho_fonte = 36 # Começa grande
+        pdf.set_font("Helvetica", "B", tamanho_fonte)
         
-        # Faixa
-        pdf.set_font("Helvetica", "B", 22)
-        pdf.set_text_color(*dourado) # Simplificado para Dourado para evitar erro de cor
-        pdf.set_xy(0, 125)
-        pdf.cell(297, 10, str(faixa).upper(), align="C")
-
-        # Rodapé
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(*preto)
-        pdf.set_xy(0, 135)
-        pdf.cell(297, 10, f"Aproveitamento: {percentual}% | Data: {data_hora}", align="C")
-
-        pdf.set_font("Courier", "", 10)
-        pdf.set_xy(20, 175)
-        pdf.cell(100, 5, f"Código: {codigo}", align="L")
+        # Enquanto a largura do texto for maior que a largura útil (com margem de segurança de 20mm)
+        while pdf.get_string_width(nome_limpo) > (largura_util - 20) and tamanho_fonte > 12:
+            tamanho_fonte -= 2
+            pdf.set_font("Helvetica", "B", tamanho_fonte)
         
-        # QR Code
+        pdf.set_text_color(*cor_dourado)
+        pdf.cell(largura_util, 15, nome_limpo, ln=1, align="C")
+        
+        # Linha decorativa abaixo do nome
+        x_linha = x_inicio + 20
+        y_linha = pdf.get_y()
+        pdf.set_draw_color(*cor_cinza)
+        pdf.set_line_width(0.2)
+        pdf.line(x_linha, y_linha, 297 - 20, y_linha)
+
+        pdf.ln(10)
+
+        # TEXTO DE CONCLUSÃO
+        pdf.set_font("Helvetica", "", 14)
+        pdf.set_text_color(*cor_preto)
+        pdf.cell(largura_util, 10, "Concluiu com êxito os requisitos técnicos e teóricos para a:", ln=1, align="C")
+
+        # FAIXA
+        pdf.ln(5)
+        pdf.set_font("Helvetica", "B", 24)
+        pdf.set_text_color(*cor_preto)
+        pdf.cell(largura_util, 10, f"FAIXA {str(faixa).upper()}", ln=1, align="C")
+
+        # DADOS TÉCNICOS
+        pdf.ln(15)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(*cor_cinza)
+        
+        # Cálculos de nota
         try:
+            percentual = int((pontuacao / total) * 100) if total > 0 else 0
+        except: percentual = 0
+        data_fmt = datetime.now().strftime("%d/%m/%Y")
+
+        pdf.cell(largura_util, 6, f"Data de Emissão: {data_fmt}", ln=1, align="C")
+        pdf.cell(largura_util, 6, f"Aproveitamento no Exame: {percentual}%", ln=1, align="C")
+
+        # --- 5. RODAPÉ, QR CODE E CÓDIGO ---
+        # Posicionamento do bloco QR Code no canto inferior direito
+        y_qr = 155
+        x_qr = 245
+        tamanho_qr = 25
+
+        # Renderizar QR Code
+        try:
+            from utils import gerar_qrcode # Garantir que importa a função
             caminho_qr = gerar_qrcode(codigo)
-            pdf.image(caminho_qr, x=250, y=155, w=25)
-        except: pass
+            pdf.image(caminho_qr, x=x_qr, y=y_qr, w=tamanho_qr)
+        except Exception as e:
+            print(f"Erro QR: {e}")
+            pass
+
+        # Código de Verificação logo abaixo do QR Code
+        pdf.set_xy(x_qr - 10, y_qr + tamanho_qr + 2) # X um pouco recuado para centralizar com o QR
+        pdf.set_font("Courier", "", 8) # Courier para parecer código
+        pdf.set_text_color(*cor_cinza)
+        # Cell com largura fixa de 45mm (largura visual do bloco QR) para centralizar o texto
+        pdf.cell(45, 4, f"Cod: {codigo}", align="C")
+        
+        # Assinatura do Professor (Opcional - Lado Esquerdo do conteúdo)
+        pdf.set_xy(x_inicio + 20, 175)
+        pdf.set_draw_color(*cor_preto)
+        pdf.line(x_inicio + 20, 175, x_inicio + 90, 175) # Linha da assinatura
+        pdf.set_xy(x_inicio + 20, 176)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(70, 5, "Professor Responsável", align="C")
 
         # Output
-        # O modo 'S' retorna string, encode latin-1 converte para bytes compativeis
         pdf_output = pdf.output(dest='S').encode('latin-1')
-        nome_arquivo = f"Certificado_{normalizar_nome(usuario_nome)}.pdf"
+        nome_arquivo = f"Certificado_{usuario_nome.split()[0]}.pdf"
         
         return pdf_output, nome_arquivo
 
