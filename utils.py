@@ -202,102 +202,127 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
 
         # Logo
         if os.path.exists("assets/logo.png"):
-            try: pdf.image("assets/logo.png", x=10, y=30, w=40)
-            except: pass
+            try: 
+                pdf.image("assets/logo.png", x=10, y=30, w=40)
+            except: 
+                pass
         
         # Configuração da Área de Texto
         x_inicio = largura_barra + 10 
         largura_util = 297 - x_inicio - 10 
+        centro_x = x_inicio + (largura_util / 2)
 
-        # Título Principal
-        pdf.set_xy(x_inicio, 35) # Subi um pouco (era 40)
+        # Título Principal - Centralizado
+        pdf.set_y(35)
         pdf.set_font("Helvetica", "B", 32)
         pdf.set_text_color(*cor_dourado)
-        pdf.cell(largura_util, 15, "CERTIFICADO DE DE EXAME TEÓRICO DE FAIXA"", ln=1, align="C")
+        titulo = "CERTIFICADO DE EXAME TEÓRICO DE FAIXA"
+        pdf.cell(largura_util, 15, titulo, ln=1, align="C")
         
-        pdf.ln(12) 
+        pdf.ln(10) 
         
-        # Texto Introdutório
+        # Texto Introdutório - Centralizado
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*cor_preto)
-        pdf.cell(largura_util, 10, "Certificamos que o(a) aluno(a)", ln=1, align="C")
+        texto_intro = "Certificamos que o(a) aluno(a)"
+        pdf.cell(largura_util, 8, texto_intro, ln=1, align="C")
 
-        # Nome do Aluno (Auto-Ajuste)
-        pdf.ln(2)
-        try: nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
-        except: nome_limpo = usuario_nome.upper()
+        # Nome do Aluno - Centralizado com auto-ajuste
+        pdf.ln(4)
+        try: 
+            nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
+        except: 
+            nome_limpo = usuario_nome.upper()
 
+        # Ajuste de tamanho de fonte para o nome
         tamanho_fonte = 36
-        pdf.set_font("Helvetica", "B", tamanho_fonte)
-        while pdf.get_string_width(nome_limpo) > (largura_util - 20) and tamanho_fonte > 12:
-            tamanho_fonte -= 2
+        largura_maxima_nome = largura_util - 40  # Margem de 20px cada lado
+        
+        while True:
             pdf.set_font("Helvetica", "B", tamanho_fonte)
-        
+            largura_texto = pdf.get_string_width(nome_limpo)
+            if largura_texto <= largura_maxima_nome or tamanho_fonte <= 16:
+                break
+            tamanho_fonte -= 1
+
+        # Centralizar horizontalmente o nome
+        x_nome = centro_x - (largura_texto / 2)
+        pdf.set_xy(x_nome, pdf.get_y())
         pdf.set_text_color(*cor_dourado)
-        pdf.cell(largura_util, 16, nome_limpo, ln=1, align="C")
+        pdf.cell(largura_texto, 16, nome_limpo, align='L')
         
-        # Linha decorativa
-        x_linha = x_inicio + 20
+        # Linha decorativa - Centralizada
+        pdf.ln(16)
         y_linha = pdf.get_y()
+        largura_linha = 200
+        x_linha = centro_x - (largura_linha / 2)
         pdf.set_draw_color(*cor_cinza)
         pdf.set_line_width(0.2)
-        pdf.line(x_linha, y_linha, 297 - 20, y_linha)
+        pdf.line(x_linha, y_linha, x_linha + largura_linha, y_linha)
 
-        pdf.ln(8)
+        pdf.ln(10)
 
-        # Texto de Conclusão
+        # Texto de Conclusão - Centralizado
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*cor_preto)
-        pdf.cell(largura_util, 10, "Concluiu com êxito o exame teóricos para a:", ln=1, align="C")
+        texto_conclusao = "foi APROVADO(A) no exame teórico de faixa"
+        pdf.cell(largura_util, 8, texto_conclusao, ln=1, align="C")
 
-        # Faixa
-        pdf.ln(2)
+        # Faixa - Centralizado
+        pdf.ln(6)
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_text_color(*cor_preto)
-        pdf.cell(largura_util, 12, f"FAIXA {str(faixa).upper()}", ln=1, align="C")
+        texto_faixa = f"FAIXA {str(faixa).upper()}"
+        pdf.cell(largura_util, 12, texto_faixa, ln=1, align="C")
 
-        # Detalhes (Data e Nota) - Mais organizados
-        pdf.ln(10)
+        # Detalhes - Centralizado
+        pdf.ln(12)
         pdf.set_font("Helvetica", "", 11)
         pdf.set_text_color(*cor_cinza)
-        try: percentual = int((pontuacao / total) * 100) if total > 0 else 0
-        except: percentual = 0
+        try: 
+            percentual = int((pontuacao / total) * 100) if total > 0 else 0
+        except: 
+            percentual = 0
         data_fmt = datetime.now().strftime("%d/%m/%Y")
-
-        pdf.cell(largura_util, 6, f"Data de Emissão: {data_fmt}  |  Aproveitamento: {percentual}%", ln=1, align="C")
-
-        # Rodapé (Assinatura e QR Code)
-        y_rodape = 165 # Posição Y fixa para o rodapé
         
-        # Assinatura (Esquerda da área branca)
-        pdf.set_xy(x_inicio + 20, y_rodape + 10)
+        detalhes = f"Data de Emissão: {data_fmt}  |  Aproveitamento: {percentual}%"
+        pdf.cell(largura_util, 6, detalhes, ln=1, align="C")
+
+        # Rodapé - Elementos alinhados
+        y_rodape = 160
+        
+        # Assinatura - Alinhada à esquerda da área de conteúdo
+        x_assinatura = x_inicio + 10
+        pdf.set_xy(x_assinatura, y_rodape)
         pdf.set_draw_color(*cor_preto)
-        pdf.line(x_inicio + 20, y_rodape + 10, x_inicio + 90, y_rodape + 10) # Linha da assinatura
-        pdf.set_xy(x_inicio + 20, y_rodape + 11)
+        pdf.line(x_assinatura, y_rodape, x_assinatura + 70, y_rodape)
+        pdf.set_xy(x_assinatura, y_rodape + 2)
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(70, 5, "Professor Responsável", align="C")
 
-        # QR Code e Hash (Direita da área branca)
-        y_qr = 155
-        x_qr = 245
+        # QR Code e Hash - Alinhados à direita
         tamanho_qr = 25
+        x_qr = 245
+        y_qr = y_rodape - 10
         
         try:
             caminho_qr = gerar_qrcode(codigo)
             pdf.image(caminho_qr, x=x_qr, y=y_qr, w=tamanho_qr)
-        except: pass
+        except: 
+            pass
 
-        # Hash logo abaixo do QR Code
-        pdf.set_xy(x_qr - 15, y_qr + tamanho_qr + 2) # Ajustei o X para centralizar melhor o texto longo
-        pdf.set_font("Courier", "", 8) # Fonte Courier fica melhor para ler códigos
+        # Hash centralizado abaixo do QR Code
+        pdf.set_font("Courier", "", 8)
         pdf.set_text_color(*cor_cinza)
-        pdf.cell(55, 4, f"{codigo}", align="C")
+        largura_hash = pdf.get_string_width(codigo)
+        x_hash = x_qr + (tamanho_qr / 2) - (largura_hash / 2)
+        pdf.set_xy(x_hash, y_qr + tamanho_qr + 3)
+        pdf.cell(largura_hash, 4, codigo)
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
     except Exception as e:
         print(f"Erro PDF: {e}")
         return None, None
-
 # =========================================
 # 6. REGRAS DO EXAME
 # =========================================
