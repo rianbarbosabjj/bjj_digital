@@ -152,14 +152,15 @@ def exame_de_faixa(usuario):
             st.session_state.resultado_prova = None; st.rerun()
         return
 
-    # --- 1. VERIFICAÇÃO RÍGIDA DE ABANDONO (ANTI-COLA) ---
-    # Se o status no banco é "em_andamento" mas a sessão local resetou (exame_iniciado=False),
-    # significa que a página recarregou. Isso ativa o bloqueio.
+    # --- 1. VERIFICAÇÃO DE ABANDONO (Somente Refresh ou Fechar) ---
+    # Aqui a lógica permanece: Se o banco diz que está em andamento, mas o navegador reiniciou (session_state False),
+    # então o aluno atualizou a página ou fechou o navegador. Isso BLOQUEIA.
+    # Se ele apenas trocar de aba, o session_state é preservado, então ele NÃO cai aqui.
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
         bloquear_por_abandono(usuario['id'])
         st.error("🚨 ALERTA DE SEGURANÇA: EXAME BLOQUEADO!")
-        st.warning("Detectamos que você saiu da tela ou recarregou a página durante a prova.")
-        st.info("Regra: O exame deve ser feito em uma única sessão contínua. Contate seu professor para desbloqueio.")
+        st.warning("Detectamos que a página foi recarregada ou fechada durante a prova.")
+        st.info("Regra: Se a conexão for interrompida ou a página atualizada (F5), a prova é bloqueada.")
         return
 
     # --- 2. PERMISSÕES BÁSICAS ---
@@ -209,29 +210,7 @@ def exame_de_faixa(usuario):
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd = len(lista_questoes)
 
-    # =========================================================
-    # JS ANTI-COLA: FORÇA RECARREGAMENTO AO SAIR DA TELA
-    # =========================================================
-    # Isso garante que se o aluno trocar de aba, a página recarrega.
-    # Ao recarregar, cai na regra 1 (Verificação de Abandono) e bloqueia.
-    if st.session_state.exame_iniciado:
-        components.html(
-            """
-            <script>
-            document.addEventListener("visibilitychange", function() {
-                if (document.hidden) {
-                    // Tenta recarregar a janela pai para acionar o bloqueio no Python
-                    try {
-                        window.parent.location.reload();
-                    } catch (e) {
-                        window.location.reload();
-                    }
-                }
-            });
-            </script>
-            """, 
-            height=0
-        )
+    # (JS REMOVIDO: O aluno pode trocar de aba sem ser bloqueado agora)
 
     # --- 6. TELA DE INÍCIO ---
     if not st.session_state.exame_iniciado:
@@ -240,7 +219,7 @@ def exame_de_faixa(usuario):
             st.markdown("#### ⚠️ Regras Importantes")
             st.markdown("""
             1. **Tentativa Única:** Se for aprovado, não poderá refazer.
-            2. **Não Saia da Tela:** Se trocar de aba ou minimizar, o exame será **BLOQUEADO** imediatamente.
+            2. **Não Atualize a Página:** Se usar F5 ou fechar o navegador, será **BLOQUEADO**.
             3. **Reprovação:** Se não atingir a nota, deverá aguardar **72 horas**.
             """)
             st.markdown("---")
