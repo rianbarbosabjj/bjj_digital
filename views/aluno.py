@@ -128,8 +128,7 @@ def ranking():
 # EXAME DE FAIXA (PRINCIPAL)
 # =========================================
 def exame_de_faixa(usuario):
-    st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
-    
+     
     if "exame_iniciado" not in st.session_state: st.session_state.exame_iniciado = False
     if "resultado_prova" not in st.session_state: st.session_state.resultado_prova = None
 
