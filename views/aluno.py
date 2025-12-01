@@ -13,6 +13,7 @@ from utils import (
     registrar_inicio_exame, 
     registrar_fim_exame, 
     bloquear_por_abandono,
+    verificar_elegibilidade_exame,
     carregar_todas_questoes,
     gerar_codigo_verificacao,
     gerar_pdf
@@ -151,7 +152,17 @@ def exame_de_faixa(usuario):
             st.session_state.resultado_prova = None; st.rerun()
         return
 
-    # --- 1. PERMISSÕES ---
+    # --- 1. VERIFICAÇÃO RÍGIDA DE ABANDONO (ANTI-COLA) ---
+    # Se o status no banco é "em_andamento" mas a sessão local resetou (exame_iniciado=False),
+    # significa que a página recarregou. Isso ativa o bloqueio.
+    if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
+        bloquear_por_abandono(usuario['id'])
+        st.error("🚨 ALERTA DE SEGURANÇA: EXAME BLOQUEADO!")
+        st.warning("Detectamos que você saiu da tela ou recarregou a página durante a prova.")
+        st.info("Regra: O exame deve ser feito em uma única sessão contínua. Contate seu professor para desbloqueio.")
+        return
+
+    # --- 2. PERMISSÕES BÁSICAS ---
     esta_habilitado = dados.get('exame_habilitado', False)
     faixa_alvo = dados.get('faixa_exame', None)
     
@@ -159,22 +170,26 @@ def exame_de_faixa(usuario):
         st.warning("🔒 Nenhum exame autorizado pelo professor.")
         return
 
-    # --- 2. DATAS (CORRIGIDO: COMPARAÇÃO UTC vs UTC) ---
+    # --- 3. VERIFICAÇÃO DAS 3 REGRAS (72h, Unica Vez, Bloqueio) ---
+    elegivel, motivo = verificar_elegibilidade_exame(dados)
+    if not elegivel:
+        if "reprovado" in motivo.lower():
+            st.error(f"⏳ {motivo}") # Mensagem das 72h
+        elif "bloqueado" in motivo.lower():
+            st.error(f"🚫 {motivo}") # Mensagem de bloqueio
+        else:
+            st.success(f"✅ {motivo}") # Mensagem de já aprovado
+        return
+
+    # --- 4. DATAS ---
     try:
         data_inicio = dados.get('exame_inicio')
         data_fim = dados.get('exame_fim')
-        
-        # CORREÇÃO: Usamos datetime.utcnow() puro para comparar com o que está no banco (que geralmente é UTC)
-        # Isso resolve o problema de 3 horas de diferença
         agora_comparacao = datetime.utcnow()
         
-        # Para exibição visual apenas (opcional, ajustamos se precisar)
-        agora_visual = agora_comparacao - timedelta(hours=3)
-
         if isinstance(data_inicio, str): 
             try: data_inicio = datetime.fromisoformat(data_inicio.replace('Z', ''))
             except: pass
-            
         if isinstance(data_fim, str): 
             try: data_fim = datetime.fromisoformat(data_fim.replace('Z', ''))
             except: pass
@@ -182,72 +197,60 @@ def exame_de_faixa(usuario):
         if data_inicio: data_inicio = data_inicio.replace(tzinfo=None)
         if data_fim: data_fim = data_fim.replace(tzinfo=None)
         
-        # LÓGICA DE BLOQUEIO
         if data_inicio and agora_comparacao < data_inicio:
-            # Mostra a data original para debug se necessário, ou ajusta visualmente
-            st.warning(f"⏳ O exame começa em: **{data_inicio.strftime('%d/%m/%Y %H:%M')}** (Horário do Servidor)")
-            return
-            
+            st.warning(f"⏳ O exame começa em: **{data_inicio.strftime('%d/%m/%Y %H:%M')}**")
+            return  
         if data_fim and agora_comparacao > data_fim:
             st.error(f"🚫 O prazo expirou em: **{data_fim.strftime('%d/%m/%Y %H:%M')}**")
             return
-            
-    except Exception as e: 
-        print(f"Erro data: {e}")
-        pass
-
-    # --- 3. STATUS ---
-    status = dados.get('status_exame', 'pendente')
-    if status == 'aprovado': st.success(f"✅ Já aprovado na Faixa {faixa_alvo}!"); return
-    if status == 'bloqueado': st.error("🚫 Exame BLOQUEADO."); return
-
-    # --- 4. AUTO-RECUPERAÇÃO ---
-    if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
-        inicio_real = dados.get("inicio_exame_temp")
-        recuperavel = False
-        if inicio_real:
-            try:
-                if isinstance(inicio_real, str): inicio_real = datetime.fromisoformat(inicio_real)
-                inicio_real = inicio_real.replace(tzinfo=None)
-                if (datetime.utcnow() - inicio_real).total_seconds() < 120: # Aumentei tolerância para teste
-                    recuperavel = True
-            except: pass
-        
-        if recuperavel:
-            st.toast("🔄 Restaurando sessão...")
-            l, t, m = carregar_exame_especifico(faixa_alvo)
-            st.session_state.exame_iniciado = True
-            st.session_state.inicio_prova = inicio_real
-            st.session_state.questoes_prova = l
-            st.session_state.params_prova = {"tempo": t, "min": m}
-            st.session_state.fim_prova_ts = inicio_real.timestamp() + (t * 60)
-            st.rerun()
-        else:
-            # Se já estava em andamento e não recuperou, pode ter sido bloqueado ou apenas finalizado errado.
-            # Vamos ser permissivos aqui se não estiver explicitamente bloqueado
-            pass
+    except Exception as e: pass
 
     # --- 5. CARREGAMENTO ---
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd = len(lista_questoes)
 
-    # JS Anti-Cola
+    # =========================================================
+    # JS ANTI-COLA: FORÇA RECARREGAMENTO AO SAIR DA TELA
+    # =========================================================
+    # Isso garante que se o aluno trocar de aba, a página recarrega.
+    # Ao recarregar, cai na regra 1 (Verificação de Abandono) e bloqueia.
     if st.session_state.exame_iniciado:
-        components.html("""<script>document.addEventListener("visibilitychange", function() {if(document.hidden){document.body.innerHTML="<h1 style='color:red;text-align:center;margin-top:20%'>🚨 BLOQUEADO 🚨</h1>"}});</script>""", height=0)
+        components.html(
+            """
+            <script>
+            document.addEventListener("visibilitychange", function() {
+                if (document.hidden) {
+                    // Tenta recarregar a janela pai para acionar o bloqueio no Python
+                    try {
+                        window.parent.location.reload();
+                    } catch (e) {
+                        window.location.reload();
+                    }
+                }
+            });
+            </script>
+            """, 
+            height=0
+        )
 
     # --- 6. TELA DE INÍCIO ---
     if not st.session_state.exame_iniciado:
         st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
         with st.container(border=True):
+            st.markdown("#### ⚠️ Regras Importantes")
+            st.markdown("""
+            1. **Tentativa Única:** Se for aprovado, não poderá refazer.
+            2. **Não Saia da Tela:** Se trocar de aba ou minimizar, o exame será **BLOQUEADO** imediatamente.
+            3. **Reprovação:** Se não atingir a nota, deverá aguardar **72 horas**.
+            """)
+            st.markdown("---")
             c1,c2,c3 = st.columns(3)
             c1.markdown(f"📝 **{qtd} Questões**")
             c2.markdown(f"⏱️ **{tempo_limite} min**")
             c3.markdown(f"✅ **{min_aprovacao}%**")
-            st.markdown("---")
-            st.markdown("**ATENÇÃO:** O cronômetro não para. Não saia da tela.")
         
         if qtd > 0:
-            if st.button("✅ INICIAR EXAME", type="primary", use_container_width=True):
+            if st.button("✅ INICIAR EXAME (Estou Ciente)", type="primary", use_container_width=True):
                 registrar_inicio_exame(usuario['id'])
                 st.session_state.exame_iniciado = True
                 st.session_state.inicio_prova = datetime.utcnow()
@@ -277,7 +280,7 @@ def exame_de_faixa(usuario):
                 respostas[i] = st.radio("R:", q.get('opcoes',['V','F']), key=f"q{i}", label_visibility="collapsed")
                 st.markdown("---")
             
-            if st.form_submit_button("Finalizar", type="primary", use_container_width=True):
+            if st.form_submit_button("Finalizar Exame", type="primary", use_container_width=True):
                 acertos = 0
                 for i, q in enumerate(questoes):
                     certa = q.get('correta') or q.get('resposta')
