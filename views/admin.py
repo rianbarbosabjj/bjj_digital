@@ -269,7 +269,7 @@ def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Configuração de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Regras da Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
+    tab1, tab2, tab3 = st.tabs(["📝 Criar e Editar da Exames", "👁️ Visualizar Exames", "✅ Autorizar Alunos"])
 
     # --- ABA 1: EDITOR DE REGRAS ---
     with tab1:
