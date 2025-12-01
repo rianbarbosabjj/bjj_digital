@@ -3,9 +3,16 @@ import pandas as pd
 import bcrypt
 import random
 import time 
-from datetime import datetime, time as dtime # CORREÇÃO: 'dtime' evita conflito com o módulo 'time'
+from datetime import datetime, time as dtime 
 from database import get_db
 from firebase_admin import firestore
+
+# Tenta importar do utils, se falhar define funções vazias para não quebrar
+try:
+    from utils import carregar_todas_questoes, salvar_questoes
+except ImportError:
+    def carregar_todas_questoes(): return []
+    def salvar_questoes(t, q): pass
 
 # =========================================
 # LISTA PADRÃO DE FAIXAS (GLOBAL)
@@ -156,18 +163,253 @@ def gestao_usuarios(usuario_logado):
 # 2. GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes():
-    st.markdown("<h1 style='color:#FFD700;'>🧠 Banco de Questões</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:#FFD700;'>📝 Gestão de Questões</h1>", unsafe_allow_html=True)
+    db = get_db()
     
+    # Verifica permissão
     user = st.session_state.usuario
     tipo_user = str(user.get("tipo", "")).lower()
-    
     if tipo_user not in ["admin", "professor"]:
         st.error("Acesso negado.")
         return
-        
-    db = get_db()
-    docs_q = list(db.collection('questoes').stream())
-    aprovadas = []; pendentes = []; edicoes = []; temas_set = set()
 
-    for doc in docs_q:
-        d = doc.to_dict(); d['id'] =
+    tab1, tab2 = st.tabs(["📚 Banco de Questões", "➕ Adicionar Nova"])
+
+    # --- TAB 1: LISTAR/EDITAR ---
+    with tab1:
+        questoes = carregar_todas_questoes()
+        
+        if not questoes:
+            st.info("Nenhuma questão cadastrada no banco.")
+        else:
+            lista_q = []
+            for q in questoes:
+                lista_q.append({
+                    "id": q.get("id"),
+                    "pergunta": q.get("pergunta"),
+                    "faixa": q.get("faixa", "Geral"),
+                    "resposta_correta": q.get("resposta_correta") or q.get("resposta"),
+                    "status": q.get("status", "aprovada")
+                })
+            
+            df = pd.DataFrame(lista_q)
+            
+            # Edição na Tabela
+            st.data_editor(
+                df,
+                column_config={
+                    "status": st.column_config.SelectboxColumn(
+                        "Status", options=["aprovada", "pendente", "arquivada"]
+                    )
+                },
+                use_container_width=True,
+                hide_index=True,
+                key="editor_questoes"
+            )
+            
+            # Deletar Questão
+            st.markdown("---")
+            col_del, _ = st.columns([1, 3])
+            # Dropdown seguro
+            opcoes_del = df["pergunta"].unique() if not df.empty else []
+            if len(opcoes_del) > 0:
+                q_to_del = col_del.selectbox("Selecionar para Excluir:", opcoes_del, key="sel_del")
+                if col_del.button("🗑️ Excluir Questão", type="primary"):
+                    try:
+                        docs = db.collection('questoes').where('pergunta', '==', q_to_del).stream()
+                        for doc in docs:
+                            doc.reference.delete()
+                        st.success("Questão excluída!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Erro ao excluir: {e}")
+
+    # --- TAB 2: ADICIONAR NOVA ---
+    with tab2:
+        with st.form("form_add_q"):
+            pergunta = st.text_area("Enunciado da Pergunta:")
+            c1, c2 = st.columns(2)
+            faixa = c1.selectbox("Nível da Faixa:", ["Todas"] + FAIXAS_COMPLETAS)
+            categoria = c2.text_input("Categoria (ex: Regras, História):", "Geral")
+            
+            st.markdown("**Alternativas:**")
+            alt_a = st.text_input("A)")
+            alt_b = st.text_input("B)")
+            alt_c = st.text_input("C)")
+            alt_d = st.text_input("D)")
+            
+            correta = st.selectbox("Qual a correta?", ["A", "B", "C", "D"])
+            
+            if st.form_submit_button("💾 Salvar Questão"):
+                if pergunta and alt_a and alt_b:
+                    nova_q = {
+                        "pergunta": pergunta,
+                        "faixa": faixa,
+                        "categoria": categoria,
+                        "alternativas": {
+                            "A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d
+                        },
+                        "resposta_correta": correta,
+                        "status": "aprovada",
+                        "criado_por": user.get('nome', 'Admin'),
+                        "data_criacao": firestore.SERVER_TIMESTAMP
+                    }
+                    db.collection('questoes').add(nova_q)
+                    st.success("Questão adicionada com sucesso!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.warning("Preencha pelo menos a pergunta e duas alternativas.")
+
+# =========================================
+# 3. GESTÃO DE EXAME
+# =========================================
+def gestao_exame_de_faixa():
+    st.markdown("<h1 style='color:#FFD700;'>⚙️ Configuração de Exames</h1>", unsafe_allow_html=True)
+    db = get_db()
+
+    tab1, tab2, tab3 = st.tabs(["📝 Regras da Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
+
+    # --- ABA 1: EDITOR DE REGRAS ---
+    with tab1:
+        st.subheader("Configurar Regras da Prova")
+        faixa_config = st.selectbox("Selecione a Faixa:", ["Todas"] + FAIXAS_COMPLETAS, key="faixa_config")
+        
+        # Busca config atual
+        config_ref = db.collection('config_exames').where('faixa', '==', faixa_config).stream()
+        config_atual = {}
+        doc_id_config = None
+        for doc in config_ref:
+            config_atual = doc.to_dict()
+            doc_id_config = doc.id
+            break
+            
+        with st.form("form_config_exame"):
+            c1, c2, c3 = st.columns(3)
+            # Default values
+            def_qtd = int(config_atual.get('qtd_questoes', 10))
+            def_tempo = int(config_atual.get('tempo_limite', 45))
+            def_min = int(config_atual.get('aprovacao_minima', 70))
+            
+            qtd = c1.number_input("Qtd. Questões (Sorteio):", min_value=1, max_value=50, value=def_qtd)
+            tempo = c2.number_input("Tempo (minutos):", min_value=10, max_value=180, value=def_tempo)
+            nota = c3.number_input("Aprovação Mínima (%):", min_value=50, max_value=100, value=def_min)
+            
+            if st.form_submit_button("💾 Salvar Regras"):
+                dados_config = {
+                    "faixa": faixa_config, 
+                    "tempo_limite": tempo, 
+                    "qtd_questoes": qtd,
+                    "aprovacao_minima": nota, 
+                    "modo_selecao": "Aleatório", # Simplificado para evitar erro
+                    "atualizado_em": firestore.SERVER_TIMESTAMP
+                }
+                if doc_id_config:
+                    db.collection('config_exames').document(doc_id_config).update(dados_config)
+                else:
+                    db.collection('config_exames').add(dados_config)
+                st.success(f"Regras salvas para faixa {faixa_config}!")
+                time.sleep(1)
+                st.rerun()
+
+    # --- ABA 2: VISUALIZAR ---
+    with tab2:
+        st.info("Visualização das configurações atuais.")
+        configs_stream = db.collection('config_exames').stream()
+        for doc in configs_stream:
+            d = doc.to_dict()
+            st.markdown(f"**{d.get('faixa')}**: {d.get('qtd_questoes')} questões | {d.get('tempo_limite')} min | Mínimo {d.get('aprovacao_minima')}%")
+            st.markdown("---")
+
+    # --- ABA 3: AUTORIZAR ALUNOS ---
+    with tab3:
+        with st.container(border=True):
+            st.subheader("🗓️ Configurar Período de Exame")
+            c1, c2 = st.columns(2)
+            d_inicio = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
+            d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
+            c3, c4 = st.columns(2)
+            
+            # CORREÇÃO: Usando 'dtime' em vez de 'time' para criar o objeto de hora
+            h_inicio = c3.time_input("Hora Início:", dtime(0, 0), key="hora_inicio_exame")
+            h_fim = c4.time_input("Hora Fim:", dtime(23, 59), key="hora_fim_exame")
+            
+            # Cria objetos datetime combinados
+            dt_inicio = datetime.combine(d_inicio, h_inicio)
+            dt_fim = datetime.combine(d_fim, h_fim)
+
+        st.write("") 
+        st.subheader("Lista de Alunos")
+        
+        try:
+            alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
+            lista_alunos = []
+            
+            for doc in alunos_ref:
+                d = doc.to_dict(); d['id'] = doc.id
+                # Tenta buscar equipe
+                vinculo = list(db.collection('alunos').where('usuario_id', '==', doc.id).limit(1).stream())
+                nome_eq = "Sem Equipe"
+                if vinculo:
+                    try:
+                        eid = vinculo[0].to_dict().get('equipe_id')
+                        if eid:
+                            eq_doc = db.collection('equipes').document(eid).get()
+                            if eq_doc.exists: nome_eq = eq_doc.to_dict().get('nome', 'Sem Nome')
+                    except: pass
+                d['nome_equipe'] = nome_eq
+                lista_alunos.append(d)
+
+            if not lista_alunos: 
+                st.info("Nenhum aluno cadastrado.")
+            else:
+                cols = st.columns([3, 2, 2, 2, 1])
+                cols[0].markdown("**Aluno**")
+                cols[1].markdown("**Equipe**")
+                cols[2].markdown("**Exame**")
+                cols[3].markdown("**Status**")
+                cols[4].markdown("**Ação**")
+                st.markdown("---")
+
+                for aluno in lista_alunos:
+                    aluno_id = aluno.get('id')
+                    aluno_nome = aluno.get('nome', 'Sem Nome')
+                    faixa_exame_atual = aluno.get('faixa_exame', 'Branca')
+                    
+                    c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 2, 1])
+                    c1.write(f"**{aluno_nome}**")
+                    c2.write(aluno.get('nome_equipe'))
+                    
+                    idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
+                    fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_{aluno_id}", label_visibility="collapsed")
+                    
+                    habilitado = aluno.get('exame_habilitado', False)
+                    status = aluno.get('status_exame', 'pendente')
+                    
+                    if habilitado:
+                        c4.success("Liberado")
+                        if c5.button("⛔", key=f"off_{aluno_id}"):
+                            db.collection('usuarios').document(aluno_id).update({
+                                "exame_habilitado": False, "status_exame": "pendente",
+                                "exame_inicio": firestore.DELETE_FIELD, "exame_fim": firestore.DELETE_FIELD
+                            })
+                            st.rerun()
+                    else:
+                        c4.write("Bloqueado")
+                        if c5.button("✅", key=f"on_{aluno_id}"):
+                            db.collection('usuarios').document(aluno_id).update({
+                                "exame_habilitado": True,
+                                "faixa_exame": fx_sel,
+                                "exame_inicio": dt_inicio.isoformat(),
+                                "exame_fim": dt_fim.isoformat(),
+                                "status_exame": "pendente",
+                                "status_exame_em_andamento": False
+                            })
+                            st.success("Liberado!")
+                            time.sleep(0.5)
+                            st.rerun()
+                    st.markdown("---")
+
+        except Exception as e:
+            st.error(f"Erro ao carregar lista de alunos: {e}")
