@@ -201,7 +201,7 @@ def exame_de_faixa(usuario):
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd = len(lista_questoes)
 
-    # --- 6. TELA DE INÍCIO ---
+    # --- 6. TELA DE INÍCIO (AJUSTE DE ALINHAMENTO) ---
     if not st.session_state.exame_iniciado:
         st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
         with st.container(border=True):
@@ -212,10 +212,18 @@ def exame_de_faixa(usuario):
             3. **Reprovação:** Se não atingir a nota, deverá aguardar **72 horas**.
             """)
             st.markdown("---")
-            c1,c2,c3 = st.columns(3)
+            
+            # --- ALINHAMENTO SIMÉTRICO AQUI ---
+            c1, c2, c3 = st.columns(3)
+            
+            # Esquerda
             c1.markdown(f"📝 **{qtd} Questões**")
-            c2.markdown(f"⏱️ **{tempo_limite} min**")
-            c3.markdown(f"✅ **{min_aprovacao}%**")
+            
+            # Centro
+            c2.markdown(f"<div style='text-align: center'>⏱️ <b>{tempo_limite} min</b></div>", unsafe_allow_html=True)
+            
+            # Direita
+            c3.markdown(f"<div style='text-align: right'>✅ Mínimo: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
         
         if qtd > 0:
             if st.button("✅ INICIAR EXAME (Estou Ciente)", type="primary", use_container_width=True):
