@@ -162,45 +162,241 @@ def gestao_questoes():
 # 3. GESTÃO DE EXAMES
 # =========================================
 def gestao_exame_de_faixa():
-    st.markdown("<h1 style='color:#FFD700;'>⚙️ Configuração de Exames</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:#FFD700;'>📜 Gestão de Exame</h1>", unsafe_allow_html=True)
+    
+    user_logado = st.session_state.usuario
+    tipo_user = str(user_logado.get("tipo", "")).lower()
+    
+    if tipo_user not in ["admin", "professor"]:
+        st.error("Acesso negado.")
+        return
+
+    # Abas Principais
+    tab_editor, tab_visualizar, tab_alunos = st.tabs(["✏️ Editor de Provas", "👁️ Visualizar Provas", "✅ Habilitar Alunos"])
+    
     db = get_db()
     
-    st.info("Configure as regras da prova para cada faixa.")
-    
-    faixa_sel = st.selectbox("Selecione a Faixa para Configurar:", FAIXAS_COMPLETAS)
-    
-    docs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
-    config_atual = {}
-    doc_id = None
-    for doc in docs:
-        config_atual = doc.to_dict()
-        doc_id = doc.id
-        break
+    # Lista completa de faixas com subdivisões
+    todas_faixas = [
+        "Cinza e Branca", "Cinza", "Cinza e Preta",
+        "Amarela e Branca", "Amarela", "Amarela e Preta",
+        "Laranja e Branca", "Laranja", "Laranja e Preta",
+        "Verde e Branca", "Verde", "Verde e Preta",
+        "Azul", "Roxa", "Marrom", "Preta"
+    ]
+
+    # ---------------------------------------------------------
+    # ABA 1: EDITOR (Focado em Criação/Edição)
+    # ---------------------------------------------------------
+    with tab_editor:
+        st.subheader("Editor de Prova")
+        st.caption("Selecione a faixa abaixo para adicionar ou remover questões.")
         
-    with st.form("form_config_exame"):
-        c1, c2, c3 = st.columns(3)
-        qtd = c1.number_input("Qtd. Questões:", min_value=5, max_value=50, value=int(config_atual.get('qtd_questoes', 10)))
-        tempo = c2.number_input("Tempo (minutos):", min_value=10, max_value=180, value=int(config_atual.get('tempo_limite', 45)))
-        minima = c3.number_input("Aprovação (%):", min_value=50, max_value=100, value=int(config_atual.get('aprovacao_minima', 70)))
+        # Seletor ÚNICO com todas as opções
+        faixa_edit = st.selectbox("Selecione o exame:", todas_faixas, key="sel_faixa_edit")
         
-        # Configurar Horários (Usando dtime para evitar conflito)
+        # Carrega dados
+        doc_ref = db.collection('exames').document(faixa_edit)
+        doc_snap = doc_ref.get()
+        
+        dados_prova = doc_snap.to_dict() if doc_snap.exists else {}
+        questoes_atuais = dados_prova.get('questoes', [])
+        tempo_atual = dados_prova.get('tempo_limite', 60)
+
+        c_time, c_stat = st.columns([1, 3])
+        novo_tempo = c_time.number_input("⏱️ Tempo Limite (min):", 10, 240, tempo_atual, 10)
+        c_stat.info(f"Prova **{faixa_edit}**: {len(questoes_atuais)} questões adicionadas.")
+
         st.markdown("---")
-        st.markdown("**Horário Padrão (Opcional)**")
-        ch1, ch2 = st.columns(2)
-        h_ini = ch1.time_input("Início Padrão:", value=dtime(0,0)) 
-        h_fim = ch2.time_input("Fim Padrão:", value=dtime(23,59))
+        st.markdown("#### ➕ Adicionar Questões do Banco")
         
-        if st.form_submit_button("💾 Salvar Configuração"):
-            dados = {
-                "faixa": faixa_sel,
-                "qtd_questoes": qtd,
-                "tempo_limite": tempo,
-                "aprovacao_minima": minima
-            }
-            if doc_id:
-                db.collection('config_exames').document(doc_id).update(dados)
-            else:
-                db.collection('config_exames').add(dados)
-            st.success(f"Regras para faixa {faixa_sel} salvas!")
-            time.sleep(1)
-            st.rerun()
+        # Carrega Banco de Questões Aprovadas
+        docs_q = db.collection('questoes').where('status', '==', 'aprovada').stream()
+        todas_q = [d.to_dict() for d in docs_q] 
+        
+        temas = sorted(list(set(q.get('tema', 'Geral') for q in todas_q)))
+        filtro = st.selectbox("Filtrar Banco por Tema:", ["Todos"] + temas)
+        
+        q_exibir = [q for q in todas_q if q.get('tema') == filtro] if filtro != "Todos" else todas_q
+        perguntas_ja_add = [q['pergunta'] for q in questoes_atuais]
+
+        # Formulário de Adição
+        with st.form("form_add_questoes"):
+            selecionadas = []
+            count = 0
+            for i, q in enumerate(q_exibir):
+                if count > 50: 
+                    st.caption("... muitos resultados. Filtre por tema para ver mais."); break
+                    
+                if q['pergunta'] not in perguntas_ja_add:
+                    c_chk, c_det = st.columns([0.5, 10])
+                    with c_chk:
+                        # Visualização compacta para seleção
+                        ck = st.checkbox("Add", key=f"add_{i}", label_visibility="collapsed")
+                        if ck: selecionadas.append(q)
+                    with c_det:
+                        st.markdown(f"**[{q.get('tema')}]** {q['pergunta']}")
+                        # Detalhes visíveis na seleção
+                        if 'opcoes' in q:
+                            st.caption(f"Opções: {q.get('opcoes')}")
+                        st.caption(f"✅ {q.get('resposta')} | ✍️ {q.get('criado_por', 'Admin')}")
+                        st.markdown("---")
+                    count += 1
+            
+            if st.form_submit_button("Salvar Selecionadas na Prova"):
+                questoes_atuais.extend(selecionadas)
+                doc_ref.set({
+                    "faixa": faixa_edit,
+                    "questoes": questoes_atuais,
+                    "tempo_limite": novo_tempo,
+                    "atualizado_em": firestore.SERVER_TIMESTAMP,
+                    "atualizado_por": user_logado['nome']
+                })
+                st.success("Prova salva com sucesso!")
+                st.rerun()
+
+        if questoes_atuais:
+            st.markdown("#### 📋 Questões na Prova Atual")
+            for i, q in enumerate(questoes_atuais):
+                with st.expander(f"{i+1}. {q['pergunta']}"):
+                    st.write(q.get('opcoes'))
+                    st.info(f"Resposta: {q.get('resposta')}")
+                    if st.button("Remover da Prova", key=f"rem_{i}"):
+                        questoes_atuais.pop(i)
+                        doc_ref.update({"questoes": questoes_atuais, "tempo_limite": novo_tempo})
+                        st.rerun()
+
+    # ---------------------------------------------------------
+    # ABA 2: VISUALIZAR (Agrupado por Cor)
+    # ---------------------------------------------------------
+    with tab_visualizar:
+        st.subheader("Visualizar Provas Cadastradas")
+        
+        # Categorias de Cores para organização visual
+        categorias = {
+            "🔘 Cinza": ["Cinza e Branca", "Cinza", "Cinza e Preta"],
+            "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
+            "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
+            "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
+            "🔵 Azul": ["Azul"],
+            "🟣 Roxa": ["Roxa"],
+            "🟤 Marrom": ["Marrom"],
+            "⚫ Preta": ["Preta"]
+        }
+        
+        abas_cores = st.tabs(list(categorias.keys()))
+        
+        for aba, (cor_nome, lista_faixas) in zip(abas_cores, categorias.items()):
+            with aba:
+                for f_nome in lista_faixas:
+                    d_ref = db.collection('exames').document(f_nome).get()
+                    if d_ref.exists:
+                        data = d_ref.to_dict()
+                        q_list = data.get('questoes', [])
+                        
+                        with st.expander(f"✅ {f_nome} ({len(q_list)} questões)"):
+                            st.caption(f"Tempo: {data.get('tempo_limite')} min | Por: {data.get('atualizado_por', 'Admin')}")
+                            
+                            if q_list:
+                                for i, q in enumerate(q_list, 1):
+                                    st.markdown(f"**{i}. {q['pergunta']}**")
+                                    for op in q.get('opcoes', []):
+                                        st.text(f"  • {op}")
+                                    st.success(f"Resposta: {q.get('resposta')}")
+                                    st.caption(f"Autor: {q.get('criado_por', 'Desconhecido')}")
+                                    st.markdown("---")
+                            else:
+                                st.warning("Prova vazia.")
+                    else:
+                        st.info(f"⚠️ A prova para a faixa **{f_nome}** ainda não foi criada.")
+
+    # ---------------------------------------------------------
+    # ABA 3: HABILITAR ALUNOS (Texto Atualizado)
+    # ---------------------------------------------------------
+    with tab_alunos:
+        st.subheader("Autorizar Alunos")
+        
+        equipes_permitidas = []
+        if tipo_user == 'admin':
+            equipes_permitidas = None 
+        else:
+            q1 = db.collection('equipes').where('professor_responsavel_id', '==', user_logado['id']).stream()
+            equipes_permitidas = [d.id for d in q1]
+            q2 = db.collection('professores').where('usuario_id', '==', user_logado['id']).where('status_vinculo', '==', 'ativo').stream()
+            for d in q2:
+                eid = d.to_dict().get('equipe_id')
+                if eid and eid not in equipes_permitidas:
+                    equipes_permitidas.append(eid)
+            
+            if not equipes_permitidas:
+                st.warning("Sem equipes vinculadas.")
+                st.stop()
+
+        alunos_ref = db.collection('alunos')
+        if equipes_permitidas:
+            query = alunos_ref.where('equipe_id', 'in', equipes_permitidas[:10])
+        else:
+            query = alunos_ref 
+
+        docs_alunos = list(query.stream())
+        
+        if not docs_alunos:
+            st.info("Nenhum aluno encontrado.")
+        else:
+            users_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('usuarios').stream()}
+            equipes_map = {d.id: d.to_dict().get('nome','?') for d in db.collection('equipes').stream()}
+            
+            st.markdown("#### 📅 Configurar Período")
+            c_ini, c_fim = st.columns(2)
+            d_ini = c_ini.date_input("Início:", value=datetime.now())
+            h_ini = c_ini.time_input("Hora:", value=time(0, 0))
+            d_fim = c_fim.date_input("Fim:", value=datetime.now())
+            h_fim = c_fim.time_input("Hora Fin:", value=time(23, 59))
+            dt_inicio = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
+
+            st.markdown("---")
+            h = st.columns([3, 2, 2, 3, 2])
+            h[0].markdown("**Aluno**"); h[1].markdown("**Equipe**"); h[2].markdown("**Exame**"); h[3].markdown("**Status**"); h[4].markdown("**Ação**")
+            
+            # Lista completa para o seletor
+            todas_faixas_ops = todas_faixas
+
+            for doc in docs_alunos:
+                d = doc.to_dict()
+                uid = d.get('usuario_id'); eid = d.get('equipe_id')
+                
+                if equipes_permitidas is None or eid in equipes_permitidas:
+                    nome = users_map.get(uid, "Desconhecido")
+                    eq = equipes_map.get(eid, "-")
+                    hab = d.get('exame_habilitado', False)
+                    lib = d.get('faixa_exame_liberado', 'Nenhuma')
+                    
+                    # --- TEXTO DE STATUS ATUALIZADO ---
+                    status_txt = "🔴 Bloqueado"
+                    if hab:
+                        try:
+                            # Formato: liberado para realizar o exame até o dia DD/MM/AAAA
+                            f_dt = d.get('exame_fim').replace(tzinfo=None).strftime("%d/%m/%Y")
+                            status_txt = f"🟢 liberado para realizar o exame até o dia {f_dt}"
+                        except:
+                            status_txt = "🟢 Liberado"
+                    
+                    c = st.columns([3, 2, 2, 3, 2])
+                    c[0].write(nome)
+                    c[1].write(eq)
+                    
+                    try: idx_f = todas_faixas_ops.index(lib)
+                    except: idx_f = 0
+                    fx_sel = c[2].selectbox("Faixa", todas_faixas_ops, index=idx_f, key=f"s_{doc.id}", label_visibility="collapsed")
+                    c[3].caption(status_txt)
+                    
+                    if hab:
+                        if c[4].button("⛔", key=f"b_{doc.id}", help="Bloquear"):
+                            db.collection('alunos').document(doc.id).update({"exame_habilitado": False})
+                            st.rerun()
+                    else:
+                        if c[4].button("✅", key=f"l_{doc.id}", help="Liberar"):
+                            db.collection('alunos').document(doc.id).update({
+                                "exame_habilitado": True, "exame_inicio": dt_inicio, "exame_fim": dt_fim, "faixa_exame_liberado": fx_sel
+                            })
+                            st.rerun()
