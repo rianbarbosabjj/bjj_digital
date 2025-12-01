@@ -5,11 +5,24 @@ import bcrypt
 from database import get_db
 
 # =========================================================
-# 1. CONFIGURAÇÃO (Deve ser a primeira linha executável)
+# FUNÇÃO PARA ENCONTRAR O LOGO
+# =========================================================
+def get_logo_path():
+    """Procura o logo na pasta assets ou na raiz."""
+    if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
+    if os.path.exists("logo.jpg"): return "logo.jpg"
+    if os.path.exists("assets/logo.png"): return "assets/logo.png"
+    if os.path.exists("logo.png"): return "logo.png"
+    return None
+
+logo_file = get_logo_path()
+
+# =========================================================
+# 1. CONFIGURAÇÃO
 # =========================================================
 st.set_page_config(
     page_title="BJJ Digital", 
-    page_icon="assets/logo.jpg", 
+    page_icon=logo_file, # Usa o arquivo encontrado
     layout="wide",
     initial_sidebar_state="expanded" 
 )
@@ -126,9 +139,9 @@ except ImportError as e:
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        if os.path.exists("assets/logo.jpg"):
+        if logo_file:
             cl, cc, cr = st.columns([1, 1, 1])
-            with cc: st.image("assets/logo.jpg", use_container_width=True)
+            with cc: st.image(logo_file, use_container_width=True)
         st.write("") 
         with st.container(border=True):
             st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
@@ -161,14 +174,13 @@ def app_principal():
 
     # SIDEBAR
     with st.sidebar:
-        if os.path.exists("assets/logo.jpg"): st.image("assets/logo.jpg", use_container_width=True)
+        if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align:center; color:#aaa;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
         
-        # Botão CERTIFICADOS na Sidebar (Oculto para Admin)
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
@@ -184,14 +196,12 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Roteamento Sidebar (Prioritário - renderiza e encerra)
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL (Apenas itens principais)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
