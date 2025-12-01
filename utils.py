@@ -140,17 +140,18 @@ def enviar_email_recuperacao(email_destino, nova_senha):
     except: return False
 
 # =========================================
-# 4. CÓDIGOS E QR CODE (FORMATO NOVO)
+# 4. CÓDIGOS E QR CODE
 # =========================================
 def gerar_codigo_verificacao():
     """Gera código no formato BJJDIGITAL-{ANO}-{SEQUENCIA}"""
     try:
         db = get_db()
-        # Tenta contar quantos certificados já existem para gerar sequencial
+        # Conta quantos documentos existem na coleção 'resultados'
         docs = db.collection('resultados').count().get()
-        total = docs[0][0].value
+        # O count() do firestore retorna uma lista de agregações, pegamos o valor da primeira
+        total = docs[0][0].value 
     except:
-        # Fallback se der erro no banco: gera número aleatório
+        # Fallback: Gera um número aleatório se não conseguir conectar
         total = random.randint(1000, 9999)
     
     sequencia = total + 1
@@ -174,7 +175,7 @@ def gerar_qrcode(codigo):
     return caminho_qr
 
 # =========================================
-# 5. PDF MODERNO (LAYOUT AJUSTADO)
+# 5. PDF PREMIUM (DARK MODE / DOURADO)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
@@ -183,146 +184,120 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_auto_page_break(False)
         pdf.add_page()
         
-        # Cores
-        cor_dourado = (184, 134, 11) 
-        cor_preto = (25, 25, 25)
-        cor_cinza = (100, 100, 100)
-        cor_fundo = (252, 252, 250)
+        # --- CORES ---
+        # Fundo Escuro (Quase Preto, levemente esverdeado/digital)
+        cor_fundo = (15, 20, 20) 
+        # Dourado Metálico
+        cor_dourado = (218, 165, 32)
+        # Branco para textos gerais
+        cor_texto = (240, 240, 240)
 
-        # Fundo
+        # 1. PREENCHER FUNDO
         pdf.set_fill_color(*cor_fundo)
         pdf.rect(0, 0, 297, 210, "F")
 
-        # Barra Lateral
-        largura_barra = 60
-        pdf.set_fill_color(*cor_preto)
-        pdf.rect(0, 0, largura_barra, 210, "F")
-        pdf.set_fill_color(*cor_dourado)
-        pdf.rect(largura_barra, 0, 2, 210, "F")
+        # 2. BORDA DOURADA (Moldura)
+        margem = 8
+        pdf.set_draw_color(*cor_dourado)
+        pdf.set_line_width(2)
+        pdf.rect(margem, margem, 297 - (2*margem), 210 - (2*margem))
+        
+        # Borda interna fina (efeito duplo)
+        pdf.set_line_width(0.5)
+        pdf.rect(margem + 2, margem + 2, 297 - (2*margem) - 4, 210 - (2*margem) - 4)
 
-        # Logo
+        # 3. LOGO (Centralizada no Topo)
         if os.path.exists("assets/logo.png"):
             try: 
-                pdf.image("assets/logo.png", x=10, y=30, w=40)
-            except: 
-                pass
+                # Centraliza imagem de 40mm
+                x_logo = (297 - 40) / 2
+                pdf.image("assets/logo.png", x=x_logo, y=15, w=40)
+            except: pass
         
-        # Configuração da Área de Texto
-        x_inicio = largura_barra + 10 
-        largura_util = 297 - x_inicio - 10 
-        centro_x = x_inicio + (largura_util / 2)
-
-        # Título Principal - Centralizado
-        pdf.set_y(35)
-        pdf.set_font("Helvetica", "B", 32)
+        # 4. CABEÇALHO
+        pdf.set_xy(0, 55)
+        pdf.set_font("Helvetica", "B", 27)
         pdf.set_text_color(*cor_dourado)
-        titulo = "CERTIFICADO DE EXAME TEÓRICO DE FAIXA"
-        pdf.cell(largura_util, 15, titulo, ln=1, align="C")
+        pdf.cell(297, 15, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", ln=1, align="C")
         
         pdf.ln(10) 
         
-        # Texto Introdutório - Centralizado
-        pdf.set_font("Helvetica", "", 14)
-        pdf.set_text_color(*cor_preto)
-        texto_intro = "Certificamos que o(a) aluno(a)"
-        pdf.cell(largura_util, 8, texto_intro, ln=1, align="C")
+        # 5. CORPO DO TEXTO
+        pdf.set_font("Helvetica", "", 16)
+        pdf.set_text_color(*cor_texto)
+        pdf.cell(297, 10, "Certificamos que o(a) aluno(a)", ln=1, align="C")
 
-        # Nome do Aluno - Centralizado com auto-ajuste
-        pdf.ln(4)
-        try: 
-            nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
-        except: 
-            nome_limpo = usuario_nome.upper()
+        # NOME DO ALUNO (Auto-Ajuste Dourado)
+        pdf.ln(5)
+        try: nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
+        except: nome_limpo = usuario_nome.upper()
 
-        # Ajuste de tamanho de fonte para o nome
-        tamanho_fonte = 36
-        largura_maxima_nome = largura_util - 40  # Margem de 20px cada lado
-        
-        while True:
+        tamanho_fonte = 40
+        pdf.set_font("Helvetica", "B", tamanho_fonte)
+        # Reduz fonte se o nome for muito grande
+        while pdf.get_string_width(nome_limpo) > 240 and tamanho_fonte > 14:
+            tamanho_fonte -= 2
             pdf.set_font("Helvetica", "B", tamanho_fonte)
-            largura_texto = pdf.get_string_width(nome_limpo)
-            if largura_texto <= largura_maxima_nome or tamanho_fonte <= 16:
-                break
-            tamanho_fonte -= 1
-
-        # Centralizar horizontalmente o nome
-        x_nome = centro_x - (largura_texto / 2)
-        pdf.set_xy(x_nome, pdf.get_y())
+        
         pdf.set_text_color(*cor_dourado)
-        pdf.cell(largura_texto, 16, nome_limpo, align='L')
+        pdf.cell(297, 20, nome_limpo, ln=1, align="C")
         
-        # Linha decorativa - Centralizada
-        pdf.ln(16)
-        y_linha = pdf.get_y()
-        largura_linha = 200
-        x_linha = centro_x - (largura_linha / 2)
-        pdf.set_draw_color(*cor_cinza)
-        pdf.set_line_width(0.2)
-        pdf.line(x_linha, y_linha, x_linha + largura_linha, y_linha)
+        # Texto de aprovação
+        pdf.set_font("Helvetica", "", 16)
+        pdf.set_text_color(*cor_texto)
+        pdf.cell(297, 10, "Foi aprovado(a) no exame teórico estando apto(a) à faixa:", ln=1, align="C")
 
-        pdf.ln(10)
+        # FAIXA (Gigante Dourada)
+        pdf.ln(5)
+        pdf.set_font("Helvetica", "B", 32)
+        pdf.set_text_color(*cor_dourado)
+        pdf.cell(297, 15, str(faixa).upper(), ln=1, align="C")
 
-        # Texto de Conclusão - Centralizado
-        pdf.set_font("Helvetica", "", 14)
-        pdf.set_text_color(*cor_preto)
-        texto_conclusao = "foi APROVADO(A) no exame teórico de faixa"
-        pdf.cell(largura_util, 8, texto_conclusao, ln=1, align="C")
-
-        # Faixa - Centralizado
-        pdf.ln(6)
-        pdf.set_font("Helvetica", "B", 24)
-        pdf.set_text_color(*cor_preto)
-        texto_faixa = f"FAIXA {str(faixa).upper()}"
-        pdf.cell(largura_util, 12, texto_faixa, ln=1, align="C")
-
-        # Detalhes - Centralizado
-        pdf.ln(12)
-        pdf.set_font("Helvetica", "", 11)
-        pdf.set_text_color(*cor_cinza)
-        try: 
-            percentual = int((pontuacao / total) * 100) if total > 0 else 0
-        except: 
-            percentual = 0
+        # 6. RODAPÉ
+        pdf.ln(15)
+        
+        # Data
         data_fmt = datetime.now().strftime("%d/%m/%Y")
-        
-        detalhes = f"Data de Emissão: {data_fmt}  |  Aproveitamento: {percentual}%"
-        pdf.cell(largura_util, 6, detalhes, ln=1, align="C")
+        pdf.set_font("Helvetica", "", 12)
+        pdf.set_text_color(*cor_texto)
+        pdf.cell(297, 6, f"Data de Emissão: {data_fmt}, ln=1, align="C")
 
-        # Rodapé - Elementos alinhados
-        y_rodape = 160
+        y_rodape = 175
         
-        # Assinatura - Alinhada à esquerda da área de conteúdo
-        x_assinatura = x_inicio + 10
-        pdf.set_xy(x_assinatura, y_rodape)
-        pdf.set_draw_color(*cor_preto)
-        pdf.line(x_assinatura, y_rodape, x_assinatura + 70, y_rodape)
-        pdf.set_xy(x_assinatura, y_rodape + 2)
+        # Assinatura (Esquerda)
+        # Linha branca para assinatura
+        pdf.set_draw_color(*cor_texto)
+        pdf.set_line_width(0.5)
+        pdf.line(40, y_rodape, 110, y_rodape)
+        
+        pdf.set_xy(40, y_rodape + 2)
         pdf.set_font("Helvetica", "", 10)
         pdf.cell(70, 5, "Professor Responsável", align="C")
 
-        # QR Code e Hash - Alinhados à direita
+        # QR Code e Hash (Direita)
+        y_qr = 160
+        x_qr = 230
         tamanho_qr = 25
-        x_qr = 245
-        y_qr = y_rodape - 10
         
         try:
             caminho_qr = gerar_qrcode(codigo)
+            # Desenha um quadrado branco atrás do QR code para contraste
+            pdf.set_fill_color(255, 255, 255)
+            pdf.rect(x_qr-1, y_qr-1, tamanho_qr+2, tamanho_qr+2, "F")
             pdf.image(caminho_qr, x=x_qr, y=y_qr, w=tamanho_qr)
-        except: 
-            pass
+        except: pass
 
-        # Hash centralizado abaixo do QR Code
-        pdf.set_font("Courier", "", 8)
-        pdf.set_text_color(*cor_cinza)
-        largura_hash = pdf.get_string_width(codigo)
-        x_hash = x_qr + (tamanho_qr / 2) - (largura_hash / 2)
-        pdf.set_xy(x_hash, y_qr + tamanho_qr + 3)
-        pdf.cell(largura_hash, 4, codigo)
+        # Hash abaixo do QR
+        pdf.set_xy(x_qr - 15, y_qr + tamanho_qr + 2)
+        pdf.set_font("Courier", "B", 10)
+        pdf.set_text_color(*cor_dourado)
+        pdf.cell(55, 5, f"{codigo}", align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
     except Exception as e:
         print(f"Erro PDF: {e}")
         return None, None
+
 # =========================================
 # 6. REGRAS DO EXAME
 # =========================================
