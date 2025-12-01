@@ -5,7 +5,7 @@ import bcrypt
 from database import get_db
 
 # =========================================================
-# 1. CONFIGURAÇÃO
+# 1. CONFIGURAÇÃO (Deve ser a primeira linha executável)
 # =========================================================
 st.set_page_config(
     page_title="BJJ Digital", 
@@ -15,7 +15,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" FORÇADO)
+# 2. ESTILOS VISUAIS
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -29,28 +29,20 @@ except ImportError:
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
-
-    /* --- GLOBAL: TEXTO BRANCO E FONTE --- */
-    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span, h1, h2, h3, h4, h5, h6 {{
+    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
-
-    /* --- BACKGROUND COM GRADIENTE --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
-    
-    /* --- CORREÇÃO DAS LINHAS (DIVISÓRIAS) --- */
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
         border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
         opacity: 1 !important;
     }}
-
-    /* --- TÍTULOS CENTRALIZADOS --- */
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
         text-align: center !important; 
@@ -58,8 +50,6 @@ st.markdown(f"""
         text-transform: uppercase;
         width: 100%; 
     }}
-
-    /* --- SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.2);
@@ -69,8 +59,6 @@ st.markdown(f"""
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
     }}
-
-    /* --- MOLDURAS E CARDS (CONTAINERS) --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.4) !important; 
@@ -80,8 +68,6 @@ st.markdown(f"""
         box-shadow: 0 8px 16px rgba(0,0,0,0.4); 
         margin-bottom: 20px;
     }}
-    
-    /* --- EXPANDER (ACORDEÃO) --- */
     .streamlit-expanderHeader {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: {COR_DESTAQUE} !important;
@@ -92,8 +78,6 @@ st.markdown(f"""
         fill: {COR_TEXTO} !important; 
         color: {COR_TEXTO} !important;
     }}
-
-    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
@@ -110,23 +94,16 @@ st.markdown(f"""
         border-color: {COR_DESTAQUE} !important;
         transform: translateY(-2px);
     }}
-
-    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: #1a3b32 !important;
         color: white !important;
         border: 1px solid rgba(255, 255, 255, 0.3) !important; 
     }}
-    .stTextInput input, .stTextArea textarea {{
-        color: white !important;
-    }}
-
-    /* --- MENU DE CIMA --- */
+    .stTextInput input, .stTextArea textarea {{ color: white !important; }}
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
     header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
-
 </style>
 """, unsafe_allow_html=True)
 
@@ -140,7 +117,7 @@ try:
     from streamlit_option_menu import option_menu
     from views import login, geral, aluno, professor, admin
 except ImportError as e:
-    st.error(f"❌ Erro crítico: {e}")
+    st.error(f"❌ Erro crítico nas importações: {e}")
     st.stop()
 
 # =========================================
@@ -180,7 +157,6 @@ def app_principal():
     usuario = st.session_state.usuario
     tipo = str(usuario.get("tipo", "aluno")).lower()
 
-    # Define função de navegação
     def nav(pg): st.session_state.menu_selection = pg
 
     # SIDEBAR
@@ -190,10 +166,9 @@ def app_principal():
         st.markdown(f"<p style='text-align:center; color:#aaa;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
-        # --- BOTÕES DE NAVEGAÇÃO DA SIDEBAR ---
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
         
-        # NOVA LOCALIZAÇÃO: Meus Certificados (Abaixo de Perfil, Oculto para Admin)
+        # Botão CERTIFICADOS na Sidebar (Oculto para Admin)
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
@@ -209,30 +184,25 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Roteamento Sidebar (Prioritário - renderiza e para se for uma dessas páginas)
+    # Roteamento Sidebar (Prioritário - renderiza e encerra)
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL
+    # MENU HORIZONTAL (Apenas itens principais)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
-        # REMOVIDO "Meus Certificados" daqui (agora está na sidebar)
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
         icns = ["house", "people", "journal", "trophy"]
 
-    # Lógica segura de índice: se a página atual não está no menu horizontal, padrão é 0 (Início)
     try: idx = ops.index(pg)
     except: idx = 0
     
-    # -------------------------------------------------------------
-    # MENU TRANSPARENTE
-    # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -271,20 +241,13 @@ def app_principal():
         }
     )
 
-    # LÓGICA DE ATUALIZAÇÃO DO MENU
-    # Só atualiza se o menu for diferente da página atual E não for um falso positivo
     if menu != pg:
-        # Se estamos em "Meus Certificados" (Sidebar) e o menu horizontal está em "Início" (padrão),
-        # NÃO atualizamos, senão o usuário seria jogado para o Início automaticamente.
-        if pg == "Meus Certificados" and menu == "Início":
-            pass 
+        if pg == "Meus Certificados" and menu == "Início": pass 
         else:
             st.session_state.menu_selection = menu
             st.rerun()
 
-    # Roteamento do Menu Horizontal
-    if pg == "Início": geral.tela_inicio()
-    elif pg == "Modo Rola": aluno.modo_rola(usuario)
+    if pg == "Modo Rola": aluno.modo_rola(usuario)
     elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
     elif pg == "Ranking": aluno.ranking()
     elif pg == "Gestão de Equipes": professor.gestao_equipes()
