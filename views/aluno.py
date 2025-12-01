@@ -216,7 +216,7 @@ def exame_de_faixa(usuario):
 - Utilize um dispositivo com bateria suficiente ou mantido na energia.
 - O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
 - Leia cada questão com atenção antes de responder.
-- Se aprovado, você poderá baixar seu certificado na aba *Meus Certificados*.
+- Se aprovado, você poderá baixar seu certificado em *Meus Certificados*.
 
 **Boa prova!** 🥋
             """)
