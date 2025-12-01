@@ -1,3 +1,4 @@
+
 import streamlit as st
 import os
 import sys
@@ -9,13 +10,13 @@ from database import get_db
 # =========================================================
 st.set_page_config(
     page_title="BJJ Digital", 
-    page_icon="assets/logo.jpg", 
+    page_icon="assets/logo.png", 
     layout="wide",
     initial_sidebar_state="expanded" 
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" FORÇADO)
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -31,24 +32,16 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
     /* --- GLOBAL: TEXTO BRANCO E FONTE --- */
-    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span, h1, h2, h3, h4, h5, h6 {{
+    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BACKGROUND COM GRADIENTE --- */
+    /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
-        /* O gradiente cria uma luz no topo. O menu precisa ser transparente para não virar uma mancha preta aqui */
+        /* Gradiente sutil para dar profundidade */
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%);
-    }}
-    
-    /* --- CORREÇÃO DAS LINHAS (DIVISÓRIAS) --- */
-    hr {{
-        margin: 2em 0 !important;
-        border: 0 !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
-        opacity: 1 !important;
     }}
 
     /* --- TÍTULOS CENTRALIZADOS --- */
@@ -57,7 +50,7 @@ st.markdown(f"""
         text-align: center !important; 
         font-weight: 700 !important; 
         text-transform: uppercase;
-        width: 100%; 
+        width: 100%; /* Garante que ocupa a linha toda para centralizar */
     }}
 
     /* --- SIDEBAR --- */
@@ -66,19 +59,16 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 215, 112, 0.2);
         box-shadow: 4px 0 15px rgba(0,0,0,0.3);
     }}
-    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
-        color: {COR_DESTAQUE} !important;
-    }}
 
-    /* --- MOLDURAS E CARDS (CONTAINERS) --- */
+    /* --- MOLDURAS E CARDS (VISIBILIDADE AUMENTADA) --- */
+    /* Fundo mais escuro e borda mais forte para destacar do fundo verde */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
-        background-color: rgba(0, 0, 0, 0.4) !important; 
-        border: 2px solid rgba(255, 215, 112, 0.25) !important; 
+        background-color: rgba(0, 0, 0, 0.4) !important; /* Fundo Preto Translúcido Forte */
+        border: 2px solid rgba(255, 215, 112, 0.25) !important; /* Borda Dourada */
         border-radius: 16px; 
         padding: 25px;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.4); 
+        box-shadow: 0 8px 16px rgba(0,0,0,0.4); /* Sombra 3D */
         margin-bottom: 20px;
     }}
     
@@ -88,10 +78,6 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
         border: 1px solid {COR_DESTAQUE} !important;
         border-radius: 8px;
-    }}
-    .streamlit-expanderHeader svg {{
-        fill: {COR_TEXTO} !important; 
-        color: {COR_TEXTO} !important;
     }}
 
     /* --- BOTÕES --- */
@@ -103,7 +89,7 @@ st.markdown(f"""
         font-weight: bold !important;
         border-radius: 10px !important; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        width: 100%; 
+        width: 100%; /* Botões largos ficam melhores no celular */
     }}
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
@@ -112,21 +98,24 @@ st.markdown(f"""
         transform: translateY(-2px);
     }}
 
-    /* --- INPUTS --- */
-    input, textarea, select, div[data-baseweb="select"] > div {{
+    /* --- INPUTS (CORREÇÃO MODO CLARO) --- */
+    input, textarea, select {{
         background-color: #1a3b32 !important;
         color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important; 
+        border: 1px solid {COR_BOTAO} !important;
     }}
-    .stTextInput input, .stTextArea textarea {{
+    div[data-baseweb="select"] > div {{
+        background-color: #1a3b32 !important;
         color: white !important;
     }}
 
-    /* --- MENU DE CIMA --- */
+    /* --- MENU MOBILE --- */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
-    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
+    header[data-testid="stHeader"] {{ background-color: {COR_FUNDO} !important; z-index: 1; }}
+    [data-testid="collapsedControl"] {{ color: {COR_DESTAQUE} !important; display: block !important; }}
+    [data-testid="collapsedControl"] svg {{ fill: {COR_DESTAQUE} !important; }}
 
 </style>
 """, unsafe_allow_html=True)
@@ -150,9 +139,9 @@ except ImportError as e:
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        if os.path.exists("assets/logo.jpg"):
+        if os.path.exists("assets/logo.png"):
             cl, cc, cr = st.columns([1, 1, 1])
-            with cc: st.image("assets/logo.jpg", use_container_width=True)
+            with cc: st.image("assets/logo.png", use_container_width=True)
         st.write("") 
         with st.container(border=True):
             st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
@@ -183,7 +172,7 @@ def app_principal():
 
     # SIDEBAR
     with st.sidebar:
-        if os.path.exists("assets/logo.jpg"): st.image("assets/logo.jpg", use_container_width=True)
+        if os.path.exists("assets/logo.png"): st.image("assets/logo.png", use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align:center; color:#aaa;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
@@ -207,7 +196,7 @@ def app_principal():
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL
+    # MENU HORIZONTAL (DESTAQUE VISUAL CORRIGIDO)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
@@ -219,9 +208,7 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
-    # -------------------------------------------------------------
-    # MENU TRANSPARENTE (SEM PARTES PRETAS)
-    # -------------------------------------------------------------
+    # AQUI: Estilo "Bloco Sólido" para o menu não ter cantos brancos
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -230,12 +217,11 @@ def app_principal():
         orientation="horizontal",
         styles={
             "container": {
-                "padding": "5px", 
-                # TRANSPARENTE: A mágica acontece aqui. 
-                # Remove o fundo sólido que conflita com o gradiente da página.
-                "background-color": "transparent", 
-                "box-shadow": "none", # Remove sombra do container para não criar mancha escura
-                "border": "none"
+                "padding": "10px", 
+                "background-color": "#11332d", # Um pouco mais claro que o fundo, sólido
+                "border-radius": "12px",
+                "border": f"1px solid {COR_DESTAQUE}", # Borda Dourada
+                "box-shadow": "0 4px 12px rgba(0,0,0,0.5)"
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -245,20 +231,15 @@ def app_principal():
             "nav-link": {
                 "font-size": "14px", 
                 "text-align": "center", 
-                "margin": "0px 6px", 
-                "color": "rgba(255, 255, 255, 0.85)",
-                # Fundo leve nos botões não selecionados para legibilidade
-                "background-color": "rgba(0, 0, 0, 0.2)",
-                "border-radius": "10px",
-                "border": "1px solid rgba(255, 255, 255, 0.1)"
+                "margin": "0px 4px", 
+                "color": "white",
+                "border-radius": "6px"
             },
             "nav-link-selected": {
-                # Dourado Aceso no selecionado
                 "background-color": COR_DESTAQUE, 
-                "color": "#0e2d26", 
+                "color": "#0e2d26", # Contraste alto no selecionado
                 "font-weight": "800",
-                "border": f"1px solid {COR_DESTAQUE}",
-                "box-shadow": "0 4px 10px rgba(0,0,0,0.3)"
+                "box-shadow": "0 2px 4px rgba(0,0,0,0.3)"
             },
         }
     )
