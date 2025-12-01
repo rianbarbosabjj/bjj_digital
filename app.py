@@ -36,9 +36,10 @@ st.markdown(f"""
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BACKGROUND --- */
+    /* --- BACKGROUND COM GRADIENTE --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
+        /* O gradiente cria uma luz no topo. O menu precisa ser transparente para não virar uma mancha preta aqui */
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%);
     }}
     
@@ -219,7 +220,7 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU SÓLIDO (COR DO FUNDO) COM BORDA DOURADA
+    # MENU TRANSPARENTE (SEM PARTES PRETAS)
     # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
@@ -230,13 +231,11 @@ def app_principal():
         styles={
             "container": {
                 "padding": "5px", 
-                # Fundo Sólido (Cor da Página)
-                "background-color": COR_FUNDO, 
-                # Bordas arredondadas e Douradas
-                "border-radius": "16px",
-                "border": f"1px solid {COR_DESTAQUE}", 
-                # Sombra suave
-                "box-shadow": "0 4px 15px rgba(0, 0, 0, 0.3)"
+                # TRANSPARENTE: A mágica acontece aqui. 
+                # Remove o fundo sólido que conflita com o gradiente da página.
+                "background-color": "transparent", 
+                "box-shadow": "none", # Remove sombra do container para não criar mancha escura
+                "border": "none"
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -246,17 +245,20 @@ def app_principal():
             "nav-link": {
                 "font-size": "14px", 
                 "text-align": "center", 
-                "margin": "0px 4px", 
-                "color": "white",
-                "border-radius": "8px"
+                "margin": "0px 6px", 
+                "color": "rgba(255, 255, 255, 0.85)",
+                # Fundo leve nos botões não selecionados para legibilidade
+                "background-color": "rgba(0, 0, 0, 0.2)",
+                "border-radius": "10px",
+                "border": "1px solid rgba(255, 255, 255, 0.1)"
             },
             "nav-link-selected": {
-                # Dourado Sutil no fundo do item selecionado
-                "background-color": "rgba(255, 215, 112, 0.2)", 
-                "color": COR_DESTAQUE, 
+                # Dourado Aceso no selecionado
+                "background-color": COR_DESTAQUE, 
+                "color": "#0e2d26", 
                 "font-weight": "800",
                 "border": f"1px solid {COR_DESTAQUE}",
-                "box-shadow": "0 0 10px rgba(255, 215, 112, 0.3)"
+                "box-shadow": "0 4px 10px rgba(0,0,0,0.3)"
             },
         }
     )
