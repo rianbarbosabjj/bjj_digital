@@ -13,12 +13,24 @@ def render_card(titulo, descricao, texto_botao, chave_botao, pagina_destino):
             st.session_state.menu_selection = pagina_destino
             st.rerun()
 
+def get_logo_path_geral():
+    """Tenta encontrar o logo em caminhos comuns."""
+    if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
+    if os.path.exists("logo.jpg"): return "logo.jpg"
+    if os.path.exists("assets/logo.png"): return "assets/logo.png"
+    if os.path.exists("logo.png"): return "logo.png"
+    return None
+
 def tela_inicio():
-    logo_path = "assets/logo.jpg"
+    logo_path = get_logo_path_geral()
     logo_html = ""
-    if os.path.exists(logo_path):
-        with open(logo_path, "rb") as f: b64 = base64.b64encode(f.read()).decode()
-        logo_html = f"<img src='data:image/png;base64,{b64}' style='width:180px;max-width:200px;margin-bottom:10px;'/>"
+    
+    if logo_path:
+        with open(logo_path, "rb") as f: 
+            b64 = base64.b64encode(f.read()).decode()
+        # Determina o tipo MIME correto (embora navegadores aceitem png para jpg geralmente)
+        mime = "image/png" if logo_path.endswith(".png") else "image/jpeg"
+        logo_html = f"<img src='data:{mime};base64,{b64}' style='width:180px;max-width:200px;margin-bottom:10px;'/>"
 
     st.markdown(f"<div style='display:flex;flex-direction:column;align-items:center;margin-bottom:30px;'>{logo_html}<h2 style='color:{COR_DESTAQUE};text-align:center;'>Painel BJJ Digital</h2><p style='color:{COR_TEXTO};text-align:center;'>Bem-vindo(a), {st.session_state.usuario['nome'].title()}!</p></div>", unsafe_allow_html=True)
     st.markdown("---")
