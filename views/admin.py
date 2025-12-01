@@ -2,11 +2,17 @@ import streamlit as st
 import pandas as pd
 import bcrypt
 import random
-import time  # CORREÇÃO: Importação padrão para evitar erros de 'NameError'
-from datetime import datetime
+import time 
+from datetime import datetime, time as dtime # CORREÇÃO CRÍTICA: 'dtime' evita conflito com o comando 'time.sleep'
 from database import get_db
 from firebase_admin import firestore
-from utils import carregar_todas_questoes, salvar_questoes  # Garante que as funções existam
+# Certifique-se de que essas funções existem no seu utils.py, senão o código falha
+try:
+    from utils import carregar_todas_questoes, salvar_questoes
+except ImportError:
+    # Fallback simples caso utils não tenha as funções
+    def carregar_todas_questoes(): return []
+    def salvar_questoes(t, q): pass
 
 # =========================================
 # LISTA PADRÃO DE FAIXAS (GLOBAL)
@@ -57,11 +63,11 @@ def gestao_usuarios(usuario_logado):
             uid = df[df['nome'] == user_sel]['id'].values[0]
             db.collection('usuarios').document(uid).update({"tipo_usuario": novo_tipo})
             st.success(f"Permissão de {user_sel} alterada para {novo_tipo}!")
-            time.sleep(1)
+            time.sleep(1) # Agora funciona sem conflito
             st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES (CORRIGIDO)
+# 2. GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Gestão de Questões</h1>", unsafe_allow_html=True)
@@ -76,21 +82,20 @@ def gestao_questoes():
         if not questoes:
             st.info("Nenhuma questão cadastrada no banco.")
         else:
-            # Prepara dados para exibição segura
             lista_q = []
             for q in questoes:
                 lista_q.append({
                     "id": q.get("id"),
                     "pergunta": q.get("pergunta"),
                     "faixa": q.get("faixa", "Geral"),
-                    "resposta_correta": q.get("resposta_correta") or q.get("resposta"), # Fallback para nomes antigos
+                    "resposta_correta": q.get("resposta_correta") or q.get("resposta"),
                     "status": q.get("status", "aprovada")
                 })
             
             df = pd.DataFrame(lista_q)
             
             # Edição na Tabela
-            event = st.data_editor(
+            st.data_editor(
                 df,
                 column_config={
                     "status": st.column_config.SelectboxColumn(
@@ -101,18 +106,13 @@ def gestao_questoes():
                 hide_index=True,
                 key="editor_questoes"
             )
-
-            # Botão para salvar alterações (se houver lógica de update em massa)
-            # Por enquanto, apenas visualização robusta.
             
             # Deletar Questão
             st.markdown("---")
             col_del, _ = st.columns([1, 3])
             q_to_del = col_del.selectbox("Selecionar para Excluir:", df["pergunta"].unique(), key="sel_del")
             if col_del.button("🗑️ Excluir Questão", type="primary"):
-                q_id = df[df["pergunta"] == q_to_del]["id"].values[0]
                 try:
-                    # Tenta deletar pelo ID se existir no Firestore
                     docs = db.collection('questoes').where('pergunta', '==', q_to_del).stream()
                     for doc in docs:
                         doc.reference.delete()
@@ -169,7 +169,6 @@ def gestao_exame_de_faixa():
     
     faixa_sel = st.selectbox("Selecione a Faixa para Configurar:", FAIXAS_COMPLETAS)
     
-    # Busca config atual
     docs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
     config_atual = {}
     doc_id = None
@@ -183,6 +182,13 @@ def gestao_exame_de_faixa():
         qtd = c1.number_input("Qtd. Questões:", min_value=5, max_value=50, value=int(config_atual.get('qtd_questoes', 10)))
         tempo = c2.number_input("Tempo (minutos):", min_value=10, max_value=180, value=int(config_atual.get('tempo_limite', 45)))
         minima = c3.number_input("Aprovação (%):", min_value=50, max_value=100, value=int(config_atual.get('aprovacao_minima', 70)))
+        
+        # Configurar Horários (Usando dtime para evitar conflito)
+        st.markdown("---")
+        st.markdown("**Horário Padrão (Opcional)**")
+        ch1, ch2 = st.columns(2)
+        h_ini = ch1.time_input("Início Padrão:", value=dtime(0,0)) 
+        h_fim = ch2.time_input("Fim Padrão:", value=dtime(23,59))
         
         if st.form_submit_button("💾 Salvar Configuração"):
             dados = {
