@@ -7,7 +7,6 @@ from database import get_db
 # =========================================================
 # 1. CONFIGURAÇÃO
 # =========================================================
-# Ajuste: Alterado para logo.jpg
 st.set_page_config(
     page_title="BJJ Digital", 
     page_icon="assets/logo.jpg", 
@@ -16,7 +15,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" FORÇADO)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -32,7 +31,7 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
     /* --- GLOBAL: TEXTO BRANCO E FONTE --- */
-    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
+    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span, h1, h2, h3, h4, h5, h6 {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
@@ -40,15 +39,16 @@ st.markdown(f"""
     /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
-        /* Gradiente sutil para dar profundidade */
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%);
     }}
     
-    /* --- CORREÇÃO DAS LINHAS DIVISÓRIAS (NOVO) --- */
-    /* Garante que a linha seja clara mesmo em modo Light do dispositivo */
+    /* --- CORREÇÃO CRÍTICA DAS LINHAS (DIVISÓRIAS) --- */
+    /* Força a linha a ser branca translúcida SEMPRE, ignorando o modo claro do navegador */
     hr {{
-        border-color: rgba(255, 255, 255, 0.4) !important;
-        margin: 1.5em 0 !important;
+        margin: 2em 0 !important;
+        border: 0 !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+        opacity: 1 !important;
     }}
 
     /* --- TÍTULOS CENTRALIZADOS --- */
@@ -57,7 +57,7 @@ st.markdown(f"""
         text-align: center !important; 
         font-weight: 700 !important; 
         text-transform: uppercase;
-        width: 100%; /* Garante que ocupa a linha toda para centralizar */
+        width: 100%; 
     }}
 
     /* --- SIDEBAR --- */
@@ -66,25 +66,34 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 215, 112, 0.2);
         box-shadow: 4px 0 15px rgba(0,0,0,0.3);
     }}
+    /* Força ícones da sidebar (como o X de fechar) a serem claros */
+    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
+        fill: {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
+    }}
 
-    /* --- MOLDURAS E CARDS (VISIBILIDADE AUMENTADA) --- */
-    /* Fundo mais escuro e borda mais forte para destacar do fundo verde */
+    /* --- MOLDURAS E CARDS (CONTAINERS) --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
-        background-color: rgba(0, 0, 0, 0.4) !important; /* Fundo Preto Translúcido Forte */
-        border: 2px solid rgba(255, 215, 112, 0.25) !important; /* Borda Dourada */
+        background-color: rgba(0, 0, 0, 0.4) !important; 
+        border: 2px solid rgba(255, 215, 112, 0.25) !important; /* Borda Dourada SEMPRE */
         border-radius: 16px; 
         padding: 25px;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.4); /* Sombra 3D */
+        box-shadow: 0 8px 16px rgba(0,0,0,0.4); 
         margin-bottom: 20px;
     }}
     
-    /* --- EXPANDER (ACORDEÃO) --- */
+    /* --- EXPANDER (ACORDEÃO) E ÍCONES --- */
     .streamlit-expanderHeader {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: {COR_DESTAQUE} !important;
         border: 1px solid {COR_DESTAQUE} !important;
         border-radius: 8px;
+    }}
+    /* Garante que a setinha do expander seja visível no modo claro */
+    .streamlit-expanderHeader svg {{
+        fill: {COR_TEXTO} !important; 
+        color: {COR_TEXTO} !important;
     }}
 
     /* --- BOTÕES --- */
@@ -96,7 +105,7 @@ st.markdown(f"""
         font-weight: bold !important;
         border-radius: 10px !important; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        width: 100%; /* Botões largos ficam melhores no celular */
+        width: 100%; 
     }}
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
@@ -106,23 +115,22 @@ st.markdown(f"""
     }}
 
     /* --- INPUTS (CORREÇÃO MODO CLARO) --- */
-    input, textarea, select {{
+    /* Força fundo escuro e borda clara nos inputs para não ficarem brancos/cinzas */
+    input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: #1a3b32 !important;
         color: white !important;
-        border: 1px solid {COR_BOTAO} !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important; 
     }}
-    div[data-baseweb="select"] > div {{
-        background-color: #1a3b32 !important;
+    /* Cor do texto digitado e placeholder */
+    .stTextInput input, .stTextArea textarea {{
         color: white !important;
     }}
 
-    /* --- MENU MOBILE --- */
+    /* --- MENU DE CIMA --- */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
-    header[data-testid="stHeader"] {{ background-color: {COR_FUNDO} !important; z-index: 1; }}
-    [data-testid="collapsedControl"] {{ color: {COR_DESTAQUE} !important; display: block !important; }}
-    [data-testid="collapsedControl"] svg {{ fill: {COR_DESTAQUE} !important; }}
+    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
 
 </style>
 """, unsafe_allow_html=True)
@@ -146,7 +154,6 @@ except ImportError as e:
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        # Ajuste: Alterado para logo.jpg
         if os.path.exists("assets/logo.jpg"):
             cl, cc, cr = st.columns([1, 1, 1])
             with cc: st.image("assets/logo.jpg", use_container_width=True)
@@ -180,7 +187,6 @@ def app_principal():
 
     # SIDEBAR
     with st.sidebar:
-        # Ajuste: Alterado para logo.jpg
         if os.path.exists("assets/logo.jpg"): st.image("assets/logo.jpg", use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align:center; color:#aaa;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
@@ -205,7 +211,7 @@ def app_principal():
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL (DESTAQUE VISUAL CORRIGIDO)
+    # MENU HORIZONTAL
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
@@ -217,7 +223,7 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
-    # AQUI: Estilo "Bloco Sólido" para o menu não ter cantos brancos
+    # Menu Option Customizado
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -227,9 +233,9 @@ def app_principal():
         styles={
             "container": {
                 "padding": "10px", 
-                "background-color": "#11332d", # Um pouco mais claro que o fundo, sólido
+                "background-color": "#11332d", 
                 "border-radius": "12px",
-                "border": f"1px solid {COR_DESTAQUE}", # Borda Dourada
+                "border": f"1px solid {COR_DESTAQUE}", 
                 "box-shadow": "0 4px 12px rgba(0,0,0,0.5)"
             },
             "icon": {
@@ -246,7 +252,7 @@ def app_principal():
             },
             "nav-link-selected": {
                 "background-color": COR_DESTAQUE, 
-                "color": "#0e2d26", # Contraste alto no selecionado
+                "color": "#0e2d26", 
                 "font-weight": "800",
                 "box-shadow": "0 2px 4px rgba(0,0,0,0.3)"
             },
