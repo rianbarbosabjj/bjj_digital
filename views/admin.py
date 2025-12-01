@@ -276,7 +276,6 @@ def gestao_exame_de_faixa():
         st.subheader("Configurar Regras da Prova")
         faixa_config = st.selectbox("Selecione a Faixa:", ["Todas"] + FAIXAS_COMPLETAS, key="faixa_config")
         
-        # Busca config atual
         config_ref = db.collection('config_exames').where('faixa', '==', faixa_config).stream()
         config_atual = {}
         doc_id_config = None
@@ -285,34 +284,133 @@ def gestao_exame_de_faixa():
             doc_id_config = doc.id
             break
             
-        with st.form("form_config_exame"):
-            c1, c2, c3 = st.columns(3)
-            # Default values
-            def_qtd = int(config_atual.get('qtd_questoes', 10))
-            def_tempo = int(config_atual.get('tempo_limite', 45))
-            def_min = int(config_atual.get('aprovacao_minima', 70))
+        if faixa_config == "Todas":
+            snapshots = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
+        else:
+            s1 = list(db.collection('questoes').where('faixa', '==', faixa_config).where('status', '==', 'aprovada').stream())
+            s2 = list(db.collection('questoes').where('faixa', '==', 'Geral').where('status', '==', 'aprovada').stream())
+            snapshots = s1 + s2
+
+        questoes_map = {}
+        for doc in snapshots:
+            d = doc.to_dict(); d['id'] = doc.id
+            questoes_map[doc.id] = d
+        lista_questoes_obj = list(questoes_map.values())
             
-            qtd = c1.number_input("Qtd. Questões (Sorteio):", min_value=1, max_value=50, value=def_qtd)
-            tempo = c2.number_input("Tempo (minutos):", min_value=10, max_value=180, value=def_tempo)
-            nota = c3.number_input("Aprovação Mínima (%):", min_value=50, max_value=100, value=def_min)
-            
-            if st.form_submit_button("💾 Salvar Regras"):
-                dados_config = {
-                    "faixa": faixa_config, 
-                    "tempo_limite": tempo, 
-                    "qtd_questoes": qtd,
-                    "aprovacao_minima": nota, 
-                    "modo_selecao": "Aleatório", # Simplificado para evitar erro
-                    "atualizado_em": firestore.SERVER_TIMESTAMP
-                }
-                if doc_id_config:
-                    db.collection('config_exames').document(doc_id_config).update(dados_config)
+        qtd_disponivel = len(lista_questoes_obj)
+        st.info(f"Questões disponíveis: **{qtd_disponivel}**")
+        
+        modo_atual = config_atual.get('modo_selecao', "🎲 Aleatório (Sorteio)")
+        modo_selecao = st.radio("Modo de Seleção:", ["🎲 Aleatório (Sorteio)", "🖐️ Manual (Fixa)"], 
+                               index=0 if "Aleatório" in modo_atual else 1, key="modo_selecao")
+        
+        questoes_escolhidas_manual = []
+        qtd_final = 0
+        
+        if modo_selecao == "🖐️ Manual (Fixa)":
+            if qtd_disponivel == 0:
+                st.warning("Não há questões para selecionar.")
+            else:
+                st.markdown("##### Selecione as questões:")
+                ids_salvos = set()
+                if config_atual.get('questoes'):
+                    for q_salva in config_atual['questoes']:
+                        if q_salva.get('id'): ids_salvos.add(q_salva.get('id'))
+                        else: ids_salvos.add(q_salva.get('pergunta'))
+
+                with st.container(height=400):
+                    for i, q in enumerate(lista_questoes_obj):
+                        is_checked = (q.get('id') in ids_salvos) or (q.get('pergunta') in ids_salvos)
+                        c_chk, c_txt = st.columns([0.5, 10])
+                        selecionado = c_chk.checkbox("", value=is_checked, key=f"chk_{faixa_config}_{q.get('id','no_id')}_{i}")
+                        if selecionado: questoes_escolhidas_manual.append(q)
+                        with c_txt:
+                            st.markdown(f"**{q.get('pergunta')}**")
+                            st.caption(f"✅ {q.get('resposta')} | Autor: {q.get('criado_por', '?')}")
+                            st.markdown("---")
+                qtd_final = len(questoes_escolhidas_manual)
+                st.success(f"**{qtd_final}** questões selecionadas.")
+        
+        st.markdown("---")
+        c1, c2, c3 = st.columns(3)
+        tempo = c1.number_input("⏱️ Tempo (min):", min_value=10, value=int(config_atual.get('tempo_limite', 45)), key="tempo_exame")
+        nota = c3.number_input("✅ Nota Mínima (%):", min_value=50, max_value=100, 
+                              value=int(config_atual.get('aprovacao_minima', 70)), key="nota_minima")
+        
+        if modo_selecao == "🎲 Aleatório (Sorteio)":
+            max_val = max(qtd_disponivel, 1)
+            val_padrao = int(config_atual.get('qtd_questoes', min(10, max_val)))
+            qtd_final = c2.number_input("📝 Qtd. Questões:", min_value=1, max_value=max_val, 
+                                       value=min(val_padrao, max_val), key="qtd_questoes")
+        else:
+            c2.text_input("📝 Qtd. Questões:", value=qtd_final, disabled=True, key="qtd_manual")
+
+        st.write("")
+        if st.button("💾 Salvar Configuração", type="primary", key="salvar_config"):
+            dados_config = {
+                "faixa": faixa_config, 
+                "tempo_limite": tempo, 
+                "qtd_questoes": qtd_final,
+                "aprovacao_minima": nota, 
+                "modo_selecao": modo_selecao,
+                "atualizado_em": firestore.SERVER_TIMESTAMP
+            }
+            if modo_selecao == "🖐️ Manual (Fixa)":
+                if not questoes_escolhidas_manual: 
+                    st.error("Selecione pelo menos uma questão para o modo manual.")
                 else:
-                    db.collection('config_exames').add(dados_config)
-                st.success(f"Regras salvas para faixa {faixa_config}!")
-                time.sleep(1)
+                    dados_config['questoes'] = questoes_escolhidas_manual
+                    if doc_id_config: db.collection('config_exames').document(doc_id_config).update(dados_config)
+                    else: db.collection('config_exames').add(dados_config)
+                    st.success(f"Salvo para Faixa {faixa_config}!")
+                    time_lib.sleep(1)
+                    st.rerun()
+            else:
+                dados_config['questoes'] = [] 
+                if doc_id_config: db.collection('config_exames').document(doc_id_config).update(dados_config)
+                else: db.collection('config_exames').add(dados_config)
+                st.success(f"Salvo para Faixa {faixa_config}!")
+                time_lib.sleep(1)
                 st.rerun()
 
+    # --- ABA 2: VISUALIZAR PROVAS ---
+    with tab2:
+        st.subheader("Status das Provas Cadastradas")
+        configs_stream = db.collection('config_exames').stream()
+        mapa_configs = {}
+        for doc in configs_stream:
+            d = doc.to_dict()
+            mapa_configs[d.get('faixa')] = d
+
+        categorias = {
+            "🔘 Cinza": ["Cinza e Branca", "Cinza", "Cinza e Preta"],
+            "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
+            "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
+            "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
+            "🔵 Azul": ["Azul"], "🟣 Roxa": ["Roxa"], "🟤 Marrom": ["Marrom"], "⚫ Preta": ["Preta"]
+        }
+
+        abas_cores = st.tabs(list(categorias.keys()))
+        for aba, (cor_nome, lista_faixas) in zip(abas_cores, categorias.items()):
+            with aba:
+                for f_nome in lista_faixas:
+                    data = mapa_configs.get(f_nome)
+                    if data:
+                        modo = data.get('modo_selecao', 'Sorteio')
+                        qtd = data.get('qtd_questoes', 0)
+                        tempo = data.get('tempo_limite', 0)
+                        nota = data.get('aprovacao_minima', 0)
+                        with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
+                            st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
+                            if modo == "🖐️ Manual (Fixa)" and data.get('questoes'):
+                                for i, q in enumerate(data['questoes'], 1):
+                                    st.markdown(f"**{i}. {q.get('pergunta')}**")
+                                    st.caption(f"Resposta: {q.get('resposta')}")
+                                    st.markdown("---")
+                            elif modo == "🎲 Aleatório (Sorteio)":
+                                st.info(f"Sorteia {qtd} questões.")
+                    else:
+                        st.warning(f"⚠️ {f_nome} não configurada.")
     # --- ABA 2: VISUALIZAR ---
     with tab2:
         st.info("Visualização das configurações atuais.")
