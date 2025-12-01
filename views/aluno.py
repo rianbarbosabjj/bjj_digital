@@ -210,9 +210,9 @@ def exame_de_faixa(usuario):
 - Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
 - Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
 - **Não é permitido** consultar materiais externos de qualquer tipo.
-- Em caso de reprovação, você poderá realizar o exame novamente somente após **3 dias**.
+- Em caso de *reprovação*, você poderá realizar o exame novamente somente após **3 dias**.
 - Realize o exame em um local confortável e silencioso para garantir sua concentração.
-- Não atualize a página, não feche o navegador e não troque de dispositivo durante a prova. Isso pode encerrar o exame automaticamente.
+- Não atualize a página, não feche o navegador e não troque de dispositivo durante a prova. Isso pode *encerrar* o exame automaticamente.
 - Utilize um dispositivo com bateria suficiente ou mantido na energia.
 - O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
 - Leia cada questão com atenção antes de responder.
