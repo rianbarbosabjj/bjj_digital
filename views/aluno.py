@@ -153,9 +153,6 @@ def exame_de_faixa(usuario):
         return
 
     # --- 1. VERIFICAÇÃO DE ABANDONO (Somente Refresh ou Fechar) ---
-    # Aqui a lógica permanece: Se o banco diz que está em andamento, mas o navegador reiniciou (session_state False),
-    # então o aluno atualizou a página ou fechou o navegador. Isso BLOQUEIA.
-    # Se ele apenas trocar de aba, o session_state é preservado, então ele NÃO cai aqui.
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
         bloquear_por_abandono(usuario['id'])
         st.error("🚨 ALERTA DE SEGURANÇA: EXAME BLOQUEADO!")
@@ -171,15 +168,12 @@ def exame_de_faixa(usuario):
         st.warning("🔒 Nenhum exame autorizado pelo professor.")
         return
 
-    # --- 3. VERIFICAÇÃO DAS 3 REGRAS (72h, Unica Vez, Bloqueio) ---
+    # --- 3. VERIFICAÇÃO DAS 3 REGRAS ---
     elegivel, motivo = verificar_elegibilidade_exame(dados)
     if not elegivel:
-        if "reprovado" in motivo.lower():
-            st.error(f"⏳ {motivo}") # Mensagem das 72h
-        elif "bloqueado" in motivo.lower():
-            st.error(f"🚫 {motivo}") # Mensagem de bloqueio
-        else:
-            st.success(f"✅ {motivo}") # Mensagem de já aprovado
+        if "reprovado" in motivo.lower(): st.error(f"⏳ {motivo}")
+        elif "bloqueado" in motivo.lower(): st.error(f"🚫 {motivo}")
+        else: st.success(f"✅ {motivo}")
         return
 
     # --- 4. DATAS ---
@@ -187,17 +181,14 @@ def exame_de_faixa(usuario):
         data_inicio = dados.get('exame_inicio')
         data_fim = dados.get('exame_fim')
         agora_comparacao = datetime.utcnow()
-        
         if isinstance(data_inicio, str): 
             try: data_inicio = datetime.fromisoformat(data_inicio.replace('Z', ''))
             except: pass
         if isinstance(data_fim, str): 
             try: data_fim = datetime.fromisoformat(data_fim.replace('Z', ''))
             except: pass
-        
         if data_inicio: data_inicio = data_inicio.replace(tzinfo=None)
         if data_fim: data_fim = data_fim.replace(tzinfo=None)
-        
         if data_inicio and agora_comparacao < data_inicio:
             st.warning(f"⏳ O exame começa em: **{data_inicio.strftime('%d/%m/%Y %H:%M')}**")
             return  
@@ -209,8 +200,6 @@ def exame_de_faixa(usuario):
     # --- 5. CARREGAMENTO ---
     lista_questoes, tempo_limite, min_aprovacao = carregar_exame_especifico(faixa_alvo)
     qtd = len(lista_questoes)
-
-    # (JS REMOVIDO: O aluno pode trocar de aba sem ser bloqueado agora)
 
     # --- 6. TELA DE INÍCIO ---
     if not st.session_state.exame_iniciado:
@@ -245,11 +234,65 @@ def exame_de_faixa(usuario):
         questoes = st.session_state.get('questoes_prova', [])
         params = st.session_state.get('params_prova', {})
         
-        restante = int(st.session_state.fim_prova_ts - time.time())
-        if restante <= 0:
-            st.error("Tempo esgotado!"); registrar_fim_exame(usuario['id'], False); st.session_state.exame_iniciado=False; time.sleep(3); st.rerun()
+        # --- LÓGICA DE TEMPO (BACKEND) ---
+        agora_ts = time.time()
+        fim_ts = st.session_state.fim_prova_ts
+        restante_segundos = int(fim_ts - agora_ts)
+        
+        if restante_segundos <= 0:
+            st.error("Tempo esgotado!")
+            registrar_fim_exame(usuario['id'], False)
+            st.session_state.exame_iniciado = False
+            time.sleep(3)
+            st.rerun()
 
-        st.metric("Tempo", f"{int(restante/60)}:{restante%60:02d}")
+        # =========================================================
+        # CRONÔMETRO VISUAL DINÂMICO (JS)
+        # =========================================================
+        cor_timer = "#FFD770" if restante_segundos > 300 else "#FF4B4B"
+        
+        cronometro_html = f"""
+        <div style="
+            border: 2px solid {cor_timer};
+            border-radius: 12px;
+            padding: 10px;
+            text-align: center;
+            background-color: rgba(0,0,0,0.3);
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        ">
+            <span style="color:white; font-family:sans-serif; font-size:14px; letter-spacing:1px;">TEMPO RESTANTE</span><br>
+            <span id="timer_display" style="color:{cor_timer}; font-family:monospace; font-size:36px; font-weight:bold;">
+                --:--
+            </span>
+        </div>
+
+        <script>
+            var time_left = {restante_segundos};
+            
+            function updateTimer() {{
+                var minutes = Math.floor(time_left / 60);
+                var seconds = Math.floor(time_left % 60);
+                
+                if (seconds < 10) seconds = "0" + seconds;
+                if (minutes < 10) minutes = "0" + minutes;
+                
+                var display = document.getElementById('timer_display');
+                if(display) {{
+                    display.innerHTML = minutes + ":" + seconds;
+                }}
+                
+                if (time_left <= 0) {{
+                    window.parent.location.reload();
+                }}
+                time_left = time_left - 1;
+            }}
+            
+            updateTimer();
+            setInterval(updateTimer, 1000);
+        </script>
+        """
+        components.html(cronometro_html, height=110)
         
         with st.form("prova"):
             respostas = {}
