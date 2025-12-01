@@ -146,18 +146,13 @@ def gerar_codigo_verificacao():
     """Gera código no formato BJJDIGITAL-{ANO}-{SEQUENCIA}"""
     try:
         db = get_db()
-        # Conta quantos documentos existem na coleção 'resultados'
         docs = db.collection('resultados').count().get()
-        # O count() do firestore retorna uma lista de agregações, pegamos o valor da primeira
         total = docs[0][0].value 
     except:
-        # Fallback: Gera um número aleatório se não conseguir conectar
         total = random.randint(1000, 9999)
     
     sequencia = total + 1
     ano_atual = datetime.now().year
-    
-    # Formato: BJJDIGITAL-2025-0042
     return f"BJJDIGITAL-{ano_atual}-{sequencia:04d}"
 
 def gerar_qrcode(codigo):
@@ -194,56 +189,48 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_fill_color(*cor_fundo)
         pdf.rect(0, 0, 297, 210, "F")
 
-        # Barra Lateral (mais fina como no exemplo)
-        largura_barra = 25  # Reduzida para ficar mais fina
+        # Barra Lateral
+        largura_barra = 25 
         pdf.set_fill_color(*cor_preto)
         pdf.rect(0, 0, largura_barra, 210, "F")
         pdf.set_fill_color(*cor_dourado)
         pdf.rect(largura_barra, 0, 2, 210, "F")
 
-        # Logo (se existir)
-        if os.path.exists("assets/logo.png"):
-            try: 
-                pdf.image("assets/logo.png", x=5, y=20, w=15)  # Ajustado para barra mais fina
-            except: 
-                pass
+        # Logo
+        if os.path.exists("assets/logo.jpg"):
+            try: pdf.image("assets/logo.jpg", x=5, y=20, w=15)
+            except: pass
+        elif os.path.exists("assets/logo.png"):
+             try: pdf.image("assets/logo.png", x=5, y=20, w=15)
+             except: pass
         
-        # Configuração da Área de Texto
-        x_inicio = largura_barra + 15  # Margem maior após a barra
+        x_inicio = largura_barra + 15
         largura_util = 297 - x_inicio - 15 
         centro_x = x_inicio + (largura_util / 2)
 
-        # Título Principal - Exatamente como no PDF
-        pdf.set_y(45)  # Posição mais alta
+        pdf.set_y(45)
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_text_color(*cor_dourado)
         titulo = "CERTIFICADO DE EXAME TEÓRICO DE FAIXA"
         pdf.cell(largura_util, 12, titulo, ln=1, align="C")
         
-        pdf.ln(20)  # Espaço maior após o título
+        pdf.ln(20)
         
-        # Texto Introdutório - Primeira linha
         pdf.set_font("Helvetica", "", 16)
         pdf.set_text_color(*cor_preto)
         texto_intro = "Certificamos que o aluno(a)"
         pdf.cell(largura_util, 10, texto_intro, ln=1, align="C")
 
-        # Nome do Aluno - Em negrito e destaque
         pdf.ln(8)
-        try: 
-            nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
-        except: 
-            nome_limpo = usuario_nome.upper()
+        try: nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
+        except: nome_limpo = usuario_nome.upper()
 
-        # Ajuste de tamanho para o nome
         tamanho_fonte = 28
         largura_maxima_nome = largura_util - 40
-        
         while True:
             pdf.set_font("Helvetica", "B", tamanho_fonte)
             largura_texto = pdf.get_string_width(nome_limpo)
-            if largura_texto <= largura_maxima_nome or tamanho_fonte <= 16:
-                break
+            if largura_texto <= largura_maxima_nome or tamanho_fonte <= 16: break
             tamanho_fonte -= 1
 
         pdf.set_text_color(*cor_dourado)
@@ -253,18 +240,15 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         
         pdf.ln(20)
 
-        # Texto de Aprovação - Segunda parte
         pdf.set_font("Helvetica", "", 16)
         pdf.set_text_color(*cor_preto)
         texto_aprovacao = "foi APROVADO(A) no Exame teórico para a faixa"
         pdf.cell(largura_util, 10, texto_aprovacao, ln=1, align="C")
         
-        # Texto adicional
         pdf.ln(2)
         texto_apto = "estando apto(a) a ser provido(a) a faixa:"
         pdf.cell(largura_util, 10, texto_apto, ln=1, align="C")
 
-        # Linha horizontal - mais longa e centralizada
         pdf.ln(15)
         y_linha = pdf.get_y()
         largura_linha = 180
@@ -275,25 +259,27 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
 
         pdf.ln(20)
 
-        # Faixa - Em destaque como no PDF
         pdf.set_font("Helvetica", "B", 32)
         pdf.set_text_color(*cor_preto)
         texto_faixa = f"{str(faixa).upper()}"
         pdf.cell(largura_util, 16, texto_faixa, ln=1, align="C")
 
-        # Rodapé com assinatura
+        # Assinatura (Fonte manuscrita se existir)
         y_rodape = 160
+        y_assinatura = y_rodape + 20
         
-        # Nome do professor (se fornecido)
-        if professor:
-            pdf.set_y(y_rodape)
+        # Adiciona a fonte Allura se disponível
+        if os.path.exists("assets/Allura-Regular.ttf"):
+            pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True)
+            pdf.set_font("Allura", "", 30) # Tamanho maior para parecer assinatura
+        else:
             pdf.set_font("Helvetica", "I", 12)
-            pdf.set_text_color(*cor_preto)
-            pdf.cell(largura_util, 8, professor, ln=1, align="C")
-        
-        # Linha de assinatura e texto "Professor Responsável"
-        pdf.ln(15)
-        y_assinatura = pdf.get_y()
+
+        # Nome do professor/Assinatura
+        assinatura_texto = professor if professor else "Professor Responsável"
+        pdf.set_xy(x_inicio, y_assinatura - 10)
+        pdf.set_text_color(*cor_preto)
+        pdf.cell(largura_util, 10, assinatura_texto, ln=1, align="C")
         
         # Linha da assinatura
         largura_linha_assinatura = 80
@@ -302,11 +288,15 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_line_width(0.3)
         pdf.line(x_assinatura, y_assinatura, x_assinatura + largura_linha_assinatura, y_assinatura)
         
-        # Texto "Professor Responsável"
+        # Texto descritivo abaixo
         pdf.set_xy(x_assinatura, y_assinatura + 2)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(*cor_cinza)
         pdf.cell(largura_linha_assinatura, 5, "Professor Responsável", align="C")
+        
+        # Selo Dourado (Se existir)
+        if os.path.exists("assets/selo_dourado.jpg"):
+            pdf.image("assets/selo_dourado.jpg", x=240, y=140, w=35)
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
     except Exception as e:
@@ -314,15 +304,59 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         return None, None
 
 # =========================================
-# 6. REGRAS DO EXAME
+# 6. REGRAS DO EXAME (ATUALIZADO)
 # =========================================
 def verificar_elegibilidade_exame(usuario_data):
-    return True, "OK" 
+    """
+    Verifica as 3 regras de ouro:
+    1. Aprovado? Não faz mais (Tentativa única).
+    2. Bloqueado? Precisa de professor.
+    3. Reprovado? Só após 72h.
+    """
+    status = usuario_data.get('status_exame', 'pendente')
+    
+    # REGRA 1: TENTATIVA ÚNICA
+    if status == 'aprovado':
+        return False, "Você já foi APROVADO neste exame. Parabéns!"
+        
+    # REGRA 2: BLOQUEIO POR ABANDONO
+    if status == 'bloqueado':
+        return False, "Exame BLOQUEADO (Abandono de tela ou Recarregamento). Contate o professor."
+        
+    # REGRA 3: DELAY DE 72H
+    if status == 'reprovado':
+        ultimo_teste = usuario_data.get('data_ultimo_exame')
+        if ultimo_teste:
+            try:
+                # Tratamento robusto de data (ISO String vs Datetime)
+                if isinstance(ultimo_teste, str):
+                    # Remove o Z se existir para evitar erro de fuso no fromisoformat em versões antigas
+                    dt_ultimo = datetime.fromisoformat(ultimo_teste.replace('Z', ''))
+                else:
+                    dt_ultimo = ultimo_teste
+                
+                # Garante que ambos sejam "naive" (sem fuso) para comparação simples
+                dt_ultimo = dt_ultimo.replace(tzinfo=None)
+                agora = datetime.utcnow()
+                
+                diff = agora - dt_ultimo
+                segundos_passados = diff.total_seconds()
+                segundos_espera = 72 * 3600 # 72 horas
+                
+                if segundos_passados < segundos_espera:
+                    horas_restantes = (segundos_espera - segundos_passados) / 3600
+                    return False, f"Reprovado. Aguarde {int(horas_restantes)+1}h para tentar novamente (Regra das 72h)."
+            except Exception as e:
+                print(f"Erro data: {e}")
+                # Se der erro na data, por segurança bloqueia e pede suporte
+                return False, "Erro ao verificar data. Contate o suporte."
+                
+    return True, "OK"
 
 def registrar_inicio_exame(usuario_id):
     try:
         db = get_db()
-        agora_br = datetime.utcnow() - timedelta(hours=3)
+        agora_br = datetime.utcnow() # Usa UTC puro para padronizar
         db.collection('usuarios').document(usuario_id).update({
             "status_exame": "em_andamento",
             "inicio_exame_temp": agora_br.isoformat(),
@@ -334,16 +368,18 @@ def registrar_fim_exame(usuario_id, aprovado):
     try:
         db = get_db()
         status = "aprovado" if aprovado else "reprovado"
-        agora_br = datetime.utcnow() - timedelta(hours=3)
+        agora_br = datetime.utcnow()
         dados = {
             "status_exame": status,
             "data_ultimo_exame": agora_br.isoformat(),
             "status_exame_em_andamento": False
         }
+        # Se aprovado, remove datas para limpar o registro e impedir re-agendamento automático sem querer
         if aprovado:
             dados["exame_habilitado"] = False
             dados["exame_inicio"] = firestore.DELETE_FIELD
             dados["exame_fim"] = firestore.DELETE_FIELD
+            
         db.collection('usuarios').document(usuario_id).update(dados)
     except: pass
 
@@ -352,7 +388,8 @@ def bloquear_por_abandono(usuario_id):
         db = get_db()
         db.collection('usuarios').document(usuario_id).update({
             "status_exame": "bloqueado",
-            "motivo_bloqueio": "Abandono de tela",
-            "status_exame_em_andamento": False
+            "motivo_bloqueio": "Saiu da tela ou recarregou a página (Anti-Cola)",
+            "status_exame_em_andamento": False,
+            "data_ultimo_exame": datetime.utcnow().isoformat()
         })
     except: pass
