@@ -323,7 +323,7 @@ def gestao_exame_de_faixa():
             st.markdown("---")
 
     # --- ABA 3: AUTORIZAR ALUNOS ---
-    with tab3:
+with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período de Exame")
             c1, c2 = st.columns(2)
@@ -331,7 +331,6 @@ def gestao_exame_de_faixa():
             d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
             c3, c4 = st.columns(2)
             
-            # CORREÇÃO: Usando 'dtime' em vez de 'time' para criar o objeto de hora
             h_inicio = c3.time_input("Hora Início:", dtime(0, 0), key="hora_inicio_exame")
             h_fim = c4.time_input("Hora Fim:", dtime(23, 59), key="hora_fim_exame")
             
@@ -387,26 +386,41 @@ def gestao_exame_de_faixa():
                     habilitado = aluno.get('exame_habilitado', False)
                     status = aluno.get('status_exame', 'pendente')
                     
+                    # --- RESTAURAÇÃO DA FUNCIONALIDADE DETALHADA ---
                     if habilitado:
-                        c4.success("Liberado")
-                        if c5.button("⛔", key=f"off_{aluno_id}"):
-                            db.collection('usuarios').document(aluno_id).update({
-                                "exame_habilitado": False, "status_exame": "pendente",
-                                "exame_inicio": firestore.DELETE_FIELD, "exame_fim": firestore.DELETE_FIELD
-                            })
+                        msg = "🟢 Liberado"
+                        try:
+                            raw_fim = aluno.get('exame_fim')
+                            if raw_fim:
+                                if isinstance(raw_fim, str):
+                                    dt_obj = datetime.fromisoformat(raw_fim.replace('Z', '+00:00'))
+                                    msg += f" (até {dt_obj.strftime('%d/%m/%Y %H:%M')})"
+                        except: pass
+                        
+                        if status == 'aprovado': msg = "🏆 Aprovado"
+                        elif status == 'bloqueado': msg = "⛔ Bloqueado"
+                        elif status == 'reprovado': msg = "🔴 Reprovado"
+                        elif status == 'em_andamento': msg = "🟡 Em Andamento"
+                        
+                        c4.write(msg)
+                        if c5.button("⛔", key=f"off_btn_{aluno_id}"):
+                            update_data = {"exame_habilitado": False, "status_exame": "pendente"}
+                            for campo in ["exame_inicio", "exame_fim", "faixa_exame", "motivo_bloqueio", "status_exame_em_andamento"]:
+                                if campo in aluno: update_data[campo] = firestore.DELETE_FIELD
+                            db.collection('usuarios').document(aluno_id).update(update_data)
                             st.rerun()
                     else:
-                        c4.write("Bloqueado")
-                        if c5.button("✅", key=f"on_{aluno_id}"):
+                        c4.write("⚪ Não autorizado")
+                        if c5.button("✅", key=f"on_btn_{aluno_id}"):
                             db.collection('usuarios').document(aluno_id).update({
                                 "exame_habilitado": True,
                                 "faixa_exame": fx_sel,
-                                "exame_inicio": dt_inicio.isoformat(),
+                                "exame_inicio": dt_inicio.isoformat(), 
                                 "exame_fim": dt_fim.isoformat(),
                                 "status_exame": "pendente",
                                 "status_exame_em_andamento": False
                             })
-                            st.success("Liberado!")
+                            st.success(f"Liberado!")
                             time.sleep(0.5)
                             st.rerun()
                     st.markdown("---")
