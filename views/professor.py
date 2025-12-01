@@ -206,7 +206,7 @@ def gestao_equipes():
             pendentes_por_equipe[eid].append((nome_prof, doc.id))
 
     # --- ABAS (ATUALIZADO COM ABA 4) ---
-    aba1, aba2, aba3, aba4 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos", "🔓 Exames (Desbloqueio)"])
+    aba1, aba2, aba3 = st.tabs(["🏫 Equipes", "👩‍🏫 Professores", "🥋 Alunos"])
 
     # ABA 1: EQUIPES
     with aba1:
@@ -377,63 +377,3 @@ def gestao_equipes():
             
         if lista_a_bd:
             st.dataframe(pd.DataFrame(lista_a_bd), use_container_width=True)
-
-    # ABA 4: EXAMES (NOVA FUNCIONALIDADE)
-    with aba4:
-        st.subheader("🔓 Liberação de Exames (Desbloqueio)")
-        
-        # Filtra alunos que precisam de ajuda (bloqueados ou reprovados recentemente)
-        # Se for admin vê tudo, se não, vê só os das suas equipes
-        lista_bloqueados = []
-        
-        # Iterar sobre todos os alunos carregados anteriormente
-        # (Para otimizar, reutilizamos os dados da query de usuários se possível, ou fazemos uma nova focada)
-        alunos_query = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
-        
-        for doc in alunos_query:
-            d = doc.to_dict()
-            uid = doc.id
-            
-            # Filtro de permissão (Se não é admin, checar se o aluno é da minha equipe)
-            # Como a query de usuários não traz equipe_id direto, precisaríamos cruzar
-            # Simplificação: se o aluno estiver na lista_alunos_dropdown, eu posso gerenciar
-            is_meu_aluno = False
-            for nome_a, uid_a in lista_alunos_dropdown:
-                if uid == uid_a:
-                    is_meu_aluno = True
-                    break
-            
-            if is_admin or is_meu_aluno:
-                status = d.get('status_exame')
-                if status in ['bloqueado', 'reprovado']:
-                    lista_bloqueados.append({
-                        "id": uid,
-                        "nome": d.get('nome'),
-                        "status": status,
-                        "motivo": d.get('motivo_bloqueio', 'N/A'),
-                        "data": d.get('data_ultimo_exame')
-                    })
-        
-        if not lista_bloqueados:
-            st.success("Nenhum aluno bloqueado ou reprovado precisando de liberação.")
-        else:
-            st.warning("Abaixo estão os alunos que não podem fazer a prova agora.")
-            
-            for aluno in lista_bloqueados:
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns([2, 2, 1])
-                    c1.markdown(f"**{aluno['nome']}**")
-                    
-                    status_fmt = f"🔴 {aluno['status'].upper()}" if aluno['status'] == 'bloqueado' else f"🟠 {aluno['status'].upper()}"
-                    c2.markdown(f"{status_fmt}")
-                    if aluno['status'] == 'bloqueado':
-                        c2.caption(f"Motivo: {aluno['motivo']}")
-                    
-                    if c3.button("🔓 Liberar", key=f"lib_{aluno['id']}"):
-                        db.collection('usuarios').document(aluno['id']).update({
-                            "status_exame": "pendente",
-                            "status_exame_em_andamento": False,
-                            "motivo_bloqueio": firestore.DELETE_FIELD
-                        })
-                        st.success(f"{aluno['nome']} liberado para refazer a prova!")
-                        st.rerun()
