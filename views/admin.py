@@ -7,7 +7,7 @@ from datetime import datetime, time as dtime
 from database import get_db
 from firebase_admin import firestore
 
-# Tenta importar do utils, se falhar define funções vazias para não quebrar
+# Tenta importar do utils
 try:
     from utils import carregar_todas_questoes, salvar_questoes
 except ImportError:
@@ -29,6 +29,11 @@ FAIXAS_COMPLETAS = [
 # 1. GESTÃO DE USUÁRIOS
 # =========================================
 def gestao_usuarios(usuario_logado):
+    # --- BOTÃO VOLTAR ---
+    if st.button("🏠 Voltar ao Início", key="btn_voltar_users"):
+        st.session_state.menu_selection = "Início"
+        st.rerun()
+
     st.markdown("<h1 style='color:#FFD700;'>👥 Gestão de Usuários</h1>", unsafe_allow_html=True)
     db = get_db()
     
@@ -179,7 +184,7 @@ def gestao_questoes():
     with tab1:
         questoes = carregar_todas_questoes()
         
-        if not questoes:
+        if not questões:
             st.info("Nenhuma questão cadastrada no banco.")
         else:
             lista_q = []
@@ -386,7 +391,6 @@ def gestao_exame_de_faixa():
                     habilitado = aluno.get('exame_habilitado', False)
                     status = aluno.get('status_exame', 'pendente')
                     
-                    # --- RESTAURAÇÃO DA FUNCIONALIDADE DETALHADA ---
                     if habilitado:
                         msg = "🟢 Liberado"
                         try:
@@ -415,7 +419,7 @@ def gestao_exame_de_faixa():
                             db.collection('usuarios').document(aluno_id).update({
                                 "exame_habilitado": True,
                                 "faixa_exame": fx_sel,
-                                "exame_inicio": dt_inicio.isoformat(), 
+                                "exame_inicio": dt_inicio.isoformat(),
                                 "exame_fim": dt_fim.isoformat(),
                                 "status_exame": "pendente",
                                 "status_exame_em_andamento": False
