@@ -1,4 +1,3 @@
-
 import streamlit as st
 import os
 import sys
@@ -10,13 +9,13 @@ from database import get_db
 # =========================================================
 st.set_page_config(
     page_title="BJJ Digital", 
-    page_icon="assets/logo.png", 
+    page_icon="assets/logo.jpg", 
     layout="wide",
     initial_sidebar_state="expanded" 
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" FORÇADO)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -32,16 +31,23 @@ st.markdown(f"""
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
     /* --- GLOBAL: TEXTO BRANCO E FONTE --- */
-    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
+    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span, h1, h2, h3, h4, h5, h6 {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BACKGROUND --- */
+    /* --- BACKGROUND COM GRADIENTE --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
-        /* Gradiente sutil para dar profundidade */
-        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%);
+        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
+    }}
+    
+    /* --- CORREÇÃO DAS LINHAS (DIVISÓRIAS) --- */
+    hr {{
+        margin: 2em 0 !important;
+        border: 0 !important;
+        border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
+        opacity: 1 !important;
     }}
 
     /* --- TÍTULOS CENTRALIZADOS --- */
@@ -50,7 +56,7 @@ st.markdown(f"""
         text-align: center !important; 
         font-weight: 700 !important; 
         text-transform: uppercase;
-        width: 100%; /* Garante que ocupa a linha toda para centralizar */
+        width: 100%; 
     }}
 
     /* --- SIDEBAR --- */
@@ -59,16 +65,19 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 215, 112, 0.2);
         box-shadow: 4px 0 15px rgba(0,0,0,0.3);
     }}
+    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
+        fill: {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
+    }}
 
-    /* --- MOLDURAS E CARDS (VISIBILIDADE AUMENTADA) --- */
-    /* Fundo mais escuro e borda mais forte para destacar do fundo verde */
+    /* --- MOLDURAS E CARDS (CONTAINERS) --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
-        background-color: rgba(0, 0, 0, 0.4) !important; /* Fundo Preto Translúcido Forte */
-        border: 2px solid rgba(255, 215, 112, 0.25) !important; /* Borda Dourada */
+        background-color: rgba(0, 0, 0, 0.4) !important; 
+        border: 2px solid rgba(255, 215, 112, 0.25) !important; 
         border-radius: 16px; 
         padding: 25px;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.4); /* Sombra 3D */
+        box-shadow: 0 8px 16px rgba(0,0,0,0.4); 
         margin-bottom: 20px;
     }}
     
@@ -78,6 +87,10 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
         border: 1px solid {COR_DESTAQUE} !important;
         border-radius: 8px;
+    }}
+    .streamlit-expanderHeader svg {{
+        fill: {COR_TEXTO} !important; 
+        color: {COR_TEXTO} !important;
     }}
 
     /* --- BOTÕES --- */
@@ -89,7 +102,7 @@ st.markdown(f"""
         font-weight: bold !important;
         border-radius: 10px !important; 
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        width: 100%; /* Botões largos ficam melhores no celular */
+        width: 100%; 
     }}
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
@@ -98,24 +111,21 @@ st.markdown(f"""
         transform: translateY(-2px);
     }}
 
-    /* --- INPUTS (CORREÇÃO MODO CLARO) --- */
-    input, textarea, select {{
+    /* --- INPUTS --- */
+    input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: #1a3b32 !important;
         color: white !important;
-        border: 1px solid {COR_BOTAO} !important;
+        border: 1px solid rgba(255, 255, 255, 0.3) !important; 
     }}
-    div[data-baseweb="select"] > div {{
-        background-color: #1a3b32 !important;
+    .stTextInput input, .stTextArea textarea {{
         color: white !important;
     }}
 
-    /* --- MENU MOBILE --- */
+    /* --- MENU DE CIMA --- */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
-    header[data-testid="stHeader"] {{ background-color: {COR_FUNDO} !important; z-index: 1; }}
-    [data-testid="collapsedControl"] {{ color: {COR_DESTAQUE} !important; display: block !important; }}
-    [data-testid="collapsedControl"] svg {{ fill: {COR_DESTAQUE} !important; }}
+    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
 
 </style>
 """, unsafe_allow_html=True)
@@ -139,9 +149,9 @@ except ImportError as e:
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        if os.path.exists("assets/logo.png"):
+        if os.path.exists("assets/logo.jpg"):
             cl, cc, cr = st.columns([1, 1, 1])
-            with cc: st.image("assets/logo.png", use_container_width=True)
+            with cc: st.image("assets/logo.jpg", use_container_width=True)
         st.write("") 
         with st.container(border=True):
             st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
@@ -170,19 +180,28 @@ def app_principal():
     usuario = st.session_state.usuario
     tipo = str(usuario.get("tipo", "aluno")).lower()
 
+    # Define função de navegação
+    def nav(pg): st.session_state.menu_selection = pg
+
     # SIDEBAR
     with st.sidebar:
-        if os.path.exists("assets/logo.png"): st.image("assets/logo.png", use_container_width=True)
+        if os.path.exists("assets/logo.jpg"): st.image("assets/logo.jpg", use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align:center; color:#aaa;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
-        def nav(pg): st.session_state.menu_selection = pg
+        # --- BOTÕES DE NAVEGAÇÃO DA SIDEBAR ---
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
+        
+        # NOVA LOCALIZAÇÃO: Meus Certificados (Abaixo de Perfil, Oculto para Admin)
+        if tipo != "admin":
+            if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
+
         if tipo in ["admin", "professor"]:
             if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
+            
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚪 Sair", use_container_width=True):
             st.session_state.clear(); st.rerun()
@@ -190,25 +209,30 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Roteamento Sidebar (prioritário)
+    # Roteamento Sidebar (Prioritário - renderiza e para se for uma dessas páginas)
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
+    if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL (DESTAQUE VISUAL CORRIGIDO)
+    # MENU HORIZONTAL
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Meus Certificados"]
-        icns = ["house", "people", "journal", "trophy", "award"]
+        # REMOVIDO "Meus Certificados" daqui (agora está na sidebar)
+        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
+        icns = ["house", "people", "journal", "trophy"]
 
+    # Lógica segura de índice: se a página atual não está no menu horizontal, padrão é 0 (Início)
     try: idx = ops.index(pg)
     except: idx = 0
     
-    # AQUI: Estilo "Bloco Sólido" para o menu não ter cantos brancos
+    # -------------------------------------------------------------
+    # MENU TRANSPARENTE
+    # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -217,11 +241,12 @@ def app_principal():
         orientation="horizontal",
         styles={
             "container": {
-                "padding": "10px", 
-                "background-color": "#11332d", # Um pouco mais claro que o fundo, sólido
-                "border-radius": "12px",
-                "border": f"1px solid {COR_DESTAQUE}", # Borda Dourada
-                "box-shadow": "0 4px 12px rgba(0,0,0,0.5)"
+                "padding": "0px",
+                "background-color": "rgba(14, 45, 38, 0.6)", 
+                "box-shadow": "0 4px 10px rgba(0,0,0,0.2)",
+                "border": "1px solid rgba(255, 215, 112, 0.1)", 
+                "margin": "0px",
+                "border-radius": "12px"
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -231,29 +256,40 @@ def app_principal():
             "nav-link": {
                 "font-size": "14px", 
                 "text-align": "center", 
-                "margin": "0px 4px", 
-                "color": "white",
-                "border-radius": "6px"
+                "margin": "0px 6px", 
+                "color": "rgba(255, 255, 255, 0.9)",
+                "background-color": "transparent",
+                "border-radius": "10px",
             },
             "nav-link-selected": {
                 "background-color": COR_DESTAQUE, 
-                "color": "#0e2d26", # Contraste alto no selecionado
+                "color": "#0e2d26", 
                 "font-weight": "800",
-                "box-shadow": "0 2px 4px rgba(0,0,0,0.3)"
+                "border": f"1px solid {COR_DESTAQUE}",
+                "box-shadow": "0 2px 8px rgba(0,0,0,0.3)"
             },
         }
     )
 
-    if menu != pg: st.session_state.menu_selection = menu; st.rerun()
+    # LÓGICA DE ATUALIZAÇÃO DO MENU
+    # Só atualiza se o menu for diferente da página atual E não for um falso positivo
+    if menu != pg:
+        # Se estamos em "Meus Certificados" (Sidebar) e o menu horizontal está em "Início" (padrão),
+        # NÃO atualizamos, senão o usuário seria jogado para o Início automaticamente.
+        if pg == "Meus Certificados" and menu == "Início":
+            pass 
+        else:
+            st.session_state.menu_selection = menu
+            st.rerun()
 
-    if menu == "Início": geral.tela_inicio()
-    elif menu == "Modo Rola": aluno.modo_rola(usuario)
-    elif menu == "Exame de Faixa": aluno.exame_de_faixa(usuario)
-    elif menu == "Ranking": aluno.ranking()
-    elif menu == "Gestão de Equipes": professor.gestao_equipes()
-    elif menu == "Gestão de Questões": admin.gestao_questoes()
-    elif menu == "Gestão de Exame": admin.gestao_exame_de_faixa()
-    elif menu == "Meus Certificados": aluno.meus_certificados(usuario)
+    # Roteamento do Menu Horizontal
+    if pg == "Início": geral.tela_inicio()
+    elif pg == "Modo Rola": aluno.modo_rola(usuario)
+    elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
+    elif pg == "Ranking": aluno.ranking()
+    elif pg == "Gestão de Equipes": professor.gestao_equipes()
+    elif pg == "Gestão de Questões": admin.gestao_questoes()
+    elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
 
 if __name__ == "__main__":
     if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
