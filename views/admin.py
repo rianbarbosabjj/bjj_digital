@@ -302,7 +302,7 @@ def gestao_exame_de_faixa():
                     "tempo_limite": tempo, 
                     "qtd_questoes": qtd,
                     "aprovacao_minima": nota, 
-                    "modo_selecao": "Aleatório", # Simplificado para evitar erro
+                    "modo_selecao": "Aleatório", 
                     "atualizado_em": firestore.SERVER_TIMESTAMP
                 }
                 if doc_id_config:
@@ -323,7 +323,7 @@ def gestao_exame_de_faixa():
             st.markdown("---")
 
     # --- ABA 3: AUTORIZAR ALUNOS ---
-with tab3:
+    with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período de Exame")
             c1, c2 = st.columns(2)
