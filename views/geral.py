@@ -22,7 +22,7 @@ def render_card(titulo, descricao, texto_botao, chave_botao, pagina_destino):
 # TELA INICIAL (DASHBOARD)
 # =========================================
 def tela_inicio():
-    logo_path = "assets/logo.png"
+    logo_path = "assets/logo.jpg"
     if os.path.exists(logo_path):
         with open(logo_path, "rb") as f:
             logo_base64 = base64.b64encode(f.read()).decode()
@@ -63,6 +63,11 @@ def tela_inicio():
 # TELA MEU PERFIL
 # =========================================
 def tela_meu_perfil(usuario_logado):
+    # --- BOTÃO VOLTAR ---
+    if st.button("🏠 Voltar ao Início", key="btn_voltar_perfil"):
+        st.session_state.menu_selection = "Início"
+        st.rerun()
+
     st.markdown("<h1 style='color:#FFD700;'>👤 Meu Perfil</h1>", unsafe_allow_html=True)
     
     db = get_db()
