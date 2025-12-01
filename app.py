@@ -7,9 +7,10 @@ from database import get_db
 # =========================================================
 # 1. CONFIGURAÇÃO
 # =========================================================
+# Ajuste: Alterado para logo.jpg
 st.set_page_config(
     page_title="BJJ Digital", 
-    page_icon="assets/logo.png", 
+    page_icon="assets/logo.jpg", 
     layout="wide",
     initial_sidebar_state="expanded" 
 )
@@ -41,6 +42,13 @@ st.markdown(f"""
         background-color: {COR_FUNDO} !important;
         /* Gradiente sutil para dar profundidade */
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%);
+    }}
+    
+    /* --- CORREÇÃO DAS LINHAS DIVISÓRIAS (NOVO) --- */
+    /* Garante que a linha seja clara mesmo em modo Light do dispositivo */
+    hr {{
+        border-color: rgba(255, 255, 255, 0.4) !important;
+        margin: 1.5em 0 !important;
     }}
 
     /* --- TÍTULOS CENTRALIZADOS --- */
@@ -138,9 +146,10 @@ except ImportError as e:
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
-        if os.path.exists("assets/logo.png"):
+        # Ajuste: Alterado para logo.jpg
+        if os.path.exists("assets/logo.jpg"):
             cl, cc, cr = st.columns([1, 1, 1])
-            with cc: st.image("assets/logo.png", use_container_width=True)
+            with cc: st.image("assets/logo.jpg", use_container_width=True)
         st.write("") 
         with st.container(border=True):
             st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
@@ -171,7 +180,8 @@ def app_principal():
 
     # SIDEBAR
     with st.sidebar:
-        if os.path.exists("assets/logo.png"): st.image("assets/logo.png", use_container_width=True)
+        # Ajuste: Alterado para logo.jpg
+        if os.path.exists("assets/logo.jpg"): st.image("assets/logo.jpg", use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align:center; color:#aaa;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
