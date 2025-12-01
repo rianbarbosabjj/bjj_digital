@@ -423,17 +423,15 @@ def gestao_exame_de_faixa():
     # --- ABA 3: AUTORIZAR ALUNOS ---
     with tab3:
         with st.container(border=True):
-            st.subheader("🗓️ Configurar Período de Exame")
+            st.subheader("🗓️ Configurar Período")
             c1, c2 = st.columns(2)
             d_inicio = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
             d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
             c3, c4 = st.columns(2)
+            h_inicio = c3.time_input("Hora Início:", time(0, 0), key="hora_inicio_exame")
+            h_fim = c4.time_input("Hora Fim:", time(23, 59), key="hora_fim_exame")
             
-            # CORREÇÃO: Usando 'dtime' em vez de 'time' para criar o objeto de hora
-            h_inicio = c3.time_input("Hora Início:", dtime(0, 0), key="hora_inicio_exame")
-            h_fim = c4.time_input("Hora Fim:", dtime(23, 59), key="hora_fim_exame")
-            
-            # Cria objetos datetime combinados
+            # Cria objetos datetime baseados no input (Considera hora local de quem está operando)
             dt_inicio = datetime.combine(d_inicio, h_inicio)
             dt_fim = datetime.combine(d_fim, h_fim)
 
@@ -446,23 +444,22 @@ def gestao_exame_de_faixa():
             
             for doc in alunos_ref:
                 d = doc.to_dict(); d['id'] = doc.id
-                # Tenta buscar equipe
-                vinculo = list(db.collection('alunos').where('usuario_id', '==', doc.id).limit(1).stream())
                 nome_eq = "Sem Equipe"
-                if vinculo:
-                    try:
+                try:
+                    vinculo = list(db.collection('alunos').where('usuario_id', '==', doc.id).limit(1).stream())
+                    if vinculo:
                         eid = vinculo[0].to_dict().get('equipe_id')
                         if eid:
                             eq_doc = db.collection('equipes').document(eid).get()
                             if eq_doc.exists: nome_eq = eq_doc.to_dict().get('nome', 'Sem Nome')
-                    except: pass
+                except: pass
                 d['nome_equipe'] = nome_eq
                 lista_alunos.append(d)
 
             if not lista_alunos: 
                 st.info("Nenhum aluno cadastrado.")
             else:
-                cols = st.columns([3, 2, 2, 2, 1])
+                cols = st.columns([3, 2, 2, 3, 1])
                 cols[0].markdown("**Aluno**")
                 cols[1].markdown("**Equipe**")
                 cols[2].markdown("**Exame**")
@@ -471,43 +468,64 @@ def gestao_exame_de_faixa():
                 st.markdown("---")
 
                 for aluno in lista_alunos:
-                    aluno_id = aluno.get('id')
-                    aluno_nome = aluno.get('nome', 'Sem Nome')
-                    faixa_exame_atual = aluno.get('faixa_exame', 'Branca')
-                    
-                    c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 2, 1])
-                    c1.write(f"**{aluno_nome}**")
-                    c2.write(aluno.get('nome_equipe'))
-                    
-                    idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
-                    fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_{aluno_id}", label_visibility="collapsed")
-                    
-                    habilitado = aluno.get('exame_habilitado', False)
-                    status = aluno.get('status_exame', 'pendente')
-                    
-                    if habilitado:
-                        c4.success("Liberado")
-                        if c5.button("⛔", key=f"off_{aluno_id}"):
-                            db.collection('usuarios').document(aluno_id).update({
-                                "exame_habilitado": False, "status_exame": "pendente",
-                                "exame_inicio": firestore.DELETE_FIELD, "exame_fim": firestore.DELETE_FIELD
-                            })
-                            st.rerun()
-                    else:
-                        c4.write("Bloqueado")
-                        if c5.button("✅", key=f"on_{aluno_id}"):
-                            db.collection('usuarios').document(aluno_id).update({
-                                "exame_habilitado": True,
-                                "faixa_exame": fx_sel,
-                                "exame_inicio": dt_inicio.isoformat(),
-                                "exame_fim": dt_fim.isoformat(),
-                                "status_exame": "pendente",
-                                "status_exame_em_andamento": False
-                            })
-                            st.success("Liberado!")
-                            time.sleep(0.5)
-                            st.rerun()
-                    st.markdown("---")
-
+                    try:
+                        aluno_id = aluno.get('id', 'unknown')
+                        aluno_nome = aluno.get('nome', 'Sem Nome')
+                        faixa_exame_atual = aluno.get('faixa_exame', '')
+                        
+                        c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
+                        c1.write(f"**{aluno_nome}**")
+                        c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
+                        
+                        idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
+                        fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
+                        
+                        habilitado = aluno.get('exame_habilitado', False)
+                        status = aluno.get('status_exame', 'pendente')
+                        
+                        if habilitado:
+                            msg = "🟢 Liberado"
+                            try:
+                                raw_fim = aluno.get('exame_fim')
+                                if raw_fim:
+                                    if isinstance(raw_fim, str):
+                                        dt_obj = datetime.fromisoformat(raw_fim.replace('Z', '+00:00'))
+                                        msg += f" (até {dt_obj.strftime('%d/%m/%Y %H:%M')})"
+                            except: pass
+                            
+                            if status == 'aprovado': msg = "🏆 Aprovado"
+                            elif status == 'bloqueado': msg = "⛔ Bloqueado"
+                            elif status == 'reprovado': msg = "🔴 Reprovado"
+                            elif status == 'em_andamento': msg = "🟡 Em Andamento"
+                            
+                            c4.write(msg)
+                            if c5.button("⛔", key=f"off_btn_{aluno_id}"):
+                                update_data = {"exame_habilitado": False, "status_exame": "pendente"}
+                                for campo in ["exame_inicio", "exame_fim", "faixa_exame", "motivo_bloqueio", "status_exame_em_andamento"]:
+                                    if campo in aluno: update_data[campo] = firestore.DELETE_FIELD
+                                db.collection('usuarios').document(aluno_id).update(update_data)
+                                st.rerun()
+                        else:
+                            c4.write("⚪ Não autorizado")
+                            if c5.button("✅", key=f"on_btn_{aluno_id}"):
+                                db.collection('usuarios').document(aluno_id).update({
+                                    "exame_habilitado": True,
+                                    "faixa_exame": fx_sel,
+                                    
+                                    # --- CORREÇÃO PRINCIPAL AQUI ---
+                                    # Antes estava: firestore.SERVER_TIMESTAMP (Hora de Londres/UTC)
+                                    # Agora: dt_inicio.isoformat() (Hora que você escolheu no input)
+                                    "exame_inicio": dt_inicio.isoformat(), 
+                                    
+                                    "exame_fim": dt_fim.isoformat(),
+                                    "status_exame": "pendente",
+                                    "status_exame_em_andamento": False
+                                })
+                                st.success(f"Liberado!")
+                                time_lib.sleep(0.5)
+                                st.rerun()
+                        st.markdown("---")
+                    except Exception as e:
+                        st.error(f"Erro aluno: {e}")
         except Exception as e:
-            st.error(f"Erro ao carregar lista de alunos: {e}")
+            st.error(f"Erro lista: {e}")
