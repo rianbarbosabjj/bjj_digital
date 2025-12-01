@@ -184,114 +184,129 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_auto_page_break(False)
         pdf.add_page()
         
-        # --- CORES ---
-        # Fundo Escuro (Quase Preto, levemente esverdeado/digital)
-        cor_fundo = (15, 20, 20) 
-        # Dourado Metálico
-        cor_dourado = (218, 165, 32)
-        # Branco para textos gerais
-        cor_texto = (240, 240, 240)
+        # Cores baseadas no PDF
+        cor_dourado = (184, 134, 11) 
+        cor_preto = (25, 25, 25)
+        cor_cinza = (100, 100, 100)
+        cor_fundo = (252, 252, 250)
 
-        # 1. PREENCHER FUNDO
+        # Fundo
         pdf.set_fill_color(*cor_fundo)
         pdf.rect(0, 0, 297, 210, "F")
 
-        # 2. BORDA DOURADA (Moldura)
-        margem = 8
-        pdf.set_draw_color(*cor_dourado)
-        pdf.set_line_width(2)
-        pdf.rect(margem, margem, 297 - (2*margem), 210 - (2*margem))
-        
-        # Borda interna fina (efeito duplo)
-        pdf.set_line_width(0.5)
-        pdf.rect(margem + 2, margem + 2, 297 - (2*margem) - 4, 210 - (2*margem) - 4)
+        # Barra Lateral (mais fina como no exemplo)
+        largura_barra = 25  # Reduzida para ficar mais fina
+        pdf.set_fill_color(*cor_preto)
+        pdf.rect(0, 0, largura_barra, 210, "F")
+        pdf.set_fill_color(*cor_dourado)
+        pdf.rect(largura_barra, 0, 2, 210, "F")
 
-        # 3. LOGO (Centralizada no Topo)
+        # Logo (se existir)
         if os.path.exists("assets/logo.png"):
             try: 
-                # Centraliza imagem de 40mm
-                x_logo = (297 - 40) / 2
-                pdf.image("assets/logo.png", x=x_logo, y=15, w=40)
-            except: pass
+                pdf.image("assets/logo.png", x=5, y=20, w=15)  # Ajustado para barra mais fina
+            except: 
+                pass
         
-        # 4. CABEÇALHO
-        pdf.set_xy(0, 55)
-        pdf.set_font("Helvetica", "B", 27)
+        # Configuração da Área de Texto
+        x_inicio = largura_barra + 15  # Margem maior após a barra
+        largura_util = 297 - x_inicio - 15 
+        centro_x = x_inicio + (largura_util / 2)
+
+        # Título Principal - Exatamente como no PDF
+        pdf.set_y(45)  # Posição mais alta
+        pdf.set_font("Helvetica", "B", 24)
         pdf.set_text_color(*cor_dourado)
-        pdf.cell(297, 15, "CERTIFICADO DE EXAME TEÓRICO DE FAIXA", ln=1, align="C")
+        titulo = "CERTIFICADO DE EXAME TEÓRICO DE FAIXA"
+        pdf.cell(largura_util, 12, titulo, ln=1, align="C")
         
-        pdf.ln(10) 
+        pdf.ln(20)  # Espaço maior após o título
         
-        # 5. CORPO DO TEXTO
+        # Texto Introdutório - Primeira linha
         pdf.set_font("Helvetica", "", 16)
-        pdf.set_text_color(*cor_texto)
-        pdf.cell(297, 10, "Certificamos que o(a) aluno(a)", ln=1, align="C")
+        pdf.set_text_color(*cor_preto)
+        texto_intro = "Certificamos que o aluno(a)"
+        pdf.cell(largura_util, 10, texto_intro, ln=1, align="C")
 
-        # NOME DO ALUNO (Auto-Ajuste Dourado)
-        pdf.ln(5)
-        try: nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
-        except: nome_limpo = usuario_nome.upper()
+        # Nome do Aluno - Em negrito e destaque
+        pdf.ln(8)
+        try: 
+            nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
+        except: 
+            nome_limpo = usuario_nome.upper()
 
-        tamanho_fonte = 40
-        pdf.set_font("Helvetica", "B", tamanho_fonte)
-        # Reduz fonte se o nome for muito grande
-        while pdf.get_string_width(nome_limpo) > 240 and tamanho_fonte > 14:
-            tamanho_fonte -= 2
+        # Ajuste de tamanho para o nome
+        tamanho_fonte = 28
+        largura_maxima_nome = largura_util - 40
+        
+        while True:
             pdf.set_font("Helvetica", "B", tamanho_fonte)
-        
+            largura_texto = pdf.get_string_width(nome_limpo)
+            if largura_texto <= largura_maxima_nome or tamanho_fonte <= 16:
+                break
+            tamanho_fonte -= 1
+
         pdf.set_text_color(*cor_dourado)
-        pdf.cell(297, 20, nome_limpo, ln=1, align="C")
+        x_nome = centro_x - (largura_texto / 2)
+        pdf.set_xy(x_nome, pdf.get_y())
+        pdf.cell(largura_texto, 14, nome_limpo, align='L')
         
-        # Texto de aprovação
+        pdf.ln(20)
+
+        # Texto de Aprovação - Segunda parte
         pdf.set_font("Helvetica", "", 16)
-        pdf.set_text_color(*cor_texto)
-        pdf.cell(297, 10, "Foi aprovado(a) no exame teórico estando apto(a) à faixa:", ln=1, align="C")
+        pdf.set_text_color(*cor_preto)
+        texto_aprovacao = "foi APROVADO(A) no Exame teórico para a faixa"
+        pdf.cell(largura_util, 10, texto_aprovacao, ln=1, align="C")
+        
+        # Texto adicional
+        pdf.ln(2)
+        texto_apto = "estando apto(a) a ser provido(a) a faixa:"
+        pdf.cell(largura_util, 10, texto_apto, ln=1, align="C")
 
-        # FAIXA (Gigante Dourada)
-        pdf.ln(5)
-        pdf.set_font("Helvetica", "B", 32)
-        pdf.set_text_color(*cor_dourado)
-        pdf.cell(297, 15, str(faixa).upper(), ln=1, align="C")
-
-        # 6. RODAPÉ
+        # Linha horizontal - mais longa e centralizada
         pdf.ln(15)
-        
-        # Data
-        data_fmt = datetime.now().strftime("%d/%m/%Y")
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(*cor_texto)
-        pdf.cell(297, 6, f"Data de Emissão: {data_fmt}, ln=1, align="C")
-
-        y_rodape = 175
-        
-        # Assinatura (Esquerda)
-        # Linha branca para assinatura
-        pdf.set_draw_color(*cor_texto)
+        y_linha = pdf.get_y()
+        largura_linha = 180
+        x_linha = centro_x - (largura_linha / 2)
+        pdf.set_draw_color(*cor_preto)
         pdf.set_line_width(0.5)
-        pdf.line(40, y_rodape, 110, y_rodape)
+        pdf.line(x_linha, y_linha, x_linha + largura_linha, y_linha)
+
+        pdf.ln(20)
+
+        # Faixa - Em destaque como no PDF
+        pdf.set_font("Helvetica", "B", 32)
+        pdf.set_text_color(*cor_preto)
+        texto_faixa = f"{str(faixa).upper()}"
+        pdf.cell(largura_util, 16, texto_faixa, ln=1, align="C")
+
+        # Rodapé com assinatura
+        y_rodape = 160
         
-        pdf.set_xy(40, y_rodape + 2)
+        # Nome do professor (se fornecido)
+        if professor:
+            pdf.set_y(y_rodape)
+            pdf.set_font("Helvetica", "I", 12)
+            pdf.set_text_color(*cor_preto)
+            pdf.cell(largura_util, 8, professor, ln=1, align="C")
+        
+        # Linha de assinatura e texto "Professor Responsável"
+        pdf.ln(15)
+        y_assinatura = pdf.get_y()
+        
+        # Linha da assinatura
+        largura_linha_assinatura = 80
+        x_assinatura = centro_x - (largura_linha_assinatura / 2)
+        pdf.set_draw_color(*cor_preto)
+        pdf.set_line_width(0.3)
+        pdf.line(x_assinatura, y_assinatura, x_assinatura + largura_linha_assinatura, y_assinatura)
+        
+        # Texto "Professor Responsável"
+        pdf.set_xy(x_assinatura, y_assinatura + 2)
         pdf.set_font("Helvetica", "", 10)
-        pdf.cell(70, 5, "Professor Responsável", align="C")
-
-        # QR Code e Hash (Direita)
-        y_qr = 160
-        x_qr = 230
-        tamanho_qr = 25
-        
-        try:
-            caminho_qr = gerar_qrcode(codigo)
-            # Desenha um quadrado branco atrás do QR code para contraste
-            pdf.set_fill_color(255, 255, 255)
-            pdf.rect(x_qr-1, y_qr-1, tamanho_qr+2, tamanho_qr+2, "F")
-            pdf.image(caminho_qr, x=x_qr, y=y_qr, w=tamanho_qr)
-        except: pass
-
-        # Hash abaixo do QR
-        pdf.set_xy(x_qr - 15, y_qr + tamanho_qr + 2)
-        pdf.set_font("Courier", "B", 10)
-        pdf.set_text_color(*cor_dourado)
-        pdf.cell(55, 5, f"{codigo}", align="C")
+        pdf.set_text_color(*cor_cinza)
+        pdf.cell(largura_linha_assinatura, 5, "Professor Responsável", align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
     except Exception as e:
