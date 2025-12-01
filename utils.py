@@ -321,7 +321,7 @@ def verificar_elegibilidade_exame(usuario_data):
         
     # REGRA 2: BLOQUEIO POR ABANDONO
     if status == 'bloqueado':
-        return False, "Exame BLOQUEADO (Abandono de tela ou Recarregamento). Contate o professor."
+        return False, "Exame BLOQUEADO. Contate o professor."
         
     # REGRA 3: DELAY DE 72H
     if status == 'reprovado':
@@ -388,7 +388,7 @@ def bloquear_por_abandono(usuario_id):
         db = get_db()
         db.collection('usuarios').document(usuario_id).update({
             "status_exame": "bloqueado",
-            "motivo_bloqueio": "Saiu da tela ou recarregou a página (Anti-Cola)",
+            "motivo_bloqueio": "Atualizou a página ou fechou o navegador (Anti-Cola)",
             "status_exame_em_andamento": False,
             "data_ultimo_exame": datetime.utcnow().isoformat()
         })
