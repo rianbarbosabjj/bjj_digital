@@ -202,9 +202,10 @@ def exame_de_faixa(usuario):
     qtd = len(lista_questoes)
 
     # --- 6. TELA DE INÍCIO (AJUSTE DE ALINHAMENTO) ---
-    if not st.session_state.exame_iniciado:
-        st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
-        with st.container(border=True):
+if not st.session_state.exame_iniciado:
+    st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
+    
+    with st.container(border=True):
         st.markdown("#### 📜 Instruções para a realização do Exame")
         st.markdown("""
 - Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
@@ -212,7 +213,7 @@ def exame_de_faixa(usuario):
 - **Não é permitido** consultar materiais externos de qualquer tipo.
 - Em caso de reprovação, você poderá realizar o exame novamente somente após **3 dias**.
 - Realize o exame em um local confortável e silencioso para garantir sua concentração.
-- Não atualize a página, não feche o navegador e não troque de dispositivo durante a prova. Isso pode encerrar o exame automaticamente.
+- Não atualize a página, não feche o navegador e não troque de dispositivo durante a prova — isso pode encerrar o exame automaticamente.
 - Utilize um dispositivo com bateria suficiente ou mantido na energia.
 - O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
 - Leia cada questão com atenção antes de responder.
@@ -222,6 +223,7 @@ def exame_de_faixa(usuario):
         """)
         
         st.markdown("---")
+
             
             # --- ALINHAMENTO SIMÉTRICO AQUI ---
             c1, c2, c3 = st.columns(3)
