@@ -236,7 +236,7 @@ def exame_de_faixa(usuario):
             c3.markdown(f"<div style='text-align: right'>✅ Mínimo: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
         
         if qtd > 0:
-            if st.button("✅ INICIAR EXAME (Estou Ciente)", type="primary", use_container_width=True):
+            if st.button("✅ (Estou Ciente) INICIAR EXAME", type="primary", use_container_width=True):
                 registrar_inicio_exame(usuario['id'])
                 st.session_state.exame_iniciado = True
                 st.session_state.inicio_prova = datetime.utcnow()
