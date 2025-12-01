@@ -219,7 +219,7 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU COM EFEITO "VIDRO LÍQUIDO" (GLASSMORPHISM)
+    # MENU SÓLIDO (COR DO FUNDO) COM BORDA DOURADA
     # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
@@ -230,16 +230,13 @@ def app_principal():
         styles={
             "container": {
                 "padding": "5px", 
-                # Fundo translúcido (Vidro)
-                "background-color": "rgba(255, 255, 255, 0.05)", 
-                # Desfoque do fundo
-                "backdrop-filter": "blur(10px)",
-                "-webkit-backdrop-filter": "blur(10px)",
-                # Bordas arredondadas e sutis
+                # Fundo Sólido (Cor da Página)
+                "background-color": COR_FUNDO, 
+                # Bordas arredondadas e Douradas
                 "border-radius": "16px",
-                "border": "1px solid rgba(255, 255, 255, 0.1)", 
+                "border": f"1px solid {COR_DESTAQUE}", 
                 # Sombra suave
-                "box-shadow": "0 4px 30px rgba(0, 0, 0, 0.1)"
+                "box-shadow": "0 4px 15px rgba(0, 0, 0, 0.3)"
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -250,11 +247,11 @@ def app_principal():
                 "font-size": "14px", 
                 "text-align": "center", 
                 "margin": "0px 4px", 
-                "color": "rgba(255, 255, 255, 0.8)", # Texto levemente transparente
+                "color": "white",
                 "border-radius": "8px"
             },
             "nav-link-selected": {
-                # Dourado Translúcido (Vidro Colorido)
+                # Dourado Sutil no fundo do item selecionado
                 "background-color": "rgba(255, 215, 112, 0.2)", 
                 "color": COR_DESTAQUE, 
                 "font-weight": "800",
