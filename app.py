@@ -42,8 +42,7 @@ st.markdown(f"""
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%);
     }}
     
-    /* --- CORREÇÃO CRÍTICA DAS LINHAS (DIVISÓRIAS) --- */
-    /* Força a linha a ser branca translúcida SEMPRE, ignorando o modo claro do navegador */
+    /* --- CORREÇÃO DAS LINHAS (DIVISÓRIAS) --- */
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
@@ -66,7 +65,6 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 215, 112, 0.2);
         box-shadow: 4px 0 15px rgba(0,0,0,0.3);
     }}
-    /* Força ícones da sidebar (como o X de fechar) a serem claros */
     section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
@@ -76,21 +74,20 @@ st.markdown(f"""
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.4) !important; 
-        border: 2px solid rgba(255, 215, 112, 0.25) !important; /* Borda Dourada SEMPRE */
+        border: 2px solid rgba(255, 215, 112, 0.25) !important; 
         border-radius: 16px; 
         padding: 25px;
         box-shadow: 0 8px 16px rgba(0,0,0,0.4); 
         margin-bottom: 20px;
     }}
     
-    /* --- EXPANDER (ACORDEÃO) E ÍCONES --- */
+    /* --- EXPANDER (ACORDEÃO) --- */
     .streamlit-expanderHeader {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: {COR_DESTAQUE} !important;
         border: 1px solid {COR_DESTAQUE} !important;
         border-radius: 8px;
     }}
-    /* Garante que a setinha do expander seja visível no modo claro */
     .streamlit-expanderHeader svg {{
         fill: {COR_TEXTO} !important; 
         color: {COR_TEXTO} !important;
@@ -114,14 +111,12 @@ st.markdown(f"""
         transform: translateY(-2px);
     }}
 
-    /* --- INPUTS (CORREÇÃO MODO CLARO) --- */
-    /* Força fundo escuro e borda clara nos inputs para não ficarem brancos/cinzas */
+    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: #1a3b32 !important;
         color: white !important;
         border: 1px solid rgba(255, 255, 255, 0.3) !important; 
     }}
-    /* Cor do texto digitado e placeholder */
     .stTextInput input, .stTextArea textarea {{
         color: white !important;
     }}
@@ -223,7 +218,9 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
-    # Menu Option Customizado
+    # -------------------------------------------------------------
+    # MENU COM EFEITO "VIDRO LÍQUIDO" (GLASSMORPHISM)
+    # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -232,11 +229,17 @@ def app_principal():
         orientation="horizontal",
         styles={
             "container": {
-                "padding": "10px", 
-                "background-color": "#11332d", 
-                "border-radius": "12px",
-                "border": f"1px solid {COR_DESTAQUE}", 
-                "box-shadow": "0 4px 12px rgba(0,0,0,0.5)"
+                "padding": "5px", 
+                # Fundo translúcido (Vidro)
+                "background-color": "rgba(255, 255, 255, 0.05)", 
+                # Desfoque do fundo
+                "backdrop-filter": "blur(10px)",
+                "-webkit-backdrop-filter": "blur(10px)",
+                # Bordas arredondadas e sutis
+                "border-radius": "16px",
+                "border": "1px solid rgba(255, 255, 255, 0.1)", 
+                # Sombra suave
+                "box-shadow": "0 4px 30px rgba(0, 0, 0, 0.1)"
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -247,14 +250,16 @@ def app_principal():
                 "font-size": "14px", 
                 "text-align": "center", 
                 "margin": "0px 4px", 
-                "color": "white",
-                "border-radius": "6px"
+                "color": "rgba(255, 255, 255, 0.8)", # Texto levemente transparente
+                "border-radius": "8px"
             },
             "nav-link-selected": {
-                "background-color": COR_DESTAQUE, 
-                "color": "#0e2d26", 
+                # Dourado Translúcido (Vidro Colorido)
+                "background-color": "rgba(255, 215, 112, 0.2)", 
+                "color": COR_DESTAQUE, 
                 "font-weight": "800",
-                "box-shadow": "0 2px 4px rgba(0,0,0,0.3)"
+                "border": f"1px solid {COR_DESTAQUE}",
+                "box-shadow": "0 0 10px rgba(255, 215, 112, 0.3)"
             },
         }
     )
