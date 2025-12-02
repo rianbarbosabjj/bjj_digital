@@ -72,28 +72,11 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
 
-    /* --- SIDEBAR PARA TODOS OS DISPOSITIVOS --- */
-    /* Garante que a sidebar sempre apareça */
+    /* --- SIDEBAR CUSTOMIZADA --- */
     section[data-testid="stSidebar"] {{
-        display: block !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        transform: none !important;
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
         box-shadow: 5px 0 15px rgba(0,0,0,0.3);
-        transition: transform 0.3s ease !important;
-    }}
-    
-    /* Botão hamburguer sempre visível */
-    [data-testid="collapsedControl"] {{
-        display: flex !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        z-index: 999999 !important;
-        position: fixed !important;
-        left: 10px !important;
-        top: 10px !important;
     }}
     
     /* Ícones da Sidebar */
@@ -101,8 +84,10 @@ st.markdown(f"""
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
     }}
-    
-    /* Botão hamburguer (três traços) - substitui o >> */
+
+    /* --- MENU HAMBURGUER (CORRIGIDO) --- */
+    /* Alvo: Botão de colapsar sidebar (Versões novas e antigas do Streamlit) */
+    [data-testid="stSidebarCollapsedControl"] button, 
     [data-testid="collapsedControl"] button {{
         background-color: rgba(9, 31, 26, 0.9) !important;
         border: 1px solid rgba(255, 215, 112, 0.3) !important;
@@ -114,124 +99,35 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
         transition: all 0.3s ease !important;
     }}
-    
-    /* Esconde o SVG original (>>) */
+
+    /* Esconde a seta SVG original (>> ou >) */
+    [data-testid="stSidebarCollapsedControl"] button svg,
     [data-testid="collapsedControl"] button svg {{
         display: none !important;
     }}
-    
-    /* Adiciona o ícone hamburguer (☰) */
+
+    /* Insere o Ícone Hamburguer via CSS */
+    [data-testid="stSidebarCollapsedControl"] button::before,
     [data-testid="collapsedControl"] button::before {{
-        content: "☰";
+        content: "☰"; /* Caractere Unicode do Menu Hamburguer */
         color: {COR_DESTAQUE} !important;
         font-size: 24px !important;
         font-weight: bold !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 100% !important;
-        height: 100% !important;
+        display: block !important;
         line-height: 1 !important;
     }}
-    
-    /* Efeito hover no ícone hamburguer */
+
+    /* Efeito Hover no Hamburguer */
+    [data-testid="stSidebarCollapsedControl"] button:hover,
     [data-testid="collapsedControl"] button:hover {{
         background-color: rgba(255, 215, 112, 0.2) !important;
         border: 1px solid rgba(255, 215, 112, 0.5) !important;
         transform: scale(1.05) !important;
     }}
-    
+
+    [data-testid="stSidebarCollapsedControl"] button:hover::before,
     [data-testid="collapsedControl"] button:hover::before {{
         color: {COR_HOVER} !important;
-    }}
-    
-    /* FORÇAR VISIBILIDADE EM TABLETS E DISPOSITIVOS MÓVEIS */
-    @media (max-width: 1024px) {{
-        /* Tablet portrait e landscape */
-        section[data-testid="stSidebar"] {{
-            min-width: 280px !important;
-            max-width: 350px !important;
-            position: fixed !important;
-            left: 0 !important;
-            top: 0 !important;
-            height: 100vh !important;
-            z-index: 999998 !important;
-            transform: translateX(-100%) !important;
-        }}
-        
-        /* Quando a sidebar está expandida */
-        section[data-testid="stSidebar"][aria-expanded="true"] {{
-            transform: translateX(0) !important;
-        }}
-        
-        /* Ajuste do conteúdo principal quando sidebar está aberta */
-        section[data-testid="stSidebar"][aria-expanded="true"] ~ .main .block-container {{
-            margin-left: 280px !important;
-            transition: margin-left 0.3s ease !important;
-        }}
-        
-        /* Botão hamburguer em tablets */
-        [data-testid="collapsedControl"] {{
-            left: 15px !important;
-            top: 15px !important;
-        }}
-    }}
-    
-    @media (max-width: 768px) {{
-        /* Tablet pequeno e smartphones grandes */
-        section[data-testid="stSidebar"] {{
-            min-width: 250px !important;
-            max-width: 300px !important;
-            width: 85vw !important;
-        }}
-        
-        [data-testid="collapsedControl"] button {{
-            padding: 8px 10px !important;
-            min-height: 40px !important;
-            min-width: 40px !important;
-        }}
-        
-        [data-testid="collapsedControl"] button::before {{
-            font-size: 20px !important;
-        }}
-        
-        /* Overlay para quando a sidebar está aberta */
-        .stApp::after {{
-            content: '';
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 999997;
-            display: none;
-            pointer-events: none;
-        }}
-        
-        section[data-testid="stSidebar"][aria-expanded="true"] ~ .stApp::after {{
-            display: block !important;
-            pointer-events: all !important;
-        }}
-        
-        /* Fechar sidebar ao clicar no overlay */
-        .stApp::after {{
-            cursor: pointer;
-        }}
-    }}
-    
-    @media (max-width: 480px) {{
-        /* Smartphones */
-        section[data-testid="stSidebar"] {{
-            min-width: 220px !important;
-            max-width: 280px !important;
-            width: 85vw !important;
-        }}
-        
-        [data-testid="collapsedControl"] {{
-            left: 10px !important;
-            top: 10px !important;
-        }}
     }}
 
     /* --- CONTAINERS E CARDS --- */
@@ -516,7 +412,7 @@ def app_principal():
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
         if tipo in ["admin", "professor"]:
-            # --- AQUI: Botão do Dashboard na Sidebar ---
+            # Botão Dashboard aqui
             if st.button("📊 Dashboard", use_container_width=True): nav("📊 Dashboard")
             if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
             
