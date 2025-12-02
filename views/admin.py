@@ -102,6 +102,7 @@ def gestao_questoes():
             st.info("Nenhuma questão encontrada.")
         else:
             st.caption(f"Exibindo {len(questoes_filtradas)} questões")
+            # --- CORREÇÃO AQUI: removido o acento de 'questoes_filtradas' ---
             for q in questoes_filtradas:
                 with st.container(border=True):
                     c_head, c_btn = st.columns([5, 1])
@@ -210,7 +211,6 @@ def gestao_exame_de_faixa():
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
         
-        # Carrega Config Atual e Sincroniza Estado
         if 'last_faixa_sel' not in st.session_state or st.session_state.last_faixa_sel != faixa_sel:
             configs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
             conf_atual = {}; doc_id = None
