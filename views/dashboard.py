@@ -5,6 +5,9 @@ from database import get_db
 
 def dashboard_professor():
     st.markdown("<h1 style='color:#FFD700;'>📊 Dashboard do Mestre</h1>", unsafe_allow_html=True)
+    if st.button("🏠 Voltar ao Início", key="btn_voltar_dash"):
+        st.session_state.menu_selection = "Início"; st.rerun()
+
     db = get_db()
     user = st.session_state.usuario
 
@@ -161,4 +164,4 @@ def dashboard_professor():
                         use_container_width=True
                     )
             else:
-                st.info("Aguardando dados...")
+                st.info("Aguardando mais dados...")
