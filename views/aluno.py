@@ -19,60 +19,69 @@ from utils import (
 )
 
 # =========================================
-# CARREGADOR DE EXAME (LÓGICA NOVA)
+# CARREGADOR DE EXAME (CORRIGIDO PARA LER IDS DO ADMIN)
 # =========================================
 def carregar_exame_especifico(faixa_alvo):
     db = get_db()
     questoes_finais = []
-    tempo = 45; nota = 70; qtd_alvo = 10
+    tempo = 45
+    nota = 70
     
     # 1. Busca Configuração da Prova
     configs = db.collection('config_exames').where('faixa', '==', faixa_alvo).limit(1).stream()
     config_doc = None
-    for doc in configs: config_doc = doc.to_dict(); break
-    
-    dificuldade_alvo = 1 # Default Fácil
+    for doc in configs: 
+        config_doc = doc.to_dict()
+        break
     
     if config_doc:
         tempo = int(config_doc.get('tempo_limite', 45))
         nota = int(config_doc.get('aprovacao_minima', 70))
-        qtd_alvo = int(config_doc.get('qtd_questoes', 10))
-        dificuldade_alvo = int(config_doc.get('dificuldade_alvo', 1)) # Pega o nível configurado
-    else:
-        # Se não tiver config, tenta um mapa básico de fallback (opcional)
-        if "Branca" in faixa_alvo: dificuldade_alvo = 1
-        elif "Azul" in faixa_alvo: dificuldade_alvo = 2
-        elif "Roxa" in faixa_alvo: dificuldade_alvo = 3
-        elif "Marrom" in faixa_alvo or "Preta" in faixa_alvo: dificuldade_alvo = 4
-
-    # 2. Busca Questões pelo NÍVEL DE DIFICULDADE
-    # Traz questões do nível exato. Se quiser misturar (ex: nivel 1 e 2), precisaria de outra lógica.
-    # Aqui vamos focar no nível alvo.
-    q_ref = list(db.collection('questoes').where('dificuldade', '==', dificuldade_alvo).where('status', '==', 'aprovada').stream())
-    
-    pool = []
-    ids_vistos = set()
-    for doc in q_ref:
-        d = doc.to_dict()
-        # Tratamento de compatibilidade para alternativas antigas vs novas
-        if 'alternativas' not in d and 'opcoes' in d:
-            ops = d['opcoes']
-            d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-            
-        pool.append(d)
-        ids_vistos.add(doc.id)
-
-    # 3. Sorteio
-    if pool:
-        if len(pool) > qtd_alvo:
-            questoes_finais = random.sample(pool, qtd_alvo)
+        
+        # --- LÓGICA NOVA: VERIFICA SE O ADMIN SELECIONOU QUESTÕES MANUALMENTE ---
+        ids_salvos = config_doc.get('questoes_ids', [])
+        
+        if ids_salvos and len(ids_salvos) > 0:
+            # MODO MANUAL: Carrega exatamente as questões que o Admin escolheu
+            for q_id in ids_salvos:
+                doc_q = db.collection('questoes').document(q_id).get()
+                if doc_q.exists:
+                    d = doc_q.to_dict()
+                    d['id'] = doc_q.id # Importante salvar o ID
+                    
+                    # Compatibilidade (List -> Dict)
+                    if 'alternativas' not in d and 'opcoes' in d:
+                        ops = d['opcoes']
+                        d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                    
+                    questoes_finais.append(d)
         else:
-            questoes_finais = pool
+            # MODO AUTOMÁTICO/ANTIGO (Fallback): Sorteia por dificuldade se não houver IDs salvos
+            qtd_alvo = int(config_doc.get('qtd_questoes', 10))
+            dificuldade_alvo = int(config_doc.get('dificuldade_alvo', 1))
+            
+            q_ref = list(db.collection('questoes').where('dificuldade', '==', dificuldade_alvo).where('status', '==', 'aprovada').stream())
+            pool = []
+            for doc in q_ref:
+                d = doc.to_dict()
+                d['id'] = doc.id
+                if 'alternativas' not in d and 'opcoes' in d:
+                    ops = d['opcoes']
+                    d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                pool.append(d)
+
+            if pool:
+                if len(pool) > qtd_alvo:
+                    questoes_finais = random.sample(pool, qtd_alvo)
+                else:
+                    questoes_finais = pool
+    else:
+        st.error(f"Prova da faixa {faixa_alvo} não configurada pelo Mestre.")
 
     return questoes_finais, tempo, nota
 
 # =========================================
-# OUTRAS TELAS (Mantidas)
+# OUTRAS TELAS
 # =========================================
 def modo_rola(usuario):
     st.markdown("## 🥋 Modo Rola"); st.info("Em breve.")
@@ -158,6 +167,7 @@ def exame_de_faixa(usuario):
         if dt_ini and datetime.utcnow() < dt_ini: st.warning(f"⏳ Início em: {dt_ini}"); return
     except: pass
 
+    # --- CARREGA A PROVA ---
     qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
     qtd = len(qs)
 
@@ -198,12 +208,13 @@ def exame_de_faixa(usuario):
                 # Compatibilidade com alternativas novas (dict) ou antigas (list)
                 opts = []
                 if 'alternativas' in q and isinstance(q['alternativas'], dict):
-                    opts = [q['alternativas'].get(k) for k in ["A","B","C","D"]]
+                    # Garante ordem A, B, C, D
+                    opts = [f"{k}) {q['alternativas'][k]}" for k in ["A","B","C","D"] if k in q['alternativas']]
                 elif 'opcoes' in q:
                     opts = q['opcoes']
                 
                 # Garante que options não esteja vazio
-                if not opts: opts = ["Erro carregamento", "Erro", "Erro", "Erro"]
+                if not opts: opts = ["Erro carregamento"]
 
                 resps[i] = st.radio("R:", opts, key=f"q{i}", label_visibility="collapsed")
                 st.markdown("---")
@@ -211,20 +222,22 @@ def exame_de_faixa(usuario):
             if st.form_submit_button("Finalizar"):
                 acertos = 0
                 for i, q in enumerate(qs):
-                    # Lógica de correção para dict (A,B,C,D) ou list (Texto direto)
-                    resp_aluno = str(resps.get(i)).strip().lower()
-                    
-                    # Tenta achar a letra correta
-                    certa_bd = q.get('resposta_correta') or q.get('resposta') or q.get('correta')
-                    certa_texto = ""
-                    
-                    # Se a resposta certa no banco for "A", "B"... converte para o texto
-                    if str(certa_bd).upper() in ["A","B","C","D"] and 'alternativas' in q:
-                        certa_texto = q['alternativas'].get(str(certa_bd).upper(), "").strip().lower()
+                    resp_aluno_full = str(resps.get(i))
+                    # Pega só a letra se estiver no formato "A) Texto" ou o texto inteiro se for lista antiga
+                    if ")" in resp_aluno_full[:2]:
+                         resp_aluno_letra = resp_aluno_full.split(")")[0].strip().upper()
                     else:
-                        certa_texto = str(certa_bd).strip().lower()
+                         resp_aluno_letra = resp_aluno_full.strip() # Fallback para sistema antigo
+
+                    # Verifica Correta
+                    certa_bd = str(q.get('resposta_correta') or q.get('resposta') or q.get('correta')).strip().upper()
                     
-                    if resp_aluno == certa_texto: acertos += 1
+                    # Comparação: Se o banco diz "A" e o aluno marcou "A) Texto", considera certo
+                    if resp_aluno_letra == certa_bd:
+                        acertos += 1
+                    # Comparação legado: Se o banco tem o texto inteiro e o aluno também
+                    elif resp_aluno_full == certa_bd:
+                        acertos += 1
 
                 nota = (acertos/len(qs))*100
                 aprovado = nota >= st.session_state.params_prova['min']
