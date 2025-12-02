@@ -154,7 +154,7 @@ def gestao_questoes():
                             val_dif = q.get('dificuldade', 1)
                             if not isinstance(val_dif, int): val_dif = 1
                             
-                            # --- AQUI: Campo de Dificuldade com Texto Bonito ---
+                            # Campo de Dificuldade com Texto Bonito
                             nv_dif = c1.selectbox(
                                 "Nível de Dificuldade:", 
                                 NIVEIS_DIFICULDADE, 
@@ -195,6 +195,44 @@ def gestao_questoes():
                             st.session_state["editing_q"] = None
                             st.success("Deletado."); st.rerun()
 
+    # --- CRIAR ---
+    with tab2:
+        # AQUI FOI A MUDANÇA DA KEY PARA EVITAR O ERRO
+        with st.form("form_criar_nova_questao"):
+            st.markdown("#### Nova Questão")
+            pergunta = st.text_area("Enunciado:")
+            
+            c1, c2 = st.columns(2)
+            
+            # Campo de Dificuldade Melhorado na Criação
+            dificuldade = c1.selectbox(
+                "Nível de Dificuldade:", 
+                NIVEIS_DIFICULDADE, 
+                format_func=lambda x: MAPA_NIVEIS.get(x, str(x))
+            )
+            
+            categoria = c2.text_input("Categoria:", "Geral")
+            
+            st.markdown("**Alternativas:**")
+            ca, cb = st.columns(2); cc, cd = st.columns(2)
+            alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
+            alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
+            correta = st.selectbox("Correta:", ["A", "B", "C", "D"])
+            
+            if st.form_submit_button("💾 Cadastrar"):
+                if pergunta and alt_a and alt_b:
+                    db.collection('questoes').add({
+                        "pergunta": pergunta, 
+                        "dificuldade": dificuldade, 
+                        "categoria": categoria,
+                        "alternativas": {"A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d},
+                        "resposta_correta": correta, 
+                        "status": "aprovada",
+                        "criado_por": user.get('nome', 'Admin'), 
+                        "data_criacao": firestore.SERVER_TIMESTAMP
+                    })
+                    st.success("Questão cadastrada com sucesso!"); time.sleep(1); st.rerun()
+                else: st.warning("Preencha o enunciado e pelo menos 2 alternativas.")
     # --- CRIAR ---
     with tab2:
         with st.form("new_q"):
