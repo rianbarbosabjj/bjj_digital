@@ -14,7 +14,7 @@ except ImportError:
     def salvar_questoes(t, q): pass
 
 FAIXAS_COMPLETAS = [
-    " ", "Cinza e Branca", "Cinza", "Cinza e Preta",
+    "Cinza e Branca", "Cinza", "Cinza e Preta",
     "Amarela e Branca", "Amarela", "Amarela e Preta",
     "Laranja e Branca", "Laranja", "Laranja e Preta",
     "Verde e Branca", "Verde", "Verde e Preta",
@@ -27,7 +27,7 @@ NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 # HELPER: BADGES DE DIFICULDADE
 # =========================================
 def get_badge_nivel(nivel):
-    cores = {" ", 1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
+    cores = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
     return cores.get(nivel, "⚪ Nível ?")
 
 # =========================================
