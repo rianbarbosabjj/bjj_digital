@@ -8,6 +8,7 @@ from database import get_db
 # FUNÇÃO PARA ENCONTRAR O LOGO
 # =========================================================
 def get_logo_path():
+    """Procura o logo na pasta assets ou na raiz."""
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
     if os.path.exists("assets/logo.png"): return "assets/logo.png"
@@ -27,7 +28,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - SEGURO)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -42,78 +43,31 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
+    /* --- GLOBAL --- */
     html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
 
+    /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
     
-    hr {{
-        margin: 2em 0 !important;
-        border: 0 !important;
-        height: 1px !important;
-        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
-    }}
-
-    h1, h2, h3, h4, h5, h6 {{ 
-        color: {COR_DESTAQUE} !important; 
-        text-align: center !important; 
-        font-weight: 700 !important; 
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }}
-
+    /* --- SIDEBAR (APENAS COR, SEM HACKS DE POSIÇÃO) --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
-        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
     
+    /* Ícones da Sidebar */
     section[data-testid="stSidebar"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
     }}
 
-    [data-testid="stSidebarCollapsedControl"] button, 
-    [data-testid="collapsedControl"] button {{
-        background-color: rgba(9, 31, 26, 0.9) !important;
-        border: 1px solid rgba(255, 215, 112, 0.3) !important;
-        border-radius: 8px !important;
-        padding: 10px 12px !important;
-        min-height: 44px !important;
-        min-width: 44px !important;
-        margin: 0 !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
-        transition: all 0.3s ease !important;
-    }}
-
-    [data-testid="stSidebarCollapsedControl"] button svg,
-    [data-testid="collapsedControl"] button svg {{ display: none !important; }}
-
-    [data-testid="stSidebarCollapsedControl"] button::before,
-    [data-testid="collapsedControl"] button::before {{
-        content: "☰";
-        color: {COR_DESTAQUE} !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
-        display: block !important;
-        line-height: 1 !important;
-    }}
-
-    [data-testid="stSidebarCollapsedControl"] button:hover,
-    [data-testid="collapsedControl"] button:hover {{
-        background-color: rgba(255, 215, 112, 0.2) !important;
-        border: 1px solid rgba(255, 215, 112, 0.5) !important;
-        transform: scale(1.05) !important;
-    }}
-
-    [data-testid="stSidebarCollapsedControl"] button:hover::before,
-    [data-testid="collapsedControl"] button:hover::before {{ color: {COR_HOVER} !important; }}
-
+    /* --- CONTAINERS E CARDS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -124,6 +78,7 @@ st.markdown(f"""
         margin-bottom: 20px;
     }}
     
+    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
@@ -140,6 +95,7 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
+    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
@@ -147,6 +103,7 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
+    /* --- MENU SUPERIOR RESPONSIVO (Option Menu) --- */
     .st-emotion-cache-1v7f65g {{
         background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
         backdrop-filter: blur(10px) !important;
@@ -154,58 +111,32 @@ st.markdown(f"""
         border-radius: 50px !important;
         box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
         margin: 20px auto !important;
-        max-width: 95% !important;
-        width: auto !important;
-        min-width: 300px !important;
-        overflow: hidden !important;
-        display: flex !important;
-        flex-wrap: nowrap !important;
-        white-space: nowrap !important;
         padding: 0 !important;
     }}
     
-    .st-emotion-cache-1v7f65g .st-ae, .st-emotion-cache-1v7f65g .st-af, .st-emotion-cache-1v7f65g .st-ag, .st-emotion-cache-1v7f65g > div, .st-emotion-cache-1v7f65g > div > div {{
-        background-color: transparent !important; background-image: none !important;
-    }}
-    
     .st-emotion-cache-1v7f65g .st-ae .st-af {{
-        background: transparent !important; color: rgba(255, 255, 255, 0.7) !important;
-        border: 1px solid transparent !important; font-size: 14px !important; text-align: center !important;
-        margin: 4px 2px !important; padding: 12px 20px !important; border-radius: 50px !important;
-        font-weight: 500 !important; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-        display: flex !important; align-items: center !important; justify-content: center !important;
-        flex-shrink: 0 !important; white-space: nowrap !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+        background: transparent !important;
     }}
     
     .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{
-        color: {COR_DESTAQUE} !important; background: rgba(255, 215, 112, 0.1) !important;
-        border: 1px solid rgba(255, 215, 112, 0.3) !important; transform: translateY(-2px) !important;
+        color: {COR_DESTAQUE} !important; 
+        background: rgba(255, 215, 112, 0.1) !important;
     }}
     
     .st-emotion-cache-1v7f65g .st-ae .st-ag {{
         background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important;
-        color: {COR_FUNDO} !important; font-weight: 700 !important;
-        box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4) !important; border: none !important;
-        animation: pulse 2s infinite !important;
+        color: {COR_FUNDO} !important; 
+        font-weight: 700 !important;
     }}
     
-    .st-emotion-cache-1v7f65g > div > div {{
-        overflow-x: auto !important; overflow-y: hidden !important;
-        scrollbar-width: thin !important; scrollbar-color: rgba(255, 215, 112, 0.3) rgba(9, 31, 26, 0.1) !important;
-        padding: 4px 8px !important;
-    }}
-    
-    .st-emotion-cache-1v7f65g .st-ae .st-af i {{ color: inherit !important; font-size: 16px !important; margin-right: 8px !important; transition: all 0.3s ease !important; }}
-    .st-emotion-cache-1v7f65g .st-ae .st-ag i {{ filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)) !important; }}
-    
-    @keyframes pulse {{
-        0% {{ box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }}
-        50% {{ box-shadow: 0 5px 25px rgba(255, 215, 112, 0.6); }}
-        100% {{ box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }}
-    }}
-    
-    #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
-    [data-testid="stDecoration"] {{display: none;}} .block-container {{padding-top: 1rem !important;}}
+    /* Remove decorações padrão */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    [data-testid="stDecoration"] {{display: none;}}
+    .block-container {{padding-top: 1rem !important;}}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -265,7 +196,7 @@ def app_principal():
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
         if tipo in ["admin", "professor"]:
-            # --- REMOVIDO BOTÃO DASHBOARD DAQUI (Fica dentro do Painel) ---
+            # Botão do Painel do Professor (onde está o Dashboard)
             if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
             
         if tipo == "admin":
@@ -286,7 +217,7 @@ def app_principal():
 
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
-        # --- REMOVIDO DASHBOARD DAQUI TAMBÉM ---
+        # Menu horizontal
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
