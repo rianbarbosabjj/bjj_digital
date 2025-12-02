@@ -19,7 +19,6 @@ def estilizar_grafico(fig):
             xanchor="right", x=1
         )
     )
-    # Remove linhas de grade feias, deixa sutil
     fig.update_xaxes(showgrid=False, zeroline=False, color="#FFD770")
     fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.1)", zeroline=False, color="#FFFFFF")
     return fig
@@ -27,7 +26,6 @@ def estilizar_grafico(fig):
 def dashboard_professor():
     st.markdown("<h1 style='color:#FFD770;'>📊 Dashboard do Mestre</h1>", unsafe_allow_html=True)
     
-    # Botão de voltar (caso seja acessado via menu lateral direto)
     if st.session_state.menu_selection == "📊 Dashboard":
         if st.button("🏠 Voltar ao Início", key="btn_voltar_dash"):
             st.session_state.menu_selection = "Início"; st.rerun()
@@ -37,12 +35,12 @@ def dashboard_professor():
 
     # 1. Carregar Dados
     with st.spinner("Analisando dados do dojo..."):
-        # Resultados dos Exames
+        # Resultados
         docs_res = list(db.collection('resultados').stream())
         dados_res = [d.to_dict() for d in docs_res]
         df_res = pd.DataFrame(dados_res)
 
-        # Questões (Para saber quais são do professor)
+        # Questões
         docs_quest = list(db.collection('questoes').stream())
         dados_quest = []
         for d in docs_quest:
@@ -56,13 +54,12 @@ def dashboard_professor():
         return
 
     # =========================================
-    # KPI's TOPO (Indicadores Gerais)
+    # KPI's TOPO
     # =========================================
     total_exames = len(df_res)
     total_aprovados = len(df_res[df_res['aprovado'] == True])
     taxa_aprovacao = (total_aprovados / total_exames * 100) if total_exames > 0 else 0
     
-    # CSS Customizado para os Cards de KPI ficarem bonitos
     st.markdown("""
     <style>
     div[data-testid="stMetric"] {
@@ -93,72 +90,59 @@ def dashboard_professor():
     with tab1:
         c1, c2 = st.columns(2)
         
-        # Gráfico de Pizza: Aprovados vs Reprovados
+        # Pizza
         with c1:
             st.subheader("Aprovação Global")
             if 'aprovado' in df_res.columns:
                 df_pizza = df_res['aprovado'].value_counts().reset_index()
                 df_pizza.columns = ['Status', 'Qtd']
                 df_pizza['Status'] = df_pizza['Status'].map({True: 'Aprovado', False: 'Reprovado'})
-                
-                # Cores Personalizadas: Verde Esmeralda vs Vermelho Suave
                 cores_pizza = {'Aprovado': '#078B6C', 'Reprovado': '#EF553B'}
-                
-                fig_pizza = px.pie(
-                    df_pizza, values='Qtd', names='Status', 
-                    color='Status', color_discrete_map=cores_pizza,
-                    hole=0.4 # Donut Chart é mais moderno
-                )
+                fig_pizza = px.pie(df_pizza, values='Qtd', names='Status', color='Status', color_discrete_map=cores_pizza, hole=0.4)
                 fig_pizza = estilizar_grafico(fig_pizza)
                 st.plotly_chart(fig_pizza, use_container_width=True)
 
-        # Gráfico de Barras: Exames por Faixa
+        # Barras
         with c2:
             st.subheader("Exames por Faixa")
             if 'faixa' in df_res.columns:
                 df_faixa = df_res['faixa'].value_counts().reset_index()
                 df_faixa.columns = ['Faixa', 'Qtd']
-                
-                fig_bar = px.bar(
-                    df_faixa, x='Faixa', y='Qtd',
-                    text='Qtd', # Mostra o número em cima da barra
-                    color_discrete_sequence=['#FFD770'] # Usa a cor Dourada do sistema
-                )
+                fig_bar = px.bar(df_faixa, x='Faixa', y='Qtd', text='Qtd', color_discrete_sequence=['#FFD770'])
                 fig_bar = estilizar_grafico(fig_bar)
-                fig_bar.update_traces(textposition='outside') # Número fora da barra
+                fig_bar.update_traces(textposition='outside')
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-        # Tabela Recente (COM BARRA VERDE)
+        # Tabela Recente (CORRIGIDO: BARRA VERDE)
         st.subheader("Últimos 5 Exames Realizados")
         cols_view = ['usuario', 'faixa', 'pontuacao', 'aprovado', 'data']
         for c in cols_view: 
             if c not in df_res.columns: df_res[c] = "-"
             
-        # Formatar Data
         df_display = df_res.copy()
         if 'data' in df_display.columns:
             df_display['data'] = pd.to_datetime(df_display['data']).dt.strftime('%d/%m/%Y %H:%M')
         
-        # Garante que pontuação é número para a barra funcionar
         df_display['pontuacao'] = pd.to_numeric(df_display['pontuacao'], errors='coerce').fillna(0)
 
-        # --- AQUI ESTÁ A MÁGICA DA BARRA VERDE ---
-        # Usamos style.bar do Pandas para ter controle total da cor
+        # ATENÇÃO: Removi o ProgressColumn do column_config para usar o style.bar
         st.dataframe(
             df_display[cols_view].sort_values(by='data', ascending=False).head(5).style
             .bar(subset=['pontuacao'], color='#078B6C', vmin=0, vmax=100) # Cor Verde (#078B6C)
-            .format({'pontuacao': '{:.1f}%'}), # Formata com %
+            .format({'pontuacao': '{:.1f}%'}),
             hide_index=True, 
             use_container_width=True,
             column_config={
                 "usuario": "Aluno",
+                "faixa": "Faixa",
+                "pontuacao": "Nota Final", # Renomeia, mas deixa o Pandas estilizar
                 "aprovado": st.column_config.CheckboxColumn("Aprovado"),
                 "data": "Data"
             }
         )
 
     # =========================================
-    # ABA 2: ANÁLISE DE QUESTÕES (INTELIGÊNCIA)
+    # ABA 2: ANÁLISE DE QUESTÕES
     # =========================================
     with tab2:
         tem_detalhes = 'detalhes' in df_res.columns and df_res['detalhes'].notna().any()
@@ -190,18 +174,14 @@ def dashboard_professor():
                     stats_completo['pergunta'] = 'Questão Deletada'
                     stats_completo['criado_por'] = '-'
 
-                # --- 1. Gráfico de Barras: Top Erros ---
+                # Top Erros
                 st.subheader("🚨 Onde os alunos mais erram?")
                 df_top_erros = stats_completo.sort_values(by='taxa_acerto', ascending=True).head(7)
-                
                 df_top_erros['pergunta_curta'] = df_top_erros['pergunta'].apply(lambda x: x[:40] + "..." if len(str(x)) > 40 else x)
 
                 fig_err = px.bar(
-                    df_top_erros, 
-                    x='taxa_acerto', 
-                    y='pergunta_curta', 
-                    orientation='h',
-                    text='taxa_acerto',
+                    df_top_erros, x='taxa_acerto', y='pergunta_curta', 
+                    orientation='h', text='taxa_acerto',
                     title="Questões com Menor Taxa de Acerto",
                     color='taxa_acerto',
                     color_continuous_scale=['#EF553B', '#FFD770', '#078B6C'] 
@@ -212,7 +192,7 @@ def dashboard_professor():
 
                 st.markdown("---")
 
-                # --- 2. Análise do Professor Logado ---
+                # Minhas Estatísticas (CORRIGIDO: BARRA VERDE)
                 st.subheader(f"👨‍🏫 Estatísticas das Questões de: {user.get('nome', 'Mim')}")
                 meus_stats = stats_completo[stats_completo['criado_por'] == user.get('nome')]
                 
@@ -225,16 +205,17 @@ def dashboard_professor():
                     media_minha = meus_stats['taxa_acerto'].mean()
                     c_m3.metric("Média de Acerto Global", f"{media_minha:.1f}%")
                     
-                    # Tabela com barra VERDE também
+                    # Removi o ProgressColumn daqui também
                     st.dataframe(
                         meus_stats[['pergunta', 'vezes_usada', 'taxa_acerto', 'dificuldade']]
                         .sort_values(by='vezes_usada', ascending=False)
                         .style
-                        .bar(subset=['taxa_acerto'], color='#078B6C', vmin=0, vmax=100) # Verde aqui também
+                        .bar(subset=['taxa_acerto'], color='#078B6C', vmin=0, vmax=100)
                         .format({'taxa_acerto': '{:.1f}%'}),
                         column_config={
                             "pergunta": "Pergunta",
                             "vezes_usada": st.column_config.NumberColumn("Aplicações", format="%d"),
+                            "taxa_acerto": "Taxa de Acerto",
                             "dificuldade": "Nível"
                         },
                         hide_index=True,
