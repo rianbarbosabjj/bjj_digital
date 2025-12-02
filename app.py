@@ -72,11 +72,28 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
 
-    /* --- SIDEBAR E ÍCONE HAMBURGUER --- */
+    /* --- SIDEBAR PARA TODOS OS DISPOSITIVOS --- */
+    /* Garante que a sidebar sempre apareça */
     section[data-testid="stSidebar"] {{
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        transform: none !important;
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
         box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+        transition: transform 0.3s ease !important;
+    }}
+    
+    /* Botão hamburguer sempre visível */
+    [data-testid="collapsedControl"] {{
+        display: flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 999999 !important;
+        position: fixed !important;
+        left: 10px !important;
+        top: 10px !important;
     }}
     
     /* Ícones da Sidebar */
@@ -86,17 +103,16 @@ st.markdown(f"""
     }}
     
     /* Botão hamburguer (três traços) - substitui o >> */
-    [data-testid="collapsedControl"] {{
-        background-color: transparent !important;
-    }}
-    
     [data-testid="collapsedControl"] button {{
-        background-color: rgba(9, 31, 26, 0.8) !important;
+        background-color: rgba(9, 31, 26, 0.9) !important;
         border: 1px solid rgba(255, 215, 112, 0.3) !important;
         border-radius: 8px !important;
-        padding: 8px 10px !important;
+        padding: 10px 12px !important;
         min-height: 44px !important;
         min-width: 44px !important;
+        margin: 0 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+        transition: all 0.3s ease !important;
     }}
     
     /* Esconde o SVG original (>>) */
@@ -108,7 +124,7 @@ st.markdown(f"""
     [data-testid="collapsedControl"] button::before {{
         content: "☰";
         color: {COR_DESTAQUE} !important;
-        font-size: 22px !important;
+        font-size: 24px !important;
         font-weight: bold !important;
         display: flex !important;
         align-items: center !important;
@@ -120,14 +136,102 @@ st.markdown(f"""
     
     /* Efeito hover no ícone hamburguer */
     [data-testid="collapsedControl"] button:hover {{
-        background-color: rgba(255, 215, 112, 0.1) !important;
+        background-color: rgba(255, 215, 112, 0.2) !important;
         border: 1px solid rgba(255, 215, 112, 0.5) !important;
         transform: scale(1.05) !important;
-        transition: all 0.3s ease !important;
     }}
     
     [data-testid="collapsedControl"] button:hover::before {{
         color: {COR_HOVER} !important;
+    }}
+    
+    /* FORÇAR VISIBILIDADE EM TABLETS E DISPOSITIVOS MÓVEIS */
+    @media (max-width: 1024px) {{
+        /* Tablet portrait e landscape */
+        section[data-testid="stSidebar"] {{
+            min-width: 280px !important;
+            max-width: 350px !important;
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            height: 100vh !important;
+            z-index: 999998 !important;
+            transform: translateX(-100%) !important;
+        }}
+        
+        /* Quando a sidebar está expandida */
+        section[data-testid="stSidebar"][aria-expanded="true"] {{
+            transform: translateX(0) !important;
+        }}
+        
+        /* Ajuste do conteúdo principal quando sidebar está aberta */
+        section[data-testid="stSidebar"][aria-expanded="true"] ~ .main .block-container {{
+            margin-left: 280px !important;
+            transition: margin-left 0.3s ease !important;
+        }}
+        
+        /* Botão hamburguer em tablets */
+        [data-testid="collapsedControl"] {{
+            left: 15px !important;
+            top: 15px !important;
+        }}
+    }}
+    
+    @media (max-width: 768px) {{
+        /* Tablet pequeno e smartphones grandes */
+        section[data-testid="stSidebar"] {{
+            min-width: 250px !important;
+            max-width: 300px !important;
+            width: 85vw !important;
+        }}
+        
+        [data-testid="collapsedControl"] button {{
+            padding: 8px 10px !important;
+            min-height: 40px !important;
+            min-width: 40px !important;
+        }}
+        
+        [data-testid="collapsedControl"] button::before {{
+            font-size: 20px !important;
+        }}
+        
+        /* Overlay para quando a sidebar está aberta */
+        .stApp::after {{
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 999997;
+            display: none;
+            pointer-events: none;
+        }}
+        
+        section[data-testid="stSidebar"][aria-expanded="true"] ~ .stApp::after {{
+            display: block !important;
+            pointer-events: all !important;
+        }}
+        
+        /* Fechar sidebar ao clicar no overlay */
+        .stApp::after {{
+            cursor: pointer;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        /* Smartphones */
+        section[data-testid="stSidebar"] {{
+            min-width: 220px !important;
+            max-width: 280px !important;
+            width: 85vw !important;
+        }}
+        
+        [data-testid="collapsedControl"] {{
+            left: 10px !important;
+            top: 10px !important;
+        }}
     }}
 
     /* --- CONTAINERS E CARDS --- */
@@ -268,11 +372,15 @@ st.markdown(f"""
         filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)) !important;
     }}
     
-    /* Responsividade */
+    /* Responsividade do MENU SUPERIOR */
     @media (max-width: 1024px) {{
         .st-emotion-cache-1v7f65g .st-ae .st-af {{
             padding: 10px 15px !important;
             font-size: 13px !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g {{
+            margin-top: 70px !important; /* Espaço para o botão hamburguer */
         }}
     }}
     
@@ -290,6 +398,7 @@ st.markdown(f"""
         .st-emotion-cache-1v7f65g {{
             max-width: 98% !important;
             border-radius: 30px !important;
+            margin-top: 70px !important;
         }}
     }}
     
@@ -311,6 +420,7 @@ st.markdown(f"""
         .st-emotion-cache-1v7f65g {{
             border-radius: 25px !important;
             padding: 2px !important;
+            margin-top: 70px !important;
         }}
     }}
     
