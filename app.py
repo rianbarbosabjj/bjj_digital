@@ -459,7 +459,8 @@ if "SECRETS_TOML" in os.environ:
 # Importações
 try:
     from streamlit_option_menu import option_menu
-    from views import login, geral, aluno, professor, admin
+    # --- AQUI: ADICIONEI dashboard ---
+    from views import login, geral, aluno, professor, admin, dashboard
 except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
     st.stop()
@@ -537,8 +538,9 @@ def app_principal():
     # MENU HORIZONTAL PRINCIPAL (RESPONSIVO)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-        icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
+        # --- AQUI: Adicionado Dashboard ---
+        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame", "📊 Dashboard"]
+        icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark", "graph-up-arrow"]
     else:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
         icns = ["house", "people", "journal", "trophy"]
@@ -619,6 +621,8 @@ def app_principal():
     elif pg == "Gestão de Equipes": professor.gestao_equipes()
     elif pg == "Gestão de Questões": admin.gestao_questoes()
     elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
+    # --- AQUI: Rota para o Dashboard ---
+    elif pg == "📊 Dashboard": dashboard.dashboard_professor()
 
 if __name__ == "__main__":
     if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
