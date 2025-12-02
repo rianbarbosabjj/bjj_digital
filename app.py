@@ -8,7 +8,6 @@ from database import get_db
 # FUNÇÃO PARA ENCONTRAR O LOGO
 # =========================================================
 def get_logo_path():
-    """Procura o logo na pasta assets ou na raiz."""
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
     if os.path.exists("assets/logo.png"): return "assets/logo.png"
@@ -28,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - CORRIGIDO)
+# 2. ESTILOS VISUAIS (DARK PREMIUM + MOBILE OPTIMIZED)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -49,16 +48,31 @@ st.markdown(f"""
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
     
+    hr {{
+        margin: 2em 0 !important;
+        border: 0 !important;
+        height: 1px !important;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
+    }}
+
+    h1, h2, h3, h4, h5, h6 {{ 
+        color: {COR_DESTAQUE} !important; 
+        text-align: center !important; 
+        font-weight: 700 !important; 
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }}
+
     /* --- SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
+        z-index: 999990 !important; /* Garante que fique acima do conteúdo no mobile */
     }}
     
     section[data-testid="stSidebar"] svg {{
@@ -66,38 +80,32 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- CRUCIAL: BOTÃO DE ABRIR SIDEBAR (O RESGATE) --- */
-    
-    /* 1. Garante que o Header (onde o botão vive) seja visível mas transparente */
+    /* --- CONTROLE DA SIDEBAR (BOTÃO) --- */
     header[data-testid="stHeader"] {{
         background-color: transparent !important;
-        visibility: visible !important; /* Importante! */
+        visibility: visible !important;
+        z-index: 1000 !important;
     }}
 
-    /* 2. Estiliza o botão de abrir/fechar (setinha >) */
+    /* Estilo do botão de abrir/fechar (Desktop) */
     [data-testid="stSidebarCollapsedControl"] button, 
     [data-testid="collapsedControl"] button {{
         color: {COR_DESTAQUE} !important;
-        background-color: rgba(9, 31, 26, 0.8) !important; /* Fundo escuro para contraste */
+        background-color: rgba(9, 31, 26, 0.8) !important;
         border: 1px solid rgba(255, 215, 112, 0.3) !important;
         border-radius: 8px !important;
+        transition: all 0.3s ease !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        transition: all 0.3s ease !important;
-        z-index: 1000001 !important; /* Sempre no topo */
     }}
 
-    /* 3. Garante que o ícone SVG dentro do botão seja DOURADO */
     [data-testid="stSidebarCollapsedControl"] button svg,
     [data-testid="collapsedControl"] button svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
-        stroke: {COR_DESTAQUE} !important;
-        display: block !important; /* Garante que apareça */
     }}
 
-    /* 4. Hover */
     [data-testid="stSidebarCollapsedControl"] button:hover,
     [data-testid="collapsedControl"] button:hover {{
         background-color: rgba(255, 215, 112, 0.2) !important;
@@ -105,7 +113,31 @@ st.markdown(f"""
         transform: scale(1.1);
     }}
 
-    /* --- CONTAINERS E CARDS --- */
+    /* --- REGRAS ESPECÍFICAS PARA MOBILE (Celular/Tablet) --- */
+    @media (max-width: 768px) {{
+        /* No mobile, a sidebar ocupa 85% da tela, não tudo */
+        section[data-testid="stSidebar"] {{
+            width: 85vw !important;
+            min-width: 250px !important;
+        }}
+        
+        /* Aumenta o botão de abrir para facilitar o toque */
+        [data-testid="stSidebarCollapsedControl"] button,
+        [data-testid="collapsedControl"] button {{
+            width: 45px !important;
+            height: 45px !important;
+            margin-top: 5px !important;
+            background-color: #091f1a !important; /* Fundo sólido para ver melhor */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5) !important;
+        }}
+        
+        /* Ajusta o padding do topo para o conteúdo não ficar embaixo do botão */
+        .block-container {{
+            padding-top: 3.5rem !important;
+        }}
+    }}
+
+    /* --- COMPONENTES GERAIS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -116,7 +148,6 @@ st.markdown(f"""
         margin-bottom: 20px;
     }}
     
-    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
@@ -133,7 +164,6 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
@@ -141,7 +171,7 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
-    /* --- MENU SUPERIOR RESPONSIVO --- */
+    /* Menu Superior (Option Menu) */
     .st-emotion-cache-1v7f65g {{
         background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
         backdrop-filter: blur(10px) !important;
@@ -151,28 +181,14 @@ st.markdown(f"""
         margin: 20px auto !important;
         padding: 0 !important;
     }}
+    .st-emotion-cache-1v7f65g .st-ae .st-af {{ color: rgba(255, 255, 255, 0.7) !important; background: transparent !important; }}
+    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{ color: {COR_DESTAQUE} !important; background: rgba(255, 215, 112, 0.1) !important; }}
+    .st-emotion-cache-1v7f65g .st-ae .st-ag {{ background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important; color: {COR_FUNDO} !important; font-weight: 700 !important; }}
     
-    .st-emotion-cache-1v7f65g .st-ae .st-af {{
-        color: rgba(255, 255, 255, 0.7) !important;
-        background: transparent !important;
-    }}
-    
-    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{
-        color: {COR_DESTAQUE} !important; 
-        background: rgba(255, 215, 112, 0.1) !important;
-    }}
-    
-    .st-emotion-cache-1v7f65g .st-ae .st-ag {{
-        background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important;
-        color: {COR_FUNDO} !important; 
-        font-weight: 700 !important;
-    }}
-    
-    /* Ajustes Gerais */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
-    [data-testid="stDecoration"] {{display: none;}} /* Remove a listra colorida do topo */
-    .block-container {{padding-top: 2rem !important;}} /* Dá um respiro pro menu */
+    [data-testid="stDecoration"] {{display: none;}}
+    .block-container {{padding-top: 1rem !important;}}
 
 </style>
 """, unsafe_allow_html=True)
@@ -233,6 +249,7 @@ def app_principal():
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
         if tipo in ["admin", "professor"]:
+            # Botão do Painel do Professor (onde está o Dashboard)
             if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
             
         if tipo == "admin":
@@ -253,6 +270,7 @@ def app_principal():
 
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
+        # Menu horizontal - Removido Dashboard daqui pois está dentro do Painel Prof
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
