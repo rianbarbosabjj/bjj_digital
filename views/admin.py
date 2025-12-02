@@ -102,15 +102,16 @@ def gestao_questoes():
             st.info("Nenhuma questão encontrada.")
         else:
             st.caption(f"Exibindo {len(questoes_filtradas)} questões")
-            # --- CORREÇÃO AQUI: removido o acento de 'questoes_filtradas' ---
             for q in questoes_filtradas:
                 with st.container(border=True):
                     c_head, c_btn = st.columns([5, 1])
                     nivel_val = q.get('dificuldade', 1)
                     nivel_texto = MAPA_NIVEIS.get(nivel_val, "⚪ Nível ?")
                     cat = q.get('categoria', 'Geral')
+                    autor = q.get('criado_por', 'Desconhecido')
                     
-                    c_head.markdown(f"**{nivel_texto}** | *{cat}*")
+                    # --- AQUI: Autor adicionado ao cabeçalho ---
+                    c_head.markdown(f"**{nivel_texto}** | *{cat}* | ✍️ {autor}")
                     c_head.markdown(f"##### {q.get('pergunta')}")
                     
                     with c_head.expander("👁️ Ver Detalhes (Alternativas)"):
@@ -123,7 +124,6 @@ def gestao_questoes():
                         st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
                         resp = q.get('resposta_correta') or q.get('correta') or "?"
                         st.success(f"**Correta:** {resp}")
-                        st.caption(f"Autor: {q.get('criado_por','?')}")
 
                     if c_btn.button("✏️", key=f"btn_edit_{q['id']}"):
                         st.session_state[f"editing_q"] = q['id']
