@@ -1,355 +1,289 @@
 import streamlit as st
-import pandas as pd
-import bcrypt
-import random
-import time 
-from datetime import datetime, time as dtime 
+import os
+import sys
+import bcrypt 
 from database import get_db
-from firebase_admin import firestore
 
+# =========================================================
+# FUNÇÃO PARA ENCONTRAR O LOGO
+# =========================================================
+def get_logo_path():
+    """Procura o logo na pasta assets ou na raiz."""
+    if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
+    if os.path.exists("logo.jpg"): return "logo.jpg"
+    if os.path.exists("assets/logo.png"): return "assets/logo.png"
+    if os.path.exists("logo.png"): return "logo.png"
+    return None
+
+logo_file = get_logo_path()
+
+# =========================================================
+# 1. CONFIGURAÇÃO
+# =========================================================
+st.set_page_config(
+    page_title="BJJ Digital", 
+    page_icon=logo_file, 
+    layout="wide",
+    initial_sidebar_state="expanded" 
+)
+
+# =========================================================
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
+# =========================================================
 try:
-    from utils import carregar_todas_questoes, salvar_questoes
+    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
-    def carregar_todas_questoes(): return []
-    def salvar_questoes(t, q): pass
+    COR_FUNDO = "#0e2d26"
+    COR_TEXTO = "#FFFFFF"
+    COR_DESTAQUE = "#FFD770"
+    COR_BOTAO = "#078B6C"
+    COR_HOVER = "#FFD770"
 
-FAIXAS_COMPLETAS = [
-    "Cinza e Branca", "Cinza", "Cinza e Preta",
-    "Amarela e Branca", "Amarela", "Amarela e Preta",
-    "Laranja e Branca", "Laranja", "Laranja e Preta",
-    "Verde e Branca", "Verde", "Verde e Preta",
-    "Azul", "Roxa", "Marrom", "Preta"
-]
+st.markdown(f"""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-NIVEIS_DIFICULDADE = [1, 2, 3, 4]
+    /* --- GLOBAL --- */
+    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
+        font-family: 'Poppins', sans-serif;
+        color: {COR_TEXTO} !important;
+    }}
 
-# =========================================
-# HELPER: BADGES DE DIFICULDADE
-# =========================================
-def get_badge_nivel(nivel):
-    cores = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
-    return cores.get(nivel, "⚪ Nível ?")
-
-# =========================================
-# 1. GESTÃO DE USUÁRIOS
-# =========================================
-def gestao_usuarios(usuario_logado):
-    if st.button("🏠 Voltar ao Início", key="btn_voltar_adm"):
-        st.session_state.menu_selection = "Início"; st.rerun()
-
-    st.markdown("<h1 style='color:#FFD700;'>👥 Gestão de Usuários</h1>", unsafe_allow_html=True)
-    db = get_db()
-    users = [d.to_dict() | {"id": d.id} for d in db.collection('usuarios').stream()]
-    if not users: st.warning("Vazio."); return
-    df = pd.DataFrame(users)
-    cols = ['nome', 'email', 'tipo_usuario', 'faixa_atual']
-    for c in cols:
-        if c not in df.columns: df[c] = "-"
-    st.dataframe(df[cols], use_container_width=True, hide_index=True)
-    st.markdown("---")
-    st.subheader("🛠️ Editar")
-    sel = st.selectbox("Usuário:", users, format_func=lambda x: f"{x.get('nome')} ({x.get('email')})")
-    if sel:
-        with st.form(f"edt_{sel['id']}"):
-            nm = st.text_input("Nome:", value=sel.get('nome',''))
-            tp = st.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
-            fx = st.selectbox("Faixa Atual:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
-            pwd = st.text_input("Nova Senha (opcional):", type="password")
-            if st.form_submit_button("Salvar"):
-                upd = {"nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx}
-                if pwd: upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(); upd["precisa_trocar_senha"] = True
-                db.collection('usuarios').document(sel['id']).update(upd)
-                st.success("Salvo!"); time.sleep(1); st.rerun()
-        if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
-            db.collection('usuarios').document(sel['id']).delete()
-            st.warning("Excluído."); time.sleep(1); st.rerun()
-
-# =========================================
-# 2. GESTÃO DE QUESTÕES (LAYOUT CARD MODERNIZADO)
-# =========================================
-def gestao_questoes():
-    st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
-    db = get_db()
+    /* --- BACKGROUND --- */
+    .stApp {{
+        background-color: {COR_FUNDO} !important;
+        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
+    }}
     
-    user = st.session_state.usuario
-    if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
-        st.error("Acesso negado."); return
+    /* --- LINHAS DIVISÓRIAS ELEGANTES --- */
+    hr {{
+        margin: 2em 0 !important;
+        border: 0 !important;
+        height: 1px !important;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
+    }}
 
-    tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
+    /* --- TÍTULOS --- */
+    h1, h2, h3, h4, h5, h6 {{ 
+        color: {COR_DESTAQUE} !important; 
+        text-align: center !important; 
+        font-weight: 700 !important; 
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }}
 
-    # --- LISTAR (CARDS) ---
-    with tab1:
-        questoes_ref = list(db.collection('questoes').stream())
-        
-        # Filtros Rápidos
-        c_f1, c_f2 = st.columns(2)
-        termo = c_f1.text_input("🔍 Buscar no enunciado:")
-        filtro_n = c_f2.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE)
+    /* --- SIDEBAR --- */
+    section[data-testid="stSidebar"] {{
+        background-color: #091f1a !important; 
+        border-right: 1px solid rgba(255, 215, 112, 0.15);
+        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+    }}
+    /* Ícones da Sidebar */
+    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
+        fill: {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
+    }}
 
-        questoes_filtradas = []
-        for doc in questoes_ref:
-            d = doc.to_dict()
-            d['id'] = doc.id
-            
-            # Aplica filtros
-            if termo and termo.lower() not in d.get('pergunta','').lower(): continue
-            if filtro_n and d.get('dificuldade', 1) not in filtro_n: continue
-            
-            questoes_filtradas.append(d)
-            
-        if not questoes_filtradas:
-            st.info("Nenhuma questão encontrada.")
-        else:
-            st.caption(f"Exibindo {len(questoes_filtradas)} questões")
-            
-            # Renderiza CARDS
-            for q in questoes_filtradas:
-                with st.container(border=True):
-                    c_head, c_btn = st.columns([5, 1])
-                    
-                    # Cabeçalho do Card
-                    nivel = get_badge_nivel(q.get('dificuldade', 1))
-                    cat = q.get('categoria', 'Geral')
-                    c_head.markdown(f"**{nivel}** | *{cat}*")
-                    c_head.markdown(f"##### {q.get('pergunta')}")
-                    
-                    # Detalhes Expansíveis
-                    with c_head.expander("👁️ Ver Detalhes (Alternativas)"):
-                        alts = q.get('alternativas', {})
-                        if not alts and 'opcoes' in q: # Compatibilidade
-                            ops = q['opcoes']
-                            alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                        
-                        st.markdown(f"**A)** {alts.get('A','')}")
-                        st.markdown(f"**B)** {alts.get('B','')}")
-                        st.markdown(f"**C)** {alts.get('C','')}")
-                        st.markdown(f"**D)** {alts.get('D','')}")
-                        
-                        resp = q.get('resposta_correta') or q.get('correta') or "?"
-                        st.success(f"**Correta:** {resp}")
-                        st.caption(f"Autor: {q.get('criado_por','?')}")
+    /* --- CONTAINERS E CARDS --- */
+    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
+    div[data-testid="stForm"] {{
+        background-color: rgba(0, 0, 0, 0.3) !important; 
+        border: 1px solid rgba(255, 215, 112, 0.2) !important; 
+        border-radius: 12px; 
+        padding: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
+        margin-bottom: 20px;
+    }}
+    
+    /* --- BOTÕES --- */
+    div.stButton > button, div.stFormSubmitButton > button {{ 
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
+        color: white !important; 
+        border: 1px solid rgba(255,255,255,0.1) !important; 
+        padding: 0.6em 1.5em !important; 
+        font-weight: 600 !important;
+        border-radius: 8px !important; 
+        transition: all 0.3s ease !important;
+    }}
+    div.stButton > button:hover {{ 
+        background: {COR_HOVER} !important; 
+        color: #0e2d26 !important; 
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
+    }}
 
-                    # Botão Editar (Abre Modal ouForm)
-                    if c_btn.button("✏️", key=f"btn_edit_{q['id']}"):
-                        st.session_state[f"editing_q"] = q['id']
+    /* --- INPUTS --- */
+    input, textarea, select, div[data-baseweb="select"] > div {{
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important; 
+        border-radius: 8px !important;
+    }}
+    
+    /* --- REMOVE MARGENS PADRÃO DO STREAMLIT --- */
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}} /* Esconde a barra colorida superior do Streamlit */
+    [data-testid="stDecoration"] {{display: none;}}
+    .block-container {{padding-top: 1rem !important;}} /* Sobe o conteúdo */
 
-                # FORMULÁRIO DE EDIÇÃO (Aparece logo abaixo do card se clicado)
-                if st.session_state.get("editing_q") == q['id']:
-                    with st.container(border=True):
-                        st.markdown("#### ✏️ Editando")
-                        with st.form(f"form_edit_{q['id']}"):
-                            enunciado = st.text_area("Pergunta:", value=q.get('pergunta',''))
-                            c1, c2 = st.columns(2)
-                            val_dif = q.get('dificuldade', 1)
-                            if not isinstance(val_dif, int): val_dif = 1
-                            nv_dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(val_dif))
-                            nv_cat = c2.text_input("Categoria:", value=q.get('categoria', 'Geral'))
-                            
-                            alts = q.get('alternativas', {})
-                            if not alts and 'opcoes' in q:
-                                ops = q['opcoes']
-                                alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                                
-                            ca, cb = st.columns(2); cc, cd = st.columns(2)
-                            rA = ca.text_input("A)", value=alts.get('A','')); rB = cb.text_input("B)", value=alts.get('B',''))
-                            rC = cc.text_input("C)", value=alts.get('C','')); rD = cd.text_input("D)", value=alts.get('D',''))
-                            
-                            resp_atual = q.get('resposta_correta', 'A')
-                            corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(resp_atual) if resp_atual in ["A","B","C","D"] else 0)
-                            
-                            cols = st.columns(2)
-                            if cols[0].form_submit_button("💾 Salvar Alterações"):
-                                db.collection('questoes').document(q['id']).update({
-                                    "pergunta": enunciado, "dificuldade": nv_dif, "categoria": nv_cat,
-                                    "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
-                                    "resposta_correta": corr, "faixa": firestore.DELETE_FIELD
-                                })
-                                st.session_state["editing_q"] = None
-                                st.success("Atualizado!"); time.sleep(1); st.rerun()
-                            
-                            if cols[1].form_submit_button("Cancelar"):
-                                st.session_state["editing_q"] = None
-                                st.rerun()
-                                
-                        if st.button("🗑️ Deletar Questão", key=f"del_q_{q['id']}", type="primary"):
-                            db.collection('questoes').document(q['id']).delete()
-                            st.session_state["editing_q"] = None
-                            st.success("Deletado."); st.rerun()
+</style>
+""", unsafe_allow_html=True)
 
-    # --- CRIAR ---
-    with tab2:
-        with st.form("new_q"):
-            st.markdown("#### Nova Questão")
-            pergunta = st.text_area("Enunciado:")
-            c1, c2 = st.columns(2)
-            dificuldade = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, help="1=Fácil ... 4=Difícil")
-            categoria = c2.text_input("Categoria:", "Geral")
-            st.markdown("**Alternativas:**")
-            ca, cb = st.columns(2); cc, cd = st.columns(2)
-            alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
-            alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
-            correta = st.selectbox("Correta:", ["A", "B", "C", "D"])
-            if st.form_submit_button("💾 Cadastrar"):
-                if pergunta and alt_a and alt_b:
-                    db.collection('questoes').add({
-                        "pergunta": pergunta, "dificuldade": dificuldade, "categoria": categoria,
-                        "alternativas": {"A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d},
-                        "resposta_correta": correta, "status": "aprovada",
-                        "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
-                    })
-                    st.success("Sucesso!"); time.sleep(1); st.rerun()
-                else: st.warning("Preencha tudo.")
+# Hack para Render/Railway
+if "SECRETS_TOML" in os.environ:
+    if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
+    with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
+
+# Importações
+try:
+    from streamlit_option_menu import option_menu
+    from views import login, geral, aluno, professor, admin
+except ImportError as e:
+    st.error(f"❌ Erro crítico nas importações: {e}")
+    st.stop()
 
 # =========================================
-# 3. GESTÃO DE EXAME (CARD SELECTION)
+# TELA DE TROCA DE SENHA
 # =========================================
-def gestao_exame_de_faixa():
-    st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
-    db = get_db()
-
-    tab1, tab2 = st.tabs(["📝 Montar Prova", "✅ Autorizar Alunos"])
-
-    with tab1:
-        st.subheader("1. Selecione a Faixa")
-        faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
-        
-        # Carrega Config Atual e Sincroniza Estado
-        if 'last_faixa_sel' not in st.session_state or st.session_state.last_faixa_sel != faixa_sel:
-            configs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
-            conf_atual = {}; doc_id = None
-            for d in configs: conf_atual = d.to_dict(); doc_id = d.id; break
-            
-            st.session_state.conf_atual = conf_atual
-            st.session_state.doc_id = doc_id
-            st.session_state.selected_ids = set(conf_atual.get('questoes_ids', []))
-            st.session_state.last_faixa_sel = faixa_sel
-        
-        conf_atual = st.session_state.conf_atual
-        
-        # Carrega TODAS as questões
-        todas_questoes = list(db.collection('questoes').stream())
-        
-        st.markdown("### 2. Selecione as Questões (Cards)")
-        
-        # --- FILTROS ---
-        c_f1, c_f2 = st.columns(2)
-        filtro_nivel = c_f1.multiselect("Filtrar por Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4])
-        
-        cats = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
-        filtro_tema = c_f2.multiselect("Filtrar por Tema:", cats, default=cats)
-        
-        # --- RENDERIZAÇÃO DOS CARDS DE SELEÇÃO ---
-        # Container com altura fixa e scroll para não ficar infinito
-        with st.container(height=500, border=True):
-            count_visible = 0
-            for doc in todas_questoes:
-                d = doc.to_dict()
-                niv = d.get('dificuldade', 1)
-                cat = d.get('categoria', 'Geral')
-                
-                if niv in filtro_nivel and cat in filtro_tema:
-                    count_visible += 1
-                    
-                    # Layout do Card de Seleção
-                    c_chk, c_content = st.columns([1, 15])
-                    
-                    # Checkbox controla o Session State
-                    is_checked = doc.id in st.session_state.selected_ids
-                    
-                    def update_selection(qid=doc.id):
-                        if st.session_state[f"chk_{qid}"]: st.session_state.selected_ids.add(qid)
-                        else: st.session_state.selected_ids.discard(qid)
-
-                    c_chk.checkbox("", value=is_checked, key=f"chk_{doc.id}", on_change=update_selection)
-                    
-                    with c_content:
-                        # Badges Visuais
-                        badge = get_badge_nivel(niv)
-                        st.markdown(f"**{badge}** | {cat}")
-                        st.markdown(f"{d.get('pergunta')}")
-                        
-                        with st.expander("Ver Detalhes Completos"):
-                            alts = d.get('alternativas', {})
-                            if not alts and 'opcoes' in d:
-                                ops = d['opcoes']
-                                alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                            
-                            st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
-                            st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
-                            st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'} | Autor: {d.get('criado_por','?')}")
-                    st.divider()
-            
-            if count_visible == 0:
-                st.warning("Nenhuma questão corresponde aos filtros.")
-
-        # Resumo da Seleção
-        total_sel = len(st.session_state.selected_ids)
-        st.success(f"**{total_sel}** questões selecionadas para a prova de **{faixa_sel}**.")
-        
-        st.markdown("### 3. Regras de Aplicação")
-        with st.form("save_conf"):
-            c1, c2 = st.columns(2)
-            tempo = c1.number_input("Tempo Limite (min):", 10, 180, int(conf_atual.get('tempo_limite', 45)))
-            nota = c2.number_input("Aprovação Mínima (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
-            
-            if st.form_submit_button("💾 Salvar Prova"):
-                if total_sel == 0:
-                    st.error("Selecione pelo menos uma questão.")
-                else:
-                    dados = {
-                        "faixa": faixa_sel,
-                        "questoes_ids": list(st.session_state.selected_ids), 
-                        "qtd_questoes": total_sel,
-                        "tempo_limite": tempo,
-                        "aprovacao_minima": nota,
-                        "modo_selecao": "Manual",
-                        "atualizado_em": firestore.SERVER_TIMESTAMP
-                    }
-                    if st.session_state.doc_id:
-                        db.collection('config_exames').document(st.session_state.doc_id).update(dados)
-                    else:
-                        db.collection('config_exames').add(dados)
-                    st.success(f"Prova da Faixa {faixa_sel} salva com sucesso!"); time.sleep(1.5); st.rerun()
-
-    # --- ABA 2: AUTORIZAR ---
-    with tab2:
+def tela_troca_senha_obrigatoria():
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        if logo_file:
+            cl, cc, cr = st.columns([1, 1, 1])
+            with cc: st.image(logo_file, use_container_width=True)
+        st.write("") 
         with st.container(border=True):
-            st.subheader("🗓️ Agendar Exame")
-            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now()); d_fim = c2.date_input("Fim:", datetime.now())
-            c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
-            dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
+            st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
+            st.warning("Por segurança, redefina sua senha.")
+            with st.form("frm_troca"):
+                ns = st.text_input("Nova Senha:", type="password")
+                cs = st.text_input("Confirmar:", type="password")
+                if st.form_submit_button("Atualizar", use_container_width=True):
+                    if ns and ns == cs:
+                        try:
+                            uid = st.session_state.usuario['id']
+                            hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
+                            db = get_db()
+                            db.collection('usuarios').document(uid).update({"senha": hashed, "precisa_trocar_senha": False})
+                            st.success("Sucesso! Entrando..."); st.session_state.usuario['precisa_trocar_senha'] = False; st.rerun()
+                        except: st.error("Erro ao salvar.")
+                    else: st.error("Senhas não conferem.")
 
-        st.markdown("### Alunos")
-        users = db.collection('usuarios').where('tipo_usuario','==','aluno').stream()
-        cols = st.columns([3,2,2,2,1])
-        cols[0].write("**Nome**"); cols[1].write("**Equipe**"); cols[2].write("**Exame**"); cols[3].write("**Status**"); cols[4].write("**Ação**")
-        st.divider()
+# =========================================
+# APP PRINCIPAL
+# =========================================
+def app_principal():
+    if not st.session_state.get('usuario'):
+        st.session_state.clear(); st.rerun(); return
+
+    usuario = st.session_state.usuario
+    tipo = str(usuario.get("tipo", "aluno")).lower()
+
+    def nav(pg): st.session_state.menu_selection = pg
+
+    # SIDEBAR
+    with st.sidebar:
+        if logo_file: st.image(logo_file, use_container_width=True)
+        st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
+        st.markdown("---")
         
-        for u in users:
-            d = u.to_dict(); uid = u.id
-            eq_nome = "-"
-            al_ref = list(db.collection('alunos').where('usuario_id','==',uid).limit(1).stream())
-            if al_ref:
-                eid = al_ref[0].to_dict().get('equipe_id')
-                if eid: 
-                    eq = db.collection('equipes').document(eid).get()
-                    if eq.exists: eq_nome = eq.to_dict().get('nome')
+        if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
+        
+        if tipo != "admin":
+            if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
-            c1, c2, c3, c4, c5 = st.columns([3,2,2,2,1])
-            c1.write(d.get('nome'))
-            c2.write(eq_nome)
-            idx_f = FAIXAS_COMPLETAS.index(d.get('faixa_exame')) if d.get('faixa_exame') in FAIXAS_COMPLETAS else 0
-            fx = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx_f, key=f"f_{uid}", label_visibility="collapsed")
+        if tipo in ["admin", "professor"]:
+            if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+        if tipo == "admin":
+            if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
             
-            hab = d.get('exame_habilitado', False)
-            if hab:
-                c4.success("Liberado")
-                if c5.button("⛔", key=f"stop_{uid}"):
-                    db.collection('usuarios').document(uid).update({"exame_habilitado": False, "status_exame": "pendente", "exame_inicio": firestore.DELETE_FIELD, "exame_fim": firestore.DELETE_FIELD})
-                    st.rerun()
-            else:
-                c4.write("⚪")
-                if c5.button("✅", key=f"go_{uid}"):
-                    db.collection('usuarios').document(uid).update({"exame_habilitado": True, "faixa_exame": fx, "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(), "status_exame": "pendente", "status_exame_em_andamento": False})
-                    st.success("OK!"); time.sleep(0.5); st.rerun()
-            st.divider()
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚪 Sair", use_container_width=True):
+            st.session_state.clear(); st.rerun()
+
+    if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
+    pg = st.session_state.menu_selection
+
+    # Roteamento Sidebar
+    if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
+    if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
+    if pg == "Painel do Professor": professor.painel_professor(); return
+    if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
+    if pg == "Início": geral.tela_inicio(); return
+
+    # MENU HORIZONTAL
+    ops, icns = [], []
+    if tipo in ["admin", "professor"]:
+        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+        icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
+    else:
+        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
+        icns = ["house", "people", "journal", "trophy"]
+
+    try: idx = ops.index(pg)
+    except: idx = 0
+    
+    # -------------------------------------------------------------
+    # NOVO ESTILO: MENU MINIMALISTA FLUTUANTE (Pílulas Douradas)
+    # -------------------------------------------------------------
+    menu = option_menu(
+        menu_title=None, 
+        options=ops, 
+        icons=icns, 
+        default_index=idx, 
+        orientation="horizontal",
+        styles={
+            "container": {
+                "padding": "0!important", 
+                "background-color": "transparent", # Totalmente transparente
+                "margin": "0px auto", # Centraliza se possível
+                "border": "none"
+            },
+            "icon": {
+                "color": COR_DESTAQUE, 
+                "font-size": "16px"
+            }, 
+            "nav-link": {
+                "font-size": "14px", 
+                "text-align": "center", 
+                "margin": "0px 5px", 
+                "color": "rgba(255, 255, 255, 0.7)", # Texto discreto
+                "font-weight": "400",
+                "background-color": "transparent", # Sem fundo quando inativo
+                "--hover-color": "rgba(255, 215, 112, 0.1)", # Brilho dourado ao passar o mouse
+                "transition": "0.3s"
+            },
+            "nav-link-selected": {
+                "background-color": COR_DESTAQUE, # Fundo Dourado
+                "color": "#0e2d26", # Texto Verde Escuro
+                "font-weight": "700",
+                "border-radius": "20px", # Formato Pílula (Arredondado)
+                "box-shadow": "0px 0px 12px rgba(255, 215, 112, 0.4)", # Brilho/Glow
+                "border": "none"
+            },
+        }
+    )
+
+    if menu != pg:
+        if pg == "Meus Certificados" and menu == "Início": pass 
+        else:
+            st.session_state.menu_selection = menu
+            st.rerun()
+
+    if pg == "Modo Rola": aluno.modo_rola(usuario)
+    elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
+    elif pg == "Ranking": aluno.ranking()
+    elif pg == "Gestão de Equipes": professor.gestao_equipes()
+    elif pg == "Gestão de Questões": admin.gestao_questoes()
+    elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
+
+if __name__ == "__main__":
+    if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
+        login.tela_login()
+    elif st.session_state.get('registration_pending'):
+        login.tela_completar_cadastro(st.session_state.registration_pending)
+    elif st.session_state.get('usuario'):
+        if st.session_state.usuario.get("precisa_trocar_senha"): tela_troca_senha_obrigatoria()
+        else: app_principal()
