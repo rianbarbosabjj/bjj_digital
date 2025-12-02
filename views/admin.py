@@ -14,7 +14,7 @@ except ImportError:
     def salvar_questoes(t, q): pass
 
 FAIXAS_COMPLETAS = [
-    "Cinza e Branca", "Cinza", "Cinza e Preta",
+    " ","Cinza e Branca", "Cinza", "Cinza e Preta",
     "Amarela e Branca", "Amarela", "Amarela e Preta",
     "Laranja e Branca", "Laranja", "Laranja e Preta",
     "Verde e Branca", "Verde", "Verde e Preta",
@@ -27,7 +27,7 @@ NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 # HELPER: BADGES DE DIFICULDADE
 # =========================================
 def get_badge_nivel(nivel):
-    cores = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
+    cores = {" ", 1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
     return cores.get(nivel, "⚪ Nível ?")
 
 # =========================================
@@ -65,7 +65,7 @@ def gestao_usuarios(usuario_logado):
             st.warning("Excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES (LAYOUT CARD MODERNIZADO)
+# 2. GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -74,6 +74,13 @@ def gestao_questoes():
     user = st.session_state.usuario
     if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
         st.error("Acesso negado."); return
+
+    MAPA_NIVEIS = {
+        1: "🟢 Fácil",
+        2: "🔵 Médio", 
+        3: "🟠 Difícil", 
+        4: "🔴 Muito Difícil"
+    }
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
@@ -84,7 +91,7 @@ def gestao_questoes():
         # Filtros Rápidos
         c_f1, c_f2 = st.columns(2)
         termo = c_f1.text_input("🔍 Buscar no enunciado:")
-        filtro_n = c_f2.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE)
+        filtro_n = c_f2.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
 
         questoes_filtradas = []
         for doc in questoes_ref:
@@ -108,9 +115,11 @@ def gestao_questoes():
                     c_head, c_btn = st.columns([5, 1])
                     
                     # Cabeçalho do Card
-                    nivel = get_badge_nivel(q.get('dificuldade', 1))
+                    nivel_val = q.get('dificuldade', 1)
+                    nivel_texto = MAPA_NIVEIS.get(nivel_val, "⚪ Nível ?")
                     cat = q.get('categoria', 'Geral')
-                    c_head.markdown(f"**{nivel}** | *{cat}*")
+                    
+                    c_head.markdown(f"**{nivel_texto}** | *{cat}*")
                     c_head.markdown(f"##### {q.get('pergunta')}")
                     
                     # Detalhes Expansíveis
@@ -129,20 +138,29 @@ def gestao_questoes():
                         st.success(f"**Correta:** {resp}")
                         st.caption(f"Autor: {q.get('criado_por','?')}")
 
-                    # Botão Editar (Abre Modal ouForm)
+                    # Botão Editar
                     if c_btn.button("✏️", key=f"btn_edit_{q['id']}"):
                         st.session_state[f"editing_q"] = q['id']
 
-                # FORMULÁRIO DE EDIÇÃO (Aparece logo abaixo do card se clicado)
+                # FORMULÁRIO DE EDIÇÃO
                 if st.session_state.get("editing_q") == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
                         with st.form(f"form_edit_{q['id']}"):
                             enunciado = st.text_area("Pergunta:", value=q.get('pergunta',''))
                             c1, c2 = st.columns(2)
+                            
                             val_dif = q.get('dificuldade', 1)
                             if not isinstance(val_dif, int): val_dif = 1
-                            nv_dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(val_dif))
+                            
+                            # Campo de Dificuldade com Texto Bonito
+                            nv_dif = c1.selectbox(
+                                "Nível de Dificuldade:", 
+                                NIVEIS_DIFICULDADE, 
+                                index=NIVEIS_DIFICULDADE.index(val_dif) if val_dif in NIVEIS_DIFICULDADE else 0,
+                                format_func=lambda x: MAPA_NIVEIS.get(x, str(x))
+                            )
+                            
                             nv_cat = c2.text_input("Categoria:", value=q.get('categoria', 'Geral'))
                             
                             alts = q.get('alternativas', {})
@@ -178,30 +196,45 @@ def gestao_questoes():
 
     # --- CRIAR ---
     with tab2:
-        with st.form("new_q"):
+        with st.form("form_criar_nova_questao"):
             st.markdown("#### Nova Questão")
             pergunta = st.text_area("Enunciado:")
+            
             c1, c2 = st.columns(2)
-            dificuldade = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, help="1=Fácil ... 4=Difícil")
+            
+            # Campo de Dificuldade Melhorado na Criação
+            dificuldade = c1.selectbox(
+                "Nível de Dificuldade:", 
+                NIVEIS_DIFICULDADE, 
+                format_func=lambda x: MAPA_NIVEIS.get(x, str(x))
+            )
+            
             categoria = c2.text_input("Categoria:", "Geral")
+            
             st.markdown("**Alternativas:**")
             ca, cb = st.columns(2); cc, cd = st.columns(2)
             alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
             alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
             correta = st.selectbox("Correta:", ["A", "B", "C", "D"])
+            
             if st.form_submit_button("💾 Cadastrar"):
                 if pergunta and alt_a and alt_b:
                     db.collection('questoes').add({
-                        "pergunta": pergunta, "dificuldade": dificuldade, "categoria": categoria,
+                        "pergunta": pergunta, 
+                        "dificuldade": dificuldade, 
+                        "categoria": categoria,
                         "alternativas": {"A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d},
-                        "resposta_correta": correta, "status": "aprovada",
-                        "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
+                        "resposta_correta": correta, 
+                        "status": "aprovada",
+                        "criado_por": user.get('nome', 'Admin'), 
+                        "data_criacao": firestore.SERVER_TIMESTAMP
                     })
-                    st.success("Sucesso!"); time.sleep(1); st.rerun()
-                else: st.warning("Preencha tudo.")
+                    st.success("Questão cadastrada com sucesso!"); time.sleep(1); st.rerun()
+                else: st.warning("Preencha o enunciado e pelo menos 2 alternativas.")
+
 
 # =========================================
-# 3. GESTÃO DE EXAME (CARD SELECTION)
+# 3. GESTÃO DE EXAME
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
@@ -212,7 +245,7 @@ def gestao_exame_de_faixa():
     # --- ABA 1: CRIAR/EDITAR ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
-        faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
+        faixa_sel = st.selectbox("Criar exame para a Faixa:", FAIXAS_COMPLETAS)
         
         # Carrega Config Atual e Sincroniza Estado
         if 'last_faixa_sel' not in st.session_state or st.session_state.last_faixa_sel != faixa_sel:
@@ -290,21 +323,21 @@ def gestao_exame_de_faixa():
                         "atualizado_em": firestore.SERVER_TIMESTAMP
                     }
                     
-                    # --- CORREÇÃO DO ERRO NOTFOUND AQUI ---
+                    # BLINDAGEM CONTRA ERRO DE EXCLUSÃO
                     try:
                         if st.session_state.doc_id:
-                            # Tenta atualizar. Se foi deletado, vai gerar erro.
+                            # Tenta atualizar
                             db.collection('config_exames').document(st.session_state.doc_id).update(dados)
                             st.success(f"Prova da Faixa {faixa_sel} ATUALIZADA com sucesso!")
                         else:
-                            # Se não tem ID, cria novo
+                            # Cria novo
                             db.collection('config_exames').add(dados)
                             st.success(f"Prova da Faixa {faixa_sel} CRIADA com sucesso!")
                     except Exception:
-                        # Se deu erro no update (porque foi deletado), cria um novo
+                        # Se falhar (ex: foi deletado), cria novo
                         ref = db.collection('config_exames').add(dados)
                         st.session_state.doc_id = ref[1].id
-                        st.success(f"Prova da Faixa {faixa_sel} RECRIADA com sucesso (a anterior havia sido excluída)!")
+                        st.success(f"Prova da Faixa {faixa_sel} RECRIADA com sucesso!")
                     
                     time.sleep(1.5); st.rerun()
 
@@ -344,20 +377,25 @@ def gestao_exame_de_faixa():
                         with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
                             st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
                             
-                            if modo == "🖐️ Manual (Fixa)" and data.get('questoes_ids'):
-                                ids = data.get('questoes_ids', [])
-                                st.markdown("---")
-                                for i, q_id in enumerate(ids, 1):
-                                    q_data = mapa_questoes_completo.get(q_id)
-                                    if q_data:
-                                        st.markdown(f"**{i}. {q_data.get('pergunta')}**")
-                                        st.caption(f"Correta: {q_data.get('resposta_correta')}")
-                                    else:
-                                        st.error(f"{i}. Questão deletada ou não encontrada (ID: {q_id})")
-                                    st.divider()
-                            elif modo == "🎲 Aleatório (Sorteio)":
-                                st.info(f"Sorteio aleatório de {qtd} questões.")
+                            # --- AQUI: BOTÃO DE VISUALIZAR (TOGGLE) ---
+                            mostrar_questoes = st.toggle("👁️ Visualizar Questões", key=f"view_q_{data['id']}")
                             
+                            if mostrar_questoes:
+                                if modo == "🖐️ Manual (Fixa)" and data.get('questoes_ids'):
+                                    ids = data.get('questoes_ids', [])
+                                    st.markdown("---")
+                                    for i, q_id in enumerate(ids, 1):
+                                        q_data = mapa_questoes_completo.get(q_id)
+                                        if q_data:
+                                            st.markdown(f"**{i}. {q_data.get('pergunta')}**")
+                                            st.caption(f"Correta: {q_data.get('resposta_correta')}")
+                                        else:
+                                            st.error(f"{i}. Questão deletada ou não encontrada (ID: {q_id})")
+                                        st.divider()
+                                elif modo == "🎲 Aleatório (Sorteio)":
+                                    st.info(f"Sorteio aleatório de {qtd} questões.")
+                            
+                            # --- BOTÃO DE EXCLUIR ---
                             st.markdown("---")
                             if st.button("🗑️ Excluir Prova", key=f"del_proof_{data['id']}"):
                                 db.collection('config_exames').document(data['id']).delete()
