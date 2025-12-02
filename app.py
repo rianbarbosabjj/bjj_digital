@@ -228,43 +228,81 @@ def app_principal():
     # -------------------------------------------------------------
     # NOVO ESTILO: MENU MINIMALISTA FLUTUANTE (Pílulas Douradas)
     # -------------------------------------------------------------
-    menu = option_menu(
-        menu_title=None, 
-        options=ops, 
-        icons=icns, 
-        default_index=idx, 
-        orientation="horizontal",
-        styles={
-            "container": {
-                "padding": "0!important", 
-                "background-color": "transparent", # Totalmente transparente
-                "margin": "0px auto", # Centraliza se possível
-                "border": "none"
-            },
-            "icon": {
-                "color": COR_DESTAQUE, 
-                "font-size": "16px"
-            }, 
-            "nav-link": {
-                "font-size": "14px", 
-                "text-align": "center", 
-                "margin": "0px 5px", 
-                "color": "rgba(255, 255, 255, 0.7)", # Texto discreto
-                "font-weight": "400",
-                "background-color": "transparent", # Sem fundo quando inativo
-                "--hover-color": "rgba(255, 215, 112, 0.1)", # Brilho dourado ao passar o mouse
-                "transition": "0.3s"
-            },
-            "nav-link-selected": {
-                "background-color": COR_DESTAQUE, # Fundo Dourado
-                "color": "#0e2d26", # Texto Verde Escuro
-                "font-weight": "700",
-                "border-radius": "20px", # Formato Pílula (Arredondado)
-                "box-shadow": "0px 0px 12px rgba(255, 215, 112, 0.4)", # Brilho/Glow
-                "border": "none"
-            },
+   
+    python
+# Esta é uma versão simplificada que mantém o option_menu mas com estilo modernizado:
+
+menu = option_menu(
+    menu_title=None,
+    options=ops,
+    icons=icns,
+    default_index=idx,
+    orientation="horizontal",
+    styles={
+        "container": {
+            "padding": "0!important",
+            "background-color": "rgba(9, 31, 26, 0.85)",
+            "backdrop-filter": "blur(10px)",
+            "border": "1px solid rgba(255, 215, 112, 0.15)",
+            "border-radius": "50px",
+            "box-shadow": "0 8px 32px rgba(0, 0, 0, 0.3)",
+            "margin": "20px auto",
+            "max-width": "fit-content"
+        },
+        "icon": {
+            "color": "rgba(255, 255, 255, 0.7)",
+            "font-size": "16px",
+            "margin-right": "8px",
+            "transition": "all 0.3s ease"
+        },
+        "nav-link": {
+            "font-size": "14px",
+            "text-align": "center",
+            "margin": "4px 2px",
+            "padding": "12px 24px",
+            "border-radius": "50px",
+            "color": "rgba(255, 255, 255, 0.7)",
+            "font-weight": "500",
+            "background": "transparent",
+            "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            "border": "1px solid transparent",
+            "display": "flex",
+            "align-items": "center",
+            "justify-content": "center"
+        },
+        "nav-link:hover": {
+            "color": COR_DESTAQUE,
+            "background": "rgba(255, 215, 112, 0.1)",
+            "border": f"1px solid rgba(255, 215, 112, 0.3)",
+            "transform": "translateY(-2px)"
+        },
+        "nav-link-selected": {
+            "background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%)",
+            "color": COR_FUNDO,
+            "font-weight": "700",
+            "box-shadow": "0 5px 20px rgba(255, 215, 112, 0.4)",
+            "border": "none",
+            "position": "relative",
+            "animation": "pulse 2s infinite"
         }
-    )
+    }
+)
+
+# Adicionar animação de pulse para o item selecionado
+st.markdown("""
+<style>
+    @keyframes pulse {
+        0% { box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }
+        50% { box-shadow: 0 5px 25px rgba(255, 215, 112, 0.6); }
+        100% { box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }
+    }
+    
+    /* Melhorar a transição entre itens */
+    .st-emotion-cache-1v7f65g .st-ae .st-af {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
     if menu != pg:
         if pg == "Meus Certificados" and menu == "Início": pass 
