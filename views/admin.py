@@ -75,6 +75,14 @@ def gestao_questoes():
     if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
         st.error("Acesso negado."); return
 
+    # Mapeamento para exibir nomes bonitos no Selectbox
+    MAPA_NIVEIS = {
+        1: "🟢 Fácil",
+        2: "🔵 Médio", 
+        3: "🟠 Difícil", 
+        4: "🔴 Muito Difícil"
+    }
+
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
     # --- LISTAR (CARDS) ---
@@ -84,7 +92,7 @@ def gestao_questoes():
         # Filtros Rápidos
         c_f1, c_f2 = st.columns(2)
         termo = c_f1.text_input("🔍 Buscar no enunciado:")
-        filtro_n = c_f2.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE)
+        filtro_n = c_f2.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
 
         questoes_filtradas = []
         for doc in questoes_ref:
@@ -108,9 +116,11 @@ def gestao_questoes():
                     c_head, c_btn = st.columns([5, 1])
                     
                     # Cabeçalho do Card
-                    nivel = get_badge_nivel(q.get('dificuldade', 1))
+                    nivel_val = q.get('dificuldade', 1)
+                    nivel_texto = MAPA_NIVEIS.get(nivel_val, "⚪ Nível ?")
                     cat = q.get('categoria', 'Geral')
-                    c_head.markdown(f"**{nivel}** | *{cat}*")
+                    
+                    c_head.markdown(f"**{nivel_texto}** | *{cat}*")
                     c_head.markdown(f"##### {q.get('pergunta')}")
                     
                     # Detalhes Expansíveis
@@ -129,20 +139,29 @@ def gestao_questoes():
                         st.success(f"**Correta:** {resp}")
                         st.caption(f"Autor: {q.get('criado_por','?')}")
 
-                    # Botão Editar (Abre Modal ouForm)
+                    # Botão Editar
                     if c_btn.button("✏️", key=f"btn_edit_{q['id']}"):
                         st.session_state[f"editing_q"] = q['id']
 
-                # FORMULÁRIO DE EDIÇÃO (Aparece logo abaixo do card se clicado)
+                # FORMULÁRIO DE EDIÇÃO
                 if st.session_state.get("editing_q") == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
                         with st.form(f"form_edit_{q['id']}"):
                             enunciado = st.text_area("Pergunta:", value=q.get('pergunta',''))
                             c1, c2 = st.columns(2)
+                            
                             val_dif = q.get('dificuldade', 1)
                             if not isinstance(val_dif, int): val_dif = 1
-                            nv_dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(val_dif))
+                            
+                            # --- AQUI: Campo de Dificuldade com Texto Bonito ---
+                            nv_dif = c1.selectbox(
+                                "Nível de Dificuldade:", 
+                                NIVEIS_DIFICULDADE, 
+                                index=NIVEIS_DIFICULDADE.index(val_dif) if val_dif in NIVEIS_DIFICULDADE else 0,
+                                format_func=lambda x: MAPA_NIVEIS.get(x, str(x))
+                            )
+                            
                             nv_cat = c2.text_input("Categoria:", value=q.get('categoria', 'Geral'))
                             
                             alts = q.get('alternativas', {})
@@ -175,6 +194,44 @@ def gestao_questoes():
                             db.collection('questoes').document(q['id']).delete()
                             st.session_state["editing_q"] = None
                             st.success("Deletado."); st.rerun()
+
+    # --- CRIAR ---
+    with tab2:
+        with st.form("new_q"):
+            st.markdown("#### Nova Questão")
+            pergunta = st.text_area("Enunciado:")
+            
+            c1, c2 = st.columns(2)
+            
+            # --- AQUI: Campo de Dificuldade Melhorado na Criação ---
+            dificuldade = c1.selectbox(
+                "Nível de Dificuldade:", 
+                NIVEIS_DIFICULDADE, 
+                format_func=lambda x: MAPA_NIVEIS.get(x, str(x))
+            )
+            
+            categoria = c2.text_input("Categoria:", "Geral")
+            
+            st.markdown("**Alternativas:**")
+            ca, cb = st.columns(2); cc, cd = st.columns(2)
+            alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
+            alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
+            correta = st.selectbox("Correta:", ["A", "B", "C", "D"])
+            
+            if st.form_submit_button("💾 Cadastrar"):
+                if pergunta and alt_a and alt_b:
+                    db.collection('questoes').add({
+                        "pergunta": pergunta, 
+                        "dificuldade": dificuldade, 
+                        "categoria": categoria,
+                        "alternativas": {"A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d},
+                        "resposta_correta": correta, 
+                        "status": "aprovada",
+                        "criado_por": user.get('nome', 'Admin'), 
+                        "data_criacao": firestore.SERVER_TIMESTAMP
+                    })
+                    st.success("Questão cadastrada com sucesso!"); time.sleep(1); st.rerun()
+                else: st.warning("Preencha o enunciado e pelo menos 2 alternativas.")
 
     # --- CRIAR ---
     with tab2:
