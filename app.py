@@ -22,13 +22,13 @@ logo_file = get_logo_path()
 # =========================================================
 st.set_page_config(
     page_title="BJJ Digital", 
-    page_icon=logo_file, # Usa o arquivo encontrado
+    page_icon=logo_file, 
     layout="wide",
     initial_sidebar_state="expanded" 
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -42,81 +42,91 @@ except ImportError:
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
+
+    /* --- GLOBAL --- */
     html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
+
+    /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
+    
+    /* --- LINHAS DIVISÓRIAS ELEGANTES --- */
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.3) !important;
-        opacity: 1 !important;
+        height: 1px !important;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
     }}
+
+    /* --- TÍTULOS --- */
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
         text-align: center !important; 
         font-weight: 700 !important; 
         text-transform: uppercase;
-        width: 100%; 
+        letter-spacing: 1px;
     }}
+
+    /* --- SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
-        border-right: 1px solid rgba(255, 215, 112, 0.2);
-        box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+        border-right: 1px solid rgba(255, 215, 112, 0.15);
+        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
+    /* Ícones da Sidebar */
     section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
     }}
+
+    /* --- CONTAINERS E CARDS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
-        background-color: rgba(0, 0, 0, 0.4) !important; 
-        border: 2px solid rgba(255, 215, 112, 0.25) !important; 
-        border-radius: 16px; 
-        padding: 25px;
-        box-shadow: 0 8px 16px rgba(0,0,0,0.4); 
+        background-color: rgba(0, 0, 0, 0.3) !important; 
+        border: 1px solid rgba(255, 215, 112, 0.2) !important; 
+        border-radius: 12px; 
+        padding: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
         margin-bottom: 20px;
     }}
-    .streamlit-expanderHeader {{
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        color: {COR_DESTAQUE} !important;
-        border: 1px solid {COR_DESTAQUE} !important;
-        border-radius: 8px;
-    }}
-    .streamlit-expanderHeader svg {{
-        fill: {COR_TEXTO} !important; 
-        color: {COR_TEXTO} !important;
-    }}
+    
+    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
-        border: 1px solid rgba(255,255,255,0.2) !important; 
-        padding: 0.7em 1.5em !important; 
-        font-weight: bold !important;
-        border-radius: 10px !important; 
-        box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        width: 100%; 
+        border: 1px solid rgba(255,255,255,0.1) !important; 
+        padding: 0.6em 1.5em !important; 
+        font-weight: 600 !important;
+        border-radius: 8px !important; 
+        transition: all 0.3s ease !important;
     }}
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
-        border-color: {COR_DESTAQUE} !important;
         transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
+
+    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
-        background-color: #1a3b32 !important;
+        background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important; 
+        border: 1px solid rgba(255, 255, 255, 0.2) !important; 
+        border-radius: 8px !important;
     }}
-    .stTextInput input, .stTextArea textarea {{ color: white !important; }}
+    
+    /* --- REMOVE MARGENS PADRÃO DO STREAMLIT --- */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
+    header {{visibility: hidden;}} /* Esconde a barra colorida superior do Streamlit */
     [data-testid="stDecoration"] {{display: none;}}
-    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
+    .block-container {{padding-top: 1rem !important;}} /* Sobe o conteúdo */
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -176,7 +186,7 @@ def app_principal():
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align:center; color:#aaa;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
@@ -196,12 +206,14 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
+    # Roteamento Sidebar
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
+    # MENU HORIZONTAL
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
@@ -213,6 +225,9 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
+    # -------------------------------------------------------------
+    # NOVO ESTILO: MENU MINIMALISTA FLUTUANTE (Pílulas Douradas)
+    # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -221,32 +236,32 @@ def app_principal():
         orientation="horizontal",
         styles={
             "container": {
-                "padding": "0px",
-                "background-color": "rgba(14, 45, 38, 0.6)", 
-                "box-shadow": "0 4px 10px rgba(0,0,0,0.2)",
-                "border": "1px solid rgba(255, 215, 112, 0.1)", 
-                "margin": "0px",
-                "border-radius": "12px"
+                "padding": "0!important", 
+                "background-color": "transparent", # Totalmente transparente
+                "margin": "0px auto", # Centraliza se possível
+                "border": "none"
             },
             "icon": {
                 "color": COR_DESTAQUE, 
-                "font-size": "16px",
-                "font-weight": "bold"
-            },
+                "font-size": "16px"
+            }, 
             "nav-link": {
                 "font-size": "14px", 
                 "text-align": "center", 
-                "margin": "0px 6px", 
-                "color": "rgba(255, 255, 255, 0.9)",
-                "background-color": "transparent",
-                "border-radius": "10px",
+                "margin": "0px 5px", 
+                "color": "rgba(255, 255, 255, 0.7)", # Texto discreto
+                "font-weight": "400",
+                "background-color": "transparent", # Sem fundo quando inativo
+                "--hover-color": "rgba(255, 215, 112, 0.1)", # Brilho dourado ao passar o mouse
+                "transition": "0.3s"
             },
             "nav-link-selected": {
-                "background-color": COR_DESTAQUE, 
-                "color": "#0e2d26", 
-                "font-weight": "800",
-                "border": f"1px solid {COR_DESTAQUE}",
-                "box-shadow": "0 2px 8px rgba(0,0,0,0.3)"
+                "background-color": COR_DESTAQUE, # Fundo Dourado
+                "color": "#0e2d26", # Texto Verde Escuro
+                "font-weight": "700",
+                "border-radius": "20px", # Formato Pílula (Arredondado)
+                "box-shadow": "0px 0px 12px rgba(255, 215, 112, 0.4)", # Brilho/Glow
+                "border": "none"
             },
         }
     )
