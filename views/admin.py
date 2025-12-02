@@ -110,7 +110,7 @@ def gestao_questoes():
                     cat = q.get('categoria', 'Geral')
                     autor = q.get('criado_por', 'Desconhecido')
                     
-                    # --- AQUI: Autor adicionado ao cabeçalho ---
+                    # --- AQUI: Autor no Banco de Questões ---
                     c_head.markdown(f"**{nivel_texto}** | *{cat}* | ✍️ {autor}")
                     c_head.markdown(f"##### {q.get('pergunta')}")
                     
@@ -236,6 +236,7 @@ def gestao_exame_de_faixa():
                 d = doc.to_dict()
                 niv = d.get('dificuldade', 1)
                 cat = d.get('categoria', 'Geral')
+                autor = d.get('criado_por', 'Desconhecido')
                 
                 if niv in filtro_nivel and cat in filtro_tema:
                     count_visible += 1
@@ -249,7 +250,8 @@ def gestao_exame_de_faixa():
                     c_chk.checkbox("", value=is_checked, key=f"chk_{doc.id}", on_change=update_selection)
                     with c_content:
                         badge = get_badge_nivel(niv)
-                        st.markdown(f"**{badge}** | {cat}")
+                        # --- AQUI: Autor no Card de Seleção ---
+                        st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
                         st.markdown(f"{d.get('pergunta')}")
                         with st.expander("Ver Detalhes"):
                             st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'}")
@@ -287,6 +289,7 @@ def gestao_exame_de_faixa():
                         "atualizado_em": firestore.SERVER_TIMESTAMP
                     }
                     
+                    # BLINDAGEM CONTRA ERRO NOTFOUND
                     try:
                         if st.session_state.doc_id:
                             db.collection('config_exames').document(st.session_state.doc_id).update(dados)
@@ -344,7 +347,9 @@ def gestao_exame_de_faixa():
                                         q_data = mapa_questoes_completo.get(q_id)
                                         if q_data:
                                             st.markdown(f"**{i}. {q_data.get('pergunta')}**")
-                                            st.caption(f"Correta: {q_data.get('resposta_correta')}")
+                                            # --- AQUI: Autor na Visualização da Prova Pronta ---
+                                            autor_q = q_data.get('criado_por', 'Desconhecido')
+                                            st.caption(f"Correta: {q_data.get('resposta_correta')} | ✍️ {autor_q}")
                                         else: st.error(f"{i}. Questão deletada (ID: {q_id})")
                                         st.divider()
                                 elif modo == "🎲 Aleatório (Sorteio)":
