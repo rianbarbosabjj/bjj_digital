@@ -289,24 +289,37 @@ def gestao_exame_de_faixa():
                         "modo_selecao": "Manual",
                         "atualizado_em": firestore.SERVER_TIMESTAMP
                     }
-                    if st.session_state.doc_id: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
-                    else: db.collection('config_exames').add(dados)
-                    st.success(f"Prova da Faixa {faixa_sel} salva com sucesso!"); time.sleep(1.5); st.rerun()
+                    
+                    # --- CORREÇÃO DO ERRO NOTFOUND AQUI ---
+                    try:
+                        if st.session_state.doc_id:
+                            # Tenta atualizar. Se foi deletado, vai gerar erro.
+                            db.collection('config_exames').document(st.session_state.doc_id).update(dados)
+                            st.success(f"Prova da Faixa {faixa_sel} ATUALIZADA com sucesso!")
+                        else:
+                            # Se não tem ID, cria novo
+                            db.collection('config_exames').add(dados)
+                            st.success(f"Prova da Faixa {faixa_sel} CRIADA com sucesso!")
+                    except Exception:
+                        # Se deu erro no update (porque foi deletado), cria um novo
+                        ref = db.collection('config_exames').add(dados)
+                        st.session_state.doc_id = ref[1].id
+                        st.success(f"Prova da Faixa {faixa_sel} RECRIADA com sucesso (a anterior havia sido excluída)!")
+                    
+                    time.sleep(1.5); st.rerun()
 
-    # --- ABA 2: VISUALIZAR (CORREÇÃO AQUI) ---
+    # --- ABA 2: VISUALIZAR E EXCLUIR ---
     with tab2:
         st.subheader("Status das Provas Cadastradas")
         
-        # 1. Carrega TODAS as questões para um dicionário (Cache Rápido)
-        # Isso evita buscar no banco questão por questão dentro do loop
         all_q_docs = list(db.collection('questoes').stream())
         mapa_questoes_completo = {doc.id: doc.to_dict() for doc in all_q_docs}
 
-        # 2. Carrega as Configurações de Exame
         configs_stream = db.collection('config_exames').stream()
         mapa_configs = {}
         for doc in configs_stream:
             d = doc.to_dict()
+            d['id'] = doc.id 
             mapa_configs[d.get('faixa')] = d
 
         categorias = {
@@ -331,7 +344,6 @@ def gestao_exame_de_faixa():
                         with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
                             st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
                             
-                            # --- LÓGICA DE EXIBIÇÃO DAS QUESTÕES ---
                             if modo == "🖐️ Manual (Fixa)" and data.get('questoes_ids'):
                                 ids = data.get('questoes_ids', [])
                                 st.markdown("---")
@@ -343,9 +355,19 @@ def gestao_exame_de_faixa():
                                     else:
                                         st.error(f"{i}. Questão deletada ou não encontrada (ID: {q_id})")
                                     st.divider()
-                                    
                             elif modo == "🎲 Aleatório (Sorteio)":
-                                st.info(f"O sistema sorteará {qtd} questões aleatórias do banco no momento da prova.")
+                                st.info(f"Sorteio aleatório de {qtd} questões.")
+                            
+                            st.markdown("---")
+                            if st.button("🗑️ Excluir Prova", key=f"del_proof_{data['id']}"):
+                                db.collection('config_exames').document(data['id']).delete()
+                                # Limpa o ID da sessão se for o mesmo que estamos deletando
+                                if 'doc_id' in st.session_state and st.session_state.doc_id == data['id']:
+                                    st.session_state.doc_id = None
+                                st.warning(f"Prova de {f_nome} excluída com sucesso.")
+                                time.sleep(1)
+                                st.rerun()
+
                     else:
                         st.warning(f"⚠️ {f_nome} não configurada.")
 
