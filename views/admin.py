@@ -14,7 +14,7 @@ except ImportError:
     def salvar_questoes(t, q): pass
 
 FAIXAS_COMPLETAS = [
-    " ","Cinza e Branca", "Cinza", "Cinza e Preta",
+    "Cinza e Branca", "Cinza", "Cinza e Preta",
     "Amarela e Branca", "Amarela", "Amarela e Preta",
     "Laranja e Branca", "Laranja", "Laranja e Preta",
     "Verde e Branca", "Verde", "Verde e Preta",
@@ -27,7 +27,7 @@ NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 # HELPER: BADGES DE DIFICULDADE
 # =========================================
 def get_badge_nivel(nivel):
-    cores = {" ", 1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
+    cores = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
     return cores.get(nivel, "⚪ Nível ?")
 
 # =========================================
@@ -76,10 +76,8 @@ def gestao_questoes():
         st.error("Acesso negado."); return
 
     MAPA_NIVEIS = {
-        1: "🟢 Fácil",
-        2: "🔵 Médio", 
-        3: "🟠 Difícil", 
-        4: "🔴 Muito Difícil"
+        1: "🟢 Fácil", 2: "🔵 Médio", 
+        3: "🟠 Difícil", 4: "🔴 Muito Difícil"
     }
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
@@ -88,7 +86,6 @@ def gestao_questoes():
     with tab1:
         questoes_ref = list(db.collection('questoes').stream())
         
-        # Filtros Rápidos
         c_f1, c_f2 = st.columns(2)
         termo = c_f1.text_input("🔍 Buscar no enunciado:")
         filtro_n = c_f2.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
@@ -97,24 +94,17 @@ def gestao_questoes():
         for doc in questoes_ref:
             d = doc.to_dict()
             d['id'] = doc.id
-            
-            # Aplica filtros
             if termo and termo.lower() not in d.get('pergunta','').lower(): continue
             if filtro_n and d.get('dificuldade', 1) not in filtro_n: continue
-            
             questoes_filtradas.append(d)
             
         if not questoes_filtradas:
             st.info("Nenhuma questão encontrada.")
         else:
             st.caption(f"Exibindo {len(questoes_filtradas)} questões")
-            
-            # Renderiza CARDS
             for q in questoes_filtradas:
                 with st.container(border=True):
                     c_head, c_btn = st.columns([5, 1])
-                    
-                    # Cabeçalho do Card
                     nivel_val = q.get('dificuldade', 1)
                     nivel_texto = MAPA_NIVEIS.get(nivel_val, "⚪ Nível ?")
                     cat = q.get('categoria', 'Geral')
@@ -122,23 +112,18 @@ def gestao_questoes():
                     c_head.markdown(f"**{nivel_texto}** | *{cat}*")
                     c_head.markdown(f"##### {q.get('pergunta')}")
                     
-                    # Detalhes Expansíveis
                     with c_head.expander("👁️ Ver Detalhes (Alternativas)"):
                         alts = q.get('alternativas', {})
-                        if not alts and 'opcoes' in q: # Compatibilidade
+                        if not alts and 'opcoes' in q:
                             ops = q['opcoes']
                             alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
                         
-                        st.markdown(f"**A)** {alts.get('A','')}")
-                        st.markdown(f"**B)** {alts.get('B','')}")
-                        st.markdown(f"**C)** {alts.get('C','')}")
-                        st.markdown(f"**D)** {alts.get('D','')}")
-                        
+                        st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
+                        st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
                         resp = q.get('resposta_correta') or q.get('correta') or "?"
                         st.success(f"**Correta:** {resp}")
                         st.caption(f"Autor: {q.get('criado_por','?')}")
 
-                    # Botão Editar
                     if c_btn.button("✏️", key=f"btn_edit_{q['id']}"):
                         st.session_state[f"editing_q"] = q['id']
 
@@ -149,18 +134,9 @@ def gestao_questoes():
                         with st.form(f"form_edit_{q['id']}"):
                             enunciado = st.text_area("Pergunta:", value=q.get('pergunta',''))
                             c1, c2 = st.columns(2)
-                            
                             val_dif = q.get('dificuldade', 1)
                             if not isinstance(val_dif, int): val_dif = 1
-                            
-                            # Campo de Dificuldade com Texto Bonito
-                            nv_dif = c1.selectbox(
-                                "Nível de Dificuldade:", 
-                                NIVEIS_DIFICULDADE, 
-                                index=NIVEIS_DIFICULDADE.index(val_dif) if val_dif in NIVEIS_DIFICULDADE else 0,
-                                format_func=lambda x: MAPA_NIVEIS.get(x, str(x))
-                            )
-                            
+                            nv_dif = c1.selectbox("Nível de Dificuldade:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(val_dif) if val_dif in NIVEIS_DIFICULDADE else 0, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
                             nv_cat = c2.text_input("Categoria:", value=q.get('categoria', 'Geral'))
                             
                             alts = q.get('alternativas', {})
@@ -196,21 +172,13 @@ def gestao_questoes():
 
     # --- CRIAR ---
     with tab2:
+        # ATENÇÃO: Nome do form alterado para evitar erro de chave duplicada
         with st.form("form_criar_nova_questao"):
             st.markdown("#### Nova Questão")
             pergunta = st.text_area("Enunciado:")
-            
             c1, c2 = st.columns(2)
-            
-            # Campo de Dificuldade Melhorado na Criação
-            dificuldade = c1.selectbox(
-                "Nível de Dificuldade:", 
-                NIVEIS_DIFICULDADE, 
-                format_func=lambda x: MAPA_NIVEIS.get(x, str(x))
-            )
-            
+            dificuldade = c1.selectbox("Nível de Dificuldade:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
             categoria = c2.text_input("Categoria:", "Geral")
-            
             st.markdown("**Alternativas:**")
             ca, cb = st.columns(2); cc, cd = st.columns(2)
             alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
@@ -220,16 +188,12 @@ def gestao_questoes():
             if st.form_submit_button("💾 Cadastrar"):
                 if pergunta and alt_a and alt_b:
                     db.collection('questoes').add({
-                        "pergunta": pergunta, 
-                        "dificuldade": dificuldade, 
-                        "categoria": categoria,
+                        "pergunta": pergunta, "dificuldade": dificuldade, "categoria": categoria,
                         "alternativas": {"A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d},
-                        "resposta_correta": correta, 
-                        "status": "aprovada",
-                        "criado_por": user.get('nome', 'Admin'), 
-                        "data_criacao": firestore.SERVER_TIMESTAMP
+                        "resposta_correta": correta, "status": "aprovada",
+                        "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
                     })
-                    st.success("Questão cadastrada com sucesso!"); time.sleep(1); st.rerun()
+                    st.success("Questão cadastrada!"); time.sleep(1); st.rerun()
                 else: st.warning("Preencha o enunciado e pelo menos 2 alternativas.")
 
 
@@ -245,9 +209,8 @@ def gestao_exame_de_faixa():
     # --- ABA 1: CRIAR/EDITAR ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
-        faixa_sel = st.selectbox("Criar exame para a Faixa:", FAIXAS_COMPLETAS)
+        faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
         
-        # Carrega Config Atual e Sincroniza Estado
         if 'last_faixa_sel' not in st.session_state or st.session_state.last_faixa_sel != faixa_sel:
             configs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
             conf_atual = {}; doc_id = None
@@ -259,19 +222,14 @@ def gestao_exame_de_faixa():
             st.session_state.last_faixa_sel = faixa_sel
         
         conf_atual = st.session_state.conf_atual
-        
-        # Carrega TODAS as questões
         todas_questoes = list(db.collection('questoes').stream())
         
         st.markdown("### 2. Selecione as Questões (Cards)")
-        
-        # Filtros
         c_f1, c_f2 = st.columns(2)
         filtro_nivel = c_f1.multiselect("Filtrar por Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4])
         cats = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
         filtro_tema = c_f2.multiselect("Filtrar por Tema:", cats, default=cats)
         
-        # Cards de Seleção
         with st.container(height=500, border=True):
             count_visible = 0
             for doc in todas_questoes:
@@ -289,7 +247,6 @@ def gestao_exame_de_faixa():
                         else: st.session_state.selected_ids.discard(qid)
 
                     c_chk.checkbox("", value=is_checked, key=f"chk_{doc.id}", on_change=update_selection)
-                    
                     with c_content:
                         badge = get_badge_nivel(niv)
                         st.markdown(f"**{badge}** | {cat}")
@@ -323,18 +280,15 @@ def gestao_exame_de_faixa():
                         "atualizado_em": firestore.SERVER_TIMESTAMP
                     }
                     
-                    # BLINDAGEM CONTRA ERRO DE EXCLUSÃO
+                    # BLINDAGEM CONTRA ERRO NOTFOUND
                     try:
                         if st.session_state.doc_id:
-                            # Tenta atualizar
                             db.collection('config_exames').document(st.session_state.doc_id).update(dados)
                             st.success(f"Prova da Faixa {faixa_sel} ATUALIZADA com sucesso!")
                         else:
-                            # Cria novo
                             db.collection('config_exames').add(dados)
                             st.success(f"Prova da Faixa {faixa_sel} CRIADA com sucesso!")
                     except Exception:
-                        # Se falhar (ex: foi deletado), cria novo
                         ref = db.collection('config_exames').add(dados)
                         st.session_state.doc_id = ref[1].id
                         st.success(f"Prova da Faixa {faixa_sel} RECRIADA com sucesso!")
@@ -344,15 +298,13 @@ def gestao_exame_de_faixa():
     # --- ABA 2: VISUALIZAR E EXCLUIR ---
     with tab2:
         st.subheader("Status das Provas Cadastradas")
-        
         all_q_docs = list(db.collection('questoes').stream())
         mapa_questoes_completo = {doc.id: doc.to_dict() for doc in all_q_docs}
 
         configs_stream = db.collection('config_exames').stream()
         mapa_configs = {}
         for doc in configs_stream:
-            d = doc.to_dict()
-            d['id'] = doc.id 
+            d = doc.to_dict(); d['id'] = doc.id 
             mapa_configs[d.get('faixa')] = d
 
         categorias = {
@@ -377,9 +329,8 @@ def gestao_exame_de_faixa():
                         with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
                             st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
                             
-                            # --- AQUI: BOTÃO DE VISUALIZAR (TOGGLE) ---
+                            # TOGGLE DE VISUALIZAÇÃO
                             mostrar_questoes = st.toggle("👁️ Visualizar Questões", key=f"view_q_{data['id']}")
-                            
                             if mostrar_questoes:
                                 if modo == "🖐️ Manual (Fixa)" and data.get('questoes_ids'):
                                     ids = data.get('questoes_ids', [])
@@ -389,25 +340,20 @@ def gestao_exame_de_faixa():
                                         if q_data:
                                             st.markdown(f"**{i}. {q_data.get('pergunta')}**")
                                             st.caption(f"Correta: {q_data.get('resposta_correta')}")
-                                        else:
-                                            st.error(f"{i}. Questão deletada ou não encontrada (ID: {q_id})")
+                                        else: st.error(f"{i}. Questão deletada (ID: {q_id})")
                                         st.divider()
                                 elif modo == "🎲 Aleatório (Sorteio)":
                                     st.info(f"Sorteio aleatório de {qtd} questões.")
                             
-                            # --- BOTÃO DE EXCLUIR ---
+                            # BOTÃO DE EXCLUIR
                             st.markdown("---")
                             if st.button("🗑️ Excluir Prova", key=f"del_proof_{data['id']}"):
                                 db.collection('config_exames').document(data['id']).delete()
-                                # Limpa o ID da sessão se for o mesmo que estamos deletando
                                 if 'doc_id' in st.session_state and st.session_state.doc_id == data['id']:
                                     st.session_state.doc_id = None
-                                st.warning(f"Prova de {f_nome} excluída com sucesso.")
-                                time.sleep(1)
-                                st.rerun()
-
-                    else:
-                        st.warning(f"⚠️ {f_nome} não configurada.")
+                                st.warning(f"Prova de {f_nome} excluída.")
+                                time.sleep(1); st.rerun()
+                    else: st.warning(f"⚠️ {f_nome} não configurada.")
 
     # --- ABA 3: AUTORIZAR ---
     with tab3:
@@ -422,8 +368,7 @@ def gestao_exame_de_faixa():
             dt_inicio = datetime.combine(d_inicio, h_inicio)
             dt_fim = datetime.combine(d_fim, h_fim)
 
-        st.write("") 
-        st.subheader("Lista de Alunos")
+        st.write(""); st.subheader("Lista de Alunos")
         try:
             alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
             lista_alunos = []
