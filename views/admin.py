@@ -58,7 +58,7 @@ def gestao_usuarios(usuario_logado):
             st.warning("Excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES (SEM VINCULO DE FAIXA)
+# 2. GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -70,11 +70,10 @@ def gestao_questoes():
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
-    # --- LISTAR ---
     with tab1:
         questoes_ref = list(db.collection('questoes').stream())
         lista_q = []
-        for doc in questoes_ref:
+        for doc in questões_ref:
             d = doc.to_dict()
             lista_q.append({
                 "id": doc.id,
@@ -131,11 +130,9 @@ def gestao_questoes():
                     db.collection('questoes').document(q_sel_id).delete()
                     st.success("Deletado."); time.sleep(1); st.rerun()
 
-    # --- CRIAR ---
     with tab2:
         with st.form("new_q"):
             st.markdown("#### Nova Questão")
-            st.caption("As questões não são vinculadas a faixas. O professor decide onde usá-las na montagem da prova.")
             pergunta = st.text_area("Enunciado:")
             c1, c2 = st.columns(2)
             dificuldade = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, help="1=Fácil ... 4=Difícil")
@@ -157,7 +154,7 @@ def gestao_questoes():
                 else: st.warning("Preencha tudo.")
 
 # =========================================
-# 3. GESTÃO DE EXAME (MONTADOR DE PROVA)
+# 3. GESTÃO DE EXAME (MONTADOR COM DETALHES)
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
@@ -165,7 +162,7 @@ def gestao_exame_de_faixa():
 
     tab1, tab2 = st.tabs(["📝 Montar Prova", "✅ Autorizar Alunos"])
 
-    # --- ABA 1: MONTAR PROVA (Manual com Filtros) ---
+    # --- ABA 1: MONTAR PROVA (DETALHADO) ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
@@ -182,7 +179,6 @@ def gestao_exame_de_faixa():
         questoes_salvas = conf_atual.get('questoes_ids', [])
         
         st.markdown("### 2. Selecione as Questões")
-        st.caption("Filtre o banco e selecione as questões que farão parte desta prova.")
         
         # --- FILTROS ---
         c_f1, c_f2 = st.columns(2)
@@ -191,7 +187,7 @@ def gestao_exame_de_faixa():
         temas_disponiveis = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
         filtro_tema = c_f2.multiselect("Filtrar por Tema:", temas_disponiveis, default=temas_disponiveis)
         
-        # --- PREPARAR DADOS PARA TABELA ---
+        # --- PREPARAR DADOS COMPLETOS PARA TABELA ---
         lista_exibicao = []
         for doc in todas_questoes:
             d = doc.to_dict()
@@ -201,33 +197,57 @@ def gestao_exame_de_faixa():
             # Aplica filtros (Visual apenas)
             if niv in filtro_nivel and cat in filtro_tema:
                 is_selected = doc.id in questoes_salvas
+                
+                # Formata alternativas em uma string legível
+                alts_str = ""
+                if 'alternativas' in d and isinstance(d['alternativas'], dict):
+                    alts = d['alternativas']
+                    # Limita o tamanho se for muito grande para não quebrar a tabela visualmente
+                    alts_str = f"A) {alts.get('A','')} | B) {alts.get('B','')} | C) {alts.get('C','')} | D) {alts.get('D','')}"
+                elif 'opcoes' in d:
+                    ops = d['opcoes']
+                    if len(ops) >= 4:
+                        alts_str = f"A) {ops[0]} | B) {ops[1]} | C) {ops[2]} | D) {ops[3]}"
+                
+                # Resposta Correta e Autor
+                resp = d.get('resposta_correta') or d.get('correta') or "?"
+                autor = d.get('criado_por', 'Sistema')
+
                 lista_exibicao.append({
                     "Selecionar": is_selected,
                     "Nível": niv,
                     "Tema": cat,
                     "Pergunta": d.get('pergunta'),
+                    "Alternativas": alts_str,  # <--- COLUNA NOVA
+                    "Correta": resp,           # <--- COLUNA NOVA
+                    "Autor": autor,            # <--- COLUNA NOVA
                     "ID": doc.id
                 })
         
         # --- TABELA INTERATIVA ---
         if not lista_exibicao:
             st.warning("Nenhuma questão encontrada com esses filtros.")
-            selecionados_finais = questoes_salvas # Mantém o que tinha se não mostrar nada
+            selecionados_finais = questoes_salvas 
         else:
             df = pd.DataFrame(lista_exibicao)
-            # O data_editor permite marcar os checkboxes
+            # O data_editor agora mostra tudo
             editor = st.data_editor(
                 df,
                 column_config={
-                    "Selecionar": st.column_config.CheckboxColumn("Usar na Prova?", default=False),
+                    "Selecionar": st.column_config.CheckboxColumn("Usar?", width="small", default=False),
+                    "Nível": st.column_config.NumberColumn("Nív.", width="small"),
+                    "Tema": st.column_config.TextColumn("Tema", width="small"),
+                    "Pergunta": st.column_config.TextColumn("Pergunta", width="medium"),
+                    "Alternativas": st.column_config.TextColumn("Alternativas", width="large"), # Coluna larga
+                    "Correta": st.column_config.TextColumn("Resp.", width="small"),
+                    "Autor": st.column_config.TextColumn("Autor", width="small"),
                     "ID": None # Esconde ID
                 },
-                disabled=["Nível", "Tema", "Pergunta"],
+                disabled=["Nível", "Tema", "Pergunta", "Alternativas", "Correta", "Autor"], # Impede edição, só seleção
                 hide_index=True,
                 use_container_width=True,
-                key=f"editor_{faixa_sel}" # Chave única por faixa para não misturar
+                key=f"editor_{faixa_sel}" 
             )
-            # Extrai os IDs marcados
             selecionados_finais = editor[editor["Selecionar"] == True]["ID"].tolist()
             
         st.info(f"Total de questões selecionadas: **{len(selecionados_finais)}**")
@@ -244,8 +264,8 @@ def gestao_exame_de_faixa():
                 else:
                     dados = {
                         "faixa": faixa_sel,
-                        "questoes_ids": selecionados_finais, # Salva a lista de IDs
-                        "qtd_questoes": len(selecionados_finais), # Atualiza qtd real
+                        "questoes_ids": selecionados_finais, 
+                        "qtd_questoes": len(selecionados_finais),
                         "tempo_limite": tempo,
                         "aprovacao_minima": nota,
                         "modo_selecao": "Manual",
