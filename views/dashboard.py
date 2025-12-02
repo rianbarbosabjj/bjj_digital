@@ -104,20 +104,22 @@ def dashboard_professor():
         if 'data' in df_display.columns:
             df_display['data'] = pd.to_datetime(df_display['data']).dt.strftime('%d/%m/%Y %H:%M')
         
-        # Garante numérico para o gráfico funcionar
         df_display['pontuacao'] = pd.to_numeric(df_display['pontuacao'], errors='coerce').fillna(0)
 
-        # Aplica estilo VERDE (#078B6C)
+        # --- AQUI: VOLTOU PARA O PROGRESS COLUMN (VERMELHO PADRÃO) ---
         st.dataframe(
-            df_display[cols_view].sort_values(by='data', ascending=False).head(5)
-            .style.bar(subset=['pontuacao'], color='#078B6C', vmin=0, vmax=100)
-            .format({'pontuacao': '{:.1f}%'}),
+            df_display[cols_view].sort_values(by='data', ascending=False).head(5),
             hide_index=True, 
             use_container_width=True,
             column_config={
                 "usuario": "Aluno",
                 "faixa": "Faixa",
-                "pontuacao": "Nota Final", # Apenas renomeia, o estilo vem do Pandas
+                "pontuacao": st.column_config.ProgressColumn(
+                    "Nota Final", 
+                    format="%.1f%%", 
+                    min_value=0, 
+                    max_value=100
+                ),
                 "aprovado": st.column_config.CheckboxColumn("Aprovado"),
                 "data": "Data"
             }
@@ -164,7 +166,6 @@ def dashboard_professor():
 
                 st.markdown("---")
 
-                # TABELA 2: MINHAS ESTATÍSTICAS
                 st.subheader(f"👨‍🏫 Estatísticas das Questões de: {user.get('nome', 'Mim')}")
                 meus_stats = stats_completo[stats_completo['criado_por'] == user.get('nome')]
                 
@@ -176,16 +177,19 @@ def dashboard_professor():
                     c_m2.metric("Total de Aplicações", meus_stats['vezes_usada'].sum())
                     c_m3.metric("Média de Acerto Global", f"{meus_stats['taxa_acerto'].mean():.1f}%")
                     
-                    # Aplica estilo VERDE (#078B6C)
+                    # --- AQUI: PROGRESS COLUMN DE VOLTA ---
                     st.dataframe(
                         meus_stats[['pergunta', 'vezes_usada', 'taxa_acerto', 'dificuldade']]
-                        .sort_values(by='vezes_usada', ascending=False)
-                        .style.bar(subset=['taxa_acerto'], color='#078B6C', vmin=0, vmax=100)
-                        .format({'taxa_acerto': '{:.1f}%'}),
+                        .sort_values(by='vezes_usada', ascending=False),
                         column_config={
                             "pergunta": "Pergunta",
                             "vezes_usada": st.column_config.NumberColumn("Aplicações", format="%d"),
-                            "taxa_acerto": "Taxa de Acerto", # Apenas renomeia
+                            "taxa_acerto": st.column_config.ProgressColumn(
+                                "Taxa de Acerto", 
+                                format="%.1f%%", 
+                                min_value=0, 
+                                max_value=100
+                            ),
                             "dificuldade": "Nível"
                         },
                         hide_index=True,
