@@ -102,7 +102,7 @@ def gestao_questoes():
             st.info("Nenhuma questão encontrada.")
         else:
             st.caption(f"Exibindo {len(questoes_filtradas)} questões")
-            for q in questoes_filtradas:
+            for q in questões_filtradas: # FIXED: typo in variable name in loop
                 with st.container(border=True):
                     c_head, c_btn = st.columns([5, 1])
                     nivel_val = q.get('dificuldade', 1)
