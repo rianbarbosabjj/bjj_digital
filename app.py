@@ -72,47 +72,14 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
 
-    /* --- SIDEBAR E ÍCONE HAMBURGUER --- */
-    /* Botão hamburguer (três traços) */
-    [data-testid="collapsedControl"] button {{
-        background-color: rgba(9, 31, 26, 0.8) !important;
-        border: 1px solid rgba(255, 215, 112, 0.3) !important;
-        border-radius: 8px !important;
-        padding: 8px !important;
-    }}
-    
-    /* Transformar o ícone >> em três traços (hamburguer) */
-    [data-testid="collapsedControl"] button svg {{
-        display: none !important;
-    }}
-    
-    [data-testid="collapsedControl"] button::before {{
-        content: "☰";
-        color: {COR_DESTAQUE} !important;
-        font-size: 24px !important;
-        font-weight: bold !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        width: 100% !important;
-        height: 100% !important;
-    }}
-    
-    [data-testid="collapsedControl"] button:hover::before {{
-        color: {COR_HOVER} !important;
-        transform: scale(1.1) !important;
-        transition: all 0.3s ease !important;
-    }}
-    
-    /* Sidebar expandida */
+    /* --- SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
         box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
-    
     /* Ícones da Sidebar */
-    section[data-testid="stSidebar"] svg {{
+    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
     }}
@@ -153,19 +120,33 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
-    /* --- MENU SUPERIOR - CORREÇÃO DO FUNDO PRETO --- */
-    /* Container principal do menu */
-    [data-testid="stHorizontalBlock"] > div > div > div > div > div {{
-        background: linear-gradient(135deg, rgba(14, 45, 38, 0.95) 0%, rgba(9, 31, 26, 0.95) 100%) !important;
+    /* --- MENU SUPERIOR RESPONSIVO --- */
+    /* Container do menu - SEM FUNDO PRETO */
+    .st-emotion-cache-1v7f65g {{
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
         backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(255, 215, 112, 0.2) !important;
+        border: 1px solid rgba(255, 215, 112, 0.15) !important;
         border-radius: 50px !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4) !important;
-        margin: 20px auto 30px auto !important;
-        padding: 8px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+        margin: 20px auto !important;
         max-width: 95% !important;
         width: auto !important;
         min-width: 300px !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        white-space: nowrap !important;
+        padding: 0 !important;
+    }}
+    
+    /* Remover qualquer fundo preto dos elementos internos */
+    .st-emotion-cache-1v7f65g .st-ae,
+    .st-emotion-cache-1v7f65g .st-af,
+    .st-emotion-cache-1v7f65g .st-ag,
+    .st-emotion-cache-1v7f65g > div,
+    .st-emotion-cache-1v7f65g > div > div {{
+        background-color: transparent !important;
+        background-image: none !important;
     }}
     
     /* Itens do menu */
@@ -175,14 +156,19 @@ st.markdown(f"""
         border: 1px solid transparent !important;
         font-size: 14px !important;
         text-align: center !important;
-        margin: 2px !important;
-        padding: 10px 18px !important;
+        margin: 4px 2px !important;
+        padding: 12px 20px !important;
         border-radius: 50px !important;
         font-weight: 500 !important;
         transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
     }}
     
-    /* Hover dos itens */
+    /* Itens do menu - hover */
     .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{
         color: {COR_DESTAQUE} !important;
         background: rgba(255, 215, 112, 0.1) !important;
@@ -200,7 +186,7 @@ st.markdown(f"""
         animation: pulse 2s infinite !important;
     }}
     
-    /* Scrollbar para telas pequenas */
+    /* Scrollbar personalizada para telas pequenas */
     .st-emotion-cache-1v7f65g > div > div {{
         overflow-x: auto !important;
         overflow-y: hidden !important;
@@ -224,14 +210,38 @@ st.markdown(f"""
         border-radius: 10px !important;
     }}
     
+    /* Ícones do menu */
+    .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+        color: inherit !important;
+        font-size: 16px !important;
+        margin-right: 8px !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    .st-emotion-cache-1v7f65g .st-ae .st-ag i {{
+        filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)) !important;
+    }}
+    
     /* Responsividade */
+    @media (max-width: 1024px) {{
+        .st-emotion-cache-1v7f65g .st-ae .st-af {{
+            padding: 10px 15px !important;
+            font-size: 13px !important;
+        }}
+    }}
+    
     @media (max-width: 768px) {{
         .st-emotion-cache-1v7f65g .st-ae .st-af {{
             padding: 8px 12px !important;
             font-size: 12px !important;
         }}
         
-        [data-testid="stHorizontalBlock"] > div > div > div > div > div {{
+        .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+            font-size: 14px !important;
+            margin-right: 5px !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g {{
             max-width: 98% !important;
             border-radius: 30px !important;
         }}
@@ -247,8 +257,25 @@ st.markdown(f"""
             min-width: 50px !important;
         }}
         
-        [data-testid="stHorizontalBlock"] > div > div > div > div > div {{
+        .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+            margin-right: 0 !important;
+            font-size: 16px !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g {{
             border-radius: 25px !important;
+            padding: 2px !important;
+        }}
+    }}
+    
+    @media (max-width: 360px) {{
+        .st-emotion-cache-1v7f65g .st-ae .st-af {{
+            padding: 8px 10px !important;
+            min-width: 45px !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+            font-size: 14px !important;
         }}
     }}
     
@@ -364,7 +391,7 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU SUPERIOR - ESTILO CORRIGIDO (SEM FUNDO PRETO)
+    # MENU SUPERIOR MODERNO E RESPONSIVO
     # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None,
@@ -375,13 +402,12 @@ def app_principal():
         styles={
             "container": {
                 "padding": "0!important",
-                "background-color": "transparent !important",
-                "border": "none !important",
-                "margin": "0 auto !important",
-                "display": "flex !important",
-                "justify-content": "center !important",
-                "max-width": "100% !important",
-                "width": "100% !important"
+                "background-color": "transparent",
+                "border": "none",
+                "margin": "0 auto",
+                "display": "flex",
+                "justify-content": "center",
+                "max-width": "100%"
             },
             "icon": {
                 "color": "inherit",
@@ -392,28 +418,29 @@ def app_principal():
             "nav-link": {
                 "font-size": "14px",
                 "text-align": "center",
-                "margin": "2px",
-                "padding": "10px 18px",
+                "margin": "4px 2px",
+                "padding": "12px 20px",
                 "border-radius": "50px",
                 "color": "rgba(255, 255, 255, 0.7)",
                 "font-weight": "500",
-                "background": "transparent !important",
+                "background": "transparent",
                 "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
                 "border": "1px solid transparent",
                 "display": "flex",
                 "align-items": "center",
                 "justify-content": "center",
                 "flex-shrink": "0",
-                "white-space": "nowrap"
+                "white-space": "nowrap",
+                "min-width": "fit-content"
             },
             "nav-link:hover": {
                 "color": COR_DESTAQUE,
-                "background": "rgba(255, 215, 112, 0.1) !important",
+                "background": "rgba(255, 215, 112, 0.1)",
                 "border": f"1px solid rgba(255, 215, 112, 0.3)",
                 "transform": "translateY(-2px)"
             },
             "nav-link-selected": {
-                "background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important",
+                "background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%)",
                 "color": COR_FUNDO,
                 "font-weight": "700",
                 "box-shadow": "0 5px 20px rgba(255, 215, 112, 0.4)",
