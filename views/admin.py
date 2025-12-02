@@ -24,6 +24,13 @@ FAIXAS_COMPLETAS = [
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 
 # =========================================
+# HELPER: BADGES DE DIFICULDADE
+# =========================================
+def get_badge_nivel(nivel):
+    cores = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
+    return cores.get(nivel, "⚪ Nível ?")
+
+# =========================================
 # 1. GESTÃO DE USUÁRIOS
 # =========================================
 def gestao_usuarios(usuario_logado):
@@ -58,7 +65,7 @@ def gestao_usuarios(usuario_logado):
             st.warning("Excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES
+# 2. GESTÃO DE QUESTÕES (LAYOUT CARD MODERNIZADO)
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -70,66 +77,106 @@ def gestao_questoes():
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
+    # --- LISTAR (CARDS) ---
     with tab1:
         questoes_ref = list(db.collection('questoes').stream())
-        lista_q = []
-        for doc in questões_ref:
-            d = doc.to_dict()
-            lista_q.append({
-                "id": doc.id,
-                "Nível": d.get('dificuldade', 1),
-                "Categoria": d.get('categoria', 'Geral'),
-                "Pergunta": d.get('pergunta'),
-                "Status": d.get('status', 'aprovada')
-            })
-            
-        if not lista_q:
-            st.info("Banco vazio.")
-        else:
-            df = pd.DataFrame(lista_q)
-            try: df = df.sort_values(by=["Nível", "Categoria"])
-            except: pass
-            
-            st.dataframe(df[["Nível", "Categoria", "Pergunta", "Status"]], use_container_width=True, hide_index=True)
-            
-            st.markdown("---")
-            q_sel_id = st.selectbox("Selecione para Editar/Excluir:", [q['id'] for q in lista_q], format_func=lambda x: next((f"[N{item['Nível']}] {item['Pergunta'][:60]}..." for item in lista_q if item['id'] == x), x))
-            
-            if q_sel_id:
-                q_data = db.collection('questoes').document(q_sel_id).get().to_dict()
-                with st.expander("✏️ Editar Questão", expanded=True):
-                    with st.form(f"edit_{q_sel_id}"):
-                        enunciado = st.text_area("Pergunta:", value=q_data.get('pergunta',''))
-                        c1, c2 = st.columns(2)
-                        
-                        val_dif = q_data.get('dificuldade', 1)
-                        if not isinstance(val_dif, int): val_dif = 1
-                        nv_dif = c1.selectbox("Nível de Dificuldade:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(val_dif))
-                        nv_cat = c2.text_input("Categoria:", value=q_data.get('categoria', 'Geral'))
-                        
-                        alts = q_data.get('alternativas', {})
-                        if not alts and 'opcoes' in q_data:
-                            ops = q_data['opcoes']
-                            alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                            
-                        ca, cb = st.columns(2); cc, cd = st.columns(2)
-                        rA = ca.text_input("A)", value=alts.get('A','')); rB = cb.text_input("B)", value=alts.get('B',''))
-                        rC = cc.text_input("C)", value=alts.get('C','')); rD = cd.text_input("D)", value=alts.get('D',''))
-                        
-                        resp_atual = q_data.get('resposta_correta', 'A')
-                        corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(resp_atual) if resp_atual in ["A","B","C","D"] else 0)
-                        
-                        if st.form_submit_button("💾 Atualizar"):
-                            db.collection('questoes').document(q_sel_id).update({
-                                "pergunta": enunciado, "dificuldade": nv_dif, "categoria": nv_cat,
-                                "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
-                                "resposta_correta": corr, "faixa": firestore.DELETE_FIELD
-                            })
-                            st.success("Atualizado!"); time.sleep(1); st.rerun()
-                if st.button("🗑️ Excluir", type="primary"):
-                    db.collection('questoes').document(q_sel_id).delete()
-                    st.success("Deletado."); time.sleep(1); st.rerun()
+        
+        # Filtros Rápidos
+        c_f1, c_f2 = st.columns(2)
+        termo = c_f1.text_input("🔍 Buscar no enunciado:")
+        filtro_n = c_f2.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE)
 
+        questoes_filtradas = []
+        for doc in questoes_ref:
+            d = doc.to_dict()
+            d['id'] = doc.id
+            
+            # Aplica filtros
+            if termo and termo.lower() not in d.get('pergunta','').lower(): continue
+            if filtro_n and d.get('dificuldade', 1) not in filtro_n: continue
+            
+            questoes_filtradas.append(d)
+            
+        if not questoes_filtradas:
+            st.info("Nenhuma questão encontrada.")
+        else:
+            st.caption(f"Exibindo {len(questoes_filtradas)} questões")
+            
+            # Renderiza CARDS
+            for q in questoes_filtradas:
+                with st.container(border=True):
+                    c_head, c_btn = st.columns([5, 1])
+                    
+                    # Cabeçalho do Card
+                    nivel = get_badge_nivel(q.get('dificuldade', 1))
+                    cat = q.get('categoria', 'Geral')
+                    c_head.markdown(f"**{nivel}** | *{cat}*")
+                    c_head.markdown(f"##### {q.get('pergunta')}")
+                    
+                    # Detalhes Expansíveis
+                    with c_head.expander("👁️ Ver Detalhes (Alternativas)"):
+                        alts = q.get('alternativas', {})
+                        if not alts and 'opcoes' in q: # Compatibilidade
+                            ops = q['opcoes']
+                            alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                        
+                        st.markdown(f"**A)** {alts.get('A','')}")
+                        st.markdown(f"**B)** {alts.get('B','')}")
+                        st.markdown(f"**C)** {alts.get('C','')}")
+                        st.markdown(f"**D)** {alts.get('D','')}")
+                        
+                        resp = q.get('resposta_correta') or q.get('correta') or "?"
+                        st.success(f"**Correta:** {resp}")
+                        st.caption(f"Autor: {q.get('criado_por','?')}")
+
+                    # Botão Editar (Abre Modal ouForm)
+                    if c_btn.button("✏️", key=f"btn_edit_{q['id']}"):
+                        st.session_state[f"editing_q"] = q['id']
+
+                # FORMULÁRIO DE EDIÇÃO (Aparece logo abaixo do card se clicado)
+                if st.session_state.get("editing_q") == q['id']:
+                    with st.container(border=True):
+                        st.markdown("#### ✏️ Editando")
+                        with st.form(f"form_edit_{q['id']}"):
+                            enunciado = st.text_area("Pergunta:", value=q.get('pergunta',''))
+                            c1, c2 = st.columns(2)
+                            val_dif = q.get('dificuldade', 1)
+                            if not isinstance(val_dif, int): val_dif = 1
+                            nv_dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(val_dif))
+                            nv_cat = c2.text_input("Categoria:", value=q.get('categoria', 'Geral'))
+                            
+                            alts = q.get('alternativas', {})
+                            if not alts and 'opcoes' in q:
+                                ops = q['opcoes']
+                                alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                                
+                            ca, cb = st.columns(2); cc, cd = st.columns(2)
+                            rA = ca.text_input("A)", value=alts.get('A','')); rB = cb.text_input("B)", value=alts.get('B',''))
+                            rC = cc.text_input("C)", value=alts.get('C','')); rD = cd.text_input("D)", value=alts.get('D',''))
+                            
+                            resp_atual = q.get('resposta_correta', 'A')
+                            corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(resp_atual) if resp_atual in ["A","B","C","D"] else 0)
+                            
+                            cols = st.columns(2)
+                            if cols[0].form_submit_button("💾 Salvar Alterações"):
+                                db.collection('questoes').document(q['id']).update({
+                                    "pergunta": enunciado, "dificuldade": nv_dif, "categoria": nv_cat,
+                                    "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
+                                    "resposta_correta": corr, "faixa": firestore.DELETE_FIELD
+                                })
+                                st.session_state["editing_q"] = None
+                                st.success("Atualizado!"); time.sleep(1); st.rerun()
+                            
+                            if cols[1].form_submit_button("Cancelar"):
+                                st.session_state["editing_q"] = None
+                                st.rerun()
+                                
+                        if st.button("🗑️ Deletar Questão", key=f"del_q_{q['id']}", type="primary"):
+                            db.collection('questoes').document(q['id']).delete()
+                            st.session_state["editing_q"] = None
+                            st.success("Deletado."); st.rerun()
+
+    # --- CRIAR ---
     with tab2:
         with st.form("new_q"):
             st.markdown("#### Nova Questão")
@@ -154,7 +201,7 @@ def gestao_questoes():
                 else: st.warning("Preencha tudo.")
 
 # =========================================
-# 3. GESTÃO DE EXAME (MONTADOR COM DETALHES)
+# 3. GESTÃO DE EXAME (CARD SELECTION)
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
@@ -162,95 +209,82 @@ def gestao_exame_de_faixa():
 
     tab1, tab2 = st.tabs(["📝 Montar Prova", "✅ Autorizar Alunos"])
 
-    # --- ABA 1: MONTAR PROVA (DETALHADO) ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
         
-        # Carrega Config Atual
-        configs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
-        conf_atual = {}; doc_id = None
-        for d in configs: conf_atual = d.to_dict(); doc_id = d.id; break
+        # Carrega Config Atual e Sincroniza Estado
+        if 'last_faixa_sel' not in st.session_state or st.session_state.last_faixa_sel != faixa_sel:
+            configs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
+            conf_atual = {}; doc_id = None
+            for d in configs: conf_atual = d.to_dict(); doc_id = d.id; break
+            
+            st.session_state.conf_atual = conf_atual
+            st.session_state.doc_id = doc_id
+            st.session_state.selected_ids = set(conf_atual.get('questoes_ids', []))
+            st.session_state.last_faixa_sel = faixa_sel
         
-        # Carrega TODAS as questões para exibir no filtro
+        conf_atual = st.session_state.conf_atual
+        
+        # Carrega TODAS as questões
         todas_questoes = list(db.collection('questoes').stream())
         
-        # Recupera IDs já salvos para marcar como selecionados
-        questoes_salvas = conf_atual.get('questoes_ids', [])
-        
-        st.markdown("### 2. Selecione as Questões")
+        st.markdown("### 2. Selecione as Questões (Cards)")
         
         # --- FILTROS ---
         c_f1, c_f2 = st.columns(2)
         filtro_nivel = c_f1.multiselect("Filtrar por Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4])
         
-        temas_disponiveis = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
-        filtro_tema = c_f2.multiselect("Filtrar por Tema:", temas_disponiveis, default=temas_disponiveis)
+        cats = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
+        filtro_tema = c_f2.multiselect("Filtrar por Tema:", cats, default=cats)
         
-        # --- PREPARAR DADOS COMPLETOS PARA TABELA ---
-        lista_exibicao = []
-        for doc in todas_questoes:
-            d = doc.to_dict()
-            niv = d.get('dificuldade', 1)
-            cat = d.get('categoria', 'Geral')
-            
-            # Aplica filtros (Visual apenas)
-            if niv in filtro_nivel and cat in filtro_tema:
-                is_selected = doc.id in questoes_salvas
+        # --- RENDERIZAÇÃO DOS CARDS DE SELEÇÃO ---
+        # Container com altura fixa e scroll para não ficar infinito
+        with st.container(height=500, border=True):
+            count_visible = 0
+            for doc in todas_questoes:
+                d = doc.to_dict()
+                niv = d.get('dificuldade', 1)
+                cat = d.get('categoria', 'Geral')
                 
-                # Formata alternativas em uma string legível
-                alts_str = ""
-                if 'alternativas' in d and isinstance(d['alternativas'], dict):
-                    alts = d['alternativas']
-                    # Limita o tamanho se for muito grande para não quebrar a tabela visualmente
-                    alts_str = f"A) {alts.get('A','')} | B) {alts.get('B','')} | C) {alts.get('C','')} | D) {alts.get('D','')}"
-                elif 'opcoes' in d:
-                    ops = d['opcoes']
-                    if len(ops) >= 4:
-                        alts_str = f"A) {ops[0]} | B) {ops[1]} | C) {ops[2]} | D) {ops[3]}"
-                
-                # Resposta Correta e Autor
-                resp = d.get('resposta_correta') or d.get('correta') or "?"
-                autor = d.get('criado_por', 'Sistema')
+                if niv in filtro_nivel and cat in filtro_tema:
+                    count_visible += 1
+                    
+                    # Layout do Card de Seleção
+                    c_chk, c_content = st.columns([1, 15])
+                    
+                    # Checkbox controla o Session State
+                    is_checked = doc.id in st.session_state.selected_ids
+                    
+                    def update_selection(qid=doc.id):
+                        if st.session_state[f"chk_{qid}"]: st.session_state.selected_ids.add(qid)
+                        else: st.session_state.selected_ids.discard(qid)
 
-                lista_exibicao.append({
-                    "Selecionar": is_selected,
-                    "Nível": niv,
-                    "Tema": cat,
-                    "Pergunta": d.get('pergunta'),
-                    "Alternativas": alts_str,  # <--- COLUNA NOVA
-                    "Correta": resp,           # <--- COLUNA NOVA
-                    "Autor": autor,            # <--- COLUNA NOVA
-                    "ID": doc.id
-                })
-        
-        # --- TABELA INTERATIVA ---
-        if not lista_exibicao:
-            st.warning("Nenhuma questão encontrada com esses filtros.")
-            selecionados_finais = questoes_salvas 
-        else:
-            df = pd.DataFrame(lista_exibicao)
-            # O data_editor agora mostra tudo
-            editor = st.data_editor(
-                df,
-                column_config={
-                    "Selecionar": st.column_config.CheckboxColumn("Usar?", width="small", default=False),
-                    "Nível": st.column_config.NumberColumn("Nív.", width="small"),
-                    "Tema": st.column_config.TextColumn("Tema", width="small"),
-                    "Pergunta": st.column_config.TextColumn("Pergunta", width="medium"),
-                    "Alternativas": st.column_config.TextColumn("Alternativas", width="large"), # Coluna larga
-                    "Correta": st.column_config.TextColumn("Resp.", width="small"),
-                    "Autor": st.column_config.TextColumn("Autor", width="small"),
-                    "ID": None # Esconde ID
-                },
-                disabled=["Nível", "Tema", "Pergunta", "Alternativas", "Correta", "Autor"], # Impede edição, só seleção
-                hide_index=True,
-                use_container_width=True,
-                key=f"editor_{faixa_sel}" 
-            )
-            selecionados_finais = editor[editor["Selecionar"] == True]["ID"].tolist()
+                    c_chk.checkbox("", value=is_checked, key=f"chk_{doc.id}", on_change=update_selection)
+                    
+                    with c_content:
+                        # Badges Visuais
+                        badge = get_badge_nivel(niv)
+                        st.markdown(f"**{badge}** | {cat}")
+                        st.markdown(f"{d.get('pergunta')}")
+                        
+                        with st.expander("Ver Detalhes Completos"):
+                            alts = d.get('alternativas', {})
+                            if not alts and 'opcoes' in d:
+                                ops = d['opcoes']
+                                alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                            
+                            st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
+                            st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
+                            st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'} | Autor: {d.get('criado_por','?')}")
+                    st.divider()
             
-        st.info(f"Total de questões selecionadas: **{len(selecionados_finais)}**")
+            if count_visible == 0:
+                st.warning("Nenhuma questão corresponde aos filtros.")
+
+        # Resumo da Seleção
+        total_sel = len(st.session_state.selected_ids)
+        st.success(f"**{total_sel}** questões selecionadas para a prova de **{faixa_sel}**.")
         
         st.markdown("### 3. Regras de Aplicação")
         with st.form("save_conf"):
@@ -259,21 +293,23 @@ def gestao_exame_de_faixa():
             nota = c2.number_input("Aprovação Mínima (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
             
             if st.form_submit_button("💾 Salvar Prova"):
-                if not selecionados_finais:
-                    st.error("Selecione pelo menos uma questão na tabela acima.")
+                if total_sel == 0:
+                    st.error("Selecione pelo menos uma questão.")
                 else:
                     dados = {
                         "faixa": faixa_sel,
-                        "questoes_ids": selecionados_finais, 
-                        "qtd_questoes": len(selecionados_finais),
+                        "questoes_ids": list(st.session_state.selected_ids), 
+                        "qtd_questoes": total_sel,
                         "tempo_limite": tempo,
                         "aprovacao_minima": nota,
                         "modo_selecao": "Manual",
                         "atualizado_em": firestore.SERVER_TIMESTAMP
                     }
-                    if doc_id: db.collection('config_exames').document(doc_id).update(dados)
-                    else: db.collection('config_exames').add(dados)
-                    st.success(f"Prova da Faixa {faixa_sel} salva com {len(selecionados_finais)} questões!"); time.sleep(1.5); st.rerun()
+                    if st.session_state.doc_id:
+                        db.collection('config_exames').document(st.session_state.doc_id).update(dados)
+                    else:
+                        db.collection('config_exames').add(dados)
+                    st.success(f"Prova da Faixa {faixa_sel} salva com sucesso!"); time.sleep(1.5); st.rerun()
 
     # --- ABA 2: AUTORIZAR ---
     with tab2:
