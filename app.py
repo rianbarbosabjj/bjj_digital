@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - BLINDADO)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -42,6 +42,7 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
+    /* --- GLOBAL --- */
     html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
@@ -67,6 +68,7 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
 
+    /* --- SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
@@ -78,42 +80,65 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
     }}
 
-    [data-testid="stSidebarCollapsedControl"] button, 
+    /* ============================================================
+       HAMBURGUER MENU - FORÇA BRUTA (NUCLEAR CSS)
+       ============================================================ */
+    
+    /* 1. Alvo: O botão de controle da sidebar (Expandida ou Colapsada) */
+    [data-testid="stSidebarCollapsedControl"] button,
     [data-testid="collapsedControl"] button {{
         background-color: rgba(9, 31, 26, 0.9) !important;
         border: 1px solid rgba(255, 215, 112, 0.3) !important;
         border-radius: 8px !important;
-        padding: 10px 12px !important;
-        min-height: 44px !important;
-        min-width: 44px !important;
-        margin: 0 !important;
+        height: 45px !important;
+        width: 45px !important;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
         transition: all 0.3s ease !important;
+        position: relative !important; /* Importante para o ícone absoluto */
+        z-index: 999999 !important;
+        color: transparent !important; /* Esconde qualquer texto/seta de fonte */
     }}
 
+    /* 2. Esconde o ícone SVG original (a seta >> ou >) */
     [data-testid="stSidebarCollapsedControl"] button svg,
-    [data-testid="collapsedControl"] button svg {{ display: none !important; }}
+    [data-testid="collapsedControl"] button svg,
+    [data-testid="stSidebarCollapsedControl"] button img {{
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+    }}
 
-    [data-testid="stSidebarCollapsedControl"] button::before,
-    [data-testid="collapsedControl"] button::before {{
+    /* 3. INJEÇÃO DO ÍCONE HAMBURGUER (☰) */
+    [data-testid="stSidebarCollapsedControl"] button::after,
+    [data-testid="collapsedControl"] button::after {{
         content: "☰";
         color: {COR_DESTAQUE} !important;
-        font-size: 24px !important;
+        font-size: 28px !important;
         font-weight: bold !important;
-        display: block !important;
+        position: absolute !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -55%) !important; /* Centraliza perfeitamente */
         line-height: 1 !important;
+        visibility: visible !important;
     }}
 
+    /* 4. Hover State */
     [data-testid="stSidebarCollapsedControl"] button:hover,
     [data-testid="collapsedControl"] button:hover {{
         background-color: rgba(255, 215, 112, 0.2) !important;
-        border: 1px solid rgba(255, 215, 112, 0.5) !important;
-        transform: scale(1.05) !important;
+        border-color: rgba(255, 215, 112, 0.8) !important;
+        transform: scale(1.05);
     }}
 
-    [data-testid="stSidebarCollapsedControl"] button:hover::before,
-    [data-testid="collapsedControl"] button:hover::before {{ color: {COR_HOVER} !important; }}
+    [data-testid="stSidebarCollapsedControl"] button:hover::after,
+    [data-testid="collapsedControl"] button:hover::after {{
+        color: {COR_HOVER} !important;
+    }}
 
+    /* ============================================================ */
+
+    /* --- CONTAINERS E CARDS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -147,6 +172,7 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
+    /* --- MENU SUPERIOR RESPONSIVO --- */
     .st-emotion-cache-1v7f65g {{
         background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
         backdrop-filter: blur(10px) !important;
@@ -265,7 +291,6 @@ def app_principal():
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
         if tipo in ["admin", "professor"]:
-            # --- REMOVIDO BOTÃO DASHBOARD DAQUI (Fica dentro do Painel) ---
             if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
             
         if tipo == "admin":
@@ -286,7 +311,6 @@ def app_principal():
 
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
-        # --- REMOVIDO DASHBOARD DAQUI TAMBÉM ---
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
