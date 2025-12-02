@@ -1,7 +1,7 @@
 import streamlit as st
 import time
 import random
-import pandas as pd # Adicionado para o Ranking
+import pandas as pd
 import os
 import json
 from datetime import datetime, timedelta
@@ -68,147 +68,206 @@ def carregar_exame_especifico(faixa_alvo):
     return questoes_finais, tempo, nota
 
 # =========================================
-# MODO ROLA (CRONÔMETRO) - NOVO!
+# MODO ROLA (QUIZ DE TREINO)
 # =========================================
 def modo_rola(usuario):
-    st.markdown("<h1 style='color:#FFD770; text-align:center'>⏱️ Modo Rola</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center'>Cronômetro oficial para treinos no dojo.</p>", unsafe_allow_html=True)
-    st.markdown("---")
+    st.markdown("<h1 style='color:#FFD770; text-align:center'>🤼 Modo Rola (Treino Rápido)</h1>", unsafe_allow_html=True)
+    st.info("Responda 5 questões aleatórias para somar pontos no Ranking!")
 
-    # Configuração
-    with st.expander("⚙️ Configurar Tempos", expanded=True):
-        c1, c2 = st.columns(2)
-        tempo_luta = c1.number_input("Tempo de Luta (minutos):", 1, 60, 5)
-        tempo_descanso = c2.number_input("Tempo de Descanso (segundos):", 0, 300, 30)
-
-    # Estado do Timer
-    if 'timer_running' not in st.session_state: st.session_state.timer_running = False
+    if "rola_iniciado" not in st.session_state: st.session_state.rola_iniciado = False
     
-    # Botões de Controle
-    col_b1, col_b2, col_b3 = st.columns([1, 1, 1])
-    
-    iniciar = col_b2.button("▶️ INICIAR ROLA", use_container_width=True, type="primary")
-    
-    # Área do Mostrador Gigante
-    timer_placeholder = st.empty()
-
-    if iniciar:
-        st.session_state.timer_running = True
-        total_segundos = tempo_luta * 60
-        
-        # Loop do Tempo de Luta
-        timer_placeholder.markdown(f"<div style='background-color:#078B6C; padding:20px; border-radius:15px; text-align:center'><h1 style='font-size:80px; color:white; margin:0'>PREPARAR...</h1></div>", unsafe_allow_html=True)
-        time.sleep(2)
-        
-        for i in range(total_segundos, -1, -1):
-            if not st.session_state.timer_running: break
-            m, s = divmod(i, 60)
-            # Visual do Timer
-            cor_fundo = "#0e2d26"
-            cor_texto = "#FFD770"
-            if i < 30: cor_texto = "#FF4B4B" # Fica vermelho no final
+    if not st.session_state.rola_iniciado:
+        c1, c2, c3 = st.columns([1, 2, 1])
+        if c2.button("🔥 COMEÇAR ROLA", type="primary", use_container_width=True):
+            db = get_db()
+            all_q = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
             
-            timer_placeholder.markdown(
-                f"<div style='border: 4px solid {cor_texto}; border-radius: 20px; padding: 40px; text-align: center; background-color: rgba(0,0,0,0.3);'>"
-                f"<h1 style='font-size: 100px; margin: 0; color: {cor_texto}; font-family: monospace;'>{m:02d}:{s:02d}</h1>"
-                f"<h3 style='color: white;'>🤼 LUTANDO</h3>"
-                f"</div>", 
-                unsafe_allow_html=True
-            )
-            time.sleep(1)
+            if len(all_q) < 5:
+                st.warning("Banco de questões insuficiente para um rola (mínimo 5).")
+            else:
+                pool = []
+                for doc in all_q:
+                    d = doc.to_dict(); d['id'] = doc.id
+                    if 'alternativas' not in d and 'opcoes' in d:
+                        ops = d['opcoes']
+                        d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                    pool.append(d)
+                
+                st.session_state.questoes_rola = random.sample(pool, 5)
+                st.session_state.rola_iniciado = True
+                st.rerun()
+    else:
+        qs = st.session_state.questoes_rola
         
-        # Alerta de Fim de Luta
-        if st.session_state.timer_running:
-            for _ in range(3): # Pisca 3 vezes
-                timer_placeholder.markdown(f"<div style='background-color:#FF4B4B; padding:20px; border-radius:15px; text-align:center'><h1 style='font-size:80px; color:white; margin:0'>ACABOU!</h1></div>", unsafe_allow_html=True)
-                time.sleep(0.5)
-                timer_placeholder.empty()
-                time.sleep(0.2)
-
-            # Loop do Descanso
-            if tempo_descanso > 0:
-                for i in range(tempo_descanso, -1, -1):
-                    timer_placeholder.markdown(
-                        f"<div style='border: 4px solid #00CC96; border-radius: 20px; padding: 40px; text-align: center; background-color: rgba(0,0,0,0.3);'>"
-                        f"<h1 style='font-size: 100px; margin: 0; color: #00CC96; font-family: monospace;'>{i}s</h1>"
-                        f"<h3 style='color: white;'>🥤 DESCANSO</h3>"
-                        f"</div>", 
-                        unsafe_allow_html=True
-                    )
-                    time.sleep(1)
+        with st.form("form_rola"):
+            respostas = {}
+            for i, q in enumerate(qs):
+                st.markdown(f"**{i+1}. {q.get('pergunta')}**")
+                opts = []
+                if 'alternativas' in q and isinstance(q['alternativas'], dict):
+                    opts = [f"{k}) {q['alternativas'][k]}" for k in ["A","B","C","D"] if k in q['alternativas']]
+                elif 'opcoes' in q:
+                    opts = q['opcoes']
+                if not opts: opts = ["Erro"]
+                respostas[i] = st.radio("R:", opts, key=f"r_rola_{i}", label_visibility="collapsed")
+                st.divider()
             
-            timer_placeholder.success("Próximo Round!")
-            st.session_state.timer_running = False
+            if st.form_submit_button("🥋 Finalizar Treino"):
+                acertos = 0
+                detalhes = []
+                
+                for i, q in enumerate(qs):
+                    resp_full = str(respostas.get(i))
+                    if ")" in resp_full[:2]:
+                         resp_letra = resp_full.split(")")[0].strip().upper()
+                    else:
+                         resp_letra = resp_full.strip()
+
+                    certa = str(q.get('resposta_correta') or 'A').strip().upper()
+                    is_correct = (resp_letra == certa)
+                    if is_correct: acertos += 1
+                    
+                    detalhes.append({
+                        "questao_id": q.get('id'),
+                        "acertou": is_correct,
+                        "dificuldade": q.get('dificuldade', 1),
+                        "categoria": q.get('categoria', 'Geral')
+                    })
+                
+                nota = (acertos / 5) * 100
+                
+                db = get_db()
+                db.collection('resultados').add({
+                    "usuario": usuario['nome'],
+                    "faixa": "Modo Rola", 
+                    "pontuacao": nota,
+                    "acertos": acertos,
+                    "total": 5,
+                    "aprovado": True, 
+                    "codigo_verificacao": None,
+                    "detalhes": detalhes,
+                    "data": firestore.SERVER_TIMESTAMP
+                })
+                
+                st.balloons()
+                if nota == 100: st.success(f"OSS! Gabaritou! Nota: {nota:.0f}")
+                elif nota >= 60: st.success(f"Bom treino! Nota: {nota:.0f}")
+                else: st.warning(f"Mais estudo na próxima! Nota: {nota:.0f}")
+                
+                time.sleep(3)
+                st.session_state.rola_iniciado = False
+                st.rerun()
 
 # =========================================
-# RANKING (LEADERBOARD) - NOVO!
+# RANKING (ATUALIZADO: SEPARADO POR FAIXA)
 # =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD770; text-align:center'>🏆 Ranking do Dojo</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center'>Os melhores desempenhos nos exames teóricos.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center'>Pontuação baseada em Exames Oficiais e Modo Rola.</p>", unsafe_allow_html=True)
     
     db = get_db()
-    with st.spinner("Calculando pontuações..."):
-        # Busca apenas resultados aprovados
+    
+    with st.spinner("Atualizando placar..."):
+        # 1. Buscar todos os Usuários para mapear a faixa atual
+        # Isso permite que Admin, Professor e Aluno entrem no ranking com sua faixa correta
+        users_ref = list(db.collection('usuarios').stream())
+        mapa_faixas = {}
+        for u in users_ref:
+            d = u.to_dict()
+            # Mapeia Nome -> Faixa Atual
+            # Se a faixa for complexa (ex: "Cinza e Preta"), simplificamos para "Cinza" na lógica de abas,
+            # ou usamos a string completa se preferir. Aqui usaremos a string da faixa.
+            mapa_faixas[d.get('nome')] = d.get('faixa_atual', 'Branca')
+
+        # 2. Buscar Resultados
         res_ref = list(db.collection('resultados').where('aprovado', '==', True).stream())
         
         if not res_ref:
-            st.info("Nenhum resultado registrado para o ranking ainda.")
+            st.info("Nenhum resultado registrado ainda.")
             return
 
         data = [d.to_dict() for d in res_ref]
         df = pd.DataFrame(data)
 
-    # Processamento dos dados
     if not df.empty:
+        # Adiciona a coluna 'faixa_do_atleta' cruzando com o mapa
+        df['faixa_atleta'] = df['usuario'].map(mapa_faixas).fillna('Desconhecido')
+
         # Agrupa por usuário e calcula métricas
-        ranking_df = df.groupby('usuario').agg(
+        ranking_geral = df.groupby(['usuario', 'faixa_atleta']).agg(
             Exames_Aprovados=('aprovado', 'count'),
-            Media_Notas=('pontuacao', 'mean'),
-            Ultima_Faixa=('faixa', 'max') # Pega a "maior" string (não ideal para faixas, mas serve para exibir)
+            Media_Notas=('pontuacao', 'mean')
         ).reset_index()
 
-        # Ordena: Quem tem maior média de notas vence
-        ranking_df = ranking_df.sort_values(by=['Media_Notas', 'Exames_Aprovados'], ascending=[False, False])
-        
-        # Adiciona coluna de Medalhas
-        medals = ['🥇', '🥈', '🥉'] + [''] * (len(ranking_df) - 3)
-        ranking_df['Pos'] = medals[:len(ranking_df)]
-        
-        # Reordena colunas para exibição
-        ranking_df = ranking_df[['Pos', 'usuario', 'Media_Notas', 'Exames_Aprovados', 'Ultima_Faixa']]
-        ranking_df.columns = ['#', 'Atleta', 'Média Geral', 'Exames Concluídos', 'Última Graduação']
+        # Função auxiliar para renderizar tabela
+        def renderizar_tabela(dataframe_filtrado):
+            if dataframe_filtrado.empty:
+                st.caption("Nenhum atleta pontuou nesta categoria ainda.")
+                return
 
-        # Exibição do Pódio (Top 3 Cards)
-        top3 = ranking_df.head(3)
-        cols = st.columns(3)
-        for i, (idx, row) in enumerate(top3.iterrows()):
-            with cols[i]:
-                with st.container(border=True):
-                    st.markdown(f"<h1 style='text-align:center'>{row['#']}</h1>", unsafe_allow_html=True)
-                    st.markdown(f"<h3 style='text-align:center; color:#FFD770'>{row['Atleta'].split()[0]}</h3>", unsafe_allow_html=True)
-                    st.metric("Média", f"{row['Média Geral']:.1f}%")
-        
-        st.markdown("---")
-        
-        # Tabela Completa
-        st.dataframe(
-            ranking_df,
-            column_config={
-                "Média Geral": st.column_config.ProgressColumn(
-                    "Média Geral",
-                    format="%.1f%%",
-                    min_value=0,
-                    max_value=100,
-                ),
-                "Exames Concluídos": st.column_config.NumberColumn(
-                    "Aprovações",
-                    format="%d 🏆"
-                )
-            },
-            hide_index=True,
-            use_container_width=True
-        )
+            # Ordena
+            df_final = dataframe_filtrado.sort_values(by=['Media_Notas', 'Exames_Aprovados'], ascending=[False, False])
+            
+            # Medalhas
+            medals = ['🥇', '🥈', '🥉'] + [''] * (len(df_final) - 3)
+            df_final['Pos'] = medals[:len(df_final)]
+            
+            # Formata
+            df_final = df_final[['Pos', 'usuario', 'Media_Notas', 'Exames_Aprovados', 'faixa_atleta']]
+            df_final.columns = ['#', 'Atleta', 'Média Geral', 'Atividades', 'Graduação']
+
+            # Top 3 Cards
+            top3 = df_final.head(3)
+            cols = st.columns(3)
+            for i, (idx, row) in enumerate(top3.iterrows()):
+                with cols[i]:
+                    with st.container(border=True):
+                        st.markdown(f"<h1 style='text-align:center'>{row['#']}</h1>", unsafe_allow_html=True)
+                        st.markdown(f"<h3 style='text-align:center; color:#FFD770'>{row['Atleta'].split()[0]}</h3>", unsafe_allow_html=True)
+                        st.caption(f"{row['Graduação']}")
+                        st.metric("Média", f"{row['Média Geral']:.1f}%")
+            
+            st.markdown("---")
+            
+            # Tabela
+            st.dataframe(
+                df_final,
+                column_config={
+                    "Média Geral": st.column_config.ProgressColumn("Média", format="%.1f%%", min_value=0, max_value=100),
+                    "Atividades": st.column_config.NumberColumn("Exames/Rolas", format="%d 🏆")
+                },
+                hide_index=True,
+                use_container_width=True
+            )
+
+        # --- ABAS POR FAIXA ---
+        # Definindo as categorias principais
+        abas = ["🌍 Geral", "⚪ Branca", "🔘 Cinza", "🟡 Amarela", "🟠 Laranja", "🟢 Verde", "🔵 Azul", "🟣 Roxa", "🟤 Marrom", "⚫ Preta"]
+        tabs = st.tabs(abas)
+
+        with tabs[0]: # Geral
+            renderizar_tabela(ranking_geral)
+
+        # Lógica para filtrar por cor (contém a string)
+        # Ex: "Cinza e Branca" entra na aba "Cinza"
+        categorias_map = {
+            "⚪ Branca": "Branca",
+            "🔘 Cinza": "Cinza",
+            "🟡 Amarela": "Amarela",
+            "🟠 Laranja": "Laranja",
+            "🟢 Verde": "Verde",
+            "🔵 Azul": "Azul",
+            "🟣 Roxa": "Roxa",
+            "🟤 Marrom": "Marrom",
+            "⚫ Preta": "Preta"
+        }
+
+        for i, (nome_aba, termo_busca) in enumerate(categorias_map.items(), 1):
+            with tabs[i]:
+                # Filtra se a faixa do atleta contém o termo (ex: "Amarela" pega "Amarela e Preta")
+                df_filt = ranking_geral[ranking_geral['faixa_atleta'].str.contains(termo_busca, na=False, case=False)]
+                renderizar_tabela(df_filt)
+
     else:
         st.warning("Dados insuficientes para gerar o ranking.")
 
