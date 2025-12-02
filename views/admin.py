@@ -338,22 +338,22 @@ def gestao_exame_de_faixa():
                         with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
                             st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
                             
-                            mostrar_questoes = st.toggle("👁️ Visualizar Questões", key=f"view_q_{data['id']}")
-                            if mostrar_questoes:
-                                if modo == "🖐️ Manual (Fixa)" and data.get('questoes_ids'):
-                                    ids = data.get('questoes_ids', [])
-                                    st.markdown("---")
-                                    for i, q_id in enumerate(ids, 1):
-                                        q_data = mapa_questoes_completo.get(q_id)
-                                        if q_data:
-                                            st.markdown(f"**{i}. {q_data.get('pergunta')}**")
-                                            # --- AQUI: Autor na Visualização da Prova Pronta ---
-                                            autor_q = q_data.get('criado_por', 'Desconhecido')
-                                            st.caption(f"Correta: {q_data.get('resposta_correta')} | ✍️ {autor_q}")
-                                        else: st.error(f"{i}. Questão deletada (ID: {q_id})")
-                                        st.divider()
-                                elif modo == "🎲 Aleatório (Sorteio)":
-                                    st.info(f"Sorteio aleatório de {qtd} questões.")
+                            # --- LISTAGEM DIRETA DAS QUESTÕES (SEM BOTÃO TOGGLE) ---
+                            if modo == "🖐️ Manual (Fixa)" and data.get('questoes_ids'):
+                                ids = data.get('questoes_ids', [])
+                                st.markdown("---")
+                                st.markdown("#### 📋 Questões Selecionadas")
+                                for i, q_id in enumerate(ids, 1):
+                                    q_data = mapa_questoes_completo.get(q_id)
+                                    if q_data:
+                                        st.markdown(f"**{i}. {q_data.get('pergunta')}**")
+                                        # --- AQUI: Autor na Visualização da Prova Pronta ---
+                                        autor_q = q_data.get('criado_por', 'Desconhecido')
+                                        st.caption(f"Correta: {q_data.get('resposta_correta')} | ✍️ {autor_q}")
+                                    else: st.error(f"{i}. Questão deletada (ID: {q_id})")
+                                    st.divider()
+                            elif modo == "🎲 Aleatório (Sorteio)":
+                                st.info(f"Sorteio aleatório de {qtd} questões.")
                             
                             st.markdown("---")
                             if st.button("🗑️ Excluir Prova", key=f"del_proof_{data['id']}"):
