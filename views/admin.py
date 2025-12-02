@@ -2,8 +2,8 @@ import streamlit as st
 import pandas as pd
 import bcrypt
 import random
-import time 
-from datetime import datetime, time as dtime 
+import time
+from datetime import datetime, time as dtime
 from database import get_db
 from firebase_admin import firestore
 
@@ -309,7 +309,9 @@ def gestao_exame_de_faixa():
                         db.collection('config_exames').document(st.session_state.doc_id).update(dados)
                     else:
                         db.collection('config_exames').add(dados)
-                    st.success(f"Prova da Faixa {faixa_sel} salva com sucesso!"); time.sleep(1.5); st.rerun()    # --- ABA 2: VISUALIZAR PROVAS ---
+                    st.success(f"Prova da Faixa {faixa_sel} salva com sucesso!"); time.sleep(1.5); st.rerun()
+
+    # --- ABA 2: VISUALIZAR PROVAS ---
     with tab2:
         st.subheader("Status das Provas Cadastradas")
         configs_stream = db.collection('config_exames').stream()
@@ -356,8 +358,10 @@ def gestao_exame_de_faixa():
             d_inicio = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
             d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
             c3, c4 = st.columns(2)
-            h_inicio = c3.time_input("Hora Início:", time(0, 0), key="hora_inicio_exame")
-            h_fim = c4.time_input("Hora Fim:", time(23, 59), key="hora_fim_exame")
+            
+            # --- CORREÇÃO APLICADA AQUI: USANDO dtime EM VEZ DE time ---
+            h_inicio = c3.time_input("Hora Início:", dtime(0, 0), key="hora_inicio_exame")
+            h_fim = c4.time_input("Hora Fim:", dtime(23, 59), key="hora_fim_exame")
             
             # Cria objetos datetime baseados no input (Considera hora local de quem está operando)
             dt_inicio = datetime.combine(d_inicio, h_inicio)
@@ -439,18 +443,14 @@ def gestao_exame_de_faixa():
                                 db.collection('usuarios').document(aluno_id).update({
                                     "exame_habilitado": True,
                                     "faixa_exame": fx_sel,
-                                    
-                                    # --- CORREÇÃO PRINCIPAL AQUI ---
-                                    # Antes estava: firestore.SERVER_TIMESTAMP (Hora de Londres/UTC)
-                                    # Agora: dt_inicio.isoformat() (Hora que você escolheu no input)
                                     "exame_inicio": dt_inicio.isoformat(), 
-                                    
                                     "exame_fim": dt_fim.isoformat(),
                                     "status_exame": "pendente",
                                     "status_exame_em_andamento": False
                                 })
                                 st.success(f"Liberado!")
-                                time_lib.sleep(0.5)
+                                # --- CORREÇÃO APLICADA AQUI: time.sleep EM VEZ DE time_lib.sleep ---
+                                time.sleep(0.5)
                                 st.rerun()
                         st.markdown("---")
                     except Exception as e:
