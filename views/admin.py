@@ -239,7 +239,6 @@ def gestao_exame_de_faixa():
         filtro_tema = c_f2.multiselect("Filtrar por Tema:", cats, default=cats)
         
         # --- RENDERIZAÇÃO DOS CARDS DE SELEÇÃO ---
-        # Container com altura fixa e scroll para não ficar infinito
         with st.container(height=500, border=True):
             count_visible = 0
             for doc in todas_questoes:
@@ -249,11 +248,7 @@ def gestao_exame_de_faixa():
                 
                 if niv in filtro_nivel and cat in filtro_tema:
                     count_visible += 1
-                    
-                    # Layout do Card de Seleção
                     c_chk, c_content = st.columns([1, 15])
-                    
-                    # Checkbox controla o Session State
                     is_checked = doc.id in st.session_state.selected_ids
                     
                     def update_selection(qid=doc.id):
@@ -263,26 +258,21 @@ def gestao_exame_de_faixa():
                     c_chk.checkbox("", value=is_checked, key=f"chk_{doc.id}", on_change=update_selection)
                     
                     with c_content:
-                        # Badges Visuais
                         badge = get_badge_nivel(niv)
                         st.markdown(f"**{badge}** | {cat}")
                         st.markdown(f"{d.get('pergunta')}")
-                        
                         with st.expander("Ver Detalhes Completos"):
                             alts = d.get('alternativas', {})
                             if not alts and 'opcoes' in d:
                                 ops = d['opcoes']
                                 alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                            
                             st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
                             st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
                             st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'} | Autor: {d.get('criado_por','?')}")
                     st.divider()
             
-            if count_visible == 0:
-                st.warning("Nenhuma questão corresponde aos filtros.")
+            if count_visible == 0: st.warning("Nenhuma questão corresponde aos filtros.")
 
-        # Resumo da Seleção
         total_sel = len(st.session_state.selected_ids)
         st.success(f"**{total_sel}** questões selecionadas para a prova de **{faixa_sel}**.")
         
@@ -305,13 +295,11 @@ def gestao_exame_de_faixa():
                         "modo_selecao": "Manual",
                         "atualizado_em": firestore.SERVER_TIMESTAMP
                     }
-                    if st.session_state.doc_id:
-                        db.collection('config_exames').document(st.session_state.doc_id).update(dados)
-                    else:
-                        db.collection('config_exames').add(dados)
+                    if st.session_state.doc_id: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
+                    else: db.collection('config_exames').add(dados)
                     st.success(f"Prova da Faixa {faixa_sel} salva com sucesso!"); time.sleep(1.5); st.rerun()
 
-    # --- ABA 2: VISUALIZAR PROVAS ---
+    # --- ABA 2: VISUALIZAR ---
     with tab2:
         st.subheader("Status das Provas Cadastradas")
         configs_stream = db.collection('config_exames').stream()
@@ -340,17 +328,13 @@ def gestao_exame_de_faixa():
                         nota = data.get('aprovacao_minima', 0)
                         with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
                             st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
-                            if modo == "🖐️ Manual (Fixa)" and data.get('questoes'):
-                                for i, q in enumerate(data['questoes'], 1):
-                                    st.markdown(f"**{i}. {q.get('pergunta')}**")
-                                    st.caption(f"Resposta: {q.get('resposta')}")
-                                    st.markdown("---")
+                            if modo == "🖐️ Manual (Fixa)" and data.get('questoes_ids'):
+                                st.info(f"Contém {len(data['questoes_ids'])} questões fixas selecionadas.")
                             elif modo == "🎲 Aleatório (Sorteio)":
                                 st.info(f"Sorteia {qtd} questões.")
-                    else:
-                        st.warning(f"⚠️ {f_nome} não configurada.")
+                    else: st.warning(f"⚠️ {f_nome} não configurada.")
 
-    # --- ABA 3: AUTORIZAR ---
+    # --- ABA 3: AUTORIZAR (CORRIGIDO) ---
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
@@ -358,12 +342,9 @@ def gestao_exame_de_faixa():
             d_inicio = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
             d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
             c3, c4 = st.columns(2)
-            
-            # --- CORREÇÃO APLICADA AQUI: USANDO dtime EM VEZ DE time ---
             h_inicio = c3.time_input("Hora Início:", dtime(0, 0), key="hora_inicio_exame")
             h_fim = c4.time_input("Hora Fim:", dtime(23, 59), key="hora_fim_exame")
             
-            # Cria objetos datetime baseados no input (Considera hora local de quem está operando)
             dt_inicio = datetime.combine(d_inicio, h_inicio)
             dt_fim = datetime.combine(d_fim, h_fim)
 
@@ -415,22 +396,34 @@ def gestao_exame_de_faixa():
                         habilitado = aluno.get('exame_habilitado', False)
                         status = aluno.get('status_exame', 'pendente')
                         
-                        if habilitado:
-                            msg = "🟢 Liberado"
+                        # --- LÓGICA DE STATUS CORRIGIDA (Prioridade Visual) ---
+                        msg_status = "⚪ Não autorizado"
+                        
+                        if status == 'aprovado':
+                            msg_status = "🏆 Aprovado"
+                        elif status == 'reprovado':
+                            msg_status = "🔴 Reprovado"
+                        elif status == 'bloqueado':
+                            msg_status = "⛔ Bloqueado"
+                        elif habilitado:
+                            msg_status = "🟢 Liberado"
+                            # Detalhes de data só aparecem se estiver liberado
                             try:
                                 raw_fim = aluno.get('exame_fim')
                                 if raw_fim:
                                     if isinstance(raw_fim, str):
                                         dt_obj = datetime.fromisoformat(raw_fim.replace('Z', '+00:00'))
-                                        msg += f" (até {dt_obj.strftime('%d/%m/%Y %H:%M')})"
+                                        msg_status += f" (até {dt_obj.strftime('%d/%m %H:%M')})"
                             except: pass
                             
-                            if status == 'aprovado': msg = "🏆 Aprovado"
-                            elif status == 'bloqueado': msg = "⛔ Bloqueado"
-                            elif status == 'reprovado': msg = "🔴 Reprovado"
-                            elif status == 'em_andamento': msg = "🟡 Em Andamento"
-                            
-                            c4.write(msg)
+                            if status == 'em_andamento':
+                                msg_status = "🟡 Em Andamento"
+
+                        c4.write(msg_status)
+                        
+                        # --- LÓGICA DE BOTÕES (Ação) ---
+                        if habilitado:
+                            # Se está habilitado, mostra botão para BLOQUEAR
                             if c5.button("⛔", key=f"off_btn_{aluno_id}"):
                                 update_data = {"exame_habilitado": False, "status_exame": "pendente"}
                                 for campo in ["exame_inicio", "exame_fim", "faixa_exame", "motivo_bloqueio", "status_exame_em_andamento"]:
@@ -438,7 +431,7 @@ def gestao_exame_de_faixa():
                                 db.collection('usuarios').document(aluno_id).update(update_data)
                                 st.rerun()
                         else:
-                            c4.write("⚪ Não autorizado")
+                            # Se NÃO está habilitado (mesmo se aprovado/reprovado), mostra botão para LIBERAR
                             if c5.button("✅", key=f"on_btn_{aluno_id}"):
                                 db.collection('usuarios').document(aluno_id).update({
                                     "exame_habilitado": True,
@@ -449,9 +442,9 @@ def gestao_exame_de_faixa():
                                     "status_exame_em_andamento": False
                                 })
                                 st.success(f"Liberado!")
-                                # --- CORREÇÃO APLICADA AQUI: time.sleep EM VEZ DE time_lib.sleep ---
                                 time.sleep(0.5)
                                 st.rerun()
+                                
                         st.markdown("---")
                     except Exception as e:
                         st.error(f"Erro aluno: {e}")
