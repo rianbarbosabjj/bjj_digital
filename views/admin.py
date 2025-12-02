@@ -102,7 +102,7 @@ def gestao_questoes():
             st.info("Nenhuma questão encontrada.")
         else:
             st.caption(f"Exibindo {len(questoes_filtradas)} questões")
-            for q in questões_filtradas: # FIXED: typo in variable name in loop
+            for q in questoes_filtradas:
                 with st.container(border=True):
                     c_head, c_btn = st.columns([5, 1])
                     nivel_val = q.get('dificuldade', 1)
@@ -172,8 +172,7 @@ def gestao_questoes():
 
     # --- CRIAR ---
     with tab2:
-        # ATENÇÃO: Nome do form alterado para evitar erro de chave duplicada
-        with st.form("form_criar_nova_questao"):
+        with st.form("form_criar_nova_questao_v2"):
             st.markdown("#### Nova Questão")
             pergunta = st.text_area("Enunciado:")
             c1, c2 = st.columns(2)
@@ -211,6 +210,7 @@ def gestao_exame_de_faixa():
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
         
+        # Carrega Config Atual e Sincroniza Estado
         if 'last_faixa_sel' not in st.session_state or st.session_state.last_faixa_sel != faixa_sel:
             configs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
             conf_atual = {}; doc_id = None
@@ -255,10 +255,17 @@ def gestao_exame_de_faixa():
                             st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'}")
                     st.divider()
             
-            if count_visible == 0: st.warning("Nenhuma questão corresponde aos filtros.")
+            if count_visible == 0: st.warning("Nenhuma questão corresponde aos filtros atuais.")
 
+        # --- BARRA DE STATUS DA SELEÇÃO (COM BOTÃO DE LIMPAR) ---
         total_sel = len(st.session_state.selected_ids)
-        st.success(f"**{total_sel}** questões selecionadas para a prova de **{faixa_sel}**.")
+        c_res1, c_res2 = st.columns([3, 1])
+        c_res1.success(f"**{total_sel}** questões selecionadas para a prova de **{faixa_sel}**.")
+        
+        if total_sel > 0:
+            if c_res2.button("🗑️ Limpar Seleção", key="btn_limpar_sel"):
+                st.session_state.selected_ids = set()
+                st.rerun()
         
         st.markdown("### 3. Regras de Aplicação")
         with st.form("save_conf"):
@@ -280,7 +287,6 @@ def gestao_exame_de_faixa():
                         "atualizado_em": firestore.SERVER_TIMESTAMP
                     }
                     
-                    # BLINDAGEM CONTRA ERRO NOTFOUND
                     try:
                         if st.session_state.doc_id:
                             db.collection('config_exames').document(st.session_state.doc_id).update(dados)
@@ -329,7 +335,6 @@ def gestao_exame_de_faixa():
                         with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
                             st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
                             
-                            # TOGGLE DE VISUALIZAÇÃO
                             mostrar_questoes = st.toggle("👁️ Visualizar Questões", key=f"view_q_{data['id']}")
                             if mostrar_questoes:
                                 if modo == "🖐️ Manual (Fixa)" and data.get('questoes_ids'):
@@ -345,7 +350,6 @@ def gestao_exame_de_faixa():
                                 elif modo == "🎲 Aleatório (Sorteio)":
                                     st.info(f"Sorteio aleatório de {qtd} questões.")
                             
-                            # BOTÃO DE EXCLUIR
                             st.markdown("---")
                             if st.button("🗑️ Excluir Prova", key=f"del_proof_{data['id']}"):
                                 db.collection('config_exames').document(data['id']).delete()
