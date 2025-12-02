@@ -25,9 +25,12 @@ def estilizar_grafico(fig):
     return fig
 
 def dashboard_professor():
-    st.markdown("<h1 style='color:#FFD700;'>📊 Dashboard do Mestre</h1>", unsafe_allow_html=True)
-    if st.button("🏠 Voltar ao Início", key="btn_voltar_dash"):
-        st.session_state.menu_selection = "Início"; st.rerun()
+    st.markdown("<h1 style='color:#FFD770;'>📊 Dashboard do Mestre</h1>", unsafe_allow_html=True)
+    
+    # Botão de voltar (caso seja acessado via menu lateral direto)
+    if st.session_state.menu_selection == "📊 Dashboard":
+        if st.button("🏠 Voltar ao Início", key="btn_voltar_dash"):
+            st.session_state.menu_selection = "Início"; st.rerun()
 
     db = get_db()
     user = st.session_state.usuario
@@ -125,24 +128,30 @@ def dashboard_professor():
                 fig_bar.update_traces(textposition='outside') # Número fora da barra
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-        # Tabela Recente
+        # Tabela Recente (COM BARRA VERDE)
         st.subheader("Últimos 5 Exames Realizados")
         cols_view = ['usuario', 'faixa', 'pontuacao', 'aprovado', 'data']
         for c in cols_view: 
             if c not in df_res.columns: df_res[c] = "-"
             
-        # Formatar Data para ficar bonita
+        # Formatar Data
         df_display = df_res.copy()
         if 'data' in df_display.columns:
             df_display['data'] = pd.to_datetime(df_display['data']).dt.strftime('%d/%m/%Y %H:%M')
+        
+        # Garante que pontuação é número para a barra funcionar
+        df_display['pontuacao'] = pd.to_numeric(df_display['pontuacao'], errors='coerce').fillna(0)
 
+        # --- AQUI ESTÁ A MÁGICA DA BARRA VERDE ---
+        # Usamos style.bar do Pandas para ter controle total da cor
         st.dataframe(
-            df_display[cols_view].sort_values(by='data', ascending=False).head(5), 
+            df_display[cols_view].sort_values(by='data', ascending=False).head(5).style
+            .bar(subset=['pontuacao'], color='#078B6C', vmin=0, vmax=100) # Cor Verde (#078B6C)
+            .format({'pontuacao': '{:.1f}%'}), # Formata com %
             hide_index=True, 
             use_container_width=True,
             column_config={
                 "usuario": "Aluno",
-                "pontuacao": st.column_config.ProgressColumn("Nota", format="%.1f%%", min_value=0, max_value=100),
                 "aprovado": st.column_config.CheckboxColumn("Aprovado"),
                 "data": "Data"
             }
@@ -185,18 +194,17 @@ def dashboard_professor():
                 st.subheader("🚨 Onde os alunos mais erram?")
                 df_top_erros = stats_completo.sort_values(by='taxa_acerto', ascending=True).head(7)
                 
-                # Encurtar perguntas muito longas para o gráfico
                 df_top_erros['pergunta_curta'] = df_top_erros['pergunta'].apply(lambda x: x[:40] + "..." if len(str(x)) > 40 else x)
 
                 fig_err = px.bar(
                     df_top_erros, 
                     x='taxa_acerto', 
                     y='pergunta_curta', 
-                    orientation='h', # Barras horizontais
+                    orientation='h',
                     text='taxa_acerto',
                     title="Questões com Menor Taxa de Acerto",
                     color='taxa_acerto',
-                    color_continuous_scale=['#EF553B', '#FFD770', '#078B6C'] # Vermelho -> Amarelo -> Verde
+                    color_continuous_scale=['#EF553B', '#FFD770', '#078B6C'] 
                 )
                 fig_err = estilizar_grafico(fig_err)
                 fig_err.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
@@ -217,12 +225,16 @@ def dashboard_professor():
                     media_minha = meus_stats['taxa_acerto'].mean()
                     c_m3.metric("Média de Acerto Global", f"{media_minha:.1f}%")
                     
+                    # Tabela com barra VERDE também
                     st.dataframe(
-                        meus_stats[['pergunta', 'vezes_usada', 'taxa_acerto', 'dificuldade']].sort_values(by='vezes_usada', ascending=False),
+                        meus_stats[['pergunta', 'vezes_usada', 'taxa_acerto', 'dificuldade']]
+                        .sort_values(by='vezes_usada', ascending=False)
+                        .style
+                        .bar(subset=['taxa_acerto'], color='#078B6C', vmin=0, vmax=100) # Verde aqui também
+                        .format({'taxa_acerto': '{:.1f}%'}),
                         column_config={
                             "pergunta": "Pergunta",
                             "vezes_usada": st.column_config.NumberColumn("Aplicações", format="%d"),
-                            "taxa_acerto": st.column_config.ProgressColumn("Taxa de Acerto", format="%.1f%%", min_value=0, max_value=100),
                             "dificuldade": "Nível"
                         },
                         hide_index=True,
