@@ -459,7 +459,6 @@ if "SECRETS_TOML" in os.environ:
 # Importações
 try:
     from streamlit_option_menu import option_menu
-    # --- AQUI: ADICIONEI dashboard ---
     from views import login, geral, aluno, professor, admin, dashboard
 except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
@@ -517,7 +516,10 @@ def app_principal():
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
         if tipo in ["admin", "professor"]:
+            # --- AQUI: Botão do Dashboard na Sidebar ---
+            if st.button("📊 Dashboard", use_container_width=True): nav("📊 Dashboard")
             if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+            
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
             
@@ -538,7 +540,6 @@ def app_principal():
     # MENU HORIZONTAL PRINCIPAL (RESPONSIVO)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
-        # --- AQUI: Adicionado Dashboard ---
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame", "📊 Dashboard"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark", "graph-up-arrow"]
     else:
@@ -621,7 +622,6 @@ def app_principal():
     elif pg == "Gestão de Equipes": professor.gestao_equipes()
     elif pg == "Gestão de Questões": admin.gestao_questoes()
     elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
-    # --- AQUI: Rota para o Dashboard ---
     elif pg == "📊 Dashboard": dashboard.dashboard_professor()
 
 if __name__ == "__main__":
