@@ -121,30 +121,115 @@ st.markdown(f"""
     }}
     
     /* --- MENU SUPERIOR RESPONSIVO --- */
-    /* Container do menu */
-    div[data-testid*="stHorizontalBlock"] > div > div > div > div > div {{
+    /* Container do menu - SEM FUNDO PRETO */
+    .st-emotion-cache-1v7f65g {{
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px solid rgba(255, 215, 112, 0.15) !important;
+        border-radius: 50px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+        margin: 20px auto !important;
+        max-width: 95% !important;
+        width: auto !important;
+        min-width: 300px !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        white-space: nowrap !important;
+        padding: 0 !important;
+    }}
+    
+    /* Remover qualquer fundo preto dos elementos internos */
+    .st-emotion-cache-1v7f65g .st-ae,
+    .st-emotion-cache-1v7f65g .st-af,
+    .st-emotion-cache-1v7f65g .st-ag,
+    .st-emotion-cache-1v7f65g > div,
+    .st-emotion-cache-1v7f65g > div > div {{
+        background-color: transparent !important;
+        background-image: none !important;
+    }}
+    
+    /* Itens do menu */
+    .st-emotion-cache-1v7f65g .st-ae .st-af {{
+        background: transparent !important;
+        color: rgba(255, 255, 255, 0.7) !important;
+        border: 1px solid transparent !important;
+        font-size: 14px !important;
+        text-align: center !important;
+        margin: 4px 2px !important;
+        padding: 12px 20px !important;
+        border-radius: 50px !important;
+        font-weight: 500 !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+    }}
+    
+    /* Itens do menu - hover */
+    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{
+        color: {COR_DESTAQUE} !important;
+        background: rgba(255, 215, 112, 0.1) !important;
+        border: 1px solid rgba(255, 215, 112, 0.3) !important;
+        transform: translateY(-2px) !important;
+    }}
+    
+    /* Item selecionado */
+    .st-emotion-cache-1v7f65g .st-ae .st-ag {{
+        background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important;
+        color: {COR_FUNDO} !important;
+        font-weight: 700 !important;
+        box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4) !important;
+        border: none !important;
+        animation: pulse 2s infinite !important;
+    }}
+    
+    /* Scrollbar personalizada para telas pequenas */
+    .st-emotion-cache-1v7f65g > div > div {{
         overflow-x: auto !important;
         overflow-y: hidden !important;
         scrollbar-width: thin !important;
         scrollbar-color: rgba(255, 215, 112, 0.3) rgba(9, 31, 26, 0.1) !important;
+        padding: 4px 8px !important;
     }}
     
-    /* Personalização da scrollbar */
-    div[data-testid*="stHorizontalBlock"] > div > div > div > div > div::-webkit-scrollbar {{
+    .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar {{
         height: 6px !important;
     }}
     
-    div[data-testid*="stHorizontalBlock"] > div > div > div > div > div::-webkit-scrollbar-track {{
+    .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar-track {{
         background: rgba(9, 31, 26, 0.1) !important;
         border-radius: 10px !important;
+        margin: 0 20px !important;
     }}
     
-    div[data-testid*="stHorizontalBlock"] > div > div > div > div > div::-webkit-scrollbar-thumb {{
+    .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar-thumb {{
         background: rgba(255, 215, 112, 0.3) !important;
         border-radius: 10px !important;
     }}
     
-    /* Ajuste para telas pequenas */
+    /* Ícones do menu */
+    .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+        color: inherit !important;
+        font-size: 16px !important;
+        margin-right: 8px !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    .st-emotion-cache-1v7f65g .st-ae .st-ag i {{
+        filter: drop-shadow(0 2px 3px rgba(0,0,0,0.2)) !important;
+    }}
+    
+    /* Responsividade */
+    @media (max-width: 1024px) {{
+        .st-emotion-cache-1v7f65g .st-ae .st-af {{
+            padding: 10px 15px !important;
+            font-size: 13px !important;
+        }}
+    }}
+    
     @media (max-width: 768px) {{
         .st-emotion-cache-1v7f65g .st-ae .st-af {{
             padding: 8px 12px !important;
@@ -153,33 +238,59 @@ st.markdown(f"""
         
         .st-emotion-cache-1v7f65g .st-ae .st-af i {{
             font-size: 14px !important;
-            margin-right: 4px !important;
+            margin-right: 5px !important;
         }}
         
-        /* Esconder texto em telas muito pequenas, mostrar apenas ícones */
-        @media (max-width: 480px) {{
-            .st-emotion-cache-1v7f65g .st-ae .st-af span {{
-                display: none !important;
-            }}
-            
-            .st-emotion-cache-1v7f65g .st-ae .st-af {{
-                padding: 10px 15px !important;
-                min-width: 50px !important;
-            }}
-            
-            .st-emotion-cache-1v7f65g .st-ae .st-af i {{
-                margin-right: 0 !important;
-                font-size: 16px !important;
-            }}
+        .st-emotion-cache-1v7f65g {{
+            max-width: 98% !important;
+            border-radius: 30px !important;
         }}
+    }}
+    
+    @media (max-width: 576px) {{
+        .st-emotion-cache-1v7f65g .st-ae .st-af span {{
+            display: none !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g .st-ae .st-af {{
+            padding: 10px 15px !important;
+            min-width: 50px !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+            margin-right: 0 !important;
+            font-size: 16px !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g {{
+            border-radius: 25px !important;
+            padding: 2px !important;
+        }}
+    }}
+    
+    @media (max-width: 360px) {{
+        .st-emotion-cache-1v7f65g .st-ae .st-af {{
+            padding: 8px 10px !important;
+            min-width: 45px !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+            font-size: 14px !important;
+        }}
+    }}
+    
+    @keyframes pulse {{
+        0% {{ box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }}
+        50% {{ box-shadow: 0 5px 25px rgba(255, 215, 112, 0.6); }}
+        100% {{ box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }}
     }}
     
     /* REMOVE MARGENS PADRÃO DO STREAMLIT */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
-    header {{visibility: hidden;}} /* Esconde a barra colorida superior do Streamlit */
+    header {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
-    .block-container {{padding-top: 1rem !important;}} /* Sobe o conteúdo */
+    .block-container {{padding-top: 1rem !important;}}
 
 </style>
 """, unsafe_allow_html=True)
@@ -280,7 +391,7 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU SUPERIOR RESPONSIVO E MODERNO
+    # MENU SUPERIOR MODERNO E RESPONSIVO
     # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None,
@@ -291,22 +402,15 @@ def app_principal():
         styles={
             "container": {
                 "padding": "0!important",
-                "background-color": "rgba(9, 31, 26, 0.85)",
-                "backdrop-filter": "blur(10px)",
-                "border": "1px solid rgba(255, 215, 112, 0.15)",
-                "border-radius": "50px",
-                "box-shadow": "0 8px 32px rgba(0, 0, 0, 0.3)",
-                "margin": "20px auto",
-                "max-width": "95%",  # Mais responsivo
-                "width": "auto",
-                "min-width": "300px",  # Largura mínima
-                "overflow": "hidden",  # Previne overflow
+                "background-color": "transparent",
+                "border": "none",
+                "margin": "0 auto",
                 "display": "flex",
-                "flex-wrap": "nowrap",
-                "white-space": "nowrap"
+                "justify-content": "center",
+                "max-width": "100%"
             },
             "icon": {
-                "color": "rgba(255, 255, 255, 0.7)",
+                "color": "inherit",
                 "font-size": "16px",
                 "margin-right": "8px",
                 "transition": "all 0.3s ease"
@@ -325,8 +429,9 @@ def app_principal():
                 "display": "flex",
                 "align-items": "center",
                 "justify-content": "center",
-                "flex-shrink": "0",  # Previne que os itens encolham
-                "white-space": "nowrap"  # Mantém texto em uma linha
+                "flex-shrink": "0",
+                "white-space": "nowrap",
+                "min-width": "fit-content"
             },
             "nav-link:hover": {
                 "color": COR_DESTAQUE,
@@ -340,74 +445,10 @@ def app_principal():
                 "font-weight": "700",
                 "box-shadow": "0 5px 20px rgba(255, 215, 112, 0.4)",
                 "border": "none",
-                "position": "relative",
-                "animation": "pulse 2s infinite"
+                "position": "relative"
             }
         }
     )
-
-    # Adicionar animação de pulse para o item selecionado
-    st.markdown("""
-    <style>
-        @keyframes pulse {
-            0% { box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }
-            50% { box-shadow: 0 5px 25px rgba(255, 215, 112, 0.6); }
-            100% { box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }
-        }
-        
-        /* Responsividade extra */
-        @media (max-width: 1024px) {
-            .st-emotion-cache-1v7f65g .st-ae .st-af {
-                padding: 10px 15px !important;
-                font-size: 13px !important;
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .st-emotion-cache-1v7f65g .st-ae .st-af {
-                padding: 8px 12px !important;
-                font-size: 12px !important;
-            }
-            
-            .st-emotion-cache-1v7f65g .st-ae .st-af i {
-                font-size: 14px !important;
-                margin-right: 5px !important;
-            }
-        }
-        
-        @media (max-width: 576px) {
-            .st-emotion-cache-1v7f65g .st-ae .st-af span {
-                display: none !important;
-            }
-            
-            .st-emotion-cache-1v7f65g .st-ae .st-af {
-                padding: 10px 15px !important;
-                min-width: 50px !important;
-            }
-            
-            .st-emotion-cache-1v7f65g .st-ae .st-af i {
-                margin-right: 0 !important;
-                font-size: 16px !important;
-            }
-            
-            .st-emotion-cache-1v7f65g {
-                max-width: 100% !important;
-                border-radius: 25px !important;
-            }
-        }
-        
-        @media (max-width: 360px) {
-            .st-emotion-cache-1v7f65g .st-ae .st-af {
-                padding: 8px 10px !important;
-                min-width: 45px !important;
-            }
-            
-            .st-emotion-cache-1v7f65g .st-ae .st-af i {
-                font-size: 14px !important;
-            }
-        }
-    </style>
-    """, unsafe_allow_html=True)
 
     if menu != pg:
         if pg == "Meus Certificados" and menu == "Início": pass 
