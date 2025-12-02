@@ -28,7 +28,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - SEGURO)
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - LIMPO)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -55,16 +55,35 @@ st.markdown(f"""
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
     
-    /* --- SIDEBAR (APENAS COR, SEM HACKS DE POSIÇÃO) --- */
+    /* --- SIDEBAR (CORRIGIDA) --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
     }}
     
-    /* Ícones da Sidebar */
-    section[data-testid="stSidebar"] svg {{
-        fill: {COR_DESTAQUE} !important;
+    /* Ícones e Textos da Sidebar */
+    section[data-testid="stSidebar"] .stMarkdown, 
+    section[data-testid="stSidebar"] h1, 
+    section[data-testid="stSidebar"] h2, 
+    section[data-testid="stSidebar"] h3 {{
+        color: {COR_TEXTO} !important;
+    }}
+
+    /* --- BOTÃO DE CONTROLE DA SIDEBAR (O RESGATE) --- */
+    /* Garante que o botão esteja visível e com a cor certa */
+    [data-testid="stSidebarCollapsedControl"] {{
         color: {COR_DESTAQUE} !important;
+        display: block !important;
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"] button {{
+        color: {COR_DESTAQUE} !important;
+        background-color: rgba(0,0,0,0.2) !important;
+    }}
+
+    [data-testid="stSidebarCollapsedControl"] button:hover {{
+        background-color: {COR_HOVER} !important;
+        color: {COR_FUNDO} !important;
     }}
 
     /* --- CONTAINERS E CARDS --- */
@@ -103,7 +122,7 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
-    /* --- MENU SUPERIOR RESPONSIVO (Option Menu) --- */
+    /* --- MENU SUPERIOR (OPTION MENU) --- */
     .st-emotion-cache-1v7f65g {{
         background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
         backdrop-filter: blur(10px) !important;
@@ -130,7 +149,6 @@ st.markdown(f"""
         font-weight: 700 !important;
     }}
     
-    /* Remove decorações padrão */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
@@ -196,7 +214,6 @@ def app_principal():
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
         if tipo in ["admin", "professor"]:
-            # Botão do Painel do Professor (onde está o Dashboard)
             if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
             
         if tipo == "admin":
@@ -217,7 +234,6 @@ def app_principal():
 
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
-        # Menu horizontal
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
