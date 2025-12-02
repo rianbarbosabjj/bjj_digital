@@ -207,7 +207,7 @@ def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2 = st.tabs(["📝 Montar Prova", "✅ Autorizar Alunos"])
+    tab1, tab2, tab3 = st.tabs(["📝 Criar e Editar Prova", "👁️ Visualizar Provas", "✅ Autorizar Alunos"])
 
     with tab1:
         st.subheader("1. Selecione a Faixa")
@@ -309,10 +309,47 @@ def gestao_exame_de_faixa():
                         db.collection('config_exames').document(st.session_state.doc_id).update(dados)
                     else:
                         db.collection('config_exames').add(dados)
-                    st.success(f"Prova da Faixa {faixa_sel} salva com sucesso!"); time.sleep(1.5); st.rerun()
-
-    # --- ABA 2: AUTORIZAR ---
+                    st.success(f"Prova da Faixa {faixa_sel} salva com sucesso!"); time.sleep(1.5); st.rerun()    # --- ABA 2: VISUALIZAR PROVAS ---
     with tab2:
+        st.subheader("Status das Provas Cadastradas")
+        configs_stream = db.collection('config_exames').stream()
+        mapa_configs = {}
+        for doc in configs_stream:
+            d = doc.to_dict()
+            mapa_configs[d.get('faixa')] = d
+
+        categorias = {
+            "🔘 Cinza": ["Cinza e Branca", "Cinza", "Cinza e Preta"],
+            "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
+            "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
+            "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
+            "🔵 Azul": ["Azul"], "🟣 Roxa": ["Roxa"], "🟤 Marrom": ["Marrom"], "⚫ Preta": ["Preta"]
+        }
+
+        abas_cores = st.tabs(list(categorias.keys()))
+        for aba, (cor_nome, lista_faixas) in zip(abas_cores, categorias.items()):
+            with aba:
+                for f_nome in lista_faixas:
+                    data = mapa_configs.get(f_nome)
+                    if data:
+                        modo = data.get('modo_selecao', 'Sorteio')
+                        qtd = data.get('qtd_questoes', 0)
+                        tempo = data.get('tempo_limite', 0)
+                        nota = data.get('aprovacao_minima', 0)
+                        with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
+                            st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
+                            if modo == "🖐️ Manual (Fixa)" and data.get('questoes'):
+                                for i, q in enumerate(data['questoes'], 1):
+                                    st.markdown(f"**{i}. {q.get('pergunta')}**")
+                                    st.caption(f"Resposta: {q.get('resposta')}")
+                                    st.markdown("---")
+                            elif modo == "🎲 Aleatório (Sorteio)":
+                                st.info(f"Sorteia {qtd} questões.")
+                    else:
+                        st.warning(f"⚠️ {f_nome} não configurada.")
+
+    # --- ABA 3: AUTORIZAR ---
+    with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Agendar Exame")
             c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now()); d_fim = c2.date_input("Fim:", datetime.now())
