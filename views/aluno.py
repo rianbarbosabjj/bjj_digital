@@ -19,7 +19,7 @@ from utils import (
 )
 
 # =========================================
-# CARREGADOR DE EXAME (CORRIGIDO PARA LER IDS DO ADMIN)
+# CARREGADOR DE EXAME
 # =========================================
 def carregar_exame_especifico(faixa_alvo):
     db = get_db()
@@ -27,7 +27,6 @@ def carregar_exame_especifico(faixa_alvo):
     tempo = 45
     nota = 70
     
-    # 1. Busca Configuração da Prova
     configs = db.collection('config_exames').where('faixa', '==', faixa_alvo).limit(1).stream()
     config_doc = None
     for doc in configs: 
@@ -37,44 +36,31 @@ def carregar_exame_especifico(faixa_alvo):
     if config_doc:
         tempo = int(config_doc.get('tempo_limite', 45))
         nota = int(config_doc.get('aprovacao_minima', 70))
-        
-        # --- LÓGICA NOVA: VERIFICA SE O ADMIN SELECIONOU QUESTÕES MANUALMENTE ---
         ids_salvos = config_doc.get('questoes_ids', [])
         
         if ids_salvos and len(ids_salvos) > 0:
-            # MODO MANUAL: Carrega exatamente as questões que o Admin escolheu
             for q_id in ids_salvos:
                 doc_q = db.collection('questoes').document(q_id).get()
                 if doc_q.exists:
                     d = doc_q.to_dict()
-                    d['id'] = doc_q.id # Importante salvar o ID
-                    
-                    # Compatibilidade (List -> Dict)
+                    d['id'] = doc_q.id 
                     if 'alternativas' not in d and 'opcoes' in d:
                         ops = d['opcoes']
                         d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                    
                     questoes_finais.append(d)
         else:
-            # MODO AUTOMÁTICO/ANTIGO (Fallback): Sorteia por dificuldade se não houver IDs salvos
             qtd_alvo = int(config_doc.get('qtd_questoes', 10))
             dificuldade_alvo = int(config_doc.get('dificuldade_alvo', 1))
-            
             q_ref = list(db.collection('questoes').where('dificuldade', '==', dificuldade_alvo).where('status', '==', 'aprovada').stream())
             pool = []
             for doc in q_ref:
-                d = doc.to_dict()
-                d['id'] = doc.id
+                d = doc.to_dict(); d['id'] = doc.id
                 if 'alternativas' not in d and 'opcoes' in d:
                     ops = d['opcoes']
                     d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
                 pool.append(d)
-
             if pool:
-                if len(pool) > qtd_alvo:
-                    questoes_finais = random.sample(pool, qtd_alvo)
-                else:
-                    questoes_finais = pool
+                questoes_finais = random.sample(pool, qtd_alvo) if len(pool) > qtd_alvo else pool
     else:
         st.error(f"Prova da faixa {faixa_alvo} não configurada pelo Mestre.")
 
@@ -111,7 +97,7 @@ def meus_certificados(usuario):
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
 # =========================================
-# EXAME DE FAIXA (LÓGICA UNIFICADA)
+# EXAME DE FAIXA (ATUALIZADO COM DETALHES)
 # =========================================
 def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
@@ -167,7 +153,6 @@ def exame_de_faixa(usuario):
         if dt_ini and datetime.utcnow() < dt_ini: st.warning(f"⏳ Início em: {dt_ini}"); return
     except: pass
 
-    # --- CARREGA A PROVA ---
     qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
     qtd = len(qs)
 
@@ -205,23 +190,18 @@ def exame_de_faixa(usuario):
             resps = {}
             for i, q in enumerate(qs):
                 st.markdown(f"**{i+1}. {q.get('pergunta')}**")
-                # Compatibilidade com alternativas novas (dict) ou antigas (list)
                 opts = []
                 if 'alternativas' in q and isinstance(q['alternativas'], dict):
-                    # Garante ordem A, B, C, D
                     opts = [f"{k}) {q['alternativas'][k]}" for k in ["A","B","C","D"] if k in q['alternativas']]
                 elif 'opcoes' in q:
                     opts = q['opcoes']
-                
-                # Garante que options não esteja vazio
                 if not opts: opts = ["Erro carregamento"]
-
                 resps[i] = st.radio("R:", opts, key=f"q{i}", label_visibility="collapsed")
                 st.markdown("---")
                 
-if st.form_submit_button("Finalizar"):
+            if st.form_submit_button("Finalizar"):
                 acertos = 0
-                detalhes_questoes = [] # <--- NOVO: Lista para guardar o raio-x da prova
+                detalhes_questoes = [] # <--- NOVO: Coleta de Dados
 
                 for i, q in enumerate(qs):
                     resp_aluno_full = str(resps.get(i))
@@ -240,7 +220,7 @@ if st.form_submit_button("Finalizar"):
                         acertos += 1
                         is_correct = True
                     
-                    # <--- NOVO: Salva o ID e o resultado individual
+                    # Salva detalhe de cada questão para o Dashboard
                     detalhes_questoes.append({
                         "questao_id": q.get('id'),
                         "acertou": is_correct,
@@ -253,23 +233,20 @@ if st.form_submit_button("Finalizar"):
                 registrar_fim_exame(usuario['id'], aprovado)
                 st.session_state.exame_iniciado = False
                 cod = gerar_codigo_verificacao() if aprovado else None
+                if aprovado: st.session_state.resultado_prova = {"nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), "acertos": acertos, "total": len(qs), "codigo": cod}
                 
-                if aprovado: 
-                    st.session_state.resultado_prova = {"nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), "acertos": acertos, "total": len(qs), "codigo": cod}
-                
-                # <--- NOVO: Adicionei 'detalhes' no salvamento do banco
-                try: 
-                    db.collection('resultados').add({
-                        "usuario": usuario['nome'], 
-                        "faixa": dados.get('faixa_exame'), 
-                        "pontuacao": nota, 
-                        "acertos": acertos, 
-                        "total": len(qs), 
-                        "aprovado": aprovado, 
-                        "codigo_verificacao": cod, 
-                        "detalhes": detalhes_questoes, # Salva o raio-x aqui
-                        "data": firestore.SERVER_TIMESTAMP
-                    })
+                # Salva no banco com os detalhes
+                try: db.collection('resultados').add({
+                    "usuario": usuario['nome'], 
+                    "faixa": dados.get('faixa_exame'), 
+                    "pontuacao": nota, 
+                    "acertos": acertos, 
+                    "total": len(qs), 
+                    "aprovado": aprovado, 
+                    "codigo_verificacao": cod, 
+                    "detalhes": detalhes_questoes,
+                    "data": firestore.SERVER_TIMESTAMP
+                })
                 except: pass
                 
                 if not aprovado: st.error(f"Reprovado. {nota:.0f}%"); time.sleep(3)
