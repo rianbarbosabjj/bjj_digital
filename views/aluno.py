@@ -1,6 +1,7 @@
 import streamlit as st
 import time
 import random
+import pandas as pd # Adicionado para o Ranking
 import os
 import json
 from datetime import datetime, timedelta
@@ -67,11 +68,153 @@ def carregar_exame_especifico(faixa_alvo):
     return questoes_finais, tempo, nota
 
 # =========================================
-# OUTRAS TELAS
+# MODO ROLA (CRONÔMETRO) - NOVO!
 # =========================================
 def modo_rola(usuario):
-    st.markdown("## 🥋 Modo Rola"); st.info("Em breve.")
+    st.markdown("<h1 style='color:#FFD770; text-align:center'>⏱️ Modo Rola</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center'>Cronômetro oficial para treinos no dojo.</p>", unsafe_allow_html=True)
+    st.markdown("---")
 
+    # Configuração
+    with st.expander("⚙️ Configurar Tempos", expanded=True):
+        c1, c2 = st.columns(2)
+        tempo_luta = c1.number_input("Tempo de Luta (minutos):", 1, 60, 5)
+        tempo_descanso = c2.number_input("Tempo de Descanso (segundos):", 0, 300, 30)
+
+    # Estado do Timer
+    if 'timer_running' not in st.session_state: st.session_state.timer_running = False
+    
+    # Botões de Controle
+    col_b1, col_b2, col_b3 = st.columns([1, 1, 1])
+    
+    iniciar = col_b2.button("▶️ INICIAR ROLA", use_container_width=True, type="primary")
+    
+    # Área do Mostrador Gigante
+    timer_placeholder = st.empty()
+
+    if iniciar:
+        st.session_state.timer_running = True
+        total_segundos = tempo_luta * 60
+        
+        # Loop do Tempo de Luta
+        timer_placeholder.markdown(f"<div style='background-color:#078B6C; padding:20px; border-radius:15px; text-align:center'><h1 style='font-size:80px; color:white; margin:0'>PREPARAR...</h1></div>", unsafe_allow_html=True)
+        time.sleep(2)
+        
+        for i in range(total_segundos, -1, -1):
+            if not st.session_state.timer_running: break
+            m, s = divmod(i, 60)
+            # Visual do Timer
+            cor_fundo = "#0e2d26"
+            cor_texto = "#FFD770"
+            if i < 30: cor_texto = "#FF4B4B" # Fica vermelho no final
+            
+            timer_placeholder.markdown(
+                f"<div style='border: 4px solid {cor_texto}; border-radius: 20px; padding: 40px; text-align: center; background-color: rgba(0,0,0,0.3);'>"
+                f"<h1 style='font-size: 100px; margin: 0; color: {cor_texto}; font-family: monospace;'>{m:02d}:{s:02d}</h1>"
+                f"<h3 style='color: white;'>🤼 LUTANDO</h3>"
+                f"</div>", 
+                unsafe_allow_html=True
+            )
+            time.sleep(1)
+        
+        # Alerta de Fim de Luta
+        if st.session_state.timer_running:
+            for _ in range(3): # Pisca 3 vezes
+                timer_placeholder.markdown(f"<div style='background-color:#FF4B4B; padding:20px; border-radius:15px; text-align:center'><h1 style='font-size:80px; color:white; margin:0'>ACABOU!</h1></div>", unsafe_allow_html=True)
+                time.sleep(0.5)
+                timer_placeholder.empty()
+                time.sleep(0.2)
+
+            # Loop do Descanso
+            if tempo_descanso > 0:
+                for i in range(tempo_descanso, -1, -1):
+                    timer_placeholder.markdown(
+                        f"<div style='border: 4px solid #00CC96; border-radius: 20px; padding: 40px; text-align: center; background-color: rgba(0,0,0,0.3);'>"
+                        f"<h1 style='font-size: 100px; margin: 0; color: #00CC96; font-family: monospace;'>{i}s</h1>"
+                        f"<h3 style='color: white;'>🥤 DESCANSO</h3>"
+                        f"</div>", 
+                        unsafe_allow_html=True
+                    )
+                    time.sleep(1)
+            
+            timer_placeholder.success("Próximo Round!")
+            st.session_state.timer_running = False
+
+# =========================================
+# RANKING (LEADERBOARD) - NOVO!
+# =========================================
+def ranking():
+    st.markdown("<h1 style='color:#FFD770; text-align:center'>🏆 Ranking do Dojo</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center'>Os melhores desempenhos nos exames teóricos.</p>", unsafe_allow_html=True)
+    
+    db = get_db()
+    with st.spinner("Calculando pontuações..."):
+        # Busca apenas resultados aprovados
+        res_ref = list(db.collection('resultados').where('aprovado', '==', True).stream())
+        
+        if not res_ref:
+            st.info("Nenhum resultado registrado para o ranking ainda.")
+            return
+
+        data = [d.to_dict() for d in res_ref]
+        df = pd.DataFrame(data)
+
+    # Processamento dos dados
+    if not df.empty:
+        # Agrupa por usuário e calcula métricas
+        ranking_df = df.groupby('usuario').agg(
+            Exames_Aprovados=('aprovado', 'count'),
+            Media_Notas=('pontuacao', 'mean'),
+            Ultima_Faixa=('faixa', 'max') # Pega a "maior" string (não ideal para faixas, mas serve para exibir)
+        ).reset_index()
+
+        # Ordena: Quem tem maior média de notas vence
+        ranking_df = ranking_df.sort_values(by=['Media_Notas', 'Exames_Aprovados'], ascending=[False, False])
+        
+        # Adiciona coluna de Medalhas
+        medals = ['🥇', '🥈', '🥉'] + [''] * (len(ranking_df) - 3)
+        ranking_df['Pos'] = medals[:len(ranking_df)]
+        
+        # Reordena colunas para exibição
+        ranking_df = ranking_df[['Pos', 'usuario', 'Media_Notas', 'Exames_Aprovados', 'Ultima_Faixa']]
+        ranking_df.columns = ['#', 'Atleta', 'Média Geral', 'Exames Concluídos', 'Última Graduação']
+
+        # Exibição do Pódio (Top 3 Cards)
+        top3 = ranking_df.head(3)
+        cols = st.columns(3)
+        for i, (idx, row) in enumerate(top3.iterrows()):
+            with cols[i]:
+                with st.container(border=True):
+                    st.markdown(f"<h1 style='text-align:center'>{row['#']}</h1>", unsafe_allow_html=True)
+                    st.markdown(f"<h3 style='text-align:center; color:#FFD770'>{row['Atleta'].split()[0]}</h3>", unsafe_allow_html=True)
+                    st.metric("Média", f"{row['Média Geral']:.1f}%")
+        
+        st.markdown("---")
+        
+        # Tabela Completa
+        st.dataframe(
+            ranking_df,
+            column_config={
+                "Média Geral": st.column_config.ProgressColumn(
+                    "Média Geral",
+                    format="%.1f%%",
+                    min_value=0,
+                    max_value=100,
+                ),
+                "Exames Concluídos": st.column_config.NumberColumn(
+                    "Aprovações",
+                    format="%d 🏆"
+                )
+            },
+            hide_index=True,
+            use_container_width=True
+        )
+    else:
+        st.warning("Dados insuficientes para gerar o ranking.")
+
+# =========================================
+# OUTRAS TELAS (MEUS CERTIFICADOS)
+# =========================================
 def meus_certificados(usuario):
     if st.button("🏠 Voltar ao Início", key="btn_back_cert"):
         st.session_state.menu_selection = "Início"; st.rerun()
@@ -94,10 +237,8 @@ def meus_certificados(usuario):
                 if pdf_bytes: c2.download_button("📄 PDF", pdf_bytes, pdf_name, "application/pdf", key=f"d_{i}")
             except: pass
 
-def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
-
 # =========================================
-# EXAME DE FAIXA (ATUALIZADO COM DETALHES)
+# EXAME DE FAIXA (LÓGICA PRINCIPAL)
 # =========================================
 def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
@@ -201,7 +342,7 @@ def exame_de_faixa(usuario):
                 
             if st.form_submit_button("Finalizar"):
                 acertos = 0
-                detalhes_questoes = [] # <--- NOVO: Coleta de Dados
+                detalhes_questoes = []
 
                 for i, q in enumerate(qs):
                     resp_aluno_full = str(resps.get(i))
@@ -220,7 +361,6 @@ def exame_de_faixa(usuario):
                         acertos += 1
                         is_correct = True
                     
-                    # Salva detalhe de cada questão para o Dashboard
                     detalhes_questoes.append({
                         "questao_id": q.get('id'),
                         "acertou": is_correct,
@@ -234,8 +374,6 @@ def exame_de_faixa(usuario):
                 st.session_state.exame_iniciado = False
                 cod = gerar_codigo_verificacao() if aprovado else None
                 if aprovado: st.session_state.resultado_prova = {"nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), "acertos": acertos, "total": len(qs), "codigo": cod}
-                
-                # Salva no banco com os detalhes
                 try: db.collection('resultados').add({
                     "usuario": usuario['nome'], 
                     "faixa": dados.get('faixa_exame'), 
