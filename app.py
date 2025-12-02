@@ -120,7 +120,61 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
-    /* --- REMOVE MARGENS PADRÃO DO STREAMLIT --- */
+    /* --- MENU SUPERIOR RESPONSIVO --- */
+    /* Container do menu */
+    div[data-testid*="stHorizontalBlock"] > div > div > div > div > div {{
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        scrollbar-width: thin !important;
+        scrollbar-color: rgba(255, 215, 112, 0.3) rgba(9, 31, 26, 0.1) !important;
+    }}
+    
+    /* Personalização da scrollbar */
+    div[data-testid*="stHorizontalBlock"] > div > div > div > div > div::-webkit-scrollbar {{
+        height: 6px !important;
+    }}
+    
+    div[data-testid*="stHorizontalBlock"] > div > div > div > div > div::-webkit-scrollbar-track {{
+        background: rgba(9, 31, 26, 0.1) !important;
+        border-radius: 10px !important;
+    }}
+    
+    div[data-testid*="stHorizontalBlock"] > div > div > div > div > div::-webkit-scrollbar-thumb {{
+        background: rgba(255, 215, 112, 0.3) !important;
+        border-radius: 10px !important;
+    }}
+    
+    /* Ajuste para telas pequenas */
+    @media (max-width: 768px) {{
+        .st-emotion-cache-1v7f65g .st-ae .st-af {{
+            padding: 8px 12px !important;
+            font-size: 12px !important;
+        }}
+        
+        .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+            font-size: 14px !important;
+            margin-right: 4px !important;
+        }}
+        
+        /* Esconder texto em telas muito pequenas, mostrar apenas ícones */
+        @media (max-width: 480px) {{
+            .st-emotion-cache-1v7f65g .st-ae .st-af span {{
+                display: none !important;
+            }}
+            
+            .st-emotion-cache-1v7f65g .st-ae .st-af {{
+                padding: 10px 15px !important;
+                min-width: 50px !important;
+            }}
+            
+            .st-emotion-cache-1v7f65g .st-ae .st-af i {{
+                margin-right: 0 !important;
+                font-size: 16px !important;
+            }}
+        }}
+    }}
+    
+    /* REMOVE MARGENS PADRÃO DO STREAMLIT */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}} /* Esconde a barra colorida superior do Streamlit */
@@ -213,7 +267,7 @@ def app_principal():
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL
+    # MENU HORIZONTAL PRINCIPAL (RESPONSIVO)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
@@ -226,83 +280,134 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # NOVO ESTILO: MENU MINIMALISTA FLUTUANTE (Pílulas Douradas)
+    # MENU SUPERIOR RESPONSIVO E MODERNO
     # -------------------------------------------------------------
-   
-    python
-# Esta é uma versão simplificada que mantém o option_menu mas com estilo modernizado:
-
-menu = option_menu(
-    menu_title=None,
-    options=ops,
-    icons=icns,
-    default_index=idx,
-    orientation="horizontal",
-    styles={
-        "container": {
-            "padding": "0!important",
-            "background-color": "rgba(9, 31, 26, 0.85)",
-            "backdrop-filter": "blur(10px)",
-            "border": "1px solid rgba(255, 215, 112, 0.15)",
-            "border-radius": "50px",
-            "box-shadow": "0 8px 32px rgba(0, 0, 0, 0.3)",
-            "margin": "20px auto",
-            "max-width": "fit-content"
-        },
-        "icon": {
-            "color": "rgba(255, 255, 255, 0.7)",
-            "font-size": "16px",
-            "margin-right": "8px",
-            "transition": "all 0.3s ease"
-        },
-        "nav-link": {
-            "font-size": "14px",
-            "text-align": "center",
-            "margin": "4px 2px",
-            "padding": "12px 24px",
-            "border-radius": "50px",
-            "color": "rgba(255, 255, 255, 0.7)",
-            "font-weight": "500",
-            "background": "transparent",
-            "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-            "border": "1px solid transparent",
-            "display": "flex",
-            "align-items": "center",
-            "justify-content": "center"
-        },
-        "nav-link:hover": {
-            "color": COR_DESTAQUE,
-            "background": "rgba(255, 215, 112, 0.1)",
-            "border": f"1px solid rgba(255, 215, 112, 0.3)",
-            "transform": "translateY(-2px)"
-        },
-        "nav-link-selected": {
-            "background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%)",
-            "color": COR_FUNDO,
-            "font-weight": "700",
-            "box-shadow": "0 5px 20px rgba(255, 215, 112, 0.4)",
-            "border": "none",
-            "position": "relative",
-            "animation": "pulse 2s infinite"
+    menu = option_menu(
+        menu_title=None,
+        options=ops,
+        icons=icns,
+        default_index=idx,
+        orientation="horizontal",
+        styles={
+            "container": {
+                "padding": "0!important",
+                "background-color": "rgba(9, 31, 26, 0.85)",
+                "backdrop-filter": "blur(10px)",
+                "border": "1px solid rgba(255, 215, 112, 0.15)",
+                "border-radius": "50px",
+                "box-shadow": "0 8px 32px rgba(0, 0, 0, 0.3)",
+                "margin": "20px auto",
+                "max-width": "95%",  # Mais responsivo
+                "width": "auto",
+                "min-width": "300px",  # Largura mínima
+                "overflow": "hidden",  # Previne overflow
+                "display": "flex",
+                "flex-wrap": "nowrap",
+                "white-space": "nowrap"
+            },
+            "icon": {
+                "color": "rgba(255, 255, 255, 0.7)",
+                "font-size": "16px",
+                "margin-right": "8px",
+                "transition": "all 0.3s ease"
+            },
+            "nav-link": {
+                "font-size": "14px",
+                "text-align": "center",
+                "margin": "4px 2px",
+                "padding": "12px 20px",
+                "border-radius": "50px",
+                "color": "rgba(255, 255, 255, 0.7)",
+                "font-weight": "500",
+                "background": "transparent",
+                "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                "border": "1px solid transparent",
+                "display": "flex",
+                "align-items": "center",
+                "justify-content": "center",
+                "flex-shrink": "0",  # Previne que os itens encolham
+                "white-space": "nowrap"  # Mantém texto em uma linha
+            },
+            "nav-link:hover": {
+                "color": COR_DESTAQUE,
+                "background": "rgba(255, 215, 112, 0.1)",
+                "border": f"1px solid rgba(255, 215, 112, 0.3)",
+                "transform": "translateY(-2px)"
+            },
+            "nav-link-selected": {
+                "background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%)",
+                "color": COR_FUNDO,
+                "font-weight": "700",
+                "box-shadow": "0 5px 20px rgba(255, 215, 112, 0.4)",
+                "border": "none",
+                "position": "relative",
+                "animation": "pulse 2s infinite"
+            }
         }
-    }
-)
+    )
 
-# Adicionar animação de pulse para o item selecionado
-st.markdown("""
-<style>
-    @keyframes pulse {
-        0% { box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }
-        50% { box-shadow: 0 5px 25px rgba(255, 215, 112, 0.6); }
-        100% { box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }
-    }
-    
-    /* Melhorar a transição entre itens */
-    .st-emotion-cache-1v7f65g .st-ae .st-af {
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    }
-</style>
-""", unsafe_allow_html=True)
+    # Adicionar animação de pulse para o item selecionado
+    st.markdown("""
+    <style>
+        @keyframes pulse {
+            0% { box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }
+            50% { box-shadow: 0 5px 25px rgba(255, 215, 112, 0.6); }
+            100% { box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }
+        }
+        
+        /* Responsividade extra */
+        @media (max-width: 1024px) {
+            .st-emotion-cache-1v7f65g .st-ae .st-af {
+                padding: 10px 15px !important;
+                font-size: 13px !important;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .st-emotion-cache-1v7f65g .st-ae .st-af {
+                padding: 8px 12px !important;
+                font-size: 12px !important;
+            }
+            
+            .st-emotion-cache-1v7f65g .st-ae .st-af i {
+                font-size: 14px !important;
+                margin-right: 5px !important;
+            }
+        }
+        
+        @media (max-width: 576px) {
+            .st-emotion-cache-1v7f65g .st-ae .st-af span {
+                display: none !important;
+            }
+            
+            .st-emotion-cache-1v7f65g .st-ae .st-af {
+                padding: 10px 15px !important;
+                min-width: 50px !important;
+            }
+            
+            .st-emotion-cache-1v7f65g .st-ae .st-af i {
+                margin-right: 0 !important;
+                font-size: 16px !important;
+            }
+            
+            .st-emotion-cache-1v7f65g {
+                max-width: 100% !important;
+                border-radius: 25px !important;
+            }
+        }
+        
+        @media (max-width: 360px) {
+            .st-emotion-cache-1v7f65g .st-ae .st-af {
+                padding: 8px 10px !important;
+                min-width: 45px !important;
+            }
+            
+            .st-emotion-cache-1v7f65g .st-ae .st-af i {
+                font-size: 14px !important;
+            }
+        }
+    </style>
+    """, unsafe_allow_html=True)
 
     if menu != pg:
         if pg == "Meus Certificados" and menu == "Início": pass 
@@ -310,6 +415,7 @@ st.markdown("""
             st.session_state.menu_selection = menu
             st.rerun()
 
+    # Navegação das páginas
     if pg == "Modo Rola": aluno.modo_rola(usuario)
     elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
     elif pg == "Ranking": aluno.ranking()
