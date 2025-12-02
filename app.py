@@ -72,16 +72,62 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
 
-    /* --- SIDEBAR --- */
+    /* --- SIDEBAR E ÍCONE HAMBURGUER --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
         box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
+    
     /* Ícones da Sidebar */
-    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
+    section[data-testid="stSidebar"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
+    }}
+    
+    /* Botão hamburguer (três traços) - substitui o >> */
+    [data-testid="collapsedControl"] {{
+        background-color: transparent !important;
+    }}
+    
+    [data-testid="collapsedControl"] button {{
+        background-color: rgba(9, 31, 26, 0.8) !important;
+        border: 1px solid rgba(255, 215, 112, 0.3) !important;
+        border-radius: 8px !important;
+        padding: 8px 10px !important;
+        min-height: 44px !important;
+        min-width: 44px !important;
+    }}
+    
+    /* Esconde o SVG original (>>) */
+    [data-testid="collapsedControl"] button svg {{
+        display: none !important;
+    }}
+    
+    /* Adiciona o ícone hamburguer (☰) */
+    [data-testid="collapsedControl"] button::before {{
+        content: "☰";
+        color: {COR_DESTAQUE} !important;
+        font-size: 22px !important;
+        font-weight: bold !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        height: 100% !important;
+        line-height: 1 !important;
+    }}
+    
+    /* Efeito hover no ícone hamburguer */
+    [data-testid="collapsedControl"] button:hover {{
+        background-color: rgba(255, 215, 112, 0.1) !important;
+        border: 1px solid rgba(255, 215, 112, 0.5) !important;
+        transform: scale(1.05) !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    [data-testid="collapsedControl"] button:hover::before {{
+        color: {COR_HOVER} !important;
     }}
 
     /* --- CONTAINERS E CARDS --- */
