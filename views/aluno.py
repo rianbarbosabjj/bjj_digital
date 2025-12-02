@@ -72,7 +72,7 @@ def carregar_exame_especifico(faixa_alvo):
 # =========================================
 def modo_rola(usuario):
     st.markdown("<h1 style='color:#FFD770; text-align:center'>🤼 Modo Rola (Treino Rápido)</h1>", unsafe_allow_html=True)
-    st.info("Responda 5 questões aleatórias para somar pontos no Ranking!")
+    st.info("Responda 5 questões aleatórias. Pontua apenas para o Ranking de Treino!")
 
     if "rola_iniciado" not in st.session_state: st.session_state.rola_iniciado = False
     
@@ -139,7 +139,7 @@ def modo_rola(usuario):
                 db = get_db()
                 db.collection('resultados').add({
                     "usuario": usuario['nome'],
-                    "faixa": "Modo Rola", 
+                    "faixa": "Modo Rola", # Identificador para separar depois
                     "pontuacao": nota,
                     "acertos": acertos,
                     "total": 5,
@@ -159,27 +159,22 @@ def modo_rola(usuario):
                 st.rerun()
 
 # =========================================
-# RANKING (ATUALIZADO: SEPARADO POR FAIXA)
+# RANKING (DESVINCULADO: EXAMES vs ROLA)
 # =========================================
 def ranking():
     st.markdown("<h1 style='color:#FFD770; text-align:center'>🏆 Ranking do Dojo</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center'>Pontuação baseada em Exames Oficiais e Modo Rola.</p>", unsafe_allow_html=True)
     
     db = get_db()
     
     with st.spinner("Atualizando placar..."):
-        # 1. Buscar todos os Usuários para mapear a faixa atual
-        # Isso permite que Admin, Professor e Aluno entrem no ranking com sua faixa correta
+        # 1. Mapa de Faixas
         users_ref = list(db.collection('usuarios').stream())
         mapa_faixas = {}
         for u in users_ref:
             d = u.to_dict()
-            # Mapeia Nome -> Faixa Atual
-            # Se a faixa for complexa (ex: "Cinza e Preta"), simplificamos para "Cinza" na lógica de abas,
-            # ou usamos a string completa se preferir. Aqui usaremos a string da faixa.
             mapa_faixas[d.get('nome')] = d.get('faixa_atual', 'Branca')
 
-        # 2. Buscar Resultados
+        # 2. Resultados
         res_ref = list(db.collection('resultados').where('aprovado', '==', True).stream())
         
         if not res_ref:
@@ -190,34 +185,36 @@ def ranking():
         df = pd.DataFrame(data)
 
     if not df.empty:
-        # Adiciona a coluna 'faixa_do_atleta' cruzando com o mapa
         df['faixa_atleta'] = df['usuario'].map(mapa_faixas).fillna('Desconhecido')
 
-        # Agrupa por usuário e calcula métricas
-        ranking_geral = df.groupby(['usuario', 'faixa_atleta']).agg(
-            Exames_Aprovados=('aprovado', 'count'),
-            Media_Notas=('pontuacao', 'mean')
-        ).reset_index()
+        # --- SEPARAÇÃO DOS DADOS ---
+        # DF apenas de EXAMES (Ignora "Modo Rola")
+        df_exames = df[df['faixa'] != 'Modo Rola']
+        
+        # DF apenas de ROLA
+        df_rola = df[df['faixa'] == 'Modo Rola']
 
-        # Função auxiliar para renderizar tabela
-        def renderizar_tabela(dataframe_filtrado):
-            if dataframe_filtrado.empty:
-                st.caption("Nenhum atleta pontuou nesta categoria ainda.")
+        # --- FUNÇÃO RENDERIZADORA GENÉRICA ---
+        def renderizar_ranking(dados, titulo_col_qtd):
+            if dados.empty:
+                st.info("Sem dados para este ranking.")
                 return
 
-            # Ordena
-            df_final = dataframe_filtrado.sort_values(by=['Media_Notas', 'Exames_Aprovados'], ascending=[False, False])
-            
-            # Medalhas
-            medals = ['🥇', '🥈', '🥉'] + [''] * (len(df_final) - 3)
-            df_final['Pos'] = medals[:len(df_final)]
-            
-            # Formata
-            df_final = df_final[['Pos', 'usuario', 'Media_Notas', 'Exames_Aprovados', 'faixa_atleta']]
-            df_final.columns = ['#', 'Atleta', 'Média Geral', 'Atividades', 'Graduação']
+            ranking_grp = dados.groupby(['usuario', 'faixa_atleta']).agg(
+                Qtd=('aprovado', 'count'),
+                Media=('pontuacao', 'mean')
+            ).reset_index()
 
-            # Top 3 Cards
-            top3 = df_final.head(3)
+            ranking_grp = ranking_grp.sort_values(by=['Media', 'Qtd'], ascending=[False, False])
+            
+            medals = ['🥇', '🥈', '🥉'] + [''] * (len(ranking_grp) - 3)
+            ranking_grp['Pos'] = medals[:len(ranking_grp)]
+            
+            ranking_final = ranking_grp[['Pos', 'usuario', 'Media', 'Qtd', 'faixa_atleta']]
+            ranking_final.columns = ['#', 'Atleta', 'Média', titulo_col_qtd, 'Graduação']
+
+            # Top 3
+            top3 = ranking_final.head(3)
             cols = st.columns(3)
             for i, (idx, row) in enumerate(top3.iterrows()):
                 with cols[i]:
@@ -225,48 +222,46 @@ def ranking():
                         st.markdown(f"<h1 style='text-align:center'>{row['#']}</h1>", unsafe_allow_html=True)
                         st.markdown(f"<h3 style='text-align:center; color:#FFD770'>{row['Atleta'].split()[0]}</h3>", unsafe_allow_html=True)
                         st.caption(f"{row['Graduação']}")
-                        st.metric("Média", f"{row['Média Geral']:.1f}%")
+                        st.metric("Média", f"{row['Média']:.1f}%")
             
             st.markdown("---")
-            
-            # Tabela
             st.dataframe(
-                df_final,
+                ranking_final,
                 column_config={
-                    "Média Geral": st.column_config.ProgressColumn("Média", format="%.1f%%", min_value=0, max_value=100),
-                    "Atividades": st.column_config.NumberColumn("Exames/Rolas", format="%d 🏆")
+                    "Média": st.column_config.ProgressColumn("Média", format="%.1f%%", min_value=0, max_value=100),
+                    titulo_col_qtd: st.column_config.NumberColumn(titulo_col_qtd, format="%d 🏆")
                 },
                 hide_index=True,
                 use_container_width=True
             )
 
-        # --- ABAS POR FAIXA ---
-        # Definindo as categorias principais
-        abas = ["🌍 Geral", "⚪ Branca", "🔘 Cinza", "🟡 Amarela", "🟠 Laranja", "🟢 Verde", "🔵 Azul", "🟣 Roxa", "🟤 Marrom", "⚫ Preta"]
-        tabs = st.tabs(abas)
+        # --- DIVISÃO EM ABAS PRINCIPAIS ---
+        tab_oficial, tab_rola = st.tabs(["🏆 Ranking Oficial (Exames)", "🤼 Ranking Modo Rola"])
 
-        with tabs[0]: # Geral
-            renderizar_tabela(ranking_geral)
+        # ABA 1: RANKING OFICIAL (Por Faixa)
+        with tab_oficial:
+            abas_faixas = ["🌍 Geral", "⚪ Branca", "🔘 Cinza", "🟡 Amarela", "🟠 Laranja", "🟢 Verde", "🔵 Azul", "🟣 Roxa", "🟤 Marrom", "⚫ Preta"]
+            subtabs = st.tabs(abas_faixas)
 
-        # Lógica para filtrar por cor (contém a string)
-        # Ex: "Cinza e Branca" entra na aba "Cinza"
-        categorias_map = {
-            "⚪ Branca": "Branca",
-            "🔘 Cinza": "Cinza",
-            "🟡 Amarela": "Amarela",
-            "🟠 Laranja": "Laranja",
-            "🟢 Verde": "Verde",
-            "🔵 Azul": "Azul",
-            "🟣 Roxa": "Roxa",
-            "🟤 Marrom": "Marrom",
-            "⚫ Preta": "Preta"
-        }
+            # Geral
+            with subtabs[0]: renderizar_ranking(df_exames, "Exames Aprovados")
 
-        for i, (nome_aba, termo_busca) in enumerate(categorias_map.items(), 1):
-            with tabs[i]:
-                # Filtra se a faixa do atleta contém o termo (ex: "Amarela" pega "Amarela e Preta")
-                df_filt = ranking_geral[ranking_geral['faixa_atleta'].str.contains(termo_busca, na=False, case=False)]
-                renderizar_tabela(df_filt)
+            # Por Faixa
+            categorias_map = {
+                "⚪ Branca": "Branca", "🔘 Cinza": "Cinza", "🟡 Amarela": "Amarela",
+                "🟠 Laranja": "Laranja", "🟢 Verde": "Verde", "🔵 Azul": "Azul",
+                "🟣 Roxa": "Roxa", "🟤 Marrom": "Marrom", "⚫ Preta": "Preta"
+            }
+            
+            for i, (nome_aba, termo) in enumerate(categorias_map.items(), 1):
+                with subtabs[i]:
+                    df_filt = df_exames[df_exames['faixa_atleta'].str.contains(termo, na=False, case=False)]
+                    renderizar_ranking(df_filt, "Exames Aprovados")
+
+        # ABA 2: RANKING MODO ROLA (Geral de Treino)
+        with tab_rola:
+            st.caption("Ranking baseado apenas nos treinos rápidos (Modo Rola).")
+            renderizar_ranking(df_rola, "Treinos Realizados")
 
     else:
         st.warning("Dados insuficientes para gerar o ranking.")
@@ -280,8 +275,18 @@ def meus_certificados(usuario):
 
     st.markdown("## 🏅 Meus Certificados")
     db = get_db()
-    docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
-    lista = [d.to_dict() for d in docs]
+    # --- FILTRO APLICADO: Exclui 'Modo Rola' ---
+    docs = db.collection('resultados')\
+             .where('usuario', '==', usuario['nome'])\
+             .where('aprovado', '==', True)\
+             .stream()
+             
+    lista = []
+    for d in docs:
+        dados = d.to_dict()
+        # Filtro manual extra para garantir
+        if dados.get('faixa') != 'Modo Rola':
+            lista.append(dados)
     
     if not lista: st.info("Nenhum certificado disponível."); return
 
@@ -318,7 +323,6 @@ def exame_de_faixa(usuario):
         if st.button("Voltar"): st.session_state.resultado_prova = None; st.rerun()
         return
 
-    # Verificação de Abandono / Timeout
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
         is_timeout = False
         try:
