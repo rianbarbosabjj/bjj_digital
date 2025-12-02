@@ -219,33 +219,58 @@ def exame_de_faixa(usuario):
                 resps[i] = st.radio("R:", opts, key=f"q{i}", label_visibility="collapsed")
                 st.markdown("---")
                 
-            if st.form_submit_button("Finalizar"):
+if st.form_submit_button("Finalizar"):
                 acertos = 0
+                detalhes_questoes = [] # <--- NOVO: Lista para guardar o raio-x da prova
+
                 for i, q in enumerate(qs):
                     resp_aluno_full = str(resps.get(i))
-                    # Pega só a letra se estiver no formato "A) Texto" ou o texto inteiro se for lista antiga
                     if ")" in resp_aluno_full[:2]:
                          resp_aluno_letra = resp_aluno_full.split(")")[0].strip().upper()
                     else:
-                         resp_aluno_letra = resp_aluno_full.strip() # Fallback para sistema antigo
+                         resp_aluno_letra = resp_aluno_full.strip()
 
-                    # Verifica Correta
                     certa_bd = str(q.get('resposta_correta') or q.get('resposta') or q.get('correta')).strip().upper()
                     
-                    # Comparação: Se o banco diz "A" e o aluno marcou "A) Texto", considera certo
+                    is_correct = False
                     if resp_aluno_letra == certa_bd:
                         acertos += 1
-                    # Comparação legado: Se o banco tem o texto inteiro e o aluno também
+                        is_correct = True
                     elif resp_aluno_full == certa_bd:
                         acertos += 1
+                        is_correct = True
+                    
+                    # <--- NOVO: Salva o ID e o resultado individual
+                    detalhes_questoes.append({
+                        "questao_id": q.get('id'),
+                        "acertou": is_correct,
+                        "dificuldade": q.get('dificuldade', 1),
+                        "categoria": q.get('categoria', 'Geral')
+                    })
 
                 nota = (acertos/len(qs))*100
                 aprovado = nota >= st.session_state.params_prova['min']
                 registrar_fim_exame(usuario['id'], aprovado)
                 st.session_state.exame_iniciado = False
                 cod = gerar_codigo_verificacao() if aprovado else None
-                if aprovado: st.session_state.resultado_prova = {"nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), "acertos": acertos, "total": len(qs), "codigo": cod}
-                try: db.collection('resultados').add({"usuario": usuario['nome'], "faixa": dados.get('faixa_exame'), "pontuacao": nota, "acertos": acertos, "total": len(qs), "aprovado": aprovado, "codigo_verificacao": cod, "data": firestore.SERVER_TIMESTAMP})
+                
+                if aprovado: 
+                    st.session_state.resultado_prova = {"nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), "acertos": acertos, "total": len(qs), "codigo": cod}
+                
+                # <--- NOVO: Adicionei 'detalhes' no salvamento do banco
+                try: 
+                    db.collection('resultados').add({
+                        "usuario": usuario['nome'], 
+                        "faixa": dados.get('faixa_exame'), 
+                        "pontuacao": nota, 
+                        "acertos": acertos, 
+                        "total": len(qs), 
+                        "aprovado": aprovado, 
+                        "codigo_verificacao": cod, 
+                        "detalhes": detalhes_questoes, # Salva o raio-x aqui
+                        "data": firestore.SERVER_TIMESTAMP
+                    })
                 except: pass
+                
                 if not aprovado: st.error(f"Reprovado. {nota:.0f}%"); time.sleep(3)
                 st.rerun()
