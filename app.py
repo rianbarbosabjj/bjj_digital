@@ -4,11 +4,7 @@ import sys
 import bcrypt 
 from database import get_db
 
-# =========================================================
-# FUNÇÃO PARA ENCONTRAR O LOGO
-# =========================================================
 def get_logo_path():
-    """Procura o logo na pasta assets ou na raiz."""
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
     if os.path.exists("assets/logo.png"): return "assets/logo.png"
@@ -17,9 +13,6 @@ def get_logo_path():
 
 logo_file = get_logo_path()
 
-# =========================================================
-# 1. CONFIGURAÇÃO
-# =========================================================
 st.set_page_config(
     page_title="BJJ Digital", 
     page_icon=logo_file, 
@@ -27,9 +20,6 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# =========================================================
-# 2. ESTILOS VISUAIS (CSS CORRIGIDO - HEADER FANTASMA)
-# =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
@@ -43,86 +33,32 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-    /* --- GLOBAL --- */
     html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
-
-    /* ============================================================
-       CORREÇÃO: HEADER FANTASMA (MANTÉM O BOTÃO VIVO)
-    ============================================================ */
     
-    /* 1. Torna o container do cabeçalho transparente e sem bordas */
-    header[data-testid="stHeader"] {{
-        background-color: transparent !important;
-        border: none !important;
-    }}
-    
-    /* 2. Remove a linha colorida do topo (Decoração) */
-    [data-testid="stDecoration"] {{
-        display: none !important;
-    }}
-
-    /* 3. Remove o menu de 3 pontinhos da direita e o botão Deploy */
-    [data-testid="stToolbar"] {{
-        display: none !important;
-        visibility: hidden !important;
-    }}
-    
-    /* 4. PUXA O CONTEÚDO PRA CIMA (Ocupa o espaço vazio) */
-    /* O padding-top padrão é 6rem. Reduzimos para subir tudo. */
-    .block-container {{
-        padding-top: 1.5rem !important;
-    }}
-
-    /* 5. ESTILIZA O BOTÃO DE ABRIR SIDEBAR (Para garantir visibilidade) */
-    [data-testid="stSidebarCollapsedControl"] button {{
-        color: {COR_DESTAQUE} !important;
-        background-color: rgba(14, 45, 38, 0.6) !important;
-        border: 1px solid rgba(255, 215, 112, 0.3) !important;
-        border-radius: 8px !important;
-        padding: 2px 8px !important;
-        font-weight: bold;
-        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-    }}
-    
-    /* Ícone SVG dentro do botão */
-    [data-testid="stSidebarCollapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
-        width: 24px !important;
-        height: 24px !important;
-    }}
-
-    /* Hover do botão */
-    [data-testid="stSidebarCollapsedControl"] button:hover {{
-        background-color: {COR_DESTAQUE} !important;
-        color: {COR_FUNDO} !important;
-        transform: scale(1.05);
-    }}
-    [data-testid="stSidebarCollapsedControl"] button:hover svg {{
-        fill: {COR_FUNDO} !important;
-    }}
-    
-    /* Esconde rodapé */
-    footer, #MainMenu {{
-        display: none !important;
-    }}
-
-    /* ============================================================ */
-
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
         height: 1px !important;
         background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
     }}
+
+    /* --- ESTILO DO RADIO BUTTON (Dourado) --- */
+    div.stRadio > div[role="radiogroup"] > label > div:first-child {{
+        border-color: {COR_DESTAQUE} !important;
+        background-color: transparent !important;
+    }}
+    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
+        background-color: {COR_DESTAQUE} !important;
+    }}
+    /* --------------------------------------- */
 
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
@@ -137,19 +73,11 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 215, 112, 0.15);
         box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
-    section[data-testid="stSidebar"] svg {{
+    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
     }}
-    
-    /* Corrige o botão de fechar DENTRO da sidebar */
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] button {{
-        background-color: transparent !important;
-        border: none !important;
-        box-shadow: none !important;
-    }}
 
-    /* --- CONTAINERS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -187,15 +115,6 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* Radio Buttons Dourados */
-    div.stRadio > div[role="radiogroup"] > label > div:first-child {{
-        border-color: {COR_DESTAQUE} !important;
-        background-color: transparent !important;
-    }}
-    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
-        background-color: {COR_DESTAQUE} !important;
-    }}
-
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
@@ -203,6 +122,11 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     .stTextInput input, .stTextArea textarea {{ color: white !important; }}
+    
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    [data-testid="stDecoration"] {{display: none;}}
+    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
 
 </style>
 """, unsafe_allow_html=True)
