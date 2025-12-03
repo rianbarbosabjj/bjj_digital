@@ -1,359 +1,235 @@
 import streamlit as st
-import os
-import requests 
-import bcrypt
 import time
-from streamlit_oauth import OAuth2Component
-
-# Importações locais
-from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
-from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep, gerar_senha_temporaria, enviar_email_recuperacao
+import random
+import os
+import json
+import pandas as pd
+from datetime import datetime, timedelta
+import streamlit.components.v1 as components 
 from database import get_db
 from firebase_admin import firestore
 
-# Configuração Google
-GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID")
-GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET")
-REDIRECT_URI = "https://bjjdigital.streamlit.app/" 
+from utils import (
+    registrar_inicio_exame, 
+    registrar_fim_exame, 
+    bloquear_por_abandono,
+    verificar_elegibilidade_exame,
+    carregar_todas_questoes,
+    gerar_codigo_verificacao,
+    gerar_pdf
+)
 
-oauth_google = None
-if GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET:
+# =========================================
+# CARREGADOR DE EXAME
+# =========================================
+def carregar_exame_especifico(faixa_alvo):
+    db = get_db()
+    questoes_finais = []
+    tempo = 45; nota = 70; qtd_alvo = 10
+    
+    configs = db.collection('config_exames').where('faixa', '==', faixa_alvo).limit(1).stream()
+    config_doc = None
+    for doc in configs: config_doc = doc.to_dict(); break
+    
+    if config_doc:
+        tempo = int(config_doc.get('tempo_limite', 45))
+        nota = int(config_doc.get('aprovacao_minima', 70))
+        
+        # MODO MANUAL
+        if 'questoes_ids' in config_doc and config_doc['questoes_ids']:
+            ids = config_doc['questoes_ids']
+            for q_id in ids:
+                q_snap = db.collection('questoes').document(q_id).get()
+                if q_snap.exists:
+                    d = q_snap.to_dict()
+                    # Compatibilidade
+                    if 'alternativas' not in d and 'opcoes' in d:
+                        ops = d['opcoes']
+                        d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                    questoes_finais.append(d)
+            random.shuffle(questoes_finais)
+            return questoes_finais, tempo, nota
+        
+        # MODO ANTIGO
+        qtd_alvo = int(config_doc.get('qtd_questoes', 10))
+
+    # FALLBACK (Busca genérica)
+    if not questoes_finais:
+        q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
+        pool = []
+        for doc in q_ref:
+            d = doc.to_dict()
+            if 'alternativas' not in d and 'opcoes' in d:
+                ops = d['opcoes']; d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+            pool.append(d)
+        if pool:
+            if len(pool) > qtd_alvo: questoes_finais = random.sample(pool, qtd_alvo)
+            else: questoes_finais = pool
+
+    return questoes_finais, tempo, nota
+
+# =========================================
+# MÓDULOS SECUNDÁRIOS
+# =========================================
+def modo_rola(usuario):
+    st.markdown(f"## 🥋 Modo Rola"); st.info("Em breve.")
+
+def meus_certificados(usuario):
+    if st.button("🏠 Voltar ao Início", key="btn_back_cert"):
+        st.session_state.menu_selection = "Início"; st.rerun()
+    st.markdown(f"## 🏅 Meus Certificados")
+    db = get_db()
+    docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
+    lista = [d.to_dict() for d in docs]
+    if not lista: st.info("Nenhum certificado disponível."); return
+    for i, cert in enumerate(lista):
+        with st.container(border=True):
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"**Faixa {cert.get('faixa')}**")
+            d_str = cert.get('data').strftime('%d/%m/%Y') if cert.get('data') else "-"
+            c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao')}%")
+            try:
+                pdf_bytes, pdf_name = gerar_pdf(usuario['nome'], cert.get('faixa'), cert.get('acertos'), cert.get('total'), cert.get('codigo_verificacao'))
+                if pdf_bytes: c2.download_button("📄 PDF", pdf_bytes, pdf_name, "application/pdf", key=f"d_{i}")
+            except: pass
+
+def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
+
+# =========================================
+# EXAME DE FAIXA (COM IMAGEM)
+# =========================================
+def exame_de_faixa(usuario):
+    st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
+    if "exame_iniciado" not in st.session_state: st.session_state.exame_iniciado = False
+    if "resultado_prova" not in st.session_state: st.session_state.resultado_prova = None
+
+    db = get_db()
+    doc_ref = db.collection('usuarios').document(usuario['id'])
+    doc = doc_ref.get()
+    if not doc.exists: st.error("Erro perfil."); return
+    dados = doc.to_dict()
+    
+    if st.session_state.resultado_prova:
+        res = st.session_state.resultado_prova
+        st.balloons(); st.success(f"Aprovado! Nota: {res['nota']:.1f}%")
+        p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['acertos'], res['total'], res['codigo'])
+        if p_b: st.download_button("📥 Baixar Certificado", p_b, p_n, "application/pdf")
+        if st.button("Voltar"): st.session_state.resultado_prova = None; st.rerun()
+        return
+
+    # Verificação de Timeout/Abandono
+    if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
+        is_timeout = False
+        try:
+            start_str = dados.get("inicio_exame_temp")
+            if start_str:
+                start_dt = datetime.fromisoformat(start_str.replace('Z', '')) if isinstance(start_str, str) else start_str
+                _, t_lim, _ = carregar_exame_especifico(dados.get('faixa_exame'))
+                limit_dt = start_dt + timedelta(minutes=t_lim)
+                if datetime.utcnow() > limit_dt.replace(tzinfo=None): is_timeout = True
+        except: pass
+
+        if is_timeout:
+            registrar_fim_exame(usuario['id'], False)
+            st.error("⌛ TEMPO ESGOTADO!"); st.warning("Reprovado por tempo."); return
+        else:
+            bloquear_por_abandono(usuario['id'])
+            st.error("🚨 BLOQUEADO!"); st.warning("Página recarregada ou fechada."); return
+
+    if not dados.get('exame_habilitado') or not dados.get('faixa_exame'):
+        st.warning("🔒 Exame não autorizado."); return
+
+    elegivel, motivo = verificar_elegibilidade_exame(dados)
+    if not elegivel:
+        st.error(f"🚫 {motivo}") if "bloqueado" in motivo.lower() or "reprovado" in motivo.lower() else st.success(motivo)
+        return
+
     try:
-        oauth_google = OAuth2Component(
-            client_id=GOOGLE_CLIENT_ID,
-            client_secret=GOOGLE_CLIENT_SECRET,
-            authorize_endpoint="https://accounts.google.com/o/oauth2/v2/auth",
-            token_endpoint="https://oauth2.googleapis.com/token",
-            refresh_token_endpoint="https://oauth2.googleapis.com/token",
-            revoke_token_endpoint="https://oauth2.googleapis.com/revoke",
-        )
+        dt_ini = dados.get('exame_inicio')
+        if isinstance(dt_ini, str): dt_ini = datetime.fromisoformat(dt_ini.replace('Z',''))
+        if dt_ini: dt_ini = dt_ini.replace(tzinfo=None)
+        if dt_ini and datetime.utcnow() < dt_ini: st.warning(f"⏳ Início em: {dt_ini}"); return
     except: pass
 
-def tela_login():
-    st.session_state.setdefault("modo_login", "login")
+    qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
+    qtd = len(qs)
 
-    c1, c2, c3 = st.columns([1, 1.5, 1])
-    with c2:
-        # --- MODO: LOGIN ---
-        if st.session_state["modo_login"] == "login":
-            if os.path.exists("assets/logo.png"):
-                cl, cc, cr = st.columns([1, 2, 1])
-                with cc: st.image("assets/logo.png", use_container_width=True)
+    if not st.session_state.exame_iniciado:
+        st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
+        with st.container(border=True):
+            st.markdown("#### 📜 Instruções")
+            st.markdown("- **Tentativa Única.**\n- **Não recarregue (F5).**\n- **Reprovação:** aguardar 72h.")
+            st.markdown("---")
+            c1, c2, c3 = st.columns(3)
+            c1.markdown(f"📝 **{qtd} Questões**")
+            c2.markdown(f"<div style='text-align:center'>⏱️ <b>{tempo_limite} min</b></div>", unsafe_allow_html=True)
+            c3.markdown(f"<div style='text-align:right'>✅ Min: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
+        
+        if qtd > 0:
+            if st.button("✅ INICIAR EXAME", type="primary", use_container_width=True):
+                registrar_inicio_exame(usuario['id'])
+                st.session_state.exame_iniciado = True
+                st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
+                st.session_state.questoes_prova = qs
+                st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
+                st.rerun()
+        else: st.warning("Sem questões disponíveis.")
 
-            with st.container(border=True):
-                st.markdown("<h3 style='text-align:center;'>Login</h3>", unsafe_allow_html=True)
+    else:
+        qs = st.session_state.get('questoes_prova', [])
+        restante = int(st.session_state.fim_prova_ts - time.time())
+        if restante <= 0:
+            st.error("⌛ Tempo esgotado!"); registrar_fim_exame(usuario['id'], False)
+            st.session_state.exame_iniciado = False; time.sleep(2); st.rerun()
+
+        cor = "#FFD770" if restante > 300 else "#FF4B4B"
+        st.components.v1.html(f"""<div style="border:2px solid {cor};border-radius:10px;padding:10px;text-align:center;background:rgba(0,0,0,0.3);"><span style="color:white;font-family:sans-serif;">TEMPO RESTANTE</span><br><span id="t" style="color:{cor};font-family:monospace;font-size:30px;font-weight:bold;">--:--</span></div><script>var t={restante};setInterval(function(){{var m=Math.floor(t/60),s=t%60;document.getElementById('t').innerHTML=m+":"+(s<10?"0"+s:s);if(t--<=0)window.parent.location.reload();}},1000);</script>""", height=100)
+
+        with st.form("prova"):
+            resps = {}
+            for i, q in enumerate(qs):
+                st.markdown(f"**{i+1}. {q.get('pergunta')}**")
                 
-                # --- INÍCIO DO FORMULÁRIO ---
-                with st.form("login_form"):
-                    user_input = st.text_input("Usuário, Email ou CPF:")
-                    pwd = st.text_input("Senha:", type="password")
-                    submit_login = st.form_submit_button("Entrar", type="primary", use_container_width=True)
-
-                # --- LÓGICA DE PROCESSAMENTO ---
-                if submit_login:
-                    if not user_input or not pwd:
-                        st.warning("Preencha todos os campos.")
-                    else:
-                        with st.spinner("Conectando..."):
-                            entrada = user_input.strip()
-                            if "@" in entrada: 
-                                entrada = entrada.lower()
-                            else:
-                                cpf = formatar_e_validar_cpf(entrada)
-                                if cpf: entrada = cpf
-                            
-                            u = autenticar_local(entrada, pwd.strip()) 
-                            
-                            if u:
-                                st.session_state.usuario = u
-                                st.success(f"Bem-vindo(a), {u['nome'].title()}!")
-                                st.rerun() 
-                            else:
-                                st.error("Credenciais inválidas.")
-
-                col_a, col_b = st.columns(2)
-                if col_a.button("📋 Criar Conta", use_container_width=True):
-                    st.session_state["modo_login"] = "cadastro"; st.rerun()
-                if col_b.button("🔑 Recuperar Senha", use_container_width=True):
-                    st.session_state["modo_login"] = "recuperar"; st.rerun()
-
-                st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
+                # --- VERIFICAÇÃO VISUAL DE MÍDIA ---
+                # Se a questão tem imagem, mostra aqui!
+                if q.get('url_imagem'):
+                    st.image(q.get('url_imagem'), caption="Imagem de Apoio", use_container_width=True)
                 
-                # --- LOGIN SOCIAL (COM TRATAMENTO DE ERRO DE STATE) ---
-                if oauth_google:
-                    try:
-                        res = oauth_google.authorize_button(
-                            "Continuar com Google", 
-                            redirect_uri=REDIRECT_URI, 
-                            scope="email profile", 
-                            key="google_auth", 
-                            use_container_width=True
-                        )
-                        
-                        if res and res.get("token"):
-                            token = res.get("token").get("access_token")
-                            try:
-                                r = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
-                                if r.status_code == 200:
-                                    u_info = r.json()
-                                    email = u_info["email"].lower()
-                                    nome = u_info.get("name", "").upper()
-                                    
-                                    exist = buscar_usuario_por_email(email)
-                                    if exist:
-                                        if not exist.get("perfil_completo"):
-                                            st.session_state.registration_pending = exist
-                                        else:
-                                            st.session_state.usuario = exist
-                                        st.rerun()
-                                    else:
-                                        novo = criar_usuario_parcial_google(email, nome)
-                                        st.session_state.registration_pending = novo
-                                        st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro de conexão Google: {e}")
-                                
-                    except Exception as e:
-                        # AQUI ESTÁ A CORREÇÃO:
-                        # Se der erro de STATE ou outro erro de OAuth, limpamos a URL e recarregamos
-                        st.warning("Sessão expirada. Recarregando...")
-                        # Limpa os parâmetros da URL para remover o código inválido
-                        st.query_params.clear()
-                        time.sleep(1)
-                        st.rerun()
+                if q.get('url_video'):
+                    st.video(q.get('url_video'))
+                # -----------------------------------
 
-        # --- MODO: CADASTRO ---
-        elif st.session_state["modo_login"] == "cadastro":
-            tela_cadastro_interno()
+                opts = []
+                if 'alternativas' in q and isinstance(q['alternativas'], dict):
+                    opts = [q['alternativas'].get(k) for k in ["A","B","C","D"]]
+                elif 'opcoes' in q: opts = q['opcoes']
+                if not opts: opts = ["-", "-", "-", "-"]
 
-        # --- MODO: RECUPERAR SENHA ---
-        elif st.session_state["modo_login"] == "recuperar":
-            st.subheader("🔑 Recuperar Senha")
-            st.markdown("Informe seu e-mail cadastrado. Enviaremos uma senha temporária.")
-            
-            email_rec = st.text_input("Email cadastrado:")
-            
-            if st.button("Enviar Nova Senha", use_container_width=True, type="primary"):
-                if not email_rec:
-                    st.warning("Informe o e-mail.")
-                else:
-                    db = get_db()
-                    email_clean = email_rec.lower().strip()
-                    users_ref = db.collection('usuarios')
-                    query = list(users_ref.where('email', '==', email_clean).stream())
-                    
-                    if len(query) > 0:
-                        doc = query[0]
-                        u_data = doc.to_dict()
-                        
-                        if u_data.get("auth_provider") == "google":
-                            st.error("Este e-mail usa login Google.")
-                        else:
-                            with st.spinner("Processando..."):
-                                nova_s = gerar_senha_temporaria()
-                                hashed = bcrypt.hashpw(nova_s.encode(), bcrypt.gensalt()).decode()
-                                
-                                db.collection('usuarios').document(doc.id).update({
-                                    "senha": hashed,
-                                    "precisa_trocar_senha": True
-                                })
-                                
-                                if enviar_email_recuperacao(email_clean, nova_s):
-                                    st.success("✅ Verifique seu e-mail (e a caixa de spam).")
-                                else:
-                                    st.error("Erro no envio do e-mail.")
-                    else:
-                        st.error("E-mail não encontrado.")
-
-            if st.button("Voltar", use_container_width=True):
-                st.session_state["modo_login"] = "login"; st.rerun()
-
-# =========================================
-# TELA CADASTRO INTERNO (MANTIDA IGUAL)
-# =========================================
-def tela_cadastro_interno():
-    st.subheader("📋 Cadastro de Novo Usuário")
-    db = get_db()
-    
-    try:
-        equipes_ref = db.collection('equipes').stream()
-        lista_equipes = ["Nenhuma (Vínculo Pendente)"]
-        mapa_equipes = {} 
-        info_equipes = {} 
-        
-        for doc in equipes_ref:
-            d = doc.to_dict()
-            nm = d.get('nome', 'Sem Nome')
-            lista_equipes.append(nm)
-            mapa_equipes[nm] = doc.id
-            info_equipes[doc.id] = d
-        
-        profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
-        mapa_nomes_profs = {} 
-        for doc in profs_users_ref:
-            mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
-
-        vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
-        profs_por_equipe = {} 
-        for doc in vincs_ref:
-            d = doc.to_dict()
-            eid = d.get('equipe_id')
-            uid = d.get('usuario_id')
-            if eid and uid and uid in mapa_nomes_profs:
-                if eid not in profs_por_equipe: profs_por_equipe[eid] = []
-                profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
+                resps[i] = st.radio("R:", opts, key=f"q{i}", label_visibility="collapsed")
+                st.markdown("---")
                 
-    except Exception as e:
-        st.error(f"Erro ao carregar listas: {e}"); return
+            if st.form_submit_button("Finalizar"):
+                acertos = 0
+                for i, q in enumerate(qs):
+                    resp_aluno = str(resps.get(i)).strip().lower()
+                    certa_bd = q.get('resposta_correta') or q.get('resposta') or q.get('correta')
+                    certa_texto = ""
+                    if str(certa_bd).upper() in ["A","B","C","D"] and 'alternativas' in q:
+                        certa_texto = q['alternativas'].get(str(certa_bd).upper(), "").strip().lower()
+                    elif 'opcoes' in q and str(certa_bd).upper() in ["A","B","C","D"]:
+                        idx_map = {"A":0, "B":1, "C":2, "D":3}
+                        try: certa_texto = q['opcoes'][idx_map[str(certa_bd).upper()]].strip().lower()
+                        except: certa_texto = str(certa_bd).strip().lower()
+                    else: certa_texto = str(certa_bd).strip().lower()
+                    if resp_aluno == certa_texto: acertos += 1
 
-    nome = st.text_input("Nome de Usuário:") 
-    email = st.text_input("E-mail:")
-    cpf_inp = st.text_input("CPF:") 
-    c1, c2 = st.columns(2)
-    senha = c1.text_input("Senha:", type="password")
-    conf = c2.text_input("Confirmar senha:", type="password")
-    
-    st.markdown("---")
-    tipo = st.selectbox("Tipo:", ["Aluno", "Professor"])
-    
-    cf, ce = st.columns(2)
-    nome_nova_equipe = None; desc_nova_equipe = None
-    
-    if tipo == "Aluno":
-        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
-        with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
-        
-        lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
-        mapa_profs_final = {}
-        eq_id_sel = mapa_equipes.get(eq_sel)
-        prof_resp_id = None
-
-        if eq_id_sel:
-            dados_eq = info_equipes.get(eq_id_sel, {})
-            prof_resp_id = dados_eq.get('professor_responsavel_id')
-            
-            if prof_resp_id and prof_resp_id in mapa_nomes_profs:
-                nome_resp = mapa_nomes_profs[prof_resp_id]
-                label_resp = f"{nome_resp} (Responsável)"
-                lista_profs_filtrada.append(label_resp)
-                mapa_profs_final[label_resp] = prof_resp_id
-
-            if eq_id_sel in profs_por_equipe:
-                for p_nome, p_uid in profs_por_equipe[eq_id_sel]:
-                    if p_uid != prof_resp_id:
-                        lista_profs_filtrada.append(p_nome)
-                        mapa_profs_final[p_nome] = p_uid
-        
-        prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
-        
-    else: 
-        with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
-        st.caption("Professores devem ser Marrom ou Preta.")
-        with ce:
-            opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
-            eq_sel = st.selectbox("Equipe:", opcoes_prof_eq)
-        
-        if eq_sel == "🆕 Criar Nova Equipe":
-            st.info("Você será o **Responsável** desta nova equipe.")
-            nome_nova_equipe = st.text_input("Nome da Nova Equipe:")
-            desc_nova_equipe = st.text_input("Descrição (Opcional):")
-        prof_sel = None 
-
-    st.markdown("#### Endereço")
-    if 'cad_cep' not in st.session_state: st.session_state.cad_cep = ''
-    
-    c_cep, c_btn = st.columns([3, 1])
-    cep = c_cep.text_input("CEP:", key="input_cep_cad", value=st.session_state.cad_cep)
-    if c_btn.button("Buscar", key="btn_cep_cad"):
-        end = buscar_cep(cep)
-        if end:
-            st.session_state.cad_cep = cep
-            st.session_state.cad_end = end
-            st.success("OK!")
-        else: st.error("Inválido")
-    
-    ec = st.session_state.get('cad_end', {})
-    c1, c2 = st.columns(2)
-    logr = c1.text_input("Logradouro:", value=ec.get('logradouro',''))
-    bairro = c2.text_input("Bairro:", value=ec.get('bairro',''))
-    c3, c4 = st.columns(2)
-    cid = c3.text_input("Cidade:", value=ec.get('cidade',''))
-    uf = c4.text_input("UF:", value=ec.get('uf',''))
-    c5, c6 = st.columns(2)
-    num = c5.text_input("Número:")
-    comp = c6.text_input("Complemento:")
-
-    if st.button("Cadastrar", use_container_width=True, type="primary"):
-        nome_fin = nome.upper()
-        email_fin = email.lower().strip()
-        cpf_fin = formatar_e_validar_cpf(cpf_inp)
-        cep_fin = formatar_cep(cep)
-
-        if not (nome and email and cpf_inp and senha and conf):
-            st.warning("Preencha obrigatórios."); return
-        if senha != conf: st.error("Senhas não conferem."); return
-        if not cpf_fin: st.error("CPF inválido."); return
-        
-        if tipo == "Professor" and eq_sel == "🆕 Criar Nova Equipe" and not nome_nova_equipe:
-            st.warning("Informe o nome da equipe."); return
-
-        users_ref = db.collection('usuarios')
-        if len(list(users_ref.where('email', '==', email_fin).stream())) > 0:
-            st.error("Email já cadastrado."); return
-        if len(list(users_ref.where('cpf', '==', cpf_fin).stream())) > 0:
-            st.error("CPF já cadastrado."); return
-            
-        try:
-            with st.spinner("Criando..."):
-                hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                tipo_db = tipo.lower()
-                
-                novo_user = {
-                    "nome": nome_fin, "email": email_fin, "cpf": cpf_fin, 
-                    "tipo_usuario": tipo_db, "senha": hashed, "auth_provider": "local", 
-                    "perfil_completo": True, "cep": cep_fin, "logradouro": logr.upper(),
-                    "numero": num, "complemento": comp.upper(), "bairro": bairro.upper(),
-                    "cidade": cid.upper(), "uf": uf.upper(), "data_criacao": firestore.SERVER_TIMESTAMP
-                }
-                _, doc_ref = db.collection('usuarios').add(novo_user)
-                user_id = doc_ref.id
-                
-                eq_id = None
-                if tipo_db == "professor" and eq_sel == "🆕 Criar Nova Equipe":
-                    _, ref_team = db.collection('equipes').add({
-                        "nome": nome_nova_equipe.upper(), "descricao": desc_nova_equipe,
-                        "professor_responsavel_id": user_id, "ativo": True
-                    })
-                    eq_id = ref_team.id
-                    db.collection('professores').add({
-                        "usuario_id": user_id, "equipe_id": eq_id, "status_vinculo": "ativo", 
-                        "eh_responsavel": True, "pode_aprovar": True
-                    })
-                else:
-                    eq_id = mapa_equipes.get(eq_sel)
-                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno" and prof_sel) else None
-                    if tipo_db == "aluno":
-                        db.collection('alunos').add({
-                            "usuario_id": user_id, "faixa_atual": faixa, "equipe_id": eq_id, 
-                            "professor_id": prof_id, "status_vinculo": "pendente"
-                        })
-                    else:
-                        db.collection('professores').add({
-                            "usuario_id": user_id, "equipe_id": eq_id, "status_vinculo": "pendente"
-                        })
-                
-                st.success("Sucesso!"); 
-                st.session_state.usuario = {"id": user_id, "nome": nome_fin, "tipo": tipo_db}
-                for k in ['cad_cep', 'cad_end']: st.session_state.pop(k, None)
-                st.session_state["modo_login"] = "login"; st.rerun()
-        except Exception as e: st.error(f"Erro: {e}")
-
-    if st.button("Voltar", use_container_width=True):
-        st.session_state["modo_login"] = "login"; st.rerun()
-
-def tela_completar_cadastro(user_data):
-    st.subheader(f"Completar cadastro: {user_data.get('nome')}")
-    # (Código simplificado, mantenha o seu original se tiver customizações)
-    if st.button("Cancelar"):
-        del st.session_state.registration_pending
-        st.rerun()
+                nota = (acertos/len(qs))*100
+                aprovado = nota >= st.session_state.params_prova['min']
+                registrar_fim_exame(usuario['id'], aprovado)
+                st.session_state.exame_iniciado = False
+                cod = gerar_codigo_verificacao() if aprovado else None
+                if aprovado: st.session_state.resultado_prova = {"nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), "acertos": acertos, "total": len(qs), "codigo": cod}
+                try: db.collection('resultados').add({"usuario": usuario['nome'], "faixa": dados.get('faixa_exame'), "pontuacao": nota, "acertos": acertos, "total": len(qs), "aprovado": aprovado, "codigo_verificacao": cod, "data": firestore.SERVER_TIMESTAMP})
+                except: pass
+                if not aprovado: st.error(f"Reprovado. {nota:.0f}%"); time.sleep(3)
+                st.rerun()
