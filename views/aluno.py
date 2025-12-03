@@ -1,9 +1,9 @@
 import streamlit as st
 import time
 import random
-import pandas as pd
 import os
 import json
+import pandas as pd
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components 
 from database import get_db
@@ -25,249 +25,124 @@ from utils import (
 def carregar_exame_especifico(faixa_alvo):
     db = get_db()
     questoes_finais = []
-    tempo = 45
-    nota = 70
+    tempo = 45; nota = 70; qtd_alvo = 10
     
     configs = db.collection('config_exames').where('faixa', '==', faixa_alvo).limit(1).stream()
     config_doc = None
-    for doc in configs: 
-        config_doc = doc.to_dict()
-        break
+    for doc in configs: config_doc = doc.to_dict(); break
     
     if config_doc:
         tempo = int(config_doc.get('tempo_limite', 45))
         nota = int(config_doc.get('aprovacao_minima', 70))
-        ids_salvos = config_doc.get('questoes_ids', [])
         
-        if ids_salvos and len(ids_salvos) > 0:
-            for q_id in ids_salvos:
-                doc_q = db.collection('questoes').document(q_id).get()
-                if doc_q.exists:
-                    d = doc_q.to_dict()
-                    d['id'] = doc_q.id 
+        # MODO MANUAL
+        if 'questoes_ids' in config_doc and config_doc['questoes_ids']:
+            ids = config_doc['questoes_ids']
+            for q_id in ids:
+                q_snap = db.collection('questoes').document(q_id).get()
+                if q_snap.exists:
+                    d = q_snap.to_dict()
+                    # Compatibilidade
                     if 'alternativas' not in d and 'opcoes' in d:
                         ops = d['opcoes']
                         d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
                     questoes_finais.append(d)
-        else:
-            qtd_alvo = int(config_doc.get('qtd_questoes', 10))
-            dificuldade_alvo = int(config_doc.get('dificuldade_alvo', 1))
-            q_ref = list(db.collection('questoes').where('dificuldade', '==', dificuldade_alvo).where('status', '==', 'aprovada').stream())
-            pool = []
-            for doc in q_ref:
-                d = doc.to_dict(); d['id'] = doc.id
-                if 'alternativas' not in d and 'opcoes' in d:
-                    ops = d['opcoes']
-                    d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                pool.append(d)
-            if pool:
-                questoes_finais = random.sample(pool, qtd_alvo) if len(pool) > qtd_alvo else pool
-    else:
-        st.error(f"Prova da faixa {faixa_alvo} não configurada pelo Mestre.")
+            random.shuffle(questoes_finais)
+            return questoes_finais, tempo, nota
+        
+        # MODO ANTIGO
+        qtd_alvo = int(config_doc.get('qtd_questoes', 10))
+
+    # FALLBACK (Busca genérica)
+    if not questoes_finais:
+        q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
+        pool = []
+        for doc in q_ref:
+            d = doc.to_dict()
+            if 'alternativas' not in d and 'opcoes' in d:
+                ops = d['opcoes']; d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+            pool.append(d)
+        if pool:
+            if len(pool) > qtd_alvo: questoes_finais = random.sample(pool, qtd_alvo)
+            else: questoes_finais = pool
 
     return questoes_finais, tempo, nota
 
 # =========================================
-# MODO ROLA (QUIZ DE TREINO)
+# MÓDULOS SECUNDÁRIOS
 # =========================================
 def modo_rola(usuario):
-    st.markdown("<h1 style='color:#FFD770; text-align:center'>🤼 Modo Rola (Treino Rápido)</h1>", unsafe_allow_html=True)
-    st.info("Responda 5 questões aleatórias para subir no Ranking!")
-
-    if "rola_iniciado" not in st.session_state: st.session_state.rola_iniciado = False
+    st.markdown(f"## 🤼 Modo Rola (Treino Livre)")
+    st.caption("Responda questões aleatórias sem pressão de tempo ou nota. Ideal para estudar!")
     
-    if not st.session_state.rola_iniciado:
-        c1, c2, c3 = st.columns([1, 2, 1])
-        if c2.button("🔥 COMEÇAR ROLA", type="primary", use_container_width=True):
-            db = get_db()
-            all_q = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
-            
-            if len(all_q) < 5:
-                st.warning("Banco de questões insuficiente para um rola (mínimo 5).")
-            else:
-                pool = []
-                for doc in all_q:
-                    d = doc.to_dict(); d['id'] = doc.id
-                    if 'alternativas' not in d and 'opcoes' in d:
-                        ops = d['opcoes']
-                        d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                    pool.append(d)
-                
-                st.session_state.questoes_rola = random.sample(pool, 5)
-                st.session_state.rola_iniciado = True
-                st.rerun()
-    else:
-        qs = st.session_state.questoes_rola
-        
-        with st.form("form_rola"):
-            respostas = {}
-            for i, q in enumerate(qs):
-                st.markdown(f"**{i+1}. {q.get('pergunta')}**")
-                opts = []
-                if 'alternativas' in q and isinstance(q['alternativas'], dict):
-                    opts = [f"{k}) {q['alternativas'][k]}" for k in ["A","B","C","D"] if k in q['alternativas']]
-                elif 'opcoes' in q:
-                    opts = q['opcoes']
-                if not opts: opts = ["Erro"]
-                respostas[i] = st.radio("R:", opts, key=f"r_rola_{i}", label_visibility="collapsed")
-                st.divider()
-            
-            if st.form_submit_button("🥋 Finalizar Treino"):
-                acertos = 0
-                detalhes = []
-                
-                for i, q in enumerate(qs):
-                    resp_full = str(respostas.get(i))
-                    if ")" in resp_full[:2]:
-                         resp_letra = resp_full.split(")")[0].strip().upper()
-                    else:
-                         resp_letra = resp_full.strip()
-
-                    certa = str(q.get('resposta_correta') or 'A').strip().upper()
-                    is_correct = (resp_letra == certa)
-                    if is_correct: acertos += 1
-                    
-                    # Salva detalhes (mas não usaremos no dashboard do professor se ele filtrar 'Modo Rola')
-                    detalhes.append({
-                        "questao_id": q.get('id'),
-                        "acertou": is_correct,
-                        "dificuldade": q.get('dificuldade', 1),
-                        "categoria": q.get('categoria', 'Geral')
-                    })
-                
-                nota = (acertos / 5) * 100
-                
-                db = get_db()
-                db.collection('resultados').add({
-                    "usuario": usuario['nome'],
-                    "faixa": "Modo Rola", 
-                    "pontuacao": nota,
-                    "acertos": acertos,
-                    "total": 5,
-                    "aprovado": True, 
-                    "codigo_verificacao": None,
-                    "detalhes": detalhes,
-                    "data": firestore.SERVER_TIMESTAMP
-                })
-                
-                st.balloons()
-                if nota == 100: st.success(f"OSS! Gabaritou! Nota: {nota:.0f}")
-                elif nota >= 60: st.success(f"Bom treino! Nota: {nota:.0f}")
-                else: st.warning(f"Mais estudo na próxima! Nota: {nota:.0f}")
-                
-                time.sleep(3)
-                st.session_state.rola_iniciado = False
-                st.rerun()
-
-# =========================================
-# RANKING (EXCLUSIVO MODO ROLA)
-# =========================================
-def ranking():
-    st.markdown("<h1 style='color:#FFD770; text-align:center'>🏆 Ranking Modo Rola</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align:center'>Quem são os maiores pontuadores nos treinos rápidos?</p>", unsafe_allow_html=True)
-    
-    db = get_db()
-    
-    with st.spinner("Atualizando placar..."):
-        # 1. Mapa de Faixas (para exibir a graduação atual do atleta no ranking)
-        users_ref = list(db.collection('usuarios').stream())
-        mapa_faixas = {}
-        for u in users_ref:
-            d = u.to_dict()
-            mapa_faixas[d.get('nome')] = d.get('faixa_atual', 'Branca')
-
-        # 2. Resultados FILTRADOS APENAS PARA MODO ROLA
-        res_ref = list(db.collection('resultados')
-                         .where('faixa', '==', 'Modo Rola') # <--- FILTRO DE FERRO
-                         .stream())
-        
-        if not res_ref:
-            st.info("Nenhum 'Rola' registrado ainda. Seja o primeiro a jogar!")
+    if "treino_questoes" not in st.session_state:
+        # Carrega 5 questões aleatórias de qualquer nível
+        db = get_db()
+        all_q = list(db.collection('questoes').where('status', '==', 'aprovada').limit(50).stream())
+        if all_q:
+            selecionados = random.sample(all_q, min(5, len(all_q)))
+            dados_q = []
+            for doc in selecionados:
+                d = doc.to_dict()
+                # Normaliza alternativas
+                if 'alternativas' not in d and 'opcoes' in d:
+                    ops = d['opcoes']
+                    d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                dados_q.append(d)
+            st.session_state.treino_questoes = dados_q
+            st.session_state.treino_respostas = {}
+            st.session_state.treino_finalizado = False
+        else:
+            st.warning("Banco de questões vazio.")
             return
 
-        data = [d.to_dict() for d in res_ref]
-        df = pd.DataFrame(data)
+    if st.button("🔄 Gerar Novo Treino"):
+        del st.session_state.treino_questoes
+        st.rerun()
 
-    if not df.empty:
-        # Cruza com a faixa atual do usuário
-        df['faixa_atleta'] = df['usuario'].map(mapa_faixas).fillna('Desconhecido')
+    with st.form("form_treino"):
+        acertos = 0
+        for i, q in enumerate(st.session_state.treino_questoes):
+            st.markdown(f"**{i+1}. {q.get('pergunta')}**")
+            
+            # --- MÍDIA NO MODO ROLA ---
+            if q.get('url_imagem'): st.image(q.get('url_imagem'), use_container_width=True)
+            if q.get('url_video'): st.video(q.get('url_video'))
+            
+            alts = q.get('alternativas', {})
+            opts = [alts.get(k, '-') for k in ["A","B","C","D"]]
+            
+            resp = st.radio(f"Opções {i}", opts, key=f"t_q{i}", label_visibility="collapsed")
+            st.markdown("---")
 
-        # Agrupa por usuário e calcula métricas
-        ranking_grp = df.groupby(['usuario', 'faixa_atleta']).agg(
-            Qtd_Rolas=('aprovado', 'count'), # Quantas vezes jogou
-            Media_Notas=('pontuacao', 'mean'), # Média de acerto
-            Total_Acertos=('acertos', 'sum') # Total acumulado de acertos (Critério de desempate legal)
-        ).reset_index()
-
-        # Ordena: Média > Total de Acertos > Qtd Jogada
-        ranking_grp = ranking_grp.sort_values(by=['Media_Notas', 'Total_Acertos'], ascending=[False, False])
+        if st.form_submit_button("Corrigir Treino"):
+            st.session_state.treino_finalizado = True
+            
+    if st.session_state.treino_finalizado:
+        st.markdown("### 📊 Resultado do Treino")
+        nota_treino = 0
+        for i, q in enumerate(st.session_state.treino_questoes):
+            user_resp = st.session_state.get(f"t_q{i}")
+            certa_letra = q.get('resposta_correta', 'A')
+            alts = q.get('alternativas', {})
+            texto_certo = alts.get(certa_letra, "").strip().lower()
+            
+            if str(user_resp).strip().lower() == texto_certo:
+                st.success(f"Questão {i+1}: Correta! ✅")
+                nota_treino += 1
+            else:
+                st.error(f"Questão {i+1}: Errou ❌. A correta era: **{texto_certo}**")
         
-        # Medalhas
-        medals = ['🥇', '🥈', '🥉'] + [''] * (len(ranking_grp) - 3)
-        ranking_grp['Pos'] = medals[:len(ranking_grp)]
-        
-        # Formata para exibição
-        ranking_final = ranking_grp[['Pos', 'usuario', 'Media_Notas', 'Qtd_Rolas', 'faixa_atleta']]
-        ranking_final.columns = ['#', 'Atleta', 'Média de Acerto', 'Treinos Realizados', 'Graduação']
+        st.metric("Total de Acertos", f"{nota_treino} / {len(st.session_state.treino_questoes)}")
 
-        # --- EXIBIÇÃO DO PÓDIO ---
-        top3 = ranking_final.head(3)
-        cols = st.columns(3)
-        for i, (idx, row) in enumerate(top3.iterrows()):
-            with cols[i]:
-                with st.container(border=True):
-                    st.markdown(f"<h1 style='text-align:center'>{row['#']}</h1>", unsafe_allow_html=True)
-                    st.markdown(f"<h3 style='text-align:center; color:#FFD770'>{row['Atleta'].split()[0]}</h3>", unsafe_allow_html=True)
-                    st.caption(f"{row['Graduação']}")
-                    st.metric("Média", f"{row['Média de Acerto']:.1f}%")
-        
-        st.markdown("---")
-        
-        # --- TABELA COMPLETA ---
-        st.dataframe(
-            ranking_final,
-            column_config={
-                "Média de Acerto": st.column_config.ProgressColumn(
-                    "Média de Acerto", 
-                    format="%.1f%%", 
-                    min_value=0, 
-                    max_value=100
-                ),
-                "Treinos Realizados": st.column_config.NumberColumn(
-                    "Partidas", 
-                    format="%d ⚔️"
-                )
-            },
-            hide_index=True,
-            use_container_width=True
-        )
-
-    else:
-        st.warning("Dados insuficientes para gerar o ranking.")
-
-# =========================================
-# OUTRAS TELAS (MEUS CERTIFICADOS)
-# =========================================
 def meus_certificados(usuario):
     if st.button("🏠 Voltar ao Início", key="btn_back_cert"):
         st.session_state.menu_selection = "Início"; st.rerun()
-
-    st.markdown("## 🏅 Meus Certificados")
+    st.markdown(f"## 🏅 Meus Certificados")
     db = get_db()
-    
-    # Busca apenas Exames Aprovados (Modo Rola já é filtrado aqui pois não gera certificado na prática, 
-    # mas garantimos com o if abaixo)
     docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
-    
-    lista = []
-    for d in docs:
-        dados = d.to_dict()
-        # Filtro Extra: Garante que 'Modo Rola' nunca apareça como certificado
-        if dados.get('faixa') != 'Modo Rola':
-            lista.append(dados)
-    
+    lista = [d.to_dict() for d in docs]
     if not lista: st.info("Nenhum certificado disponível."); return
-
     for i, cert in enumerate(lista):
         with st.container(border=True):
             c1, c2 = st.columns([3, 1])
@@ -279,8 +154,32 @@ def meus_certificados(usuario):
                 if pdf_bytes: c2.download_button("📄 PDF", pdf_bytes, pdf_name, "application/pdf", key=f"d_{i}")
             except: pass
 
+def ranking():
+    st.markdown("## 🏆 Hall da Fama - Ranking")
+    db = get_db()
+    try:
+        res_ref = db.collection('resultados').where('aprovado', '==', True).stream()
+        placar = {}
+        for doc in res_ref:
+            d = doc.to_dict()
+            aluno = d.get('usuario', 'Desconhecido')
+            faixa = d.get('faixa', '?')
+            if aluno not in placar: placar[aluno] = {"faixas": set(), "pontos": 0}
+            if faixa not in placar[aluno]["faixas"]:
+                placar[aluno]["faixas"].add(faixa)
+                placar[aluno]["pontos"] += 100
+        ranking_lista = []
+        for nome, dados in placar.items():
+            ranking_lista.append({"Aluno": nome, "Faixas": len(dados["faixas"]), "Pontos": dados["pontos"]})
+        if not ranking_lista: st.info("Sem dados.")
+        else:
+            df = pd.DataFrame(ranking_lista).sort_values(by="Pontos", ascending=False).reset_index(drop=True)
+            df.index += 1
+            st.dataframe(df, use_container_width=True)
+    except: pass
+
 # =========================================
-# EXAME DE FAIXA (LÓGICA PRINCIPAL)
+# EXAME DE FAIXA (PRINCIPAL)
 # =========================================
 def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
@@ -301,13 +200,13 @@ def exame_de_faixa(usuario):
         if st.button("Voltar"): st.session_state.resultado_prova = None; st.rerun()
         return
 
+    # Verificação de Timeout/Abandono
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
         is_timeout = False
         try:
             start_str = dados.get("inicio_exame_temp")
             if start_str:
-                if isinstance(start_str, str): start_dt = datetime.fromisoformat(start_str.replace('Z', ''))
-                else: start_dt = start_str
+                start_dt = datetime.fromisoformat(start_str.replace('Z', '')) if isinstance(start_str, str) else start_str
                 _, t_lim, _ = carregar_exame_especifico(dados.get('faixa_exame'))
                 limit_dt = start_dt + timedelta(minutes=t_lim)
                 if datetime.utcnow() > limit_dt.replace(tzinfo=None): is_timeout = True
@@ -339,9 +238,10 @@ def exame_de_faixa(usuario):
     qtd = len(qs)
 
     if not st.session_state.exame_iniciado:
-        st.markdown(f"### Faixa **{dados.get('faixa_exame')}**")
+        st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
         with st.container(border=True):
-            st.markdown("#### Regras"); st.markdown("- Tentativa Única.\n- Não recarregue (F5).\n- Reprovação: aguardar 72h.")
+            st.markdown("#### 📜 Instruções")
+            st.markdown("- **Tentativa Única.**\n- **Não recarregue (F5).**\n- **Reprovação:** aguardar 72h.")
             st.markdown("---")
             c1, c2, c3 = st.columns(3)
             c1.markdown(f"📝 **{qtd} Questões**")
@@ -356,13 +256,13 @@ def exame_de_faixa(usuario):
                 st.session_state.questoes_prova = qs
                 st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
                 st.rerun()
-        else: st.warning("Sem questões disponíveis para este nível.")
+        else: st.warning("Sem questões disponíveis.")
 
     else:
         qs = st.session_state.get('questoes_prova', [])
         restante = int(st.session_state.fim_prova_ts - time.time())
         if restante <= 0:
-            st.error("Tempo esgotado!"); registrar_fim_exame(usuario['id'], False)
+            st.error("⌛ Tempo esgotado!"); registrar_fim_exame(usuario['id'], False)
             st.session_state.exame_iniciado = False; time.sleep(2); st.rerun()
 
         cor = "#FFD770" if restante > 300 else "#FF4B4B"
@@ -372,42 +272,39 @@ def exame_de_faixa(usuario):
             resps = {}
             for i, q in enumerate(qs):
                 st.markdown(f"**{i+1}. {q.get('pergunta')}**")
+                
+                # --- EXIBIÇÃO DE MÍDIA ---
+                # Aqui está o código que faz a imagem aparecer
+                if q.get('url_imagem'):
+                    st.image(q.get('url_imagem'), caption="Imagem de Apoio", use_container_width=True)
+                
+                if q.get('url_video'):
+                    st.video(q.get('url_video'))
+                # -------------------------
+
                 opts = []
                 if 'alternativas' in q and isinstance(q['alternativas'], dict):
-                    opts = [f"{k}) {q['alternativas'][k]}" for k in ["A","B","C","D"] if k in q['alternativas']]
-                elif 'opcoes' in q:
-                    opts = q['opcoes']
-                if not opts: opts = ["Erro carregamento"]
+                    opts = [q['alternativas'].get(k) for k in ["A","B","C","D"]]
+                elif 'opcoes' in q: opts = q['opcoes']
+                if not opts: opts = ["-", "-", "-", "-"]
+
                 resps[i] = st.radio("R:", opts, key=f"q{i}", label_visibility="collapsed")
                 st.markdown("---")
                 
             if st.form_submit_button("Finalizar"):
                 acertos = 0
-                detalhes_questoes = []
-
                 for i, q in enumerate(qs):
-                    resp_aluno_full = str(resps.get(i))
-                    if ")" in resp_aluno_full[:2]:
-                         resp_aluno_letra = resp_aluno_full.split(")")[0].strip().upper()
-                    else:
-                         resp_aluno_letra = resp_aluno_full.strip()
-
-                    certa_bd = str(q.get('resposta_correta') or q.get('resposta') or q.get('correta')).strip().upper()
-                    
-                    is_correct = False
-                    if resp_aluno_letra == certa_bd:
-                        acertos += 1
-                        is_correct = True
-                    elif resp_aluno_full == certa_bd:
-                        acertos += 1
-                        is_correct = True
-                    
-                    detalhes_questoes.append({
-                        "questao_id": q.get('id'),
-                        "acertou": is_correct,
-                        "dificuldade": q.get('dificuldade', 1),
-                        "categoria": q.get('categoria', 'Geral')
-                    })
+                    resp_aluno = str(resps.get(i)).strip().lower()
+                    certa_bd = q.get('resposta_correta') or q.get('resposta') or q.get('correta')
+                    certa_texto = ""
+                    if str(certa_bd).upper() in ["A","B","C","D"] and 'alternativas' in q:
+                        certa_texto = q['alternativas'].get(str(certa_bd).upper(), "").strip().lower()
+                    elif 'opcoes' in q and str(certa_bd).upper() in ["A","B","C","D"]:
+                        idx_map = {"A":0, "B":1, "C":2, "D":3}
+                        try: certa_texto = q['opcoes'][idx_map[str(certa_bd).upper()]].strip().lower()
+                        except: certa_texto = str(certa_bd).strip().lower()
+                    else: certa_texto = str(certa_bd).strip().lower()
+                    if resp_aluno == certa_texto: acertos += 1
 
                 nota = (acertos/len(qs))*100
                 aprovado = nota >= st.session_state.params_prova['min']
@@ -415,18 +312,7 @@ def exame_de_faixa(usuario):
                 st.session_state.exame_iniciado = False
                 cod = gerar_codigo_verificacao() if aprovado else None
                 if aprovado: st.session_state.resultado_prova = {"nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), "acertos": acertos, "total": len(qs), "codigo": cod}
-                try: db.collection('resultados').add({
-                    "usuario": usuario['nome'], 
-                    "faixa": dados.get('faixa_exame'), 
-                    "pontuacao": nota, 
-                    "acertos": acertos, 
-                    "total": len(qs), 
-                    "aprovado": aprovado, 
-                    "codigo_verificacao": cod, 
-                    "detalhes": detalhes_questoes,
-                    "data": firestore.SERVER_TIMESTAMP
-                })
+                try: db.collection('resultados').add({"usuario": usuario['nome'], "faixa": dados.get('faixa_exame'), "pontuacao": nota, "acertos": acertos, "total": len(qs), "aprovado": aprovado, "codigo_verificacao": cod, "data": firestore.SERVER_TIMESTAMP})
                 except: pass
-                
                 if not aprovado: st.error(f"Reprovado. {nota:.0f}%"); time.sleep(3)
                 st.rerun()
