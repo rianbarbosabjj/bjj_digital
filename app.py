@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - MENU FLUTUANTE)
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - TRANSPARENTE)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -127,92 +127,63 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
-    /* --- NOVO MENU FLUTUANTE (PREMIUM) --- */
+    /* --- MENU SUPERIOR FLUTUANTE (TOTALMENTE TRANSPARENTE) --- */
     
-    /* CONTAINER DO MENU */
+    /* CONTAINER GERAL DO MENU */
     .st-emotion-cache-1v7f65g {{
-        background: rgba(14, 45, 38, 0.9) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(255, 215, 112, 0.2) !important;
-        border-radius: 12px !important;
-        padding: 8px !important;
-        margin: 10px auto 30px auto !important;
-        max-width: 95% !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+        background: transparent !important; /* FUNDO PRETO REMOVIDO */
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 10px auto 20px auto !important;
+        max-width: 98% !important;
         display: flex !important;
         justify-content: center !important;
         flex-wrap: nowrap !important;
         overflow-x: auto !important;
     }}
     
-    /* ITENS DO MENU */
+    /* ITENS INDIVIDUAIS */
     .st-emotion-cache-1v7f65g .st-ae .st-af {{
-        padding: 10px 20px !important;
+        padding: 8px 15px !important;
         border-radius: 8px !important;
-        margin: 0 4px !important;
+        margin: 0 5px !important;
         transition: all 0.3s ease !important;
-        position: relative !important;
-        overflow: hidden !important;
         white-space: nowrap !important;
-    }}
-    
-    /* ITEM NORMAL */
-    .st-emotion-cache-1v7f65g .st-ae .st-af:not(.st-ag) {{
-        background: transparent !important;
-        color: rgba(255, 255, 255, 0.7) !important;
         border: 1px solid transparent !important;
     }}
     
-    /* ITEM NORMAL HOVER */
+    /* ITEM NORMAL (NÃO SELECIONADO) */
+    .st-emotion-cache-1v7f65g .st-ae .st-af:not(.st-ag) {{
+        color: rgba(255, 255, 255, 0.6) !important;
+        background: rgba(0,0,0,0.1) !important; /* Leve fundo para leitura */
+    }}
+    
+    /* HOVER */
     .st-emotion-cache-1v7f65g .st-ae .st-af:not(.st-ag):hover {{
         color: {COR_DESTAQUE} !important;
-        background: rgba(255, 215, 112, 0.1) !important;
-        border: 1px solid rgba(255, 215, 112, 0.3) !important;
+        background: rgba(255, 215, 112, 0.05) !important;
+        border-color: rgba(255, 215, 112, 0.2) !important;
         transform: translateY(-2px) !important;
     }}
     
-    /* ITEM SELECIONADO */
+    /* ITEM SELECIONADO (DOURADO) */
     .st-emotion-cache-1v7f65g .st-ae .st-ag {{
-        background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important;
-        color: {COR_FUNDO} !important;
+        background: transparent !important; /* Sem fundo sólido */
+        color: {COR_DESTAQUE} !important; /* Texto Dourado */
         font-weight: 700 !important;
-        border: none !important;
-        box-shadow: 0 4px 15px rgba(255, 215, 112, 0.4) !important;
-        position: relative !important;
-    }}
-    
-    /* EFEITO BRILHO NO ITEM SELECIONADO */
-    .st-emotion-cache-1v7f65g .st-ae .st-ag::before {{
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: -2px;
-        right: -2px;
-        bottom: -2px;
-        background: linear-gradient(45deg, {COR_DESTAQUE}, transparent, {COR_DESTAQUE});
-        z-index: -1;
-        border-radius: 10px;
-        animation: pulse-glow 2s infinite;
+        border-bottom: 2px solid {COR_DESTAQUE} !important; /* Linha embaixo */
+        border-radius: 0px !important; /* Quadrado embaixo */
     }}
     
     /* ÍCONES */
     .st-emotion-cache-1v7f65g .st-ae svg {{
         color: inherit !important;
-        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
     }}
     
-    @keyframes pulse-glow {{
-        0%, 100% {{ opacity: 0.7; }}
-        50% {{ opacity: 1; }}
-    }}
-    
-    /* Scrollbar do menu para mobile */
+    /* Scrollbar */
     .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar {{
-        height: 4px;
-    }}
-    .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar-thumb {{
-        background: {COR_DESTAQUE};
-        border-radius: 10px;
+        height: 0px; /* Esconde a barra de rolagem */
     }}
 
     /* --- REMOVE PADDING EXTRA --- */
@@ -300,7 +271,7 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU SUPERIOR - NOVO DESIGN "PREMIUM FLOATING"
+    # MENU SUPERIOR - TRANSPARENTE
     # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
@@ -311,23 +282,23 @@ def app_principal():
         styles={
             "container": {
                 "padding": "0!important", 
-                "background-color": "transparent",
+                "background-color": "transparent", # Transparente de verdade
                 "border": "none",
                 "display": "flex",
                 "justify-content": "center"
             },
             "icon": {
                 "color": "inherit", 
-                "font-size": "18px",
+                "font-size": "16px",
                 "margin-right": "8px"
             }, 
             "nav-link": {
                 "font-size": "14px", 
                 "text-align": "center", 
-                "margin": "0px 4px", 
-                "padding": "12px 20px",
+                "margin": "0px 5px", 
+                "padding": "10px 15px",
                 "border-radius": "8px",
-                "color": "rgba(255, 255, 255, 0.7)",
+                "color": "rgba(255, 255, 255, 0.6)", # Texto suave
                 "font-weight": "500",
                 "background": "transparent",
                 "transition": "all 0.3s ease",
@@ -338,12 +309,11 @@ def app_principal():
                 "min-width": "fit-content"
             },
             "nav-link-selected": {
-                "background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%)",
-                "color": COR_FUNDO,
+                "background-color": "transparent",
+                "color": COR_DESTAQUE, # Dourado
                 "font-weight": "700",
-                "box-shadow": "0 4px 15px rgba(255, 215, 112, 0.4)",
-                "border": "none",
-                "position": "relative"
+                "border-bottom": f"2px solid {COR_DESTAQUE}", # Linha embaixo
+                "border-radius": "0px"
             },
         }
     )
