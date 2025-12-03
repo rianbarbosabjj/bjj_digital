@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM + GLASS")
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -53,21 +53,58 @@ st.markdown(f"""
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
 
-    hr {{
-        margin: 2em 0 !important;
-        border: 0 !important;
-        height: 1px !important;
-        background-image: linear-gradient(to right, rgba(255, 255, 255, 0),
-                                                  rgba(255, 255, 255, 0.5),
-                                                  rgba(255, 255, 255, 0)) !important;
+    /* =========================================================
+       🔥 MENU SUPERIOR – VIDRO FOSCO PREMIUM (COMPATÍVEL)
+       ========================================================= */
+
+    /* Wrapper geral do menu */
+    div[data-testid="stHorizontalBlock"] > div,
+    .st-emotion-cache-1v7f65g,
+    .st-emotion-cache-1v7f65g.ezrtsby2 {{
+        background: rgba(255, 255, 255, 0.07) !important;
+        backdrop-filter: blur(14px) saturate(140%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+        border-radius: 14px !important;
+        border: 1px solid rgba(255,255,255,0.15) !important;
+        margin: 15px auto 25px auto !important;
+        padding: 12px 18px !important;
+        max-width: 98% !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
     }}
 
-    h1, h2, h3, h4, h5, h6 {{ 
-        color: {COR_DESTAQUE} !important; 
-        text-align: center !important; 
-        font-weight: 700 !important; 
-        text-transform: uppercase;
-        letter-spacing: 1px;
+    /* Links do menu */
+    .st-emotion-cache-1v7f65g .st-ae .st-af,
+    .st-emotion-cache-1v7f65g.ezrtsby2 .st-ae .st-af {{
+        background: rgba(255,255,255,0.08) !important;
+        border-radius: 10px !important;
+        padding: 10px 16px !important;
+        margin: 0 6px !important;
+        color: rgba(255,255,255,0.75) !important;
+        transition: all 0.25s ease !important;
+    }}
+
+    /* Hover premium */
+    .st-emotion-cache-1v7f65g .st-ae .st-af:hover,
+    .st-emotion-cache-1v7f65g.ezrtsby2 .st-ae .st-af:hover {{
+        background: rgba(255,215,112,0.18) !important;
+        color: {COR_DESTAQUE} !important;
+        border: 1px solid rgba(255,215,112,0.4) !important;
+        transform: translateY(-2px);
+    }}
+
+    /* Item selecionado */
+    .st-emotion-cache-1v7f65g .st-ae .st-ag,
+    .st-emotion-cache-1v7f65g.ezrtsby2 .st-ae .st-ag {{
+        background: rgba(255,215,112,0.25) !important;
+        color: {COR_DESTAQUE} !important;
+        font-weight: 700 !important;
+        border-bottom: 2px solid {COR_DESTAQUE} !important;
+        border-radius: 6px !important;
+    }}
+
+    /* Scroll invisível */
+    div[data-testid="stHorizontalBlock"] > div::-webkit-scrollbar {{
+        height: 0px !important;
     }}
 
     /* --- SIDEBAR --- */
@@ -81,13 +118,9 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- BOTÃO SIDEBAR (SAFE MODE) --- */
-    [data-testid="stSidebarCollapsedControl"] {{
-        color: {COR_DESTAQUE} !important;
-    }}
-
+    /* --- BOTÃO SIDEBAR --- */
     [data-testid="stSidebarCollapsedControl"] button {{
-        background-color: rgba(0,0,0,0.2) !important;
+        background-color: rgba(0,0,0,0.15) !important;
         color: {COR_DESTAQUE} !important;
     }}
 
@@ -96,89 +129,25 @@ st.markdown(f"""
         color: {COR_FUNDO} !important;
     }}
 
-    /* --- CARDS & CONTAINERS --- */
+    /* --- CARDS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
-        background-color: rgba(0, 0, 0, 0.3) !important; 
-        border: 1px solid rgba(255, 215, 112, 0.2) !important; 
-        border-radius: 12px; 
-        padding: 20px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
-        margin-bottom: 20px;
-    }}
-
-    /* --- BOTÕES --- */
-    div.stButton > button, div.stFormSubmitButton > button {{ 
-        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
-        color: white !important; 
-        border: 1px solid rgba(255,255,255,0.1) !important; 
-        padding: 0.6em 1.5em !important; 
-        font-weight: 600 !important;
-        border-radius: 8px !important; 
-        transition: all 0.3s ease !important;
-    }}
-
-    div.stButton > button:hover {{ 
-        background: {COR_HOVER} !important; 
-        color: #0e2d26 !important; 
-        transform: translateY(-2px);
+        background-color: rgba(0,0,0,0.35) !important;
+        border: 1px solid rgba(255,215,112,0.18) !important;
+        border-radius: 12px !important;
+        padding: 20px !important;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
     }}
 
     /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
-        background-color: rgba(255, 255, 255, 0.05) !important;
+        background-color: rgba(255, 255, 255, 0.06) !important;
+        border: 1px solid rgba(255,255,255,0.25) !important;
+        border-radius: 8px !important;
         color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important; 
-        border-radius: 8px !important;
     }}
 
-    /* =========================================================
-       🔥 MENU SUPERIOR — Fundo 100% igual ao fundo da tela
-       ========================================================= */
-    .st-emotion-cache-1v7f65g {{
-        background-color: {COR_FUNDO} !important;
-        background-image: radial-gradient(circle at 50% 0%, #164036 0%, {COR_FUNDO} 70%) !important;
-        border: none !important;
-        box-shadow: none !important;
-        padding: 0 !important;
-        margin: 10px auto 20px auto !important;
-        max-width: 98% !important;
-        display: flex !important;
-        justify-content: center !important;
-        flex-wrap: nowrap !important;
-        overflow-x: auto !important;
-    }}
-
-    .st-emotion-cache-1v7f65g .st-ae .st-af {{
-        padding: 8px 15px !important;
-        border-radius: 8px !important;
-        margin: 0 5px !important;
-        transition: all 0.3s ease !important;
-        white-space: nowrap !important;
-        border: 1px solid transparent !important;
-        background: rgba(0,0,0,0.1) !important;
-        color: rgba(255,255,255,0.6) !important;
-    }}
-
-    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{
-        color: {COR_DESTAQUE} !important;
-        background: rgba(255, 215, 112, 0.05) !important;
-        border-color: rgba(255,215,112,0.2) !important;
-    }}
-
-    .st-emotion-cache-1v7f65g .st-ae .st-ag {{
-        background: transparent !important;
-        color: {COR_DESTAQUE} !important;
-        font-weight: 700 !important;
-        border-bottom: 2px solid {COR_DESTAQUE} !important;
-        border-radius: 0px !important;
-    }}
-
-    /* Scrollbar invisível */
-    .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar {{
-        height: 0px !important;
-    }}
-
+    /* OCULTAR ITENS PADRÃO */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
@@ -189,6 +158,10 @@ st.markdown(f"""
 
 </style>
 """, unsafe_allow_html=True)
+
+# =========================================================
+# RESTANTE DO SEU CÓDIGO (SEM ALTERAÇÃO)
+# =========================================================
 
 if "SECRETS_TOML" in os.environ:
     if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
@@ -241,7 +214,7 @@ def app_principal():
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         if tipo in ["admin", "professor"]:
-            if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
             
