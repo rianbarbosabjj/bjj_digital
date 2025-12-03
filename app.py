@@ -28,7 +28,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (HEADER TRANSPARENTE + BOTÃO FLUTUANTE)
+# 2. ESTILOS VISUAIS (CSS CORRIGIDO - HEADER FANTASMA)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -56,70 +56,64 @@ st.markdown(f"""
     }}
 
     /* ============================================================
-       ESTRATÉGIA: HEADER TRANSPARENTE E "INTANGÍVEL"
+       CORREÇÃO: HEADER FANTASMA (MANTÉM O BOTÃO VIVO)
     ============================================================ */
     
-    /* 1. O Header existe, mas é invisível e o mouse passa através dele */
+    /* 1. Torna o container do cabeçalho transparente e sem bordas */
     header[data-testid="stHeader"] {{
-        background: transparent !important;
-        pointer-events: none !important; /* O segredo: permite clicar no conteúdo atrás */
-        border-bottom: none !important;
+        background-color: transparent !important;
+        border: none !important;
     }}
     
-    /* 2. Removemos a linha colorida do topo */
+    /* 2. Remove a linha colorida do topo (Decoração) */
     [data-testid="stDecoration"] {{
         display: none !important;
     }}
 
-    /* 3. Removemos o menu de opções da direita (3 pontinhos) */
+    /* 3. Remove o menu de 3 pontinhos da direita e o botão Deploy */
     [data-testid="stToolbar"] {{
         display: none !important;
+        visibility: hidden !important;
+    }}
+    
+    /* 4. PUXA O CONTEÚDO PRA CIMA (Ocupa o espaço vazio) */
+    /* O padding-top padrão é 6rem. Reduzimos para subir tudo. */
+    .block-container {{
+        padding-top: 1.5rem !important;
     }}
 
-    /* 4. BOTÃO DA SIDEBAR: Trazemos de volta a interatividade e estilo */
-    [data-testid="stSidebarCollapsedControl"] {{
-        display: block !important;
-        pointer-events: auto !important; /* Reativa o clique SÓ no botão */
-        
-        /* Posição Fixa no Canto */
-        position: fixed !important;
-        top: 20px !important;
-        left: 20px !important;
-        z-index: 1000002 !important; /* Acima de tudo */
-        
-        /* Estilo Visual Premium */
-        background-color: rgba(14, 45, 38, 0.9) !important;
-        border: 1px solid {COR_DESTAQUE} !important;
+    /* 5. ESTILIZA O BOTÃO DE ABRIR SIDEBAR (Para garantir visibilidade) */
+    [data-testid="stSidebarCollapsedControl"] button {{
+        color: {COR_DESTAQUE} !important;
+        background-color: rgba(14, 45, 38, 0.6) !important;
+        border: 1px solid rgba(255, 215, 112, 0.3) !important;
         border-radius: 8px !important;
-        padding: 5px !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;
-        transition: all 0.3s ease !important;
+        padding: 2px 8px !important;
+        font-weight: bold;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.3);
     }}
-
-    /* Ícone do Botão */
+    
+    /* Ícone SVG dentro do botão */
     [data-testid="stSidebarCollapsedControl"] svg {{
         fill: {COR_DESTAQUE} !important;
         width: 24px !important;
         height: 24px !important;
     }}
 
-    /* Efeito Hover */
-    [data-testid="stSidebarCollapsedControl"]:hover {{
+    /* Hover do botão */
+    [data-testid="stSidebarCollapsedControl"] button:hover {{
         background-color: {COR_DESTAQUE} !important;
-        transform: scale(1.1);
+        color: {COR_FUNDO} !important;
+        transform: scale(1.05);
     }}
-    [data-testid="stSidebarCollapsedControl"]:hover svg {{
-        fill: {COR_FUNDO} !important; /* Inverte a cor no hover */
-    }}
-
-    /* 5. Sobe o conteúdo da página para ocupar o topo */
-    .block-container {{
-        padding-top: 4rem !important;
+    [data-testid="stSidebarCollapsedControl"] button:hover svg {{
+        fill: {COR_FUNDO} !important;
     }}
     
-    /* Esconde Rodapé */
-    footer {{visibility: hidden; display: none;}}
-    #MainMenu {{visibility: hidden; display: none;}}
+    /* Esconde rodapé */
+    footer, #MainMenu {{
+        display: none !important;
+    }}
 
     /* ============================================================ */
 
@@ -143,18 +137,16 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 215, 112, 0.15);
         box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
+    section[data-testid="stSidebar"] svg {{
+        fill: {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
+    }}
     
-    /* Botão de fechar DENTRO da sidebar aberta (ajuste para não bugar) */
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] {{
-        position: relative !important;
-        top: 0 !important;
-        left: 0 !important;
+    /* Corrige o botão de fechar DENTRO da sidebar */
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] button {{
         background-color: transparent !important;
         border: none !important;
         box-shadow: none !important;
-    }}
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
     }}
 
     /* --- CONTAINERS --- */
@@ -195,7 +187,7 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* Radio Dourado */
+    /* Radio Buttons Dourados */
     div.stRadio > div[role="radiogroup"] > label > div:first-child {{
         border-color: {COR_DESTAQUE} !important;
         background-color: transparent !important;
@@ -259,7 +251,6 @@ def app_principal():
 
     def nav(pg): st.session_state.menu_selection = pg
 
-    # SIDEBAR
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
@@ -281,14 +272,12 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Roteamento Sidebar
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
