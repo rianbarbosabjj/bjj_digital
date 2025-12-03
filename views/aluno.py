@@ -128,9 +128,11 @@ def exame_de_faixa(usuario):
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons(); st.success(f"Aprovado! Nota: {res['nota']:.1f}%")
-        p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['acertos'], res['total'], res['codigo'])
-        if p_b: st.download_button("📥 Baixar Certificado", p_b, p_n, "application/pdf", use_container_width=True)
-        if st.button("Voltar"): st.session_state.resultado_prova = None; st.rerun()
+        p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
+        if p_b: 
+            st.download_button("📥 Baixar Certificado", p_b, p_n, "application/pdf", key="btn_down_result", use_container_width=True)
+        
+        if st.button("Voltar ao Início"): st.session_state.resultado_prova = None; st.rerun()
         return
 
     # --- VERIFICAÇÃO DE ABANDONO ---
