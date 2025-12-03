@@ -187,7 +187,7 @@ st.markdown(f"""
     }}
 
     /* --- REMOVE PADDING EXTRA --- */
-    #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
+    #MainMenu {{visibility: hidden;}} footer {{visibility: visible;}} header {{visibility: hidden;}}
     .block-container {{padding-top: 1.5rem !important;}}
 
 </style>
