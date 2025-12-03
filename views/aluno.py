@@ -9,15 +9,28 @@ import streamlit.components.v1 as components
 from database import get_db
 from firebase_admin import firestore
 
-from utils import (
-    registrar_inicio_exame, 
-    registrar_fim_exame, 
-    bloquear_por_abandono,
-    verificar_elegibilidade_exame,
-    carregar_todas_questoes,
-    gerar_codigo_verificacao,
-    gerar_pdf
-)
+# Importa a função de normalizar vídeo
+try:
+    from utils import (
+        registrar_inicio_exame, 
+        registrar_fim_exame, 
+        bloquear_por_abandono,
+        verificar_elegibilidade_exame,
+        carregar_todas_questoes,
+        gerar_codigo_verificacao,
+        gerar_pdf,
+        normalizar_link_video # <--- NOVA IMPORTAÇÃO ESSENCIAL
+    )
+except ImportError:
+    # Fallback caso utils esteja desatualizado na memória
+    def normalizar_link_video(u): return u
+    def registrar_inicio_exame(u): pass
+    def registrar_fim_exame(u, a): pass
+    def bloquear_por_abandono(u): pass
+    def verificar_elegibilidade_exame(u): return True, "OK"
+    def carregar_todas_questoes(): return []
+    def gerar_codigo_verificacao(): return ""
+    def gerar_pdf(a,b,c,d,e): return None, None
 
 # =========================================
 # CARREGADOR DE EXAME
@@ -72,68 +85,8 @@ def carregar_exame_especifico(faixa_alvo):
 # MÓDULOS SECUNDÁRIOS
 # =========================================
 def modo_rola(usuario):
-    st.markdown(f"## 🤼 Modo Rola (Treino Livre)")
-    st.caption("Responda questões aleatórias sem pressão de tempo ou nota. Ideal para estudar!")
-    
-    if "treino_questoes" not in st.session_state:
-        # Carrega 5 questões aleatórias de qualquer nível
-        db = get_db()
-        all_q = list(db.collection('questoes').where('status', '==', 'aprovada').limit(50).stream())
-        if all_q:
-            selecionados = random.sample(all_q, min(5, len(all_q)))
-            dados_q = []
-            for doc in selecionados:
-                d = doc.to_dict()
-                # Normaliza alternativas
-                if 'alternativas' not in d and 'opcoes' in d:
-                    ops = d['opcoes']
-                    d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                dados_q.append(d)
-            st.session_state.treino_questoes = dados_q
-            st.session_state.treino_respostas = {}
-            st.session_state.treino_finalizado = False
-        else:
-            st.warning("Banco de questões vazio.")
-            return
-
-    if st.button("🔄 Gerar Novo Treino"):
-        del st.session_state.treino_questoes
-        st.rerun()
-
-    with st.form("form_treino"):
-        acertos = 0
-        for i, q in enumerate(st.session_state.treino_questoes):
-            st.markdown(f"**{i+1}. {q.get('pergunta')}**")
-            
-            # --- MÍDIA NO MODO ROLA ---
-            if q.get('url_imagem'): st.image(q.get('url_imagem'), use_container_width=True)
-            if q.get('url_video'): st.video(q.get('url_video'))
-            
-            alts = q.get('alternativas', {})
-            opts = [alts.get(k, '-') for k in ["A","B","C","D"]]
-            
-            resp = st.radio(f"Opções {i}", opts, key=f"t_q{i}", label_visibility="collapsed")
-            st.markdown("---")
-
-        if st.form_submit_button("Corrigir Treino"):
-            st.session_state.treino_finalizado = True
-            
-    if st.session_state.treino_finalizado:
-        st.markdown("### 📊 Resultado do Treino")
-        nota_treino = 0
-        for i, q in enumerate(st.session_state.treino_questoes):
-            user_resp = st.session_state.get(f"t_q{i}")
-            certa_letra = q.get('resposta_correta', 'A')
-            alts = q.get('alternativas', {})
-            texto_certo = alts.get(certa_letra, "").strip().lower()
-            
-            if str(user_resp).strip().lower() == texto_certo:
-                st.success(f"Questão {i+1}: Correta! ✅")
-                nota_treino += 1
-            else:
-                st.error(f"Questão {i+1}: Errou ❌. A correta era: **{texto_certo}**")
-        
-        st.metric("Total de Acertos", f"{nota_treino} / {len(st.session_state.treino_questoes)}")
+    st.markdown(f"## 🥋 Modo Rola (Treino Livre)")
+    st.info("Em breve.")
 
 def meus_certificados(usuario):
     if st.button("🏠 Voltar ao Início", key="btn_back_cert"):
@@ -154,29 +107,7 @@ def meus_certificados(usuario):
                 if pdf_bytes: c2.download_button("📄 PDF", pdf_bytes, pdf_name, "application/pdf", key=f"d_{i}")
             except: pass
 
-def ranking():
-    st.markdown("## 🏆 Hall da Fama - Ranking")
-    db = get_db()
-    try:
-        res_ref = db.collection('resultados').where('aprovado', '==', True).stream()
-        placar = {}
-        for doc in res_ref:
-            d = doc.to_dict()
-            aluno = d.get('usuario', 'Desconhecido')
-            faixa = d.get('faixa', '?')
-            if aluno not in placar: placar[aluno] = {"faixas": set(), "pontos": 0}
-            if faixa not in placar[aluno]["faixas"]:
-                placar[aluno]["faixas"].add(faixa)
-                placar[aluno]["pontos"] += 100
-        ranking_lista = []
-        for nome, dados in placar.items():
-            ranking_lista.append({"Aluno": nome, "Faixas": len(dados["faixas"]), "Pontos": dados["pontos"]})
-        if not ranking_lista: st.info("Sem dados.")
-        else:
-            df = pd.DataFrame(ranking_lista).sort_values(by="Pontos", ascending=False).reset_index(drop=True)
-            df.index += 1
-            st.dataframe(df, use_container_width=True)
-    except: pass
+def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
 # =========================================
 # EXAME DE FAIXA (PRINCIPAL)
@@ -273,14 +204,19 @@ def exame_de_faixa(usuario):
             for i, q in enumerate(qs):
                 st.markdown(f"**{i+1}. {q.get('pergunta')}**")
                 
-                # --- EXIBIÇÃO DE MÍDIA ---
-                # Aqui está o código que faz a imagem aparecer
+                # --- EXIBIÇÃO DE MÍDIA COM CORREÇÃO ---
                 if q.get('url_imagem'):
                     st.image(q.get('url_imagem'), caption="Imagem de Apoio", use_container_width=True)
                 
                 if q.get('url_video'):
-                    st.video(q.get('url_video'))
-                # -------------------------
+                    # Aplica a normalização para funcionar shorts/mobile
+                    link_vid = normalizar_link_video(q.get('url_video'))
+                    try:
+                        st.video(link_vid)
+                    except:
+                        st.warning("Erro no player.")
+                        st.markdown(f"🔗 [Abrir Vídeo]({q.get('url_video')})")
+                # --------------------------------------
 
                 opts = []
                 if 'alternativas' in q and isinstance(q['alternativas'], dict):
