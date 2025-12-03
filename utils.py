@@ -16,7 +16,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fpdf import FPDF
 from database import get_db
-from firebase_admin import firestore, storage 
+from firebase_admin import firestore, storage
 
 # =========================================
 # FUNÇÃO DE UPLOAD BLINDADA
@@ -28,32 +28,28 @@ def fazer_upload_imagem(arquivo):
     if not arquivo: return None
     
     try:
-        # Pega o bucket configurado no database.py
         bucket = storage.bucket() 
-        
-        # Verificação de segurança
         if not bucket.name:
-            st.error("Erro Crítico: Nome do Bucket não encontrado. Verifique se o 'database.py' foi atualizado e se o 'secrets.toml' tem o project_id.")
+            st.error("Erro: Bucket não configurado no secrets.toml")
             return None
 
-        # 1. Prepara o arquivo
-        arquivo.seek(0) # Garante que está no inicio do arquivo
+        # 1. Define o caminho do arquivo
         ext = arquivo.name.split('.')[-1]
         blob_name = f"questoes/{uuid.uuid4()}.{ext}"
         blob = bucket.blob(blob_name)
         
         # 2. Faz o Upload
-        # Define o content type para o navegador saber que é imagem
         blob.upload_from_file(arquivo, content_type=arquivo.type)
         
-        # 3. Configura Token de Acesso Público
+        # 3. Define o Token
         access_token = str(uuid.uuid4())
         metadata = {"firebaseStorageDownloadTokens": access_token}
         blob.metadata = metadata
-        blob.patch() # Salva o metadado
+        blob.patch() 
 
-        # 4. Monta a URL Manualmente (Formato Firebase)
+        # 4. Monta a URL
         blob_path_encoded = quote(blob_name, safe='') 
+        
         final_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{blob_path_encoded}?alt=media&token={access_token}"
         
         return final_url
@@ -320,7 +316,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         x_assinatura = centro_x - (largura_linha_assinatura / 2)
         pdf.set_draw_color(*cor_preto)
         pdf.set_line_width(0.3)
-        pdf.line(x_assinatura, y_assinatura, x_assinatura + largura_linha_assinatura, y_assinatura)
+        pdf.line(x_assinatura, y_assinatura, x_assinatura + largura_linha, y_assinatura)
         
         pdf.set_xy(x_assinatura, y_assinatura + 2)
         pdf.set_font("Helvetica", "", 10)
