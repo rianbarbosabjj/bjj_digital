@@ -15,32 +15,41 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fpdf import FPDF
 from database import get_db
-from firebase_admin import firestore, storage # Importar Storage
+from firebase_admin import firestore, storage 
 
 # =========================================
-# FUNÇÃO DE UPLOAD (NOVA)
+# FUNÇÃO DE UPLOAD (CORRIGIDA PARA URL ASSINADA)
 # =========================================
 def fazer_upload_imagem(arquivo):
-    """Envia imagem para o Firebase Storage e retorna a URL pública."""
+    """
+    Envia imagem para o Firebase Storage e retorna uma URL Assinada.
+    Isso evita erros de permissão em buckets com 'Acesso Uniforme'.
+    """
     if not arquivo: return None
     
     try:
-        bucket = storage.bucket() # Pega o bucket configurado no database.py
+        bucket = storage.bucket() 
         
-        # Cria um nome único para não sobrescrever arquivos
+        # Cria um nome único
         ext = arquivo.name.split('.')[-1]
         nome_final = f"questoes/{uuid.uuid4()}.{ext}"
         
         blob = bucket.blob(nome_final)
         blob.upload_from_file(arquivo, content_type=arquivo.type)
         
-        # Torna público para ser visível no app
-        blob.make_public()
+        # GERA URL ASSINADA (Válida por 10 anos - 3650 dias)
+        # Isso funciona mesmo se o bucket for Privado.
+        url_assinada = blob.generate_signed_url(
+            version="v4",
+            expiration=timedelta(days=3650),
+            method="GET"
+        )
         
-        return blob.public_url
+        return url_assinada
+        
     except Exception as e:
         print(f"Erro no upload: {e}")
-        # Se falhar o bucket, retorna None mas não quebra o app
+        # Retorna None para não quebrar, mas avisa no console
         return None
 
 # =========================================
