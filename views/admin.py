@@ -7,12 +7,14 @@ from datetime import datetime, time as dtime
 from database import get_db
 from firebase_admin import firestore
 
+# Importa a nova função normalizadora
 try:
-    from utils import carregar_todas_questoes, salvar_questoes, fazer_upload_midia
+    from utils import carregar_todas_questoes, salvar_questoes, fazer_upload_midia, normalizar_link_video
 except ImportError:
     def carregar_todas_questoes(): return []
     def salvar_questoes(t, q): pass
     def fazer_upload_midia(f): return None
+    def normalizar_link_video(u): return u
 
 FAIXAS_COMPLETAS = [
     " ", "Cinza e Branca", "Cinza", "Cinza e Preta",
@@ -25,8 +27,7 @@ FAIXAS_COMPLETAS = [
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
 
-def get_badge_nivel(nivel):
-    return MAPA_NIVEIS.get(nivel, "⚪ Nível ?")
+def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
 # 1. GESTÃO DE USUÁRIOS
@@ -35,7 +36,7 @@ def gestao_usuarios(usuario_logado):
     if st.button("🏠 Voltar ao Início", key="btn_voltar_adm"):
         st.session_state.menu_selection = "Início"; st.rerun()
 
-    st.markdown("<h1 style='color:#FFD700;'>👥 Gestão de Usuários</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:#FFD700;'>👥 Usuários</h1>", unsafe_allow_html=True)
     db = get_db()
     users = [d.to_dict() | {"id": d.id} for d in db.collection('usuarios').stream()]
     if not users: st.warning("Vazio."); return
@@ -44,6 +45,7 @@ def gestao_usuarios(usuario_logado):
     for c in cols:
         if c not in df.columns: df[c] = "-"
     st.dataframe(df[cols], use_container_width=True, hide_index=True)
+    
     st.markdown("---")
     st.subheader("🛠️ Editar")
     sel = st.selectbox("Usuário:", users, format_func=lambda x: f"{x.get('nome')} ({x.get('email')})")
@@ -51,24 +53,23 @@ def gestao_usuarios(usuario_logado):
         with st.form(f"edt_{sel['id']}"):
             nm = st.text_input("Nome:", value=sel.get('nome',''))
             tp = st.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
-            fx = st.selectbox("Faixa Atual:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
-            pwd = st.text_input("Nova Senha (opcional):", type="password")
+            fx = st.selectbox("Faixa:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
+            pwd = st.text_input("Nova Senha:", type="password")
             if st.form_submit_button("Salvar"):
                 upd = {"nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx}
                 if pwd: upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(); upd["precisa_trocar_senha"] = True
                 db.collection('usuarios').document(sel['id']).update(upd)
                 st.success("Salvo!"); time.sleep(1); st.rerun()
-        if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
+        if st.button("🗑️ Excluir", key=f"del_{sel['id']}"):
             db.collection('usuarios').document(sel['id']).delete()
-            st.warning("Excluído."); time.sleep(1); st.rerun()
+            st.warning("Excluído."); st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES (PLAYER DE VÍDEO ATIVO)
+# 2. GESTÃO DE QUESTÕES (CORRIGIDO VÍDEO)
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
     db = get_db()
-    
     user = st.session_state.usuario
     if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
         st.error("Acesso negado."); return
@@ -77,173 +78,134 @@ def gestao_questoes():
 
     # --- LISTAR ---
     with tab1:
-        questoes_ref = list(db.collection('questoes').stream())
-        c_f1, c_f2 = st.columns(2)
-        termo = c_f1.text_input("🔍 Buscar no enunciado:")
-        filtro_n = c_f2.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
-
-        questoes_filtradas = []
-        for doc in questoes_ref:
+        q_ref = list(db.collection('questoes').stream())
+        c1, c2 = st.columns(2)
+        termo = c1.text_input("🔍 Buscar:")
+        filt_n = c2.multiselect("Nível:", NIVEIS_DIFICULDADE)
+        
+        q_filtro = []
+        for doc in q_ref:
             d = doc.to_dict(); d['id'] = doc.id
             if termo and termo.lower() not in d.get('pergunta','').lower(): continue
-            if filtro_n and d.get('dificuldade', 1) not in filtro_n: continue
-            questoes_filtradas.append(d)
+            if filt_n and d.get('dificuldade',1) not in filt_n: continue
+            q_filtro.append(d)
             
-        if not questoes_filtradas:
-            st.info("Nenhuma questão encontrada.")
+        if not q_filtro: st.info("Nada encontrado.")
         else:
-            st.caption(f"Exibindo {len(questoes_filtradas)} questões")
-            for q in questoes_filtradas:
+            st.caption(f"{len(q_filtro)} questões")
+            for q in q_filtro:
                 with st.container(border=True):
-                    c_head, c_btn = st.columns([5, 1])
+                    ch, cb = st.columns([5, 1])
+                    bdg = get_badge_nivel(q.get('dificuldade',1))
+                    ch.markdown(f"**{bdg}** | {q.get('categoria','Geral')} | ✍️ {q.get('criado_por','?')}")
+                    ch.markdown(f"##### {q.get('pergunta')}")
                     
-                    nivel = get_badge_nivel(q.get('dificuldade', 1))
-                    cat = q.get('categoria', 'Geral')
-                    autor = q.get('criado_por', 'Desconhecido')
+                    # --- PREVIEW ---
+                    if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
                     
-                    c_head.markdown(f"**{nivel}** | *{cat}* | ✍️ {autor}")
-                    c_head.markdown(f"##### {q.get('pergunta')}")
-                    
-                    # --- VISUALIZAÇÃO DE MÍDIA ---
-                    if q.get('url_imagem'):
-                        c_head.image(q.get('url_imagem'), caption="Imagem Anexada", width=200)
-                    
+                    # CORREÇÃO VÍDEO: Usa o normalizador
                     if q.get('url_video'):
+                        link_limpo = normalizar_link_video(q.get('url_video'))
                         try:
-                            # Tenta exibir o player
-                            c_head.video(q.get('url_video'))
+                            ch.video(link_limpo)
                         except:
-                            # Se falhar (ex: link privado), mostra link clicável
-                            c_head.error("Não foi possível carregar o player. Link abaixo:")
-                            c_head.markdown(f"🔗 [Abrir Vídeo]({q.get('url_video')})")
-                    # -----------------------------
-
-                    with c_head.expander("👁️ Ver Detalhes"):
+                            ch.markdown(f"🔗 [Ver Vídeo Externo]({q.get('url_video')})")
+                    
+                    with ch.expander("Alternativas"):
                         alts = q.get('alternativas', {})
-                        if not alts and 'opcoes' in q:
-                            ops = q['opcoes']; alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
-                        st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')} | **C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
-                        resp = q.get('resposta_correta') or q.get('correta') or "?"
-                        st.success(f"**Correta:** {resp}")
-
-                    if c_btn.button("✏️", key=f"btn_edit_{q['id']}"):
-                        st.session_state[f"editing_q"] = q['id']
-
-                if st.session_state.get("editing_q") == q['id']:
+                        st.write(f"A) {alts.get('A','')} | B) {alts.get('B','')}")
+                        st.write(f"C) {alts.get('C','')} | D) {alts.get('D','')}")
+                        st.success(f"Correta: {q.get('resposta_correta')}")
+                    
+                    if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
+                
+                # --- EDITAR ---
+                if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
-                        with st.form(f"form_edit_{q['id']}"):
-                            enunciado = st.text_area("Pergunta:", value=q.get('pergunta',''))
+                        with st.form(f"f_ed_{q['id']}"):
+                            perg = st.text_area("Enunciado:", value=q.get('pergunta',''))
                             
                             st.markdown("🖼️ **Mídia**")
-                            cm1, cm2 = st.columns(2)
-                            novo_arquivo = cm1.file_uploader("Trocar Imagem:", type=["jpg", "png", "jpeg"], key=f"up_edit_{q['id']}")
-                            url_img_atual = q.get('url_imagem', '')
-                            if url_img_atual: cm1.caption(f"Atual: {url_img_atual[:30]}...")
+                            c_img, c_vid = st.columns(2)
+                            up_img = c_img.file_uploader("Nova Imagem:", type=["jpg","png"], key=f"u_i_{q['id']}")
+                            url_i_at = q.get('url_imagem','')
+                            if url_i_at: c_img.caption("Imagem atual salva.")
                             
-                            # --- UPLOAD E URL DE VÍDEO ---
-                            novo_video_arq = cm2.file_uploader("Trocar Vídeo (Upload):", type=["mp4", "mov"], key=f"up_v_edit_{q['id']}")
-                            url_video_atual = q.get('url_video', '')
-                            url_video_manual = cm2.text_input("Ou Link YouTube/Vimeo:", value=url_video_atual)
-                            # -----------------------------
-
+                            up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
+                            url_v_at = q.get('url_video','')
+                            url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
+                            
                             c1, c2 = st.columns(2)
-                            val_dif = q.get('dificuldade', 1)
-                            if not isinstance(val_dif, int): val_dif = 1
-                            nv_dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(val_dif) if val_dif in NIVEIS_DIFICULDADE else 0, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
-                            nv_cat = c2.text_input("Categoria:", value=q.get('categoria', 'Geral'))
+                            dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(q.get('dificuldade',1)))
+                            cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
                             
-                            alts = q.get('alternativas', {})
-                            if not alts and 'opcoes' in q:
-                                ops = q['opcoes']; alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                            alts = q.get('alternativas',{})
                             ca, cb = st.columns(2); cc, cd = st.columns(2)
-                            rA = ca.text_input("A)", value=alts.get('A','')); rB = cb.text_input("B)", value=alts.get('B',''))
-                            rC = cc.text_input("C)", value=alts.get('C','')); rD = cd.text_input("D)", value=alts.get('D',''))
-                            resp_atual = q.get('resposta_correta', 'A')
-                            corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(resp_atual) if resp_atual in ["A","B","C","D"] else 0)
+                            rA = ca.text_input("A)", alts.get('A','')); rB = cb.text_input("B)", alts.get('B',''))
+                            rC = cc.text_input("C)", alts.get('C','')); rD = cd.text_input("D)", alts.get('D',''))
+                            corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(q.get('resposta_correta','A')))
                             
                             cols = st.columns(2)
                             if cols[0].form_submit_button("💾 Salvar"):
-                                try:
-                                    # Lógica de Imagem
-                                    final_url_img = url_img_atual
-                                    if novo_arquivo:
-                                        with st.spinner("Subindo imagem..."):
-                                            link = fazer_upload_midia(novo_arquivo)
-                                            if link: final_url_img = link
-                                    
-                                    # Lógica de Vídeo (Prioriza Upload > Link Manual > Atual)
-                                    final_url_vid = url_video_manual
-                                    if novo_video_arq:
-                                        with st.spinner("Subindo vídeo..."):
-                                            link_v = fazer_upload_midia(novo_video_arq)
-                                            if link_v: final_url_vid = link_v
-                                    
-                                    db.collection('questoes').document(q['id']).update({
-                                        "pergunta": enunciado, "dificuldade": nv_dif, "categoria": nv_cat,
-                                        "url_imagem": final_url_img, "url_video": final_url_vid,
-                                        "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
-                                        "resposta_correta": corr, "faixa": firestore.DELETE_FIELD
-                                    })
-                                    st.session_state["editing_q"] = None; st.success("Atualizado!"); time.sleep(1); st.rerun()
-                                except Exception as e: st.error(f"Erro ao salvar: {e}")
-                            
+                                fin_img = url_i_at
+                                if up_img:
+                                    with st.spinner("Subindo imagem..."): fin_img = fazer_upload_midia(up_img)
+                                
+                                fin_vid = url_v_manual
+                                if up_vid:
+                                    with st.spinner("Subindo vídeo..."): fin_vid = fazer_upload_midia(up_vid)
+                                
+                                db.collection('questoes').document(q['id']).update({
+                                    "pergunta": perg, "dificuldade": dif, "categoria": cat,
+                                    "url_imagem": fin_img, "url_video": fin_vid,
+                                    "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
+                                    "resposta_correta": corr
+                                })
+                                st.session_state['edit_q'] = None; st.success("Salvo!"); time.sleep(1); st.rerun()
+                                
                             if cols[1].form_submit_button("Cancelar"):
-                                st.session_state["editing_q"] = None; st.rerun()
+                                st.session_state['edit_q'] = None; st.rerun()
                                 
                         if st.button("🗑️ Deletar", key=f"del_q_{q['id']}", type="primary"):
-                            try:
-                                db.collection('questoes').document(q['id']).delete()
-                                st.session_state["editing_q"] = None; st.success("Deletado."); st.rerun()
-                            except Exception as e: st.error(f"Erro ao deletar: {e}")
+                            db.collection('questoes').document(q['id']).delete()
+                            st.session_state['edit_q'] = None; st.success("Deletado."); st.rerun()
 
-    # --- CRIAR ---
+    # --- ADICIONAR ---
     with tab2:
         with st.form("new_q"):
             st.markdown("#### Nova Questão")
-            pergunta = st.text_area("Enunciado:")
-            
-            st.markdown("🖼️ **Mídia (Opcional)**")
-            cm1, cm2 = st.columns(2)
-            arquivo_img = cm1.file_uploader("Upload Imagem:", type=["jpg", "png", "jpeg"])
-            
-            # Campos de Vídeo
-            arquivo_vid = cm2.file_uploader("Upload Vídeo:", type=["mp4", "mov"])
-            input_video = cm2.text_input("Ou Link Vídeo (YouTube):", help="Cole o link aqui se não quiser fazer upload")
-            
+            perg = st.text_area("Enunciado:")
+            st.markdown("🖼️ **Mídia**")
             c1, c2 = st.columns(2)
-            dificuldade = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
-            categoria = c2.text_input("Categoria:", "Geral")
+            up_img = c1.file_uploader("Imagem (JPG/PNG):", type=["jpg","png","jpeg"])
+            up_vid = c2.file_uploader("Vídeo (MP4/MOV):", type=["mp4","mov"])
+            link_vid = c2.text_input("Ou Link YouTube:")
+            
+            c3, c4 = st.columns(2)
+            dif = c3.selectbox("Nível:", NIVEIS_DIFICULDADE)
+            cat = c4.text_input("Categoria:", "Geral")
+            
             st.markdown("**Alternativas:**")
             ca, cb = st.columns(2); cc, cd = st.columns(2)
             alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
             alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
-            correta = st.selectbox("Correta:", ["A", "B", "C", "D"])
+            correta = st.selectbox("Correta:", ["A","B","C","D"])
             
             if st.form_submit_button("💾 Cadastrar"):
-                try:
-                    if pergunta and alt_a and alt_b:
-                        link_final_img = None
-                        if arquivo_img:
-                            with st.spinner("Enviando imagem..."):
-                                link_final_img = fazer_upload_midia(arquivo_img)
-                        
-                        # Lógica de Vídeo
-                        link_final_vid = input_video
-                        if arquivo_vid:
-                            with st.spinner("Enviando vídeo..."):
-                                link_final_vid = fazer_upload_midia(arquivo_vid)
-                        
-                        db.collection('questoes').add({
-                            "pergunta": pergunta, "dificuldade": dificuldade, "categoria": categoria,
-                            "url_imagem": link_final_img, "url_video": link_final_vid,
-                            "alternativas": {"A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d},
-                            "resposta_correta": correta, "status": "aprovada",
-                            "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
-                        })
-                        st.success("Sucesso!"); time.sleep(1); st.rerun()
-                    else: st.warning("Preencha enunciado e alternativas.")
-                except Exception as e: st.error(f"Erro ao cadastrar: {e}")
+                if perg and alt_a and alt_b:
+                    f_img = fazer_upload_midia(up_img) if up_img else None
+                    f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
+                    
+                    db.collection('questoes').add({
+                        "pergunta": perg, "dificuldade": dif, "categoria": cat,
+                        "url_imagem": f_img, "url_video": f_vid,
+                        "alternativas": {"A":alt_a, "B":alt_b, "C":alt_c, "D":alt_d},
+                        "resposta_correta": corr, "status": "aprovada",
+                        "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
+                    })
+                    st.success("Sucesso!"); time.sleep(1); st.rerun()
+                else: st.warning("Preencha dados básicos.")
 
 # =========================================
 # 3. GESTÃO DE EXAME
