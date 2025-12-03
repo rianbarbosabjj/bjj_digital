@@ -4,11 +4,7 @@ import sys
 import bcrypt 
 from database import get_db
 
-# =========================================================
-# FUNÇÃO PARA ENCONTRAR O LOGO
-# =========================================================
 def get_logo_path():
-    """Procura o logo na pasta assets ou na raiz."""
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
     if os.path.exists("assets/logo.png"): return "assets/logo.png"
@@ -17,9 +13,6 @@ def get_logo_path():
 
 logo_file = get_logo_path()
 
-# =========================================================
-# 1. CONFIGURAÇÃO
-# =========================================================
 st.set_page_config(
     page_title="BJJ Digital", 
     page_icon=logo_file, 
@@ -27,9 +20,6 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" + HEADER REMOVIDO)
-# =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
@@ -43,75 +33,16 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-    /* --- GLOBAL --- */
     html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
-
-    /* ============================================================
-       HEADER INVISÍVEL (CORREÇÃO DEFINITIVA)
-    ============================================================ */
     
-    /* 1. Esconde totalmente o container do cabeçalho */
-    header[data-testid="stHeader"] {{
-        visibility: hidden !important;
-        background: transparent !important;
-    }}
-    
-    /* 2. Traz de volta APENAS o botão de abrir a sidebar */
-    [data-testid="stSidebarCollapsedControl"] {{
-        visibility: visible !important;
-        display: block !important;
-        color: {COR_DESTAQUE} !important;
-        background-color: rgba(14, 45, 38, 0.8) !important; /* Fundo escuro p/ contraste */
-        border: 1px solid rgba(255, 215, 112, 0.2);
-        border-radius: 8px;
-        padding: 4px;
-        
-        /* Posicionamento Fixo para garantir que fique no topo */
-        position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        z-index: 1000001 !important;
-    }}
-
-    /* 3. Garante cor do ícone */
-    [data-testid="stSidebarCollapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
-        stroke: {COR_DESTAQUE} !important;
-    }}
-
-    /* 4. Efeito Hover no botão */
-    [data-testid="stSidebarCollapsedControl"]:hover {{
-        background-color: rgba(255, 215, 112, 0.15) !important;
-        transform: scale(1.05);
-        transition: 0.3s;
-    }}
-
-    /* 5. Remove a linha colorida de decoração */
-    [data-testid="stDecoration"] {{
-        display: none !important;
-    }}
-
-    /* 6. Sobe o conteúdo para o topo da tela */
-    .block-container {{
-        padding-top: 3rem !important; /* Espaço apenas para o botão não cobrir o título */
-    }}
-    
-    /* 7. Esconde Menu de 3 pontos e Rodapé */
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-
-    /* ============================================================ */
-    
-    /* --- LINHAS DIVISÓRIAS --- */
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
@@ -119,7 +50,16 @@ st.markdown(f"""
         background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
     }}
 
-    /* --- TÍTULOS --- */
+    /* --- ESTILO DO RADIO BUTTON (Dourado) --- */
+    div.stRadio > div[role="radiogroup"] > label > div:first-child {{
+        border-color: {COR_DESTAQUE} !important;
+        background-color: transparent !important;
+    }}
+    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
+        background-color: {COR_DESTAQUE} !important;
+    }}
+    /* --------------------------------------- */
+
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
         text-align: center !important; 
@@ -128,7 +68,6 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
 
-    /* --- SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
@@ -139,7 +78,6 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- CONTAINERS E CARDS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -150,7 +88,6 @@ st.markdown(f"""
         margin-bottom: 20px;
     }}
     
-    /* --- EXPANDER --- */
     .streamlit-expanderHeader {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: {COR_DESTAQUE} !important;
@@ -162,7 +99,6 @@ st.markdown(f"""
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
@@ -179,16 +115,6 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* --- RADIO BUTTONS (Marcador Dourado) --- */
-    div.stRadio > div[role="radiogroup"] > label > div:first-child {
-        border-color: #FFD770 !important;
-        background-color: transparent !important;
-    }
-    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {
-        background-color: #FFD770 !important;
-    }
-
-    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
@@ -196,6 +122,11 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     .stTextInput input, .stTextArea textarea {{ color: white !important; }}
+    
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    [data-testid="stDecoration"] {{display: none;}}
+    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
 
 </style>
 """, unsafe_allow_html=True)
