@@ -19,6 +19,19 @@ def estilizar_grafico(fig):
     fig.update_yaxes(showgrid=True, gridcolor="rgba(255,255,255,0.1)", zeroline=False, color="#FFFFFF")
     return fig
 
+# Helper para ícones de faixa
+def get_icone_faixa(faixa_nome):
+    if "Branca" in faixa_nome: return "⚪"
+    if "Cinza" in faixa_nome: return "🔘"
+    if "Amarela" in faixa_nome: return "🟡"
+    if "Laranja" in faixa_nome: return "🟠"
+    if "Verde" in faixa_nome: return "🟢"
+    if "Azul" in faixa_nome: return "🔵"
+    if "Roxa" in faixa_nome: return "🟣"
+    if "Marrom" in faixa_nome: return "🟤"
+    if "Preta" in faixa_nome: return "⚫"
+    return "🥋"
+
 def dashboard_professor():
     st.markdown("<h1 style='color:#FFD770;'>📊 Dashboard do Mestre</h1>", unsafe_allow_html=True)
     
@@ -31,12 +44,10 @@ def dashboard_professor():
 
     # 1. Carregar Dados
     with st.spinner("Analisando dados do dojo..."):
-        # Resultados
         docs_res = list(db.collection('resultados').stream())
         dados_res = [d.to_dict() for d in docs_res]
         df_res = pd.DataFrame(dados_res)
 
-        # Questões
         docs_quest = list(db.collection('questoes').stream())
         dados_quest = []
         for d in docs_quest:
@@ -47,7 +58,7 @@ def dashboard_professor():
         st.info("Nenhum exame realizado ainda para gerar estatísticas.")
         return
 
-    # --- FILTRO: REMOVE DADOS DO "MODO ROLA" ---
+    # Filtro Modo Rola
     if 'faixa' in df_res.columns:
         df_res = df_res[df_res['faixa'] != 'Modo Rola']
 
@@ -104,44 +115,49 @@ def dashboard_professor():
                 fig_bar.update_traces(textposition='outside')
                 st.plotly_chart(estilizar_grafico(fig_bar), use_container_width=True)
 
-        # --- TABELA MODERNIZADA ---
-        st.subheader("Últimos Exames Realizados")
+        # --- LISTA DE CARDS MODERNOS (FEED DE ATIVIDADE) ---
+        st.subheader("📝 Feed de Exames Recentes")
         
-        # Preparação dos dados para ficar bonito
+        # Prepara dados
         df_display = df_res.copy()
-        
-        # 1. Ícone no nome
-        df_display['usuario_visual'] = "🥋 " + df_display['usuario']
-        
-        # 2. Status com Emoji (Substitui checkbox)
-        df_display['status_visual'] = df_display['aprovado'].apply(lambda x: "🏆 Aprovado" if x else "🔴 Reprovado")
-        
-        # 3. Formatar Data
         if 'data' in df_display.columns:
-            df_display['data_formatada'] = pd.to_datetime(df_display['data']).dt.strftime('%d/%m %H:%M')
+            df_display['data_obj'] = pd.to_datetime(df_display['data'])
         else:
-            df_display['data_formatada'] = "-"
+            df_display['data_obj'] = pd.Timestamp.now()
             
-        # 4. Garantir numérico para barra
-        df_display['pontuacao'] = pd.to_numeric(df_display['pontuacao'], errors='coerce').fillna(0)
+        # Pega os 10 últimos
+        ultimos = df_display.sort_values(by='data_obj', ascending=False).head(10)
 
-        # Seleção e Ordem das Colunas
-        cols_final = ['usuario_visual', 'faixa', 'pontuacao', 'status_visual', 'data_formatada']
-        
-        st.dataframe(
-            df_display[cols_final].sort_values(by='data_formatada', ascending=False).head(10).style
-            .bar(subset=['pontuacao'], color='#078B6C', vmin=0, vmax=100) # Barra Verde
-            .format({'pontuacao': '{:.1f}%'}),
-            hide_index=True, 
-            use_container_width=True,
-            column_config={
-                "usuario_visual": st.column_config.TextColumn("Atleta", width="medium"),
-                "faixa": st.column_config.TextColumn("Faixa", width="small"),
-                "pontuacao": st.column_config.Column("Performance", width="small"), # Barra verde (estilo pandas)
-                "status_visual": st.column_config.TextColumn("Status", width="small"),
-                "data_formatada": st.column_config.TextColumn("Data", width="small")
-            }
-        )
+        # Loop para criar os cards
+        for idx, row in ultimos.iterrows():
+            aprovado = row.get('aprovado', False)
+            nota = float(row.get('pontuacao', 0))
+            faixa = row.get('faixa', 'Desconhecida')
+            nome = row.get('usuario', 'Aluno').split()[0].title() # Só o primeiro nome
+            data_str = row['data_obj'].strftime('%d/%m às %H:%M')
+            
+            # Cores e Ícones baseados no status
+            cor_status = "#078B6C" if aprovado else "#EF553B" # Verde ou Vermelho
+            icone_status = "🏆 APROVADO" if aprovado else "🔻 REPROVADO"
+            icone_faixa = get_icone_faixa(faixa)
+
+            # O CARD
+            with st.container(border=True):
+                col_avatar, col_info, col_stats = st.columns([1, 4, 2])
+                
+                with col_avatar:
+                    # Avatar Simples
+                    st.markdown(f"<div style='font-size: 40px; text-align: center;'>🥋</div>", unsafe_allow_html=True)
+                
+                with col_info:
+                    st.markdown(f"**{nome}**")
+                    st.caption(f"{icone_faixa} Exame de Faixa {faixa}")
+                    st.caption(f"📅 {data_str}")
+                
+                with col_stats:
+                    st.markdown(f"<div style='text-align: right; color: {cor_status}; font-weight: bold;'>{icone_status}</div>", unsafe_allow_html=True)
+                    st.progress(int(nota) / 100)
+                    st.markdown(f"<div style='text-align: right; font-size: 12px;'>Nota: {nota:.1f}%</div>", unsafe_allow_html=True)
 
     # =========================================
     # ABA 2: INTELIGÊNCIA
@@ -197,13 +213,11 @@ def dashboard_professor():
                     
                     st.dataframe(
                         meus_stats[['pergunta', 'vezes_usada', 'taxa_acerto', 'dificuldade']]
-                        .sort_values(by='vezes_usada', ascending=False)
-                        .style.bar(subset=['taxa_acerto'], color='#078B6C', vmin=0, vmax=100)
-                        .format({'taxa_acerto': '{:.1f}%'}),
+                        .sort_values(by='vezes_usada', ascending=False),
                         column_config={
                             "pergunta": "Pergunta",
                             "vezes_usada": st.column_config.NumberColumn("Aplicações", format="%d"),
-                            "taxa_acerto": "Taxa de Acerto",
+                            "taxa_acerto": st.column_config.ProgressColumn("Taxa de Acerto", format="%.1f%%", min_value=0, max_value=100),
                             "dificuldade": "Nível"
                         },
                         hide_index=True,
