@@ -8,6 +8,7 @@ from database import get_db
 # FUNÇÃO PARA ENCONTRAR O LOGO
 # =========================================================
 def get_logo_path():
+    """Procura o logo na pasta assets ou na raiz."""
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
     if os.path.exists("assets/logo.png"): return "assets/logo.png"
@@ -27,7 +28,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CORRIGIDO PARA SIDEBAR FUNCIONAR)
+# 2. ESTILOS VISUAIS (HEADER TRANSPARENTE + BOTÃO FLUTUANTE)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -55,48 +56,70 @@ st.markdown(f"""
     }}
 
     /* ============================================================
-       HEADER TRANSPARENTE (Correção da Sidebar)
+       ESTRATÉGIA: HEADER TRANSPARENTE E "INTANGÍVEL"
     ============================================================ */
     
-    /* 1. Remove a linha colorida de decoração */
-    [data-testid="stDecoration"] {{
-        display: none;
-    }}
-
-    /* 2. Torna o cabeçalho transparente (não usa display:none para não sumir o botão) */
+    /* 1. O Header existe, mas é invisível e o mouse passa através dele */
     header[data-testid="stHeader"] {{
-        background-color: transparent !important;
+        background: transparent !important;
+        pointer-events: none !important; /* O segredo: permite clicar no conteúdo atrás */
         border-bottom: none !important;
     }}
+    
+    /* 2. Removemos a linha colorida do topo */
+    [data-testid="stDecoration"] {{
+        display: none !important;
+    }}
 
-    /* 3. Esconde o menu de 3 pontinhos e Deploy (Opcional, para limpar a tela) */
+    /* 3. Removemos o menu de opções da direita (3 pontinhos) */
     [data-testid="stToolbar"] {{
         display: none !important;
     }}
 
-    /* 4. Estiliza o botão da Sidebar (Hambúrguer) para aparecer no fundo escuro */
-    [data-testid="stSidebarCollapsedControl"] button {{
-        color: {COR_DESTAQUE} !important; /* Ícone Dourado */
-        background-color: rgba(14, 45, 38, 0.5) !important; /* Fundo semi-transparente */
-        border: 1px solid rgba(255, 215, 112, 0.2) !important;
-        border-radius: 8px;
-        transition: 0.3s;
-    }}
-    
-    [data-testid="stSidebarCollapsedControl"] button:hover {{
-        background-color: rgba(255, 215, 112, 0.15) !important;
-        transform: scale(1.05);
-    }}
-    
-    /* Garante a cor do ícone SVG */
-    [data-testid="stSidebarCollapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
+    /* 4. BOTÃO DA SIDEBAR: Trazemos de volta a interatividade e estilo */
+    [data-testid="stSidebarCollapsedControl"] {{
+        display: block !important;
+        pointer-events: auto !important; /* Reativa o clique SÓ no botão */
+        
+        /* Posição Fixa no Canto */
+        position: fixed !important;
+        top: 20px !important;
+        left: 20px !important;
+        z-index: 1000002 !important; /* Acima de tudo */
+        
+        /* Estilo Visual Premium */
+        background-color: rgba(14, 45, 38, 0.9) !important;
+        border: 1px solid {COR_DESTAQUE} !important;
+        border-radius: 8px !important;
+        padding: 5px !important;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.3) !important;
+        transition: all 0.3s ease !important;
     }}
 
-    /* 5. Puxa o conteúdo para cima para ocupar o lugar do header */
-    .block-container {{
-        padding-top: 3rem !important; /* Ajuste esse valor se ficar muito colado */
+    /* Ícone do Botão */
+    [data-testid="stSidebarCollapsedControl"] svg {{
+        fill: {COR_DESTAQUE} !important;
+        width: 24px !important;
+        height: 24px !important;
     }}
+
+    /* Efeito Hover */
+    [data-testid="stSidebarCollapsedControl"]:hover {{
+        background-color: {COR_DESTAQUE} !important;
+        transform: scale(1.1);
+    }}
+    [data-testid="stSidebarCollapsedControl"]:hover svg {{
+        fill: {COR_FUNDO} !important; /* Inverte a cor no hover */
+    }}
+
+    /* 5. Sobe o conteúdo da página para ocupar o topo */
+    .block-container {{
+        padding-top: 4rem !important;
+    }}
+    
+    /* Esconde Rodapé */
+    footer {{visibility: hidden; display: none;}}
+    #MainMenu {{visibility: hidden; display: none;}}
 
     /* ============================================================ */
 
@@ -120,17 +143,21 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 215, 112, 0.15);
         box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
-    section[data-testid="stSidebar"] svg {{
-        fill: {COR_DESTAQUE} !important;
-        color: {COR_DESTAQUE} !important;
-    }}
     
-    /* Ajuste do botão de fechar DENTRO da sidebar aberta */
-    section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] button {{
+    /* Botão de fechar DENTRO da sidebar aberta (ajuste para não bugar) */
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] {{
+        position: relative !important;
+        top: 0 !important;
+        left: 0 !important;
         background-color: transparent !important;
         border: none !important;
+        box-shadow: none !important;
+    }}
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] svg {{
+        fill: {COR_DESTAQUE} !important;
     }}
 
+    /* --- CONTAINERS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -168,7 +195,7 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* Radio Buttons Dourados */
+    /* Radio Dourado */
     div.stRadio > div[role="radiogroup"] > label > div:first-child {{
         border-color: {COR_DESTAQUE} !important;
         background-color: transparent !important;
@@ -184,9 +211,6 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     .stTextInput input, .stTextArea textarea {{ color: white !important; }}
-    
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
 
 </style>
 """, unsafe_allow_html=True)
@@ -235,6 +259,7 @@ def app_principal():
 
     def nav(pg): st.session_state.menu_selection = pg
 
+    # SIDEBAR
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
@@ -256,12 +281,14 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
+    # Roteamento Sidebar
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
+    # MENU HORIZONTAL
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
