@@ -7,6 +7,9 @@ from datetime import datetime, time as dtime
 from database import get_db
 from firebase_admin import firestore
 
+# =========================================================
+# CORREÇÃO: Importando 'fazer_upload_imagem' corretamente
+# =========================================================
 try:
     from utils import carregar_todas_questoes, salvar_questoes, fazer_upload_imagem
 except ImportError:
@@ -75,6 +78,7 @@ def gestao_questoes():
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
+    # --- LISTAR ---
     with tab1:
         questoes_ref = list(db.collection('questoes').stream())
         c_f1, c_f2 = st.columns(2)
@@ -88,7 +92,7 @@ def gestao_questoes():
             if filtro_n and d.get('dificuldade', 1) not in filtro_n: continue
             questoes_filtradas.append(d)
             
-        if not questões_filtradas:
+        if not questoes_filtradas:
             st.info("Nenhuma questão encontrada.")
         else:
             st.caption(f"Exibindo {len(questoes_filtradas)} questões")
@@ -111,8 +115,7 @@ def gestao_questoes():
                     with c_head.expander("👁️ Ver Detalhes"):
                         alts = q.get('alternativas', {})
                         if not alts and 'opcoes' in q:
-                            ops = q['opcoes']
-                            alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                            ops = q['opcoes']; alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
                         st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')} | **C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
                         resp = q.get('resposta_correta') or q.get('correta') or "?"
                         st.success(f"**Correta:** {resp}")
@@ -259,7 +262,8 @@ def gestao_exame_de_faixa():
                     c_chk.checkbox("", value=is_checked, key=f"chk_{doc.id}", on_change=update_selection)
                     with c_content:
                         badge = get_badge_nivel(niv)
-                        st.markdown(f"**{badge}** | {cat}")
+                        autor = d.get('criado_por', '?')
+                        st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
                         st.markdown(f"{d.get('pergunta')}")
                         if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
                         
@@ -308,14 +312,10 @@ def gestao_exame_de_faixa():
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
-            c1, c2 = st.columns(2)
-            d_inicio = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
+            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
             d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
-            c3, c4 = st.columns(2)
-            h_inicio = c3.time_input("Hora Início:", dtime(0, 0), key="hora_inicio_exame")
-            h_fim = c4.time_input("Hora Fim:", dtime(23, 59), key="hora_fim_exame")
-            dt_inicio = datetime.combine(d_inicio, h_inicio)
-            dt_fim = datetime.combine(d_fim, h_fim)
+            c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
+            dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
         st.write(""); st.subheader("Lista de Alunos")
         try:
@@ -387,7 +387,7 @@ def gestao_exame_de_faixa():
                             if c5.button("✅", key=f"on_btn_{aluno_id}"):
                                 db.collection('usuarios').document(aluno_id).update({
                                     "exame_habilitado": True, "faixa_exame": fx_sel,
-                                    "exame_inicio": dt_inicio.isoformat(), "exame_fim": dt_fim.isoformat(),
+                                    "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
                                     "status_exame": "pendente", "status_exame_em_andamento": False
                                 })
                                 st.success("Liberado!"); time.sleep(0.5); st.rerun()
