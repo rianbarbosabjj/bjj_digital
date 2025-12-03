@@ -185,7 +185,7 @@ def app_principal():
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         if tipo in ["admin", "professor"]:
-            if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
             
