@@ -138,7 +138,7 @@ def dashboard_professor():
             
             # Cores e Ícones baseados no status
             cor_status = "#078B6C" if aprovado else "#EF553B" # Verde ou Vermelho
-            icone_status = "🏆 APROVADO" if aprovado else "🔻 REPROVADO"
+            icone_status = "🏆 APROVADO" if aprovado else "🔴 REPROVADO"
             icone_faixa = get_icone_faixa(faixa)
 
             # O CARD
