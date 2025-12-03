@@ -181,7 +181,7 @@ st.markdown(f"""
 
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
-    header {{visibility: hidden;}}
+    header {{visibility: none;}}
 
     .block-container {{
         padding-top: 1.5rem !important;
