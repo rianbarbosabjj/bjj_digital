@@ -8,7 +8,6 @@ from database import get_db
 # FUNÇÃO PARA ENCONTRAR O LOGO
 # =========================================================
 def get_logo_path():
-    """Procura o logo na pasta assets ou na raiz."""
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
     if os.path.exists("assets/logo.png"): return "assets/logo.png"
@@ -28,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (DARK PREMIUM + HEADER TRANSPARENTE)
+# 2. ESTILOS VISUAIS (CORRIGIDO PARA SIDEBAR FUNCIONAR)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -56,62 +55,51 @@ st.markdown(f"""
     }}
 
     /* ============================================================
-       HEADER TRANSPARENTE (ESTRATÉGIA SEGURA)
+       HEADER TRANSPARENTE (Correção da Sidebar)
     ============================================================ */
     
-    /* 1. Em vez de esconder, deixamos transparente */
+    /* 1. Remove a linha colorida de decoração */
+    [data-testid="stDecoration"] {{
+        display: none;
+    }}
+
+    /* 2. Torna o cabeçalho transparente (não usa display:none para não sumir o botão) */
     header[data-testid="stHeader"] {{
         background-color: transparent !important;
         border-bottom: none !important;
     }}
-    
-    /* 2. Esconde a linha colorida de decoração (o arco-íris do topo) */
-    [data-testid="stDecoration"] {{
+
+    /* 3. Esconde o menu de 3 pontinhos e Deploy (Opcional, para limpar a tela) */
+    [data-testid="stToolbar"] {{
         display: none !important;
     }}
 
-    /* 3. Esconde o Menu de 3 pontinhos e o botão de Deploy (Canto Direito) */
-    [data-testid="stToolbar"] {{
-        visibility: hidden !important;
-        display: none !important;
-    }}
-    
-    /* 4. Estiliza o Botão de Abrir Sidebar (Hambúrguer) */
-    /* Como o header ainda existe (transparente), o botão funciona normalmente */
+    /* 4. Estiliza o botão da Sidebar (Hambúrguer) para aparecer no fundo escuro */
     [data-testid="stSidebarCollapsedControl"] button {{
-        color: {COR_DESTAQUE} !important;
-        background-color: rgba(14, 45, 38, 0.6) !important;
+        color: {COR_DESTAQUE} !important; /* Ícone Dourado */
+        background-color: rgba(14, 45, 38, 0.5) !important; /* Fundo semi-transparente */
         border: 1px solid rgba(255, 215, 112, 0.2) !important;
-        border-radius: 8px !important;
+        border-radius: 8px;
         transition: 0.3s;
     }}
     
-    /* Ícone do Botão */
+    [data-testid="stSidebarCollapsedControl"] button:hover {{
+        background-color: rgba(255, 215, 112, 0.15) !important;
+        transform: scale(1.05);
+    }}
+    
+    /* Garante a cor do ícone SVG */
     [data-testid="stSidebarCollapsedControl"] svg {{
         fill: {COR_DESTAQUE} !important;
     }}
 
-    /* Hover do Botão */
-    [data-testid="stSidebarCollapsedControl"] button:hover {{
-        background-color: rgba(255, 215, 112, 0.15) !important;
-        border-color: {COR_DESTAQUE} !important;
-        transform: scale(1.05);
-    }}
-
-    /* 5. Sobe o conteúdo levemente */
+    /* 5. Puxa o conteúdo para cima para ocupar o lugar do header */
     .block-container {{
-        padding-top: 2rem !important; 
-    }}
-    
-    /* 6. Esconde Rodapé */
-    footer {{
-        visibility: hidden;
-        display: none;
+        padding-top: 3rem !important; /* Ajuste esse valor se ficar muito colado */
     }}
 
     /* ============================================================ */
 
-    /* --- LINHAS DIVISÓRIAS --- */
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
@@ -119,7 +107,6 @@ st.markdown(f"""
         background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
     }}
 
-    /* --- TÍTULOS --- */
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
         text-align: center !important; 
@@ -128,7 +115,6 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
 
-    /* --- SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
@@ -139,13 +125,12 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
     }}
     
-    /* Botão de fechar dentro da sidebar (X) */
-    [data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] button {{
+    /* Ajuste do botão de fechar DENTRO da sidebar aberta */
+    section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] button {{
         background-color: transparent !important;
         border: none !important;
     }}
 
-    /* --- CONTAINERS E CARDS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -156,7 +141,6 @@ st.markdown(f"""
         margin-bottom: 20px;
     }}
     
-    /* --- EXPANDER --- */
     .streamlit-expanderHeader {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: {COR_DESTAQUE} !important;
@@ -168,7 +152,6 @@ st.markdown(f"""
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
@@ -185,7 +168,7 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* --- RADIO BUTTONS --- */
+    /* Radio Buttons Dourados */
     div.stRadio > div[role="radiogroup"] > label > div:first-child {{
         border-color: {COR_DESTAQUE} !important;
         background-color: transparent !important;
@@ -194,7 +177,6 @@ st.markdown(f"""
         background-color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
@@ -202,6 +184,9 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     .stTextInput input, .stTextArea textarea {{ color: white !important; }}
+    
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
 
 </style>
 """, unsafe_allow_html=True)
@@ -250,7 +235,6 @@ def app_principal():
 
     def nav(pg): st.session_state.menu_selection = pg
 
-    # SIDEBAR
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
@@ -272,14 +256,12 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Roteamento Sidebar
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL (Sólido e Integrado)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
