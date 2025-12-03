@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - TRANSPARENTE)
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -52,12 +52,14 @@ st.markdown(f"""
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
-    
+
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
         height: 1px !important;
-        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0),
+                                                  rgba(255, 255, 255, 0.5),
+                                                  rgba(255, 255, 255, 0)) !important;
     }}
 
     h1, h2, h3, h4, h5, h6 {{ 
@@ -73,7 +75,7 @@ st.markdown(f"""
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
     }}
-    
+
     section[data-testid="stSidebar"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
@@ -83,10 +85,12 @@ st.markdown(f"""
     [data-testid="stSidebarCollapsedControl"] {{
         color: {COR_DESTAQUE} !important;
     }}
+
     [data-testid="stSidebarCollapsedControl"] button {{
         background-color: rgba(0,0,0,0.2) !important;
         color: {COR_DESTAQUE} !important;
     }}
+
     [data-testid="stSidebarCollapsedControl"] button:hover {{
         background-color: {COR_HOVER} !important;
         color: {COR_FUNDO} !important;
@@ -102,7 +106,7 @@ st.markdown(f"""
         box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
         margin-bottom: 20px;
     }}
-    
+
     /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
@@ -113,6 +117,7 @@ st.markdown(f"""
         border-radius: 8px !important; 
         transition: all 0.3s ease !important;
     }}
+
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
@@ -126,12 +131,13 @@ st.markdown(f"""
         border: 1px solid rgba(255, 255, 255, 0.2) !important; 
         border-radius: 8px !important;
     }}
-    
-    /* --- MENU SUPERIOR FLUTUANTE (TOTALMENTE TRANSPARENTE) --- */
-    
-    /* CONTAINER GERAL DO MENU */
+
+    /* =========================================================
+       🔥 MENU SUPERIOR — Fundo 100% igual ao fundo da tela
+       ========================================================= */
     .st-emotion-cache-1v7f65g {{
-        background: transparent !important; /* FUNDO PRETO REMOVIDO */
+        background-color: {COR_FUNDO} !important;
+        background-image: radial-gradient(circle at 50% 0%, #164036 0%, {COR_FUNDO} 70%) !important;
         border: none !important;
         box-shadow: none !important;
         padding: 0 !important;
@@ -142,8 +148,7 @@ st.markdown(f"""
         flex-wrap: nowrap !important;
         overflow-x: auto !important;
     }}
-    
-    /* ITENS INDIVIDUAIS */
+
     .st-emotion-cache-1v7f65g .st-ae .st-af {{
         padding: 8px 15px !important;
         border-radius: 8px !important;
@@ -151,44 +156,36 @@ st.markdown(f"""
         transition: all 0.3s ease !important;
         white-space: nowrap !important;
         border: 1px solid transparent !important;
-    }}
-    
-    /* ITEM NORMAL (NÃO SELECIONADO) */
-    .st-emotion-cache-1v7f65g .st-ae .st-af:not(.st-ag) {{
-        color: rgba(255, 255, 255, 0.6) !important;
-        background: rgba(0,0,0,0.1) !important; /* Leve fundo para leitura */
-    }}
-    
-    /* HOVER */
-    .st-emotion-cache-1v7f65g .st-ae .st-af:not(.st-ag):hover {{
-        color: {COR_DESTAQUE} !important;
-        background: rgba(255, 215, 112, 0.05) !important;
-        border-color: rgba(255, 215, 112, 0.2) !important;
-        transform: translateY(-2px) !important;
-    }}
-    
-    /* ITEM SELECIONADO (DOURADO) */
-    .st-emotion-cache-1v7f65g .st-ae .st-ag {{
-        background: transparent !important; /* Sem fundo sólido */
-        color: {COR_DESTAQUE} !important; /* Texto Dourado */
-        font-weight: 700 !important;
-        border-bottom: 2px solid {COR_DESTAQUE} !important; /* Linha embaixo */
-        border-radius: 0px !important; /* Quadrado embaixo */
-    }}
-    
-    /* ÍCONES */
-    .st-emotion-cache-1v7f65g .st-ae svg {{
-        color: inherit !important;
-    }}
-    
-    /* Scrollbar */
-    .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar {{
-        height: 0px; /* Esconde a barra de rolagem */
+        background: rgba(0,0,0,0.1) !important;
+        color: rgba(255,255,255,0.6) !important;
     }}
 
-    /* --- REMOVE PADDING EXTRA --- */
-    #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
-    .block-container {{padding-top: 1.5rem !important;}}
+    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{
+        color: {COR_DESTAQUE} !important;
+        background: rgba(255, 215, 112, 0.05) !important;
+        border-color: rgba(255,215,112,0.2) !important;
+    }}
+
+    .st-emotion-cache-1v7f65g .st-ae .st-ag {{
+        background: transparent !important;
+        color: {COR_DESTAQUE} !important;
+        font-weight: 700 !important;
+        border-bottom: 2px solid {COR_DESTAQUE} !important;
+        border-radius: 0px !important;
+    }}
+
+    /* Scrollbar invisível */
+    .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar {{
+        height: 0px !important;
+    }}
+
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+
+    .block-container {{
+        padding-top: 1.5rem !important;
+    }}
 
 </style>
 """, unsafe_allow_html=True)
@@ -220,8 +217,10 @@ def tela_troca_senha_obrigatoria():
                             db = get_db()
                             db.collection('usuarios').document(uid).update({"senha": hashed, "precisa_trocar_senha": False})
                             st.success("Sucesso!"); st.session_state.usuario['precisa_trocar_senha'] = False; st.rerun()
-                        except: st.error("Erro.")
-                    else: st.error("Senhas não conferem.")
+                        except:
+                            st.error("Erro.")
+                    else:
+                        st.error("Senhas não conferem.")
 
 def app_principal():
     if not st.session_state.get('usuario'):
@@ -250,7 +249,9 @@ def app_principal():
         if st.button("🚪 Sair", use_container_width=True):
             st.session_state.clear(); st.rerun()
 
-    if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
+    if "menu_selection" not in st.session_state:
+        st.session_state.menu_selection = "Início"
+
     pg = st.session_state.menu_selection
 
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
@@ -267,12 +268,11 @@ def app_principal():
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
         icns = ["house", "people", "journal", "trophy"]
 
-    try: idx = ops.index(pg)
-    except: idx = 0
-    
-    # -------------------------------------------------------------
-    # MENU SUPERIOR - TRANSPARENTE
-    # -------------------------------------------------------------
+    try:
+        idx = ops.index(pg)
+    except:
+        idx = 0
+
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -281,48 +281,37 @@ def app_principal():
         orientation="horizontal",
         styles={
             "container": {
-                "padding": "0!important", 
-                "background-color": "transparent", # Transparente de verdade
+                "padding": "0!important",
+                "background-color": "transparent",
                 "border": "none",
                 "display": "flex",
                 "justify-content": "center"
             },
-            "icon": {
-                "color": "inherit", 
-                "font-size": "16px",
-                "margin-right": "8px"
-            }, 
+            "icon": {"color": "inherit"},
             "nav-link": {
-                "font-size": "14px", 
-                "text-align": "center", 
-                "margin": "0px 5px", 
+                "font-size": "14px",
+                "margin": "0px 5px",
                 "padding": "10px 15px",
                 "border-radius": "8px",
-                "color": "rgba(255, 255, 255, 0.6)", # Texto suave
+                "color": "rgba(255,255,255,0.6)",
                 "font-weight": "500",
                 "background": "transparent",
-                "transition": "all 0.3s ease",
-                "display": "flex",
-                "align-items": "center",
-                "justify-content": "center",
-                "white-space": "nowrap",
-                "min-width": "fit-content"
+                "transition": "0.3s",
+                "white-space": "nowrap"
             },
             "nav-link-selected": {
                 "background-color": "transparent",
-                "color": COR_DESTAQUE, # Dourado
+                "color": COR_DESTAQUE,
                 "font-weight": "700",
-                "border-bottom": f"2px solid {COR_DESTAQUE}", # Linha embaixo
+                "border-bottom": f"2px solid {COR_DESTAQUE}",
                 "border-radius": "0px"
             },
         }
     )
 
     if menu != pg:
-        if pg == "Meus Certificados" and menu == "Início": pass 
-        else:
-            st.session_state.menu_selection = menu
-            st.rerun()
+        st.session_state.menu_selection = menu
+        st.rerun()
 
     if pg == "Modo Rola": aluno.modo_rola(usuario)
     elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
@@ -337,5 +326,7 @@ if __name__ == "__main__":
     elif st.session_state.get('registration_pending'):
         login.tela_completar_cadastro(st.session_state.registration_pending)
     elif st.session_state.get('usuario'):
-        if st.session_state.usuario.get("precisa_trocar_senha"): tela_troca_senha_obrigatoria()
-        else: app_principal()
+        if st.session_state.usuario.get("precisa_trocar_senha"):
+            tela_troca_senha_obrigatoria()
+        else:
+            app_principal()
