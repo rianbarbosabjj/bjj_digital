@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - MINIMALISTA)
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - CLEAN TABS)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -212,7 +212,7 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU SUPERIOR - NOVO DESIGN "CLEAN TABS"
+    # MENU SUPERIOR - DESIGN "CLEAN TABS" (FUNDO TRANSPARENTE)
     # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
@@ -223,27 +223,27 @@ def app_principal():
         styles={
             "container": {
                 "padding": "0!important", 
-                "background-color": "transparent", # Fundo transparente
+                "background-color": "transparent", # Fundo transparente real
                 "margin": "0",
-                "border-bottom": "1px solid rgba(255,255,255,0.1)" # Linha sutil separando o menu
+                "border-bottom": "1px solid rgba(255,255,255,0.1)" 
             },
             "icon": {
-                "color": COR_DESTAQUE, # Ícone Dourado
+                "color": COR_DESTAQUE, 
                 "font-size": "16px"
             }, 
             "nav-link": {
                 "font-size": "15px",
                 "text-align": "center",
                 "margin": "0px 10px",
-                "color": "rgba(255,255,255,0.6)", # Texto meio apagado quando não selecionado
+                "color": "rgba(255,255,255,0.6)", 
                 "font-weight": "400",
-                "border-radius": "0px" # Sem bordas arredondadas (visual de aba)
+                "border-radius": "0px" 
             },
             "nav-link-selected": {
-                "background-color": "transparent",
-                "color": "#FFFFFF", # Texto Branco Forte
+                "background-color": "transparent", # Fundo transparente na seleção
+                "color": "#FFFFFF", 
                 "font-weight": "600",
-                "border-bottom": f"3px solid {COR_DESTAQUE}", # Linha Dourada embaixo
+                "border-bottom": f"3px solid {COR_DESTAQUE}", 
             }
         }
     )
