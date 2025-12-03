@@ -10,7 +10,7 @@ import unicodedata
 import qrcode
 import random
 import uuid
-from urllib.parse import quote # Importação essencial para links
+from urllib.parse import quote
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -41,15 +41,13 @@ def fazer_upload_imagem(arquivo):
         # 2. Faz o Upload PRIMEIRO
         blob.upload_from_file(arquivo, content_type=arquivo.type)
         
-        # 3. Define o Token DEPOIS do upload (para não ser sobrescrito)
-        # Isso cria aquele acesso estilo "download token" do console do Firebase
+        # 3. Define o Token
         access_token = str(uuid.uuid4())
         metadata = {"firebaseStorageDownloadTokens": access_token}
         blob.metadata = metadata
         blob.patch() # Grava o metadado na nuvem
 
         # 4. Monta a URL codificada corretamente
-        # O encode converte a barra '/' em '%2F', essencial para a URL funcionar
         blob_path_encoded = quote(blob_name, safe='') 
         
         final_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{blob_path_encoded}?alt=media&token={access_token}"
@@ -338,22 +336,67 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
 # =========================================
 def verificar_elegibilidade_exame(usuario_data):
     status = usuario_data.get('status_exame', 'pendente')
-    if status == 'aprovado': return False, "Aprovado."
-    if status == 'bloqueado': return False, "Bloqueado."
+    if status == 'aprovado':
+        return False, "Você já foi APROVADO neste exame. Parabéns!"
+    if status == 'bloqueado':
+        return False, "Exame BLOQUEADO. Contate o professor."
     if status == 'reprovado':
-        ult = usuario_data.get('data_ultimo_exame')
-        if ult:
+        ultimo_teste = usuario_data.get('data_ultimo_exame')
+        if ultimo_teste:
             try:
-                dt_u = datetime.fromisoformat(ult.replace('Z','')) if isinstance(ult,str) else ult
-                diff = datetime.utcnow() - dt_u.replace(tzinfo=None)
-                if diff.total_seconds() < 72*3600: return False, "Aguarde 72h."
-            except: pass
+                if isinstance(ultimo_teste, str):
+                    dt_ultimo = datetime.fromisoformat(ultimo_teste.replace('Z', ''))
+                else:
+                    dt_ultimo = ultimo_teste
+                
+                dt_ultimo = dt_ultimo.replace(tzinfo=None)
+                agora = datetime.utcnow()
+                diff = agora - dt_ultimo
+                segundos_passados = diff.total_seconds()
+                segundos_espera = 72 * 3600
+                if segundos_passados < segundos_espera:
+                    horas_restantes = (segundos_espera - segundos_passados) / 3600
+                    return False, f"Reprovado. Aguarde {int(horas_restantes)+1}h para tentar novamente."
+            except Exception as e:
+                print(f"Erro data: {e}")
+                return False, "Erro ao verificar data."
     return True, "OK"
 
 def registrar_inicio_exame(usuario_id):
-    try: get_db().collection('usuarios').document(usuario_id).update({"status_exame": "em_andamento", "inicio_exame_temp": datetime.utcnow().isoformat(), "status_exame_em_andamento": True})
+    try:
+        db = get_db()
+        agora_br = datetime.utcnow() 
+        db.collection('usuarios').document(usuario_id).update({
+            "status_exame": "em_andamento",
+            "inicio_exame_temp": agora_br.isoformat(),
+            "status_exame_em_andamento": True
+        })
     except: pass
 
 def registrar_fim_exame(usuario_id, aprovado):
     try:
-        dados = {"status_exame
+        db = get_db()
+        status = "aprovado" if aprovado else "reprovado"
+        agora_br = datetime.utcnow()
+        dados = {
+            "status_exame": status,
+            "data_ultimo_exame": agora_br.isoformat(),
+            "status_exame_em_andamento": False
+        }
+        if aprovado:
+            dados["exame_habilitado"] = False
+            dados["exame_inicio"] = firestore.DELETE_FIELD
+            dados["exame_fim"] = firestore.DELETE_FIELD
+        db.collection('usuarios').document(usuario_id).update(dados)
+    except: pass
+
+def bloquear_por_abandono(usuario_id):
+    try:
+        db = get_db()
+        db.collection('usuarios').document(usuario_id).update({
+            "status_exame": "bloqueado",
+            "motivo_bloqueio": "Atualizou a página ou fechou o navegador (Anti-Cola)",
+            "status_exame_em_andamento": False,
+            "data_ultimo_exame": datetime.utcnow().isoformat()
+        })
+    except: pass
