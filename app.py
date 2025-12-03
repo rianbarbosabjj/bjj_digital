@@ -4,11 +4,7 @@ import sys
 import bcrypt 
 from database import get_db
 
-# =========================================================
-# FUNÇÃO PARA ENCONTRAR O LOGO
-# =========================================================
 def get_logo_path():
-    """Procura o logo na pasta assets ou na raiz."""
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
     if os.path.exists("assets/logo.png"): return "assets/logo.png"
@@ -17,9 +13,6 @@ def get_logo_path():
 
 logo_file = get_logo_path()
 
-# =========================================================
-# 1. CONFIGURAÇÃO
-# =========================================================
 st.set_page_config(
     page_title="BJJ Digital", 
     page_icon=logo_file, 
@@ -27,9 +20,6 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# =========================================================
-# 2. ESTILOS VISUAIS (DARK PREMIUM + MOBILE OPTIMIZED)
-# =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
@@ -43,19 +33,16 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-    /* --- GLOBAL --- */
     html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
     
-    /* --- LINHAS DIVISÓRIAS --- */
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
@@ -63,7 +50,16 @@ st.markdown(f"""
         background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
     }}
 
-    /* --- TÍTULOS --- */
+    /* --- ESTILO DO RADIO BUTTON (Dourado) --- */
+    div.stRadio > div[role="radiogroup"] > label > div:first-child {{
+        border-color: {COR_DESTAQUE} !important;
+        background-color: transparent !important;
+    }}
+    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
+        background-color: {COR_DESTAQUE} !important;
+    }}
+    /* --------------------------------------- */
+
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
         text-align: center !important; 
@@ -72,7 +68,6 @@ st.markdown(f"""
         letter-spacing: 1px;
     }}
 
-    /* --- SIDEBAR --- */
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
@@ -83,7 +78,6 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- CONTAINERS E CARDS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -94,7 +88,6 @@ st.markdown(f"""
         margin-bottom: 20px;
     }}
     
-    /* --- EXPANDER --- */
     .streamlit-expanderHeader {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: {COR_DESTAQUE} !important;
@@ -106,7 +99,6 @@ st.markdown(f"""
         color: {COR_TEXTO} !important;
     }}
 
-    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
@@ -119,11 +111,10 @@ st.markdown(f"""
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
-        border-color: {COR_DESTAQUE} !important;
         transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
@@ -132,7 +123,6 @@ st.markdown(f"""
     }}
     .stTextInput input, .stTextArea textarea {{ color: white !important; }}
     
-    /* --- INTERFACE GERAL --- */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
@@ -141,12 +131,10 @@ st.markdown(f"""
 </style>
 """, unsafe_allow_html=True)
 
-# Hack para Render/Railway
 if "SECRETS_TOML" in os.environ:
     if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
     with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
 
-# Importações
 try:
     from streamlit_option_menu import option_menu
     from views import login, geral, aluno, professor, admin
@@ -154,9 +142,6 @@ except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
     st.stop()
 
-# =========================================
-# TELA DE TROCA DE SENHA
-# =========================================
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
@@ -181,9 +166,6 @@ def tela_troca_senha_obrigatoria():
                         except: st.error("Erro ao salvar.")
                     else: st.error("Senhas não conferem.")
 
-# =========================================
-# APP PRINCIPAL
-# =========================================
 def app_principal():
     if not st.session_state.get('usuario'):
         st.session_state.clear(); st.rerun(); return
@@ -193,7 +175,6 @@ def app_principal():
 
     def nav(pg): st.session_state.menu_selection = pg
 
-    # SIDEBAR
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
@@ -201,12 +182,10 @@ def app_principal():
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
-        
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
-
         if tipo in ["admin", "professor"]:
-            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+            if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
             
@@ -217,14 +196,12 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Roteamento Sidebar
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
@@ -236,9 +213,6 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
-    # -------------------------------------------------------------
-    # MENU SÓLIDO & EXPANSÍVEL (OCUPA TUDO)
-    # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -247,16 +221,16 @@ def app_principal():
         orientation="horizontal",
         styles={
             "container": {
-                "padding": "5px 5px", 
+                "padding": "5px 10px", 
                 "background-color": COR_FUNDO, 
                 "margin": "0px auto",
                 "border-radius": "12px", 
                 "border": "1px solid rgba(255, 215, 112, 0.15)", 
                 "box-shadow": "0 4px 15px rgba(0,0,0,0.3)",
-                "width": "100%",      # <--- Força ocupar toda a largura
-                "max-width": "100%",  # <--- Garante que não limite
-                "display": "flex",    # <--- Habilita flexbox
-                "justify-content": "space-between" # <--- Distribui espaço
+                "width": "100%",      
+                "max-width": "100%",  
+                "display": "flex",    
+                "justify-content": "space-between" 
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -266,13 +240,13 @@ def app_principal():
             "nav-link": {
                 "font-size": "14px", 
                 "text-align": "center", 
-                "margin": "0px 2px",  # <--- Margem mínima entre botões
+                "margin": "0px 2px",  
                 "color": "rgba(255, 255, 255, 0.8)",
                 "font-weight": "400",
                 "border-radius": "8px",
                 "transition": "0.3s",
-                "width": "100%",      # <--- MÁGICA: O botão tenta ocupar 100% do espaço disponível para ele
-                "flex-grow": "1",     # <--- MÁGICA: O botão cresce para preencher vazios
+                "width": "100%",      
+                "flex-grow": "1",     
                 "display": "flex",
                 "justify-content": "center",
                 "align-items": "center"
