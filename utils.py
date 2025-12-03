@@ -9,12 +9,39 @@ import string
 import unicodedata
 import qrcode
 import random
+import uuid
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fpdf import FPDF
 from database import get_db
-from firebase_admin import firestore
+from firebase_admin import firestore, storage # Importar Storage
+
+# =========================================
+# FUNÇÃO DE UPLOAD (NOVA)
+# =========================================
+def fazer_upload_imagem(arquivo):
+    """Envia imagem para o Firebase Storage e retorna a URL pública."""
+    if not arquivo: return None
+    
+    try:
+        bucket = storage.bucket() # Pega o bucket configurado no database.py
+        
+        # Cria um nome único para não sobrescrever arquivos
+        ext = arquivo.name.split('.')[-1]
+        nome_final = f"questoes/{uuid.uuid4()}.{ext}"
+        
+        blob = bucket.blob(nome_final)
+        blob.upload_from_file(arquivo, content_type=arquivo.type)
+        
+        # Torna público para ser visível no app
+        blob.make_public()
+        
+        return blob.public_url
+    except Exception as e:
+        print(f"Erro no upload: {e}")
+        # Se falhar o bucket, retorna None mas não quebra o app
+        return None
 
 # =========================================
 # 1. FUNÇÕES DE QUESTÕES
@@ -143,7 +170,6 @@ def enviar_email_recuperacao(email_destino, nova_senha):
 # 4. CÓDIGOS E QR CODE
 # =========================================
 def gerar_codigo_verificacao():
-    """Gera código no formato BJJDIGITAL-{ANO}-{SEQUENCIA}"""
     try:
         db = get_db()
         docs = db.collection('resultados').count().get()
@@ -170,7 +196,7 @@ def gerar_qrcode(codigo):
     return caminho_qr
 
 # =========================================
-# 5. PDF PREMIUM (DARK MODE / DOURADO)
+# 5. PDF PREMIUM
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
@@ -179,24 +205,20 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_auto_page_break(False)
         pdf.add_page()
         
-        # Cores baseadas no PDF
         cor_dourado = (184, 134, 11) 
         cor_preto = (25, 25, 25)
         cor_cinza = (100, 100, 100)
         cor_fundo = (252, 252, 250)
 
-        # Fundo
         pdf.set_fill_color(*cor_fundo)
         pdf.rect(0, 0, 297, 210, "F")
 
-        # Barra Lateral
         largura_barra = 25 
         pdf.set_fill_color(*cor_preto)
         pdf.rect(0, 0, largura_barra, 210, "F")
         pdf.set_fill_color(*cor_dourado)
         pdf.rect(largura_barra, 0, 2, 210, "F")
 
-        # Logo
         if os.path.exists("assets/logo.jpg"):
             try: pdf.image("assets/logo.jpg", x=5, y=20, w=15)
             except: pass
@@ -215,7 +237,6 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.cell(largura_util, 12, titulo, ln=1, align="C")
         
         pdf.ln(20)
-        
         pdf.set_font("Helvetica", "", 16)
         pdf.set_text_color(*cor_preto)
         texto_intro = "Certificamos que o aluno(a)"
@@ -239,7 +260,6 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.cell(largura_texto, 14, nome_limpo, align='L')
         
         pdf.ln(20)
-
         pdf.set_font("Helvetica", "", 16)
         pdf.set_text_color(*cor_preto)
         texto_aprovacao = "foi APROVADO(A) no Exame teórico para a faixa"
@@ -258,43 +278,36 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.line(x_linha, y_linha, x_linha + largura_linha, y_linha)
 
         pdf.ln(20)
-
         pdf.set_font("Helvetica", "B", 32)
         pdf.set_text_color(*cor_preto)
         texto_faixa = f"{str(faixa).upper()}"
         pdf.cell(largura_util, 16, texto_faixa, ln=1, align="C")
 
-        # Assinatura (Fonte manuscrita se existir)
         y_rodape = 160
         y_assinatura = y_rodape + 20
         
-        # Adiciona a fonte Allura se disponível
         if os.path.exists("assets/Allura-Regular.ttf"):
             pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True)
-            pdf.set_font("Allura", "", 30) # Tamanho maior para parecer assinatura
+            pdf.set_font("Allura", "", 30)
         else:
             pdf.set_font("Helvetica", "I", 12)
 
-        # Nome do professor/Assinatura
         assinatura_texto = professor if professor else "Professor Responsável"
         pdf.set_xy(x_inicio, y_assinatura - 10)
         pdf.set_text_color(*cor_preto)
         pdf.cell(largura_util, 10, assinatura_texto, ln=1, align="C")
         
-        # Linha da assinatura
         largura_linha_assinatura = 80
         x_assinatura = centro_x - (largura_linha_assinatura / 2)
         pdf.set_draw_color(*cor_preto)
         pdf.set_line_width(0.3)
         pdf.line(x_assinatura, y_assinatura, x_assinatura + largura_linha_assinatura, y_assinatura)
         
-        # Texto descritivo abaixo
         pdf.set_xy(x_assinatura, y_assinatura + 2)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(*cor_cinza)
         pdf.cell(largura_linha_assinatura, 5, "Professor Responsável", align="C")
         
-        # Selo Dourado (Se existir)
         if os.path.exists("assets/selo_dourado.jpg"):
             pdf.image("assets/selo_dourado.jpg", x=240, y=140, w=35)
 
@@ -304,59 +317,40 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         return None, None
 
 # =========================================
-# 6. REGRAS DO EXAME (ATUALIZADO)
+# 6. REGRAS DO EXAME
 # =========================================
 def verificar_elegibilidade_exame(usuario_data):
-    """
-    Verifica as 3 regras de ouro:
-    1. Aprovado? Não faz mais (Tentativa única).
-    2. Bloqueado? Precisa de professor.
-    3. Reprovado? Só após 72h.
-    """
     status = usuario_data.get('status_exame', 'pendente')
-    
-    # REGRA 1: TENTATIVA ÚNICA
     if status == 'aprovado':
         return False, "Você já foi APROVADO neste exame. Parabéns!"
-        
-    # REGRA 2: BLOQUEIO POR ABANDONO
     if status == 'bloqueado':
         return False, "Exame BLOQUEADO. Contate o professor."
-        
-    # REGRA 3: DELAY DE 72H
     if status == 'reprovado':
         ultimo_teste = usuario_data.get('data_ultimo_exame')
         if ultimo_teste:
             try:
-                # Tratamento robusto de data (ISO String vs Datetime)
                 if isinstance(ultimo_teste, str):
-                    # Remove o Z se existir para evitar erro de fuso no fromisoformat em versões antigas
                     dt_ultimo = datetime.fromisoformat(ultimo_teste.replace('Z', ''))
                 else:
                     dt_ultimo = ultimo_teste
                 
-                # Garante que ambos sejam "naive" (sem fuso) para comparação simples
                 dt_ultimo = dt_ultimo.replace(tzinfo=None)
                 agora = datetime.utcnow()
-                
                 diff = agora - dt_ultimo
                 segundos_passados = diff.total_seconds()
-                segundos_espera = 72 * 3600 # 72 horas
-                
+                segundos_espera = 72 * 3600
                 if segundos_passados < segundos_espera:
                     horas_restantes = (segundos_espera - segundos_passados) / 3600
-                    return False, f"Reprovado. Aguarde {int(horas_restantes)+1}h para tentar novamente (Regra das 72h)."
+                    return False, f"Reprovado. Aguarde {int(horas_restantes)+1}h para tentar novamente."
             except Exception as e:
                 print(f"Erro data: {e}")
-                # Se der erro na data, por segurança bloqueia e pede suporte
-                return False, "Erro ao verificar data. Contate o suporte."
-                
+                return False, "Erro ao verificar data."
     return True, "OK"
 
 def registrar_inicio_exame(usuario_id):
     try:
         db = get_db()
-        agora_br = datetime.utcnow() # Usa UTC puro para padronizar
+        agora_br = datetime.utcnow() 
         db.collection('usuarios').document(usuario_id).update({
             "status_exame": "em_andamento",
             "inicio_exame_temp": agora_br.isoformat(),
@@ -374,12 +368,10 @@ def registrar_fim_exame(usuario_id, aprovado):
             "data_ultimo_exame": agora_br.isoformat(),
             "status_exame_em_andamento": False
         }
-        # Se aprovado, remove datas para limpar o registro e impedir re-agendamento automático sem querer
         if aprovado:
             dados["exame_habilitado"] = False
             dados["exame_inicio"] = firestore.DELETE_FIELD
             dados["exame_fim"] = firestore.DELETE_FIELD
-            
         db.collection('usuarios').document(usuario_id).update(dados)
     except: pass
 
