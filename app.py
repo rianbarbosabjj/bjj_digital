@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM + GLASS")
+# 2. ESTILOS VISUAIS (CSS "DARK + GLASS MENU")
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -42,7 +42,7 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-    /* --- GLOBAL --- */
+    /* GLOBAL */
     html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
@@ -50,110 +50,69 @@ st.markdown(f"""
 
     .stApp {{
         background-color: {COR_FUNDO} !important;
-        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
+        background-image: radial-gradient(circle at 50% 0%, #164036 0%, {COR_FUNDO} 70%) !important;
     }}
 
-/* =====================================================================
-   🔥 MENU SUPERIOR – VIDRO FOSCO PREMIUM (APENAS NO MENU)
-   ===================================================================== */
+    /* =========================================================
+       🍸 MENU SUPERIOR – VIDRO FOSCO PREMIUM (SOMENTE NO MENU)
+       ========================================================= */
 
-/* Seleciona SOMENTE o container onde o option_menu é renderizado */
-div[data-testid="stHorizontalBlock"] > div:first-child {
-    background: rgba(255, 255, 255, 0.07) !important;
-    backdrop-filter: blur(14px) saturate(140%) !important;
-    -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
-    border-radius: 14px !important;
-    border: 1px solid rgba(255,255,255,0.15) !important;
-    margin: 15px auto 25px auto !important;
-    padding: 12px 18px !important;
-    max-width: 98% !important;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
-}
+    div[data-testid="stHorizontalBlock"] > div:first-child {{
+        background: rgba(255, 255, 255, 0.07) !important;
+        backdrop-filter: blur(14px) saturate(140%) !important;
+        -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+        border-radius: 14px !important;
+        border: 1px solid rgba(255,255,255,0.15) !important;
+        margin: 15px auto 25px auto !important;
+        padding: 12px 18px !important;
+        max-width: 98% !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
+    }}
 
-/* Links do menu */
-div[data-testid="stHorizontalBlock"] > div:first-child .st-emotion-cache-1v7f65g .st-ae .st-af,
-div[data-testid="stHorizontalBlock"] > div:first-child .st-emotion-cache-1v7f65g.ezrtsby2 .st-ae .st-af {
-    background: rgba(255,255,255,0.08) !important;
-    border-radius: 10px !important;
-    padding: 10px 16px !important;
-    margin: 0 6px !important;
-    color: rgba(255,255,255,0.75) !important;
-    transition: all 0.25s ease !important;
-}
-
-/* Hover premium */
-div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-af:hover {
-    background: rgba(255,215,112,0.18) !important;
-    color: {COR_DESTAQUE} !important;
-    border: 1px solid rgba(255,215,112,0.4) !important;
-    transform: translateY(-2px);
-}
-
-/* Item ativo */
-div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-ag {
-    background: rgba(255,215,112,0.25) !important;
-    color: {COR_DESTAQUE} !important;
-    font-weight: 700 !important;
-    border-bottom: 2px solid {COR_DESTAQUE} !important;
-    border-radius: 6px !important;
-}
-
-/* Scroll invisível */
-div[data-testid="stHorizontalBlock"] > div:first-child::-webkit-scrollbar {
-    height: 0px !important;
-}
-
-
-    /* Links do menu */
-    .st-emotion-cache-1v7f65g .st-ae .st-af,
-    .st-emotion-cache-1v7f65g.ezrtsby2 .st-ae .st-af {{
+    /* LINKS DO MENU */
+    div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-af {{
         background: rgba(255,255,255,0.08) !important;
         border-radius: 10px !important;
         padding: 10px 16px !important;
-        margin: 0 6px !important;
         color: rgba(255,255,255,0.75) !important;
         transition: all 0.25s ease !important;
     }}
 
-    /* Hover premium */
-    .st-emotion-cache-1v7f65g .st-ae .st-af:hover,
-    .st-emotion-cache-1v7f65g.ezrtsby2 .st-ae .st-af:hover {{
+    div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-af:hover {{
         background: rgba(255,215,112,0.18) !important;
         color: {COR_DESTAQUE} !important;
         border: 1px solid rgba(255,215,112,0.4) !important;
         transform: translateY(-2px);
     }}
 
-    /* Item selecionado */
-    .st-emotion-cache-1v7f65g .st-ae .st-ag,
-    .st-emotion-cache-1v7f65g.ezrtsby2 .st-ae .st-ag {{
+    /* ITEM SELECIONADO */
+    div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-ag {{
         background: rgba(255,215,112,0.25) !important;
         color: {COR_DESTAQUE} !important;
-        font-weight: 700 !important;
         border-bottom: 2px solid {COR_DESTAQUE} !important;
         border-radius: 6px !important;
+        font-weight: 700 !important;
     }}
 
     /* Scroll invisível */
-    div[data-testid="stHorizontalBlock"] > div::-webkit-scrollbar {{
+    div[data-testid="stHorizontalBlock"] > div:first-child::-webkit-scrollbar {{
         height: 0px !important;
     }}
 
-    /* --- SIDEBAR --- */
-    section[data-testid="stSidebar"] {{
-        background-color: #091f1a !important; 
-        border-right: 1px solid rgba(255, 215, 112, 0.15);
+    /* =========================================================
+       ✔ RESTAURAR BOTÃO DA SIDEBAR
+       ========================================================= */
+
+    [data-testid="stSidebarCollapsedControl"] {{
+        visibility: visible !important;
+        opacity: 1 !important;
     }}
 
-    section[data-testid="stSidebar"] svg {{
-        fill: {COR_DESTAQUE} !important;
-        color: {COR_DESTAQUE} !important;
-    }}
-
-    /* --- BOTÃO SIDEBAR --- */
     [data-testid="stSidebarCollapsedControl"] button {{
-        background-color: rgba(0,0,0,0.15) !important;
+        background-color: rgba(255,255,255,0.1) !important;
         color: {COR_DESTAQUE} !important;
+        border-radius: 6px !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
     }}
 
     [data-testid="stSidebarCollapsedControl"] button:hover {{
@@ -161,38 +120,39 @@ div[data-testid="stHorizontalBlock"] > div:first-child::-webkit-scrollbar {
         color: {COR_FUNDO} !important;
     }}
 
-    /* --- CARDS --- */
-    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
+    /* SIDEBAR */
+    section[data-testid="stSidebar"] {{
+        background-color: #091f1a !important; 
+        border-right: 1px solid rgba(255,215,112,0.15);
+    }}
+
+    /* CARDS */
+    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"],
     div[data-testid="stForm"] {{
-        background-color: rgba(0,0,0,0.35) !important;
-        border: 1px solid rgba(255,215,112,0.18) !important;
+        background-color: rgba(0,0,0,0.3) !important;
+        border: 1px solid rgba(255,215,112,0.15) !important;
         border-radius: 12px !important;
-        padding: 20px !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+        padding: 20px;
     }}
 
-    /* --- INPUTS --- */
-    input, textarea, select, div[data-baseweb="select"] > div {{
-        background-color: rgba(255, 255, 255, 0.06) !important;
+    /* INPUTS */
+    input, textarea, select {{
+        background-color: rgba(255,255,255,0.06) !important;
         border: 1px solid rgba(255,255,255,0.25) !important;
-        border-radius: 8px !important;
         color: white !important;
+        border-radius: 8px !important;
     }}
 
-    /* OCULTAR ITENS PADRÃO */
+    /* OCULTAR MENU PADRÃO */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
-
-    .block-container {{
-        padding-top: 1.5rem !important;
-    }}
 
 </style>
 """, unsafe_allow_html=True)
 
 # =========================================================
-# RESTANTE DO SEU CÓDIGO (SEM ALTERAÇÃO)
+# RESTANTE DO SEU CÓDIGO (NÃO ALTERADO)
 # =========================================================
 
 if "SECRETS_TOML" in os.environ:
@@ -241,7 +201,7 @@ def app_principal():
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
-        
+
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
@@ -249,7 +209,7 @@ def app_principal():
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
-            
+
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚪 Sair", use_container_width=True):
             st.session_state.clear(); st.rerun()
@@ -279,39 +239,11 @@ def app_principal():
         idx = 0
 
     menu = option_menu(
-        menu_title=None, 
-        options=ops, 
-        icons=icns, 
-        default_index=idx, 
-        orientation="horizontal",
-        styles={
-            "container": {
-                "padding": "0!important",
-                "background-color": "transparent",
-                "border": "none",
-                "display": "flex",
-                "justify-content": "center"
-            },
-            "icon": {"color": "inherit"},
-            "nav-link": {
-                "font-size": "14px",
-                "margin": "0px 5px",
-                "padding": "10px 15px",
-                "border-radius": "8px",
-                "color": "rgba(255,255,255,0.6)",
-                "font-weight": "500",
-                "background": "transparent",
-                "transition": "0.3s",
-                "white-space": "nowrap"
-            },
-            "nav-link-selected": {
-                "background-color": "transparent",
-                "color": COR_DESTAQUE,
-                "font-weight": "700",
-                "border-bottom": f"2px solid {COR_DESTAQUE}",
-                "border-radius": "0px"
-            },
-        }
+        menu_title=None,
+        options=ops,
+        icons=icns,
+        default_index=idx,
+        orientation="horizontal"
     )
 
     if menu != pg:
