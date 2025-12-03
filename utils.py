@@ -16,29 +16,28 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fpdf import FPDF
 from database import get_db
-from firebase_admin import firestore, storage
+from firebase_admin import firestore, storage 
 
 # =========================================
 # CONFIGURAÇÃO DE CORES DAS FAIXAS (RGB)
 # =========================================
 CORES_FAIXAS = {
-    "BRANCA": (50, 50, 50),      # Cinza Escuro (para ler no papel branco)
-    "CINZA": (128, 128, 128),    # Cinza
-    "AMARELA": (204, 169, 0),    # Amarelo Escuro (Ouro)
-    "LARANJA": (255, 140, 0),    # Laranja
-    "VERDE": (0, 100, 0),        # Verde Escuro
-    "AZUL": (0, 0, 139),         # Azul Escuro
-    "ROXA": (128, 0, 128),       # Roxo
-    "MARROM": (101, 67, 33),     # Marrom
-    "PRETA": (0, 0, 0)           # Preto
+    "BRANCA": (50, 50, 50),      
+    "CINZA": (128, 128, 128),    
+    "AMARELA": (204, 169, 0),    
+    "LARANJA": (255, 140, 0),    
+    "VERDE": (0, 100, 0),        
+    "AZUL": (0, 0, 139),         
+    "ROXA": (128, 0, 128),       
+    "MARROM": (101, 67, 33),     
+    "PRETA": (0, 0, 0)           
 }
 
 def get_cor_faixa(nome_faixa):
-    """Retorna a tupla RGB baseada no nome da faixa."""
     for chave, cor in CORES_FAIXAS.items():
         if chave in nome_faixa.upper():
             return cor
-    return (0, 0, 0) # Default Preto
+    return (0, 0, 0) 
 
 # =========================================
 # FUNÇÃO: NORMALIZAR VÍDEO
@@ -88,7 +87,7 @@ def fazer_upload_midia(arquivo):
         return None
 
 # =========================================
-# FUNÇÕES DE BANCO DE QUESTÕES (LEGADO/ADMIN)
+# FUNÇÕES DE BANCO (LEGADO)
 # =========================================
 def carregar_todas_questoes():
     try:
@@ -96,7 +95,6 @@ def carregar_todas_questoes():
         docs = db.collection('questoes').where('status', '==', 'aprovada').stream()
         return [doc.to_dict() for doc in docs]
     except: return []
-
 def carregar_questoes(t): return []
 def salvar_questoes(t, q): pass
 
@@ -154,16 +152,36 @@ def enviar_email_recuperacao(dest, senha):
     except: return False
 
 # =========================================
-# CÓDIGOS E QR CODE
+# CÓDIGOS E QR CODE (SEQUENCIAL + QR)
 # =========================================
 def gerar_codigo_verificacao():
-    return f"BJJ-{datetime.now().year}-{random.randint(10000,99999)}"
+    """
+    Gera código sequencial: BJJDIGITAL-{ANO}-{SEQUENCIA}
+    Consulta o banco para saber o próximo número.
+    """
+    try:
+        db = get_db()
+        # Conta quantos documentos existem na coleção 'resultados'
+        # Usamos count() que é mais barato e rápido que baixar tudo
+        aggregate_query = db.collection('resultados').count()
+        snapshots = aggregate_query.get()
+        total_existente = int(snapshots[0][0].value)
+        
+        proximo_num = total_existente + 1
+        ano = datetime.now().year
+        
+        # Formata com 4 dígitos (ex: 0001, 0042)
+        return f"BJJDIGITAL-{ano}-{proximo_num:04d}"
+    except Exception as e:
+        print(f"Erro ao gerar sequencia: {e}")
+        # Fallback para aleatório se o banco falhar
+        return f"BJJDIGITAL-{datetime.now().year}-{random.randint(1000,9999)}"
 
 def gerar_qrcode(codigo):
     try:
         os.makedirs("temp", exist_ok=True)
         caminho_qr = f"temp/qr_{codigo}.png"
-        # Link para validar (exemplo)
+        # URL fictícia de validação
         url_validacao = f"https://bjjdigital.streamlit.app/?validar={codigo}"
         
         qr = qrcode.QRCode(version=1, box_size=10, border=1)
@@ -175,7 +193,7 @@ def gerar_qrcode(codigo):
     except: return None
 
 # =========================================
-# GERADOR DE PDF (NOVO LAYOUT)
+# GERADOR DE PDF (VISUAL PREMIUM)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
@@ -183,66 +201,52 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf = FPDF("L", "mm", "A4")
         pdf.add_page()
         
-        # --- CONFIGURAÇÃO DE CORES ---
-        COR_FUNDO = (255, 255, 252)      # Papel levemente creme
-        COR_VERDE = (14, 45, 38)         # Verde BJJ
-        COR_DOURADO = (218, 165, 32)     # Dourado Metálico
-        COR_PRETO = (30, 30, 30)
+        COR_FUNDO = (255, 255, 252)
+        COR_VERDE = (14, 45, 38)
+        COR_DOURADO = (218, 165, 32)
         
-        # Fundo
+        # Fundo e Borda
         pdf.set_fill_color(*COR_FUNDO)
         pdf.rect(0, 0, 297, 210, "F")
-        
-        # Barra Lateral Esquerda
         pdf.set_fill_color(*COR_VERDE)
-        pdf.rect(0, 0, 25, 210, "F")
+        pdf.rect(0, 0, 35, 210, "F")
         pdf.set_fill_color(*COR_DOURADO)
-        pdf.rect(25, 0, 2, 210, "F") # Linha fina dourada separando
-        
-        # Borda Dupla Dourada no Corpo
+        pdf.rect(35, 0, 2, 210, "F")
         pdf.set_draw_color(*COR_DOURADO)
         pdf.set_line_width(1)
-        pdf.rect(35, 10, 252, 190) # Borda externa
+        pdf.rect(10, 10, 277, 190)
         pdf.set_line_width(0.3)
-        pdf.rect(37, 12, 248, 186) # Borda interna fina
+        pdf.rect(37, 12, 248, 186)
 
-        margem_conteudo = 45
-        largura_util = 297 - margem_conteudo - 15
-        centro_x = margem_conteudo + (largura_util / 2)
+        margem_esq = 40
+        largura_util = 297 - margem_esq - 10
+        centro_x = margem_conteudo = margem_esq # Alias
+        
+        # --- IMAGENS (COM PROTEÇÃO) ---
+        if os.path.exists("assets/logo.jpg"):
+            try: pdf.image("assets/logo.jpg", x=margem_esq, y=20, w=30)
+            except: pass
+        elif os.path.exists("assets/logo.png"):
+            try: pdf.image("assets/logo.png", x=margem_esq, y=20, w=30)
+            except: pass
 
-        # --- CABEÇALHO (LOGO E QR CODE) ---
-        y_topo = 20
-        
-        # 1. Logo (Esquerda, alinhado com QR Code)
-        logo_path = None
-        if os.path.exists("assets/logo.jpg"): logo_path = "assets/logo.jpg"
-        elif os.path.exists("assets/logo.png"): logo_path = "assets/logo.png"
-        
-        if logo_path:
-            pdf.image(logo_path, x=margem_conteudo, y=y_topo, w=30)
-        
-        # 2. Bloco de Autenticidade (Direita)
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
-            # Texto "Verificar Autenticidade" (EM CIMA)
-            pdf.set_xy(240, y_topo)
+            pdf.set_xy(240, 20)
             pdf.set_font("Helvetica", "B", 8)
             pdf.set_text_color(100, 100, 100)
             pdf.cell(40, 5, "Verificar Autenticidade", align="C")
-            
-            # Imagem QR Code (MEIO)
-            pdf.image(qr_path, x=250, y=y_topo + 6, w=20)
-            
-            # Código escrito (EMBAIXO)
-            pdf.set_xy(240, y_topo + 27)
+            pdf.image(qr_path, x=250, y=26, w=20)
+            pdf.set_xy(240, 47)
             pdf.set_font("Courier", "B", 9)
             pdf.set_text_color(0, 0, 0)
+            # Divide o código se for muito longo para não quebrar layout
             pdf.cell(40, 5, codigo, align="C")
 
-        # --- TÍTULO PRINCIPAL ---
+        # --- TEXTOS ---
+        pdf.set_left_margin(margem_esq)
         pdf.set_y(50)
-        pdf.set_x(margem_conteudo)
-        pdf.set_font("Helvetica", "B", 38)
+        pdf.set_font("Helvetica", "B", 36)
         pdf.set_text_color(*COR_VERDE)
         pdf.cell(largura_util, 15, "CERTIFICADO", ln=True, align="C")
         
@@ -251,77 +255,66 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.cell(largura_util, 10, "DE CONCLUSÃO DE EXAME TEÓRICO", ln=True, align="C")
         
         pdf.ln(10)
-        
-        # --- CORPO DO TEXTO ---
         pdf.set_font("Helvetica", "", 16)
         pdf.set_text_color(0, 0, 0)
         pdf.cell(largura_util, 10, "Certificamos que o aluno(a)", ln=True, align="C")
         
-        # --- NOME DO ALUNO (ADAPTÁVEL) ---
+        # Nome do Aluno (Adaptável)
+        pdf.ln(5)
         try: nome_limpo = usuario_nome.upper().encode('latin-1', 'replace').decode('latin-1')
-        except: nome_limpo = usuario_nome.upper()
+        except: nome_limpo = str(usuario_nome).upper()
         
-        # Lógica para reduzir fonte se nome for grande
-        tam_fonte = 34
+        tam_fonte = 32
         pdf.set_font("Helvetica", "B", tam_fonte)
-        largura_texto = pdf.get_string_width(nome_limpo)
-        
-        while largura_texto > (largura_util - 20) and tam_fonte > 12:
-            tam_fonte -= 1
+        while pdf.get_string_width(nome_limpo) > (largura_util - 20) and tam_fonte > 12:
+            tam_fonte -= 2
             pdf.set_font("Helvetica", "B", tam_fonte)
-            largura_texto = pdf.get_string_width(nome_limpo)
         
         pdf.set_text_color(*COR_DOURADO)
         pdf.cell(largura_util, 20, nome_limpo, ln=True, align="C")
         
-        # --- CONTINUAÇÃO TEXTO ---
+        pdf.ln(5)
         pdf.set_font("Helvetica", "", 16)
         pdf.set_text_color(0, 0, 0)
         pdf.cell(largura_util, 10, "Concluiu com êxito a avaliação técnica e está apto à faixa", ln=True, align="C")
         
-        # --- FAIXA (COLORIDA) ---
+        # Faixa Colorida
         pdf.ln(5)
         cor_faixa = get_cor_faixa(faixa)
         pdf.set_text_color(*cor_faixa)
         pdf.set_font("Helvetica", "B", 32)
         pdf.cell(largura_util, 15, faixa.upper(), ln=True, align="C")
         
-        # --- DETALHES FINAIS ---
-        pdf.ln(10)
+        # Info
+        pdf.ln(15)
         pdf.set_font("Helvetica", "", 11)
         pdf.set_text_color(100, 100, 100)
         data_hoje = datetime.now().strftime("%d/%m/%Y")
-        info = f"Data de Emissão: {data_hoje}   |   Aproveitamento: {pontuacao:.1f}%"
-        pdf.cell(largura_util, 8, info, ln=True, align="C")
+        pdf.cell(largura_util, 8, f"Emissão: {data_hoje}  |  Aproveitamento: {pontuacao:.1f}%", ln=True, align="C")
         
-        # --- ASSINATURA ---
+        # Assinatura
         pdf.ln(15)
-        y_assinatura = pdf.get_y()
-        
-        # Linha da assinatura
         pdf.set_draw_color(50, 50, 50)
         pdf.set_line_width(0.5)
-        x_line_start = centro_x - 60
-        x_line_end = centro_x + 60
-        pdf.line(x_line_start, y_assinatura, x_line_end, y_assinatura)
-        
-        pdf.set_xy(x_line_start, y_assinatura + 2)
+        x_line = margem_esq + (largura_util/2) - 60
+        pdf.line(x_line, pdf.get_y(), x_line + 120, pdf.get_y())
+        pdf.ln(2)
         pdf.set_font("Helvetica", "B", 11)
         pdf.set_text_color(*COR_VERDE)
-        pdf.cell(120, 6, "COORDENAÇÃO TÉCNICA - BJJ DIGITAL", align="C")
+        pdf.cell(largura_util, 6, "COORDENAÇÃO TÉCNICA - BJJ DIGITAL", align="C")
         
-        # --- SELO DOURADO (INFERIOR DIREITO) ---
         if os.path.exists("assets/selo_dourado.jpg"):
-            # Posicionado no canto inferior direito, dentro da margem
             pdf.image("assets/selo_dourado.jpg", x=245, y=155, w=35)
 
-        return pdf.output(dest='S').encode('latin-1'), f"Certificado_{nome_limpo.split()[0]}.pdf"
+        # IMPORTANTE: Retorna bytes puros para o botão funcionar
+        return bytes(pdf.output(dest='S').encode('latin-1')), f"Certificado_{usuario_nome.split()[0]}.pdf"
+    
     except Exception as e:
         print(f"Erro PDF: {e}")
         return None, None
 
 # =========================================
-# REGRAS DO EXAME
+# 6. REGRAS DO EXAME
 # =========================================
 def verificar_elegibilidade_exame(ud):
     stt = ud.get('status_exame','pendente')
