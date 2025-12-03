@@ -7,11 +7,16 @@ from datetime import datetime, time as dtime
 from database import get_db
 from firebase_admin import firestore
 
+# Importações seguras do utils
 try:
-    from utils import carregar_todas_questoes, salvar_questoes, fazer_upload_imagem
+    from utils import carregar_todas_questoes, salvar_questoes
 except ImportError:
     def carregar_todas_questoes(): return []
     def salvar_questoes(t, q): pass
+
+try:
+    from utils import fazer_upload_imagem
+except ImportError:
     def fazer_upload_imagem(f): return None
 
 FAIXAS_COMPLETAS = [
@@ -54,13 +59,17 @@ def gestao_usuarios(usuario_logado):
             fx = st.selectbox("Faixa Atual:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
             pwd = st.text_input("Nova Senha (opcional):", type="password")
             if st.form_submit_button("Salvar"):
-                upd = {"nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx}
-                if pwd: upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(); upd["precisa_trocar_senha"] = True
-                db.collection('usuarios').document(sel['id']).update(upd)
-                st.success("Salvo!"); time.sleep(1); st.rerun()
+                try:
+                    upd = {"nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx}
+                    if pwd: upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(); upd["precisa_trocar_senha"] = True
+                    db.collection('usuarios').document(sel['id']).update(upd)
+                    st.success("Salvo!"); time.sleep(1); st.rerun()
+                except Exception as e: st.error(f"Erro ao salvar: {e}")
         if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
-            db.collection('usuarios').document(sel['id']).delete()
-            st.warning("Excluído."); time.sleep(1); st.rerun()
+            try:
+                db.collection('usuarios').document(sel['id']).delete()
+                st.warning("Excluído."); time.sleep(1); st.rerun()
+            except Exception as e: st.error(f"Erro ao excluir: {e}")
 
 # =========================================
 # 2. GESTÃO DE QUESTÕES
@@ -149,26 +158,30 @@ def gestao_questoes():
                             
                             cols = st.columns(2)
                             if cols[0].form_submit_button("💾 Salvar"):
-                                final_url_img = url_img_atual
-                                if novo_arquivo:
-                                    with st.spinner("Enviando imagem..."):
-                                        link_gerado = fazer_upload_imagem(novo_arquivo)
-                                        if link_gerado: final_url_img = link_gerado
-                                
-                                db.collection('questoes').document(q['id']).update({
-                                    "pergunta": enunciado, "dificuldade": nv_dif, "categoria": nv_cat,
-                                    "url_imagem": final_url_img, "url_video": url_video,
-                                    "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
-                                    "resposta_correta": corr, "faixa": firestore.DELETE_FIELD
-                                })
-                                st.session_state["editing_q"] = None; st.success("Atualizado!"); time.sleep(1); st.rerun()
+                                try:
+                                    final_url_img = url_img_atual
+                                    if novo_arquivo:
+                                        with st.spinner("Enviando imagem..."):
+                                            link_gerado = fazer_upload_imagem(novo_arquivo)
+                                            if link_gerado: final_url_img = link_gerado
+                                    
+                                    db.collection('questoes').document(q['id']).update({
+                                        "pergunta": enunciado, "dificuldade": nv_dif, "categoria": nv_cat,
+                                        "url_imagem": final_url_img, "url_video": url_video,
+                                        "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
+                                        "resposta_correta": corr, "faixa": firestore.DELETE_FIELD
+                                    })
+                                    st.session_state["editing_q"] = None; st.success("Atualizado!"); time.sleep(1); st.rerun()
+                                except Exception as e: st.error(f"Erro ao salvar: {e}")
                             
                             if cols[1].form_submit_button("Cancelar"):
                                 st.session_state["editing_q"] = None; st.rerun()
                                 
                         if st.button("🗑️ Deletar", key=f"del_q_{q['id']}", type="primary"):
-                            db.collection('questoes').document(q['id']).delete()
-                            st.session_state["editing_q"] = None; st.success("Deletado."); st.rerun()
+                            try:
+                                db.collection('questoes').document(q['id']).delete()
+                                st.session_state["editing_q"] = None; st.success("Deletado."); st.rerun()
+                            except Exception as e: st.error(f"Erro ao deletar: {e}")
 
     with tab2:
         with st.form("new_q"):
@@ -189,21 +202,23 @@ def gestao_questoes():
             alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
             correta = st.selectbox("Correta:", ["A", "B", "C", "D"])
             if st.form_submit_button("💾 Cadastrar"):
-                if pergunta and alt_a and alt_b:
-                    link_final_img = None
-                    if arquivo_img:
-                        with st.spinner("Enviando imagem..."):
-                            link_final_img = fazer_upload_imagem(arquivo_img)
-                    
-                    db.collection('questoes').add({
-                        "pergunta": pergunta, "dificuldade": dificuldade, "categoria": categoria,
-                        "url_imagem": link_final_img, "url_video": input_video,
-                        "alternativas": {"A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d},
-                        "resposta_correta": correta, "status": "aprovada",
-                        "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
-                    })
-                    st.success("Sucesso!"); time.sleep(1); st.rerun()
-                else: st.warning("Preencha enunciado e alternativas.")
+                try:
+                    if pergunta and alt_a and alt_b:
+                        link_final_img = None
+                        if arquivo_img:
+                            with st.spinner("Enviando imagem..."):
+                                link_final_img = fazer_upload_imagem(arquivo_img)
+                        
+                        db.collection('questoes').add({
+                            "pergunta": pergunta, "dificuldade": dificuldade, "categoria": categoria,
+                            "url_imagem": link_final_img, "url_video": input_video,
+                            "alternativas": {"A": alt_a, "B": alt_b, "C": alt_c, "D": alt_d},
+                            "resposta_correta": correta, "status": "aprovada",
+                            "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
+                        })
+                        st.success("Sucesso!"); time.sleep(1); st.rerun()
+                    else: st.warning("Preencha enunciado e alternativas.")
+                except Exception as e: st.error(f"Erro ao cadastrar: {e}")
 
 # =========================================
 # 3. GESTÃO DE EXAME
@@ -246,7 +261,6 @@ def gestao_exame_de_faixa():
                 if niv in filtro_nivel and cat in filtro_tema:
                     count_visible += 1
                     c_chk, c_content = st.columns([1, 15])
-                    
                     is_checked = doc.id in st.session_state.selected_ids
                     
                     def update_selection(qid=doc.id):
@@ -281,36 +295,24 @@ def gestao_exame_de_faixa():
             c1, c2 = st.columns(2)
             tempo = c1.number_input("Tempo (min):", 10, 180, int(conf_atual.get('tempo_limite', 45)))
             nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
-            
             if st.form_submit_button("💾 Salvar Prova"):
                 if total_sel == 0: st.error("Selecione questões.")
                 else:
-                    dados = {
-                        "faixa": faixa_sel, "questoes_ids": list(st.session_state.selected_ids), 
-                        "qtd_questoes": total_sel, "tempo_limite": tempo, "aprovacao_minima": nota,
-                        "modo_selecao": "Manual", "atualizado_em": firestore.SERVER_TIMESTAMP
-                    }
-                    
-                    # --- CORREÇÃO DA LÓGICA DE SALVAMENTO ---
                     try:
+                        dados = {
+                            "faixa": faixa_sel, "questoes_ids": list(st.session_state.selected_ids), 
+                            "qtd_questoes": total_sel, "tempo_limite": tempo, "aprovacao_minima": nota,
+                            "modo_selecao": "Manual", "atualizado_em": firestore.SERVER_TIMESTAMP
+                        }
                         if st.session_state.doc_id:
-                            # Tenta atualizar
-                            db.collection('config_exames').document(st.session_state.doc_id).update(dados)
-                            st.success(f"Prova da Faixa {faixa_sel} ATUALIZADA!")
+                            # Tenta atualizar, se falhar (doc apagado), cria novo
+                            try: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
+                            except: db.collection('config_exames').add(dados)
                         else:
-                            # Cria novo
-                            ref = db.collection('config_exames').add(dados)
-                            st.session_state.doc_id = ref[1].id
-                            st.success(f"Prova da Faixa {faixa_sel} CRIADA!")
-                    except Exception as e:
-                        # Se falhar (ex: doc deletado), cria novo
-                        ref = db.collection('config_exames').add(dados)
-                        st.session_state.doc_id = ref[1].id
-                        st.success(f"Recuperado: Prova SALVA!")
-                    
-                    time.sleep(1.5); st.rerun()
+                            db.collection('config_exames').add(dados)
+                        st.success("Salvo!"); time.sleep(1.5); st.rerun()
+                    except Exception as e: st.error(f"Erro ao salvar: {e}")
 
-    # --- ABA 2: VISUALIZAR ---
     with tab2:
         st.write("Configurações atuais:")
         for doc in db.collection('config_exames').stream():
@@ -321,11 +323,11 @@ def gestao_exame_de_faixa():
                     db.collection('config_exames').document(doc.id).delete()
                     st.success("Deletado."); st.rerun()
 
-    # --- ABA 3: AUTORIZAR ---
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
-            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now()); d_fim = c2.date_input("Fim:", datetime.now())
+            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
+            d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
             c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
@@ -399,7 +401,7 @@ def gestao_exame_de_faixa():
                             if c5.button("✅", key=f"on_btn_{aluno_id}"):
                                 db.collection('usuarios').document(aluno_id).update({
                                     "exame_habilitado": True, "faixa_exame": fx_sel,
-                                    "exame_inicio": dt_inicio.isoformat(), "exame_fim": dt_fim.isoformat(),
+                                    "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
                                     "status_exame": "pendente", "status_exame_em_andamento": False
                                 })
                                 st.success("Liberado!"); time.sleep(0.5); st.rerun()
