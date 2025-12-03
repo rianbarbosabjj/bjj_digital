@@ -19,75 +19,133 @@ from database import get_db
 from firebase_admin import firestore, storage 
 
 # =========================================
-# CORES FAIXAS
+# CONFIGURAÇÃO DE CORES DAS FAIXAS (RGB)
 # =========================================
 CORES_FAIXAS = {
-    "BRANCA": (50, 50, 50), "CINZA": (128, 128, 128), "AMARELA": (204, 169, 0),
-    "LARANJA": (255, 140, 0), "VERDE": (0, 100, 0), "AZUL": (0, 0, 139),
-    "ROXA": (128, 0, 128), "MARROM": (101, 67, 33), "PRETA": (0, 0, 0)
+    "CINZA E BRANCA": (128, 128, 128), "CINZA": (128, 128, 128), "CINZA E PRETA": (128, 128, 128), 
+    "AMARELA E BRANCA": (204, 169, 0), "AMARELA": (204, 169, 0), "AMARELA E PRETA": (204, 169, 0),
+    "LARANJA E BRANCA": (255, 140, 0), "LARANJA": (255, 140, 0), "LARANJA E PRETA": (255, 140, 0),
+    "VERDE e BRANCA": (0, 100, 0), "VERDE": (0, 100, 0), "VERDE E PRETA": (0, 100, 0),
+    "AZUL": (0, 0, 139), "ROXA": (128, 0, 128), "MARROM": (101, 67, 33), "PRETA": (0, 0, 0)
 }
-def get_cor_faixa(nome):
-    for k, v in CORES_FAIXAS.items():
-        if k in nome.upper(): return v
-    return (0, 0, 0)
+
+def get_cor_faixa(nome_faixa):
+    for chave, cor in CORES_FAIXAS.items():
+        if chave in nome_faixa.upper():
+            return cor
+    return (0, 0, 0) 
 
 # =========================================
-# UPLOAD E VÍDEO
+# FUNÇÃO: NORMALIZAR VÍDEO
 # =========================================
 def normalizar_link_video(url):
     if not url: return None
     try:
-        if "shorts/" in url: return f"https://www.youtube.com/watch?v={url.split('shorts/')[1].split('?')[0]}"
-        elif "youtu.be/" in url: return f"https://www.youtube.com/watch?v={url.split('youtu.be/')[1].split('?')[0]}"
+        if "shorts/" in url:
+            base = url.split("shorts/")[1]
+            video_id = base.split("?")[0]
+            return f"https://www.youtube.com/watch?v={video_id}"
+        elif "youtu.be/" in url:
+            base = url.split("youtu.be/")[1]
+            video_id = base.split("?")[0]
+            return f"https://www.youtube.com/watch?v={video_id}"
         return url
     except: return url
 
+# =========================================
+# FUNÇÃO: UPLOAD DE MÍDIA
+# =========================================
 def fazer_upload_midia(arquivo):
     if not arquivo: return None
     try:
         bucket = storage.bucket()
         if not bucket.name:
-            bn = st.secrets.get("firebase", {}).get("storage_bucket")
-            if not bn: bn = st.secrets.get("storage_bucket")
-            if not bn: return None
+            bucket_name = st.secrets.get("firebase", {}).get("storage_bucket")
+            if not bucket_name: bucket_name = st.secrets.get("storage_bucket")
+            if not bucket_name: return None
         
         ext = arquivo.name.split('.')[-1]
-        blob = bucket.blob(f"questoes/{uuid.uuid4()}.{ext}")
+        blob_name = f"questoes/{uuid.uuid4()}.{ext}"
+        blob = bucket.blob(blob_name)
+        
         arquivo.seek(0)
         blob.upload_from_file(arquivo, content_type=arquivo.type)
         
-        token = str(uuid.uuid4())
-        blob.metadata = {"firebaseStorageDownloadTokens": token}
+        access_token = str(uuid.uuid4())
+        metadata = {"firebaseStorageDownloadTokens": access_token}
+        blob.metadata = metadata
         blob.patch()
-        return f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{quote(blob.name, safe='')}?alt=media&token={token}"
+
+        blob_path_encoded = quote(blob_name, safe='')
+        return f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{blob_path_encoded}?alt=media&token={access_token}"
     except Exception as e:
-        st.error(f"Erro Upload: {e}"); return None
+        st.error(f"Erro Upload: {e}")
+        return None
 
 # =========================================
-# QUESTÕES
+# FUNÇÕES DE BANCO (LEGADO)
 # =========================================
 def carregar_todas_questoes():
     try:
-        docs = get_db().collection('questoes').where('status', '==', 'aprovada').stream()
-        return [d.to_dict() for d in docs]
+        db = get_db()
+        docs = db.collection('questoes').where('status', '==', 'aprovada').stream()
+        return [doc.to_dict() for doc in docs]
     except: return []
 def carregar_questoes(t): return []
 def salvar_questoes(t, q): pass
 
 # =========================================
-# UTILITÁRIOS
+# FUNÇÕES GERAIS
 # =========================================
-def normalizar_nome(n): return "_".join(unicodedata.normalize("NFKD", n).encode("ASCII","ignore").decode().split()).lower() if n else "sem_nome"
-def formatar_e_validar_cpf(c): return f"{c[:3]}.{c[3:6]}.{c[6:9]}-{c[9:]}" if c and len(re.sub(r'\D','',str(c)))==11 else None
-def formatar_cep(c): return ''.join(filter(str.isdigit,c)) if c else None
+def normalizar_nome(nome):
+    if not nome: return "sem_nome"
+    return "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split()).lower()
+
+def formatar_e_validar_cpf(cpf):
+    if not cpf: return None
+    c = re.sub(r'\D', '', str(cpf))
+    if len(c) != 11 or c == c[0]*11: return None
+    return f"{c[:3]}.{c[3:6]}.{c[6:9]}-{c[9:]}"
+
+def formatar_cep(cep):
+    if not cep: return None
+    c = ''.join(filter(str.isdigit, cep))
+    return c if len(c) == 8 else None
+
 def buscar_cep(cep):
+    c = formatar_cep(cep)
+    if not c: return None
     try:
-        r = requests.get(f"https://viacep.com.br/ws/{formatar_cep(cep)}/json/", timeout=3)
-        if r.ok and "erro" not in r.json(): return r.json()
+        r = requests.get(f"https://viacep.com.br/ws/{c}/json/", timeout=3)
+        if r.status_code == 200 and "erro" not in r.json():
+            d = r.json()
+            return {"logradouro": d.get("logradouro","").upper(), "bairro": d.get("bairro","").upper(), "cidade": d.get("localidade","").upper(), "uf": d.get("uf","").upper()}
     except: pass
     return None
-def gerar_senha_temporaria(t=8): return ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(t))
-def enviar_email_recuperacao(d, s): return False 
+
+# =========================================
+# SEGURANÇA
+# =========================================
+def gerar_senha_temporaria(t=8):
+    return ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(t))
+
+def enviar_email_recuperacao(dest, senha):
+    try:
+        s_email = st.secrets.get("EMAIL_SENDER")
+        s_pwd = st.secrets.get("EMAIL_PASSWORD")
+        if not s_email or not s_pwd: return False
+        msg = MIMEMultipart()
+        msg['Subject'] = "Recuperação BJJ"
+        msg['From'] = s_email
+        msg['To'] = dest
+        msg.attach(MIMEText(f"Senha: {senha}", 'html'))
+        server = smtplib.SMTP("smtp.gmail.com", 587)
+        server.starttls()
+        server.login(s_email, s_pwd)
+        server.sendmail(s_email, dest, msg.as_string())
+        server.quit()
+        return True
+    except: return False
 
 # =========================================
 # CÓDIGO SEQUENCIAL E QR CODE
@@ -95,12 +153,21 @@ def enviar_email_recuperacao(d, s): return False
 def gerar_codigo_verificacao():
     """Gera BJJDIGITAL-{ANO}-{SEQUENCIA} consultando o banco."""
     try:
-        # Tenta contar documentos para gerar sequencia
-        count = get_db().collection('resultados').count().get()[0][0].value
-        seq = int(count) + 1
-    except:
-        seq = random.randint(1000, 9999)
-    return f"BJJDIGITAL-{datetime.now().year}-{seq:04d}"
+        db = get_db()
+        # Conta quantos documentos existem na coleção 'resultados'
+        aggregate_query = db.collection('resultados').count()
+        snapshots = aggregate_query.get()
+        total_existente = int(snapshots[0][0].value)
+        
+        proximo_num = total_existente + 1
+        ano = datetime.now().year
+        
+        # Formata com 4 dígitos (ex: 0001, 0042)
+        return f"BJJDIGITAL-{ano}-{proximo_num:04d}"
+    except Exception as e:
+        print(f"Erro ao gerar sequencia: {e}")
+        # Fallback para aleatório se o banco falhar
+        return f"BJJDIGITAL-{datetime.now().year}-{random.randint(1000,9999)}"
 
 def gerar_qrcode(codigo):
     try:
@@ -207,7 +274,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         return None, None
 
 # =========================================
-# 6. REGRAS
+# 6. REGRAS DO EXAME
 # =========================================
 def verificar_elegibilidade_exame(ud):
     stt = ud.get('status_exame','pendente')
