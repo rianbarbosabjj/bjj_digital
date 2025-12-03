@@ -9,7 +9,7 @@ import string
 import unicodedata
 import random
 import uuid
-from urllib.parse import quote
+from urllib.parse import quote, urlparse, parse_qs
 from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -18,44 +18,67 @@ from database import get_db
 from firebase_admin import firestore, storage 
 
 # =========================================
-# FUNÇÃO DE UPLOAD (FOTO OU VÍDEO)
+# FUNÇÃO NOVA: CORRIGIR LINK DO YOUTUBE
+# =========================================
+def normalizar_link_video(url):
+    """
+    Converte links de YouTube Shorts ou Mobile para o formato padrão 'watch?v='.
+    Isso garante que o st.video consiga reproduzir.
+    """
+    if not url: return None
+    
+    try:
+        # Se for link de Shorts
+        if "shorts/" in url:
+            # Ex: https://youtube.com/shorts/ID_DO_VIDEO?feature=share
+            # Vira: https://youtube.com/watch?v=ID_DO_VIDEO
+            base = url.split("shorts/")[1]
+            video_id = base.split("?")[0] # Remove parâmetros extras
+            return f"https://www.youtube.com/watch?v={video_id}"
+        
+        # Se for link mobile (youtu.be)
+        elif "youtu.be/" in url:
+            base = url.split("youtu.be/")[1]
+            video_id = base.split("?")[0]
+            return f"https://www.youtube.com/watch?v={video_id}"
+            
+        # Se já for normal, retorna como está
+        return url
+    except:
+        return url
+
+# =========================================
+# FUNÇÃO DE UPLOAD (LINK PÚBLICO FIREBASE)
 # =========================================
 def fazer_upload_midia(arquivo):
-    """
-    Envia qualquer arquivo (img/video) para o Storage e gera link público.
-    """
     if not arquivo: return None
-    
     try:
         bucket = storage.bucket() 
         if not bucket.name:
-            # Fallback de segurança
             bucket_name = st.secrets.get("firebase", {}).get("storage_bucket")
-            if not bucket_name: return None
+            # Fallback para ler direto da raiz se não achar no dict
+            if not bucket_name: bucket_name = st.secrets.get("storage_bucket")
             
-        # 1. Define o caminho (pasta questoes/)
+            if not bucket_name: return None
+        
         ext = arquivo.name.split('.')[-1]
         blob_name = f"questoes/{uuid.uuid4()}.{ext}"
         blob = bucket.blob(blob_name)
         
-        # 2. Upload
         arquivo.seek(0)
         blob.upload_from_file(arquivo, content_type=arquivo.type)
         
-        # 3. Token
         access_token = str(uuid.uuid4())
         metadata = {"firebaseStorageDownloadTokens": access_token}
         blob.metadata = metadata
         blob.patch() 
 
-        # 4. URL
         blob_path_encoded = quote(blob_name, safe='') 
         final_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{blob_path_encoded}?alt=media&token={access_token}"
         
         return final_url
-        
     except Exception as e:
-        st.error(f"❌ Erro Upload: {e}")
+        st.error(f"Erro Upload: {e}")
         return None
 
 # =========================================
@@ -68,8 +91,8 @@ def carregar_todas_questoes():
         return [doc.to_dict() for doc in docs]
     except: return []
 
-def carregar_questoes(t): return [] # Legado
-def salvar_questoes(t, q): pass # Legado
+def carregar_questoes(t): return [] 
+def salvar_questoes(t, q): pass
 
 # =========================================
 # 2. FUNÇÕES GERAIS
