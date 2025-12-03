@@ -53,24 +53,56 @@ st.markdown(f"""
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
 
-    /* =========================================================
-       🔥 MENU SUPERIOR – VIDRO FOSCO PREMIUM (COMPATÍVEL)
-       ========================================================= */
+/* =====================================================================
+   🔥 MENU SUPERIOR – VIDRO FOSCO PREMIUM (APENAS NO MENU)
+   ===================================================================== */
 
-    /* Wrapper geral do menu */
-    div[data-testid="stHorizontalBlock"] > div,
-    .st-emotion-cache-1v7f65g,
-    .st-emotion-cache-1v7f65g.ezrtsby2 {{
-        background: rgba(255, 255, 255, 0.07) !important;
-        backdrop-filter: blur(14px) saturate(140%) !important;
-        -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
-        border-radius: 14px !important;
-        border: 1px solid rgba(255,255,255,0.15) !important;
-        margin: 15px auto 25px auto !important;
-        padding: 12px 18px !important;
-        max-width: 98% !important;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
-    }}
+/* Seleciona SOMENTE o container onde o option_menu é renderizado */
+div[data-testid="stHorizontalBlock"] > div:first-child {
+    background: rgba(255, 255, 255, 0.07) !important;
+    backdrop-filter: blur(14px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
+    border-radius: 14px !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
+    margin: 15px auto 25px auto !important;
+    padding: 12px 18px !important;
+    max-width: 98% !important;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
+}
+
+/* Links do menu */
+div[data-testid="stHorizontalBlock"] > div:first-child .st-emotion-cache-1v7f65g .st-ae .st-af,
+div[data-testid="stHorizontalBlock"] > div:first-child .st-emotion-cache-1v7f65g.ezrtsby2 .st-ae .st-af {
+    background: rgba(255,255,255,0.08) !important;
+    border-radius: 10px !important;
+    padding: 10px 16px !important;
+    margin: 0 6px !important;
+    color: rgba(255,255,255,0.75) !important;
+    transition: all 0.25s ease !important;
+}
+
+/* Hover premium */
+div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-af:hover {
+    background: rgba(255,215,112,0.18) !important;
+    color: {COR_DESTAQUE} !important;
+    border: 1px solid rgba(255,215,112,0.4) !important;
+    transform: translateY(-2px);
+}
+
+/* Item ativo */
+div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-ag {
+    background: rgba(255,215,112,0.25) !important;
+    color: {COR_DESTAQUE} !important;
+    font-weight: 700 !important;
+    border-bottom: 2px solid {COR_DESTAQUE} !important;
+    border-radius: 6px !important;
+}
+
+/* Scroll invisível */
+div[data-testid="stHorizontalBlock"] > div:first-child::-webkit-scrollbar {
+    height: 0px !important;
+}
+
 
     /* Links do menu */
     .st-emotion-cache-1v7f65g .st-ae .st-af,
