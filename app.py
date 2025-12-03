@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK + GLASS MENU")
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM")
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -42,7 +42,7 @@ st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-    /* GLOBAL */
+    /* --- GLOBAL --- */
     html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
@@ -50,69 +50,45 @@ st.markdown(f"""
 
     .stApp {{
         background-color: {COR_FUNDO} !important;
-        background-image: radial-gradient(circle at 50% 0%, #164036 0%, {COR_FUNDO} 70%) !important;
+        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
 
-    /* =========================================================
-       🍸 MENU SUPERIOR – VIDRO FOSCO PREMIUM (SOMENTE NO MENU)
-       ========================================================= */
-
-    div[data-testid="stHorizontalBlock"] > div:first-child {{
-        background: rgba(255, 255, 255, 0.07) !important;
-        backdrop-filter: blur(14px) saturate(140%) !important;
-        -webkit-backdrop-filter: blur(14px) saturate(140%) !important;
-        border-radius: 14px !important;
-        border: 1px solid rgba(255,255,255,0.15) !important;
-        margin: 15px auto 25px auto !important;
-        padding: 12px 18px !important;
-        max-width: 98% !important;
-        box-shadow: 0 8px 24px rgba(0,0,0,0.35) !important;
+    hr {{
+        margin: 2em 0 !important;
+        border: 0 !important;
+        height: 1px !important;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0),
+                                                  rgba(255, 255, 255, 0.5),
+                                                  rgba(255, 255, 255, 0)) !important;
     }}
 
-    /* LINKS DO MENU */
-    div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-af {{
-        background: rgba(255,255,255,0.08) !important;
-        border-radius: 10px !important;
-        padding: 10px 16px !important;
-        color: rgba(255,255,255,0.75) !important;
-        transition: all 0.25s ease !important;
+    h1, h2, h3, h4, h5, h6 {{ 
+        color: {COR_DESTAQUE} !important; 
+        text-align: center !important; 
+        font-weight: 700 !important; 
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }}
 
-    div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-af:hover {{
-        background: rgba(255,215,112,0.18) !important;
+    /* --- SIDEBAR --- */
+    section[data-testid="stSidebar"] {{
+        background-color: #091f1a !important; 
+        border-right: 1px solid rgba(255, 215, 112, 0.15);
+    }}
+
+    section[data-testid="stSidebar"] svg {{
+        fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
-        border: 1px solid rgba(255,215,112,0.4) !important;
-        transform: translateY(-2px);
     }}
 
-    /* ITEM SELECIONADO */
-    div[data-testid="stHorizontalBlock"] > div:first-child .st-ae .st-ag {{
-        background: rgba(255,215,112,0.25) !important;
-        color: {COR_DESTAQUE} !important;
-        border-bottom: 2px solid {COR_DESTAQUE} !important;
-        border-radius: 6px !important;
-        font-weight: 700 !important;
-    }}
-
-    /* Scroll invisível */
-    div[data-testid="stHorizontalBlock"] > div:first-child::-webkit-scrollbar {{
-        height: 0px !important;
-    }}
-
-    /* =========================================================
-       ✔ RESTAURAR BOTÃO DA SIDEBAR
-       ========================================================= */
-
+    /* --- BOTÃO SIDEBAR (SAFE MODE) --- */
     [data-testid="stSidebarCollapsedControl"] {{
-        visibility: visible !important;
-        opacity: 1 !important;
+        color: {COR_DESTAQUE} !important;
     }}
 
     [data-testid="stSidebarCollapsedControl"] button {{
-        background-color: rgba(255,255,255,0.1) !important;
+        background-color: rgba(0,0,0,0.2) !important;
         color: {COR_DESTAQUE} !important;
-        border-radius: 6px !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
     }}
 
     [data-testid="stSidebarCollapsedControl"] button:hover {{
@@ -120,40 +96,99 @@ st.markdown(f"""
         color: {COR_FUNDO} !important;
     }}
 
-    /* SIDEBAR */
-    section[data-testid="stSidebar"] {{
-        background-color: #091f1a !important; 
-        border-right: 1px solid rgba(255,215,112,0.15);
-    }}
-
-    /* CARDS */
-    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"],
+    /* --- CARDS & CONTAINERS --- */
+    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
-        background-color: rgba(0,0,0,0.3) !important;
-        border: 1px solid rgba(255,215,112,0.15) !important;
-        border-radius: 12px !important;
+        background-color: rgba(0, 0, 0, 0.3) !important; 
+        border: 1px solid rgba(255, 215, 112, 0.2) !important; 
+        border-radius: 12px; 
         padding: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
+        margin-bottom: 20px;
     }}
 
-    /* INPUTS */
-    input, textarea, select {{
-        background-color: rgba(255,255,255,0.06) !important;
-        border: 1px solid rgba(255,255,255,0.25) !important;
+    /* --- BOTÕES --- */
+    div.stButton > button, div.stFormSubmitButton > button {{ 
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
+        color: white !important; 
+        border: 1px solid rgba(255,255,255,0.1) !important; 
+        padding: 0.6em 1.5em !important; 
+        font-weight: 600 !important;
+        border-radius: 8px !important; 
+        transition: all 0.3s ease !important;
+    }}
+
+    div.stButton > button:hover {{ 
+        background: {COR_HOVER} !important; 
+        color: #0e2d26 !important; 
+        transform: translateY(-2px);
+    }}
+
+    /* --- INPUTS --- */
+    input, textarea, select, div[data-baseweb="select"] > div {{
+        background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important; 
         border-radius: 8px !important;
     }}
 
-    /* OCULTAR MENU PADRÃO */
+    /* =========================================================
+       🔥 MENU SUPERIOR — Fundo 100% igual ao fundo da tela
+       ========================================================= */
+    .st-emotion-cache-1v7f65g {{
+        background-color: {COR_FUNDO} !important;
+        background-image: radial-gradient(circle at 50% 0%, #164036 0%, {COR_FUNDO} 70%) !important;
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
+        margin: 10px auto 20px auto !important;
+        max-width: 98% !important;
+        display: flex !important;
+        justify-content: center !important;
+        flex-wrap: nowrap !important;
+        overflow-x: auto !important;
+    }}
+
+    .st-emotion-cache-1v7f65g .st-ae .st-af {{
+        padding: 8px 15px !important;
+        border-radius: 8px !important;
+        margin: 0 5px !important;
+        transition: all 0.3s ease !important;
+        white-space: nowrap !important;
+        border: 1px solid transparent !important;
+        background: rgba(0,0,0,0.1) !important;
+        color: rgba(255,255,255,0.6) !important;
+    }}
+
+    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{
+        color: {COR_DESTAQUE} !important;
+        background: rgba(255, 215, 112, 0.05) !important;
+        border-color: rgba(255,215,112,0.2) !important;
+    }}
+
+    .st-emotion-cache-1v7f65g .st-ae .st-ag {{
+        background: transparent !important;
+        color: {COR_DESTAQUE} !important;
+        font-weight: 700 !important;
+        border-bottom: 2px solid {COR_DESTAQUE} !important;
+        border-radius: 0px !important;
+    }}
+
+    /* Scrollbar invisível */
+    .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar {{
+        height: 0px !important;
+    }}
+
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     header {{visibility: hidden;}}
 
+    .block-container {{
+        padding-top: 1.5rem !important;
+    }}
+
 </style>
 """, unsafe_allow_html=True)
-
-# =========================================================
-# RESTANTE DO SEU CÓDIGO (NÃO ALTERADO)
-# =========================================================
 
 if "SECRETS_TOML" in os.environ:
     if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
@@ -201,7 +236,7 @@ def app_principal():
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
-
+        
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
@@ -209,7 +244,7 @@ def app_principal():
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
-
+            
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚪 Sair", use_container_width=True):
             st.session_state.clear(); st.rerun()
@@ -239,11 +274,39 @@ def app_principal():
         idx = 0
 
     menu = option_menu(
-        menu_title=None,
-        options=ops,
-        icons=icns,
-        default_index=idx,
-        orientation="horizontal"
+        menu_title=None, 
+        options=ops, 
+        icons=icns, 
+        default_index=idx, 
+        orientation="horizontal",
+        styles={
+            "container": {
+                "padding": "0!important",
+                "background-color": "transparent",
+                "border": "none",
+                "display": "flex",
+                "justify-content": "center"
+            },
+            "icon": {"color": "inherit"},
+            "nav-link": {
+                "font-size": "14px",
+                "margin": "0px 5px",
+                "padding": "10px 15px",
+                "border-radius": "8px",
+                "color": "rgba(255,255,255,0.6)",
+                "font-weight": "500",
+                "background": "transparent",
+                "transition": "0.3s",
+                "white-space": "nowrap"
+            },
+            "nav-link-selected": {
+                "background-color": "transparent",
+                "color": COR_DESTAQUE,
+                "font-weight": "700",
+                "border-bottom": f"2px solid {COR_DESTAQUE}",
+                "border-radius": "0px"
+            },
+        }
     )
 
     if menu != pg:
