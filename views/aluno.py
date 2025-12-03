@@ -19,10 +19,9 @@ try:
         carregar_todas_questoes,
         gerar_codigo_verificacao,
         gerar_pdf,
-        normalizar_link_video # <--- NOVA IMPORTAÇÃO ESSENCIAL
+        normalizar_link_video 
     )
 except ImportError:
-    # Fallback caso utils esteja desatualizado na memória
     def normalizar_link_video(u): return u
     def registrar_inicio_exame(u): pass
     def registrar_fim_exame(u, a): pass
@@ -47,26 +46,20 @@ def carregar_exame_especifico(faixa_alvo):
     if config_doc:
         tempo = int(config_doc.get('tempo_limite', 45))
         nota = int(config_doc.get('aprovacao_minima', 70))
-        
-        # MODO MANUAL
         if 'questoes_ids' in config_doc and config_doc['questoes_ids']:
             ids = config_doc['questoes_ids']
             for q_id in ids:
                 q_snap = db.collection('questoes').document(q_id).get()
                 if q_snap.exists:
                     d = q_snap.to_dict()
-                    # Compatibilidade
                     if 'alternativas' not in d and 'opcoes' in d:
                         ops = d['opcoes']
                         d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
                     questoes_finais.append(d)
             random.shuffle(questoes_finais)
             return questoes_finais, tempo, nota
-        
-        # MODO ANTIGO
         qtd_alvo = int(config_doc.get('qtd_questoes', 10))
 
-    # FALLBACK (Busca genérica)
     if not questoes_finais:
         q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         pool = []
@@ -131,7 +124,6 @@ def exame_de_faixa(usuario):
         if st.button("Voltar"): st.session_state.resultado_prova = None; st.rerun()
         return
 
-    # Verificação de Timeout/Abandono
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
         is_timeout = False
         try:
@@ -211,7 +203,7 @@ def exame_de_faixa(usuario):
                 st.session_state.questoes_prova = lista_questoes
                 st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
                 st.rerun()
-        else: st.warning("Sem questões disponíveis.")
+        else: st.warning(f"⚠️ Sem questões encontradas para **{faixa_alvo}**.")
 
     else:
         qs = st.session_state.get('questoes_prova', [])
@@ -228,19 +220,13 @@ def exame_de_faixa(usuario):
             for i, q in enumerate(qs):
                 st.markdown(f"**{i+1}. {q.get('pergunta')}**")
                 
-                # --- EXIBIÇÃO DE MÍDIA COM CORREÇÃO ---
                 if q.get('url_imagem'):
                     st.image(q.get('url_imagem'), caption="Imagem de Apoio", use_container_width=True)
                 
                 if q.get('url_video'):
-                    # Aplica a normalização para funcionar shorts/mobile
                     link_vid = normalizar_link_video(q.get('url_video'))
-                    try:
-                        st.video(link_vid)
-                    except:
-                        st.warning("Erro no player.")
-                        st.markdown(f"🔗 [Abrir Vídeo]({q.get('url_video')})")
-                # --------------------------------------
+                    try: st.video(link_vid)
+                    except: st.markdown(f"🔗 [Abrir Vídeo]({q.get('url_video')})")
 
                 opts = []
                 if 'alternativas' in q and isinstance(q['alternativas'], dict):
@@ -248,13 +234,16 @@ def exame_de_faixa(usuario):
                 elif 'opcoes' in q: opts = q['opcoes']
                 if not opts: opts = ["-", "-", "-", "-"]
 
-                resps[i] = st.radio("R:", opts, key=f"q{i}", label_visibility="collapsed")
+                # AQUI A MUDANÇA: index=None para vir vazio
+                resps[i] = st.radio("R:", opts, key=f"q{i}", label_visibility="collapsed", index=None)
                 st.markdown("---")
                 
             if st.form_submit_button("Finalizar"):
                 acertos = 0
                 for i, q in enumerate(qs):
-                    resp_aluno = str(resps.get(i)).strip().lower()
+                    # Trata caso não responda (None)
+                    resp_aluno = str(resps.get(i) or "").strip().lower()
+                    
                     certa_bd = q.get('resposta_correta') or q.get('resposta') or q.get('correta')
                     certa_texto = ""
                     if str(certa_bd).upper() in ["A","B","C","D"] and 'alternativas' in q:
@@ -264,7 +253,8 @@ def exame_de_faixa(usuario):
                         try: certa_texto = q['opcoes'][idx_map[str(certa_bd).upper()]].strip().lower()
                         except: certa_texto = str(certa_bd).strip().lower()
                     else: certa_texto = str(certa_bd).strip().lower()
-                    if resp_aluno == certa_texto: acertos += 1
+                    
+                    if resp_aluno and resp_aluno == certa_texto: acertos += 1
 
                 nota = (acertos/len(qs))*100
                 aprovado = nota >= st.session_state.params_prova['min']
