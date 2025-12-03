@@ -50,6 +50,7 @@ st.markdown(f"""
     }}
 
     /* --- BACKGROUND --- */
+    /* O gradiente começa com #164036 no topo (50% 0%) */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
@@ -119,8 +120,8 @@ st.markdown(f"""
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
+        border-color: {COR_DESTAQUE} !important;
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
     /* --- INPUTS --- */
@@ -237,9 +238,9 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # NOVO ESTILO: MENU INTEGRADO (Sem Caixas Pretas)
+    # MENU SÓLIDO (COR DO TOPO DO GRADIENTE)
     # -------------------------------------------------------------
-    # Usa a mesma cor do fundo para parecer que os ícones flutuam na página
+    # Usamos #164036 para se fundir com o brilho superior do gradiente
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -249,13 +250,11 @@ def app_principal():
         styles={
             "container": {
                 "padding": "5px 10px", 
-                # A MÁGICA: Cor exata do fundo da página (#0e2d26)
-                # Assim ele "some" e só os botões aparecem
-                "background-color": COR_FUNDO, 
+                "background-color": "#164036", # <--- COR DA LUZ DO TOPO
                 "margin": "0px auto",
-                "border-radius": "0px", # Reto para integrar
+                "border-radius": "50px", # Borda bem arredondada (Pílula gigante)
                 "border": "none",
-                "box-shadow": "none" # Remove sombra que cria o efeito de "mancha"
+                "box-shadow": "0 4px 20px rgba(0,0,0,0.3)" # Sombra suave para destacar
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -266,19 +265,16 @@ def app_principal():
                 "font-size": "14px", 
                 "text-align": "center", 
                 "margin": "0px 5px", 
-                "color": "rgba(255, 255, 255, 0.7)",
+                "color": "rgba(255, 255, 255, 0.8)",
                 "font-weight": "500",
                 "background-color": "transparent",
-                "border-radius": "8px",
+                "border-radius": "30px",
                 "transition": "0.3s"
             },
             "nav-link-selected": {
-                # Botão Selecionado: Dourado com texto escuro
                 "background-color": COR_DESTAQUE, 
                 "color": "#0e2d26", 
                 "font-weight": "700",
-                # Borda sutil para destacar
-                "border": f"1px solid {COR_DESTAQUE}",
                 "box-shadow": "0px 4px 10px rgba(0,0,0,0.3)" 
             },
         }
