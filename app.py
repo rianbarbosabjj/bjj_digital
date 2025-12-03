@@ -250,7 +250,7 @@ def app_principal():
 
         if tipo in ["admin", "professor"]:
             # Botão do Painel do Professor (onde está o Dashboard)
-            if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
             
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
