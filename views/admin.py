@@ -7,9 +7,6 @@ from datetime import datetime, time as dtime
 from database import get_db
 from firebase_admin import firestore
 
-# =========================================================
-# CORREÇÃO: Importando 'fazer_upload_imagem' corretamente
-# =========================================================
 try:
     from utils import carregar_todas_questoes, salvar_questoes, fazer_upload_imagem
 except ImportError:
@@ -78,7 +75,6 @@ def gestao_questoes():
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
-    # --- LISTAR ---
     with tab1:
         questoes_ref = list(db.collection('questoes').stream())
         c_f1, c_f2 = st.columns(2)
@@ -174,7 +170,6 @@ def gestao_questoes():
                             db.collection('questoes').document(q['id']).delete()
                             st.session_state["editing_q"] = None; st.success("Deletado."); st.rerun()
 
-    # --- CRIAR ---
     with tab2:
         with st.form("new_q"):
             st.markdown("#### Nova Questão")
@@ -186,15 +181,13 @@ def gestao_questoes():
             input_video = cm2.text_input("Link do Vídeo (YouTube/Vimeo):")
             
             c1, c2 = st.columns(2)
-            dificuldade = c1.selectbox("Nível de Dificuldade:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
+            dificuldade = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
             categoria = c2.text_input("Categoria:", "Geral")
-            
             st.markdown("**Alternativas:**")
             ca, cb = st.columns(2); cc, cd = st.columns(2)
             alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
             alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
             correta = st.selectbox("Correta:", ["A", "B", "C", "D"])
-            
             if st.form_submit_button("💾 Cadastrar"):
                 if pergunta and alt_a and alt_b:
                     link_final_img = None
@@ -253,6 +246,7 @@ def gestao_exame_de_faixa():
                 if niv in filtro_nivel and cat in filtro_tema:
                     count_visible += 1
                     c_chk, c_content = st.columns([1, 15])
+                    
                     is_checked = doc.id in st.session_state.selected_ids
                     
                     def update_selection(qid=doc.id):
@@ -287,6 +281,7 @@ def gestao_exame_de_faixa():
             c1, c2 = st.columns(2)
             tempo = c1.number_input("Tempo (min):", 10, 180, int(conf_atual.get('tempo_limite', 45)))
             nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
+            
             if st.form_submit_button("💾 Salvar Prova"):
                 if total_sel == 0: st.error("Selecione questões.")
                 else:
@@ -295,10 +290,27 @@ def gestao_exame_de_faixa():
                         "qtd_questoes": total_sel, "tempo_limite": tempo, "aprovacao_minima": nota,
                         "modo_selecao": "Manual", "atualizado_em": firestore.SERVER_TIMESTAMP
                     }
-                    if st.session_state.doc_id: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
-                    else: db.collection('config_exames').add(dados)
-                    st.success("Salvo!"); time.sleep(1.5); st.rerun()
+                    
+                    # --- CORREÇÃO DA LÓGICA DE SALVAMENTO ---
+                    try:
+                        if st.session_state.doc_id:
+                            # Tenta atualizar
+                            db.collection('config_exames').document(st.session_state.doc_id).update(dados)
+                            st.success(f"Prova da Faixa {faixa_sel} ATUALIZADA!")
+                        else:
+                            # Cria novo
+                            ref = db.collection('config_exames').add(dados)
+                            st.session_state.doc_id = ref[1].id
+                            st.success(f"Prova da Faixa {faixa_sel} CRIADA!")
+                    except Exception as e:
+                        # Se falhar (ex: doc deletado), cria novo
+                        ref = db.collection('config_exames').add(dados)
+                        st.session_state.doc_id = ref[1].id
+                        st.success(f"Recuperado: Prova SALVA!")
+                    
+                    time.sleep(1.5); st.rerun()
 
+    # --- ABA 2: VISUALIZAR ---
     with tab2:
         st.write("Configurações atuais:")
         for doc in db.collection('config_exames').stream():
@@ -309,11 +321,11 @@ def gestao_exame_de_faixa():
                     db.collection('config_exames').document(doc.id).delete()
                     st.success("Deletado."); st.rerun()
 
+    # --- ABA 3: AUTORIZAR ---
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
-            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
-            d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
+            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now()); d_fim = c2.date_input("Fim:", datetime.now())
             c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
@@ -387,7 +399,7 @@ def gestao_exame_de_faixa():
                             if c5.button("✅", key=f"on_btn_{aluno_id}"):
                                 db.collection('usuarios').document(aluno_id).update({
                                     "exame_habilitado": True, "faixa_exame": fx_sel,
-                                    "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
+                                    "exame_inicio": dt_inicio.isoformat(), "exame_fim": dt_fim.isoformat(),
                                     "status_exame": "pendente", "status_exame_em_andamento": False
                                 })
                                 st.success("Liberado!"); time.sleep(0.5); st.rerun()
