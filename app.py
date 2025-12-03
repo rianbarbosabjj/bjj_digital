@@ -173,7 +173,7 @@ st.markdown(f"""
     
     /* Menu Superior (Option Menu) */
     .st-emotion-cache-1v7f65g {{
-        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 50%) !important;
         backdrop-filter: blur(10px) !important;
         border: 1px solid rgba(255, 215, 112, 0.15) !important;
         border-radius: 50px !important;
@@ -187,6 +187,7 @@ st.markdown(f"""
     
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
     .block-container {{padding-top: 1rem !important;}}
 
