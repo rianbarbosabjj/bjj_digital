@@ -114,7 +114,7 @@ def dashboard_professor():
         df_display['usuario_visual'] = "🥋 " + df_display['usuario']
         
         # 2. Status com Emoji (Substitui checkbox)
-        df_display['status_visual'] = df_display['aprovado'].apply(lambda x: "🏆 Aprovado" if x else "🔻 Reprovado")
+        df_display['status_visual'] = df_display['aprovado'].apply(lambda x: "🏆 Aprovado" if x else "🔴 Reprovado")
         
         # 3. Formatar Data
         if 'data' in df_display.columns:
