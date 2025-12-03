@@ -8,6 +8,7 @@ from database import get_db
 # FUNÇÃO PARA ENCONTRAR O LOGO
 # =========================================================
 def get_logo_path():
+    """Procura o logo na pasta assets ou na raiz."""
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
     if os.path.exists("assets/logo.png"): return "assets/logo.png"
@@ -48,11 +49,13 @@ st.markdown(f"""
         color: {COR_TEXTO} !important;
     }}
 
+    /* --- BACKGROUND --- */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
     
+    /* --- LINHAS DIVISÓRIAS --- */
     hr {{
         margin: 2em 0 !important;
         border: 0 !important;
@@ -60,6 +63,7 @@ st.markdown(f"""
         background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
     }}
 
+    /* --- TÍTULOS --- */
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
         text-align: center !important; 
@@ -72,72 +76,14 @@ st.markdown(f"""
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
-        z-index: 999990 !important; /* Garante que fique acima do conteúdo no mobile */
+        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
-    
-    section[data-testid="stSidebar"] svg {{
+    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- CONTROLE DA SIDEBAR (BOTÃO) --- */
-    header[data-testid="stHeader"] {{
-        background-color: transparent !important;
-        visibility: visible !important;
-        z-index: 1000 !important;
-    }}
-
-    /* Estilo do botão de abrir/fechar (Desktop) */
-    [data-testid="stSidebarCollapsedControl"] button, 
-    [data-testid="collapsedControl"] button {{
-        color: {COR_DESTAQUE} !important;
-        background-color: rgba(9, 31, 26, 0.8) !important;
-        border: 1px solid rgba(255, 215, 112, 0.3) !important;
-        border-radius: 8px !important;
-        transition: all 0.3s ease !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-    }}
-
-    [data-testid="stSidebarCollapsedControl"] button svg,
-    [data-testid="collapsedControl"] button svg {{
-        fill: {COR_DESTAQUE} !important;
-        color: {COR_DESTAQUE} !important;
-    }}
-
-    [data-testid="stSidebarCollapsedControl"] button:hover,
-    [data-testid="collapsedControl"] button:hover {{
-        background-color: rgba(255, 215, 112, 0.2) !important;
-        border-color: {COR_HOVER} !important;
-        transform: scale(1.1);
-    }}
-
-    /* --- REGRAS ESPECÍFICAS PARA MOBILE (Celular/Tablet) --- */
-    @media (max-width: 768px) {{
-        /* No mobile, a sidebar ocupa 85% da tela, não tudo */
-        section[data-testid="stSidebar"] {{
-            width: 85vw !important;
-            min-width: 250px !important;
-        }}
-        
-        /* Aumenta o botão de abrir para facilitar o toque */
-        [data-testid="stSidebarCollapsedControl"] button,
-        [data-testid="collapsedControl"] button {{
-            width: 45px !important;
-            height: 45px !important;
-            margin-top: 5px !important;
-            background-color: #091f1a !important; /* Fundo sólido para ver melhor */
-            box-shadow: 0 2px 10px rgba(0,0,0,0.5) !important;
-        }}
-        
-        /* Ajusta o padding do topo para o conteúdo não ficar embaixo do botão */
-        .block-container {{
-            padding-top: 3.5rem !important;
-        }}
-    }}
-
-    /* --- COMPONENTES GERAIS --- */
+    /* --- CONTAINERS E CARDS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -148,6 +94,19 @@ st.markdown(f"""
         margin-bottom: 20px;
     }}
     
+    /* --- EXPANDER --- */
+    .streamlit-expanderHeader {{
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        color: {COR_DESTAQUE} !important;
+        border: 1px solid {COR_DESTAQUE} !important;
+        border-radius: 8px;
+    }}
+    .streamlit-expanderHeader svg {{
+        fill: {COR_TEXTO} !important; 
+        color: {COR_TEXTO} !important;
+    }}
+
+    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
@@ -164,46 +123,40 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
+    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important; 
         border-radius: 8px !important;
     }}
+    .stTextInput input, .stTextArea textarea {{ color: white !important; }}
     
-    /* Menu Superior (Option Menu) */
-    .st-emotion-cache-1v7f65g {{
-        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(255, 215, 112, 0.15) !important;
-        border-radius: 50px !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
-        margin: 20px auto !important;
-        padding: 0 !important;
-    }}
-    .st-emotion-cache-1v7f65g .st-ae .st-af {{ color: rgba(255, 255, 255, 0.7) !important; background: transparent !important; }}
-    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{ color: {COR_DESTAQUE} !important; background: rgba(255, 215, 112, 0.1) !important; }}
-    .st-emotion-cache-1v7f65g .st-ae .st-ag {{ background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important; color: {COR_FUNDO} !important; font-weight: 700 !important; }}
-    
+    /* --- INTERFACE GERAL --- */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
-    .block-container {{padding-top: 1rem !important;}}
+    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
 
 </style>
 """, unsafe_allow_html=True)
 
+# Hack para Render/Railway
 if "SECRETS_TOML" in os.environ:
     if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
     with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
 
+# Importações
 try:
     from streamlit_option_menu import option_menu
-    from views import login, geral, aluno, professor, admin, dashboard
+    from views import login, geral, aluno, professor, admin
 except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
     st.stop()
 
+# =========================================
+# TELA DE TROCA DE SENHA
+# =========================================
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
@@ -228,6 +181,9 @@ def tela_troca_senha_obrigatoria():
                         except: st.error("Erro ao salvar.")
                     else: st.error("Senhas não conferem.")
 
+# =========================================
+# APP PRINCIPAL
+# =========================================
 def app_principal():
     if not st.session_state.get('usuario'):
         st.session_state.clear(); st.rerun(); return
@@ -237,6 +193,7 @@ def app_principal():
 
     def nav(pg): st.session_state.menu_selection = pg
 
+    # SIDEBAR
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
@@ -249,9 +206,7 @@ def app_principal():
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
 
         if tipo in ["admin", "professor"]:
-            # Botão do Painel do Professor (onde está o Dashboard)
-            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
-            
+            if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
             
@@ -262,15 +217,16 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
+    # Roteamento Sidebar
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
+    # MENU HORIZONTAL
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
-        # Menu horizontal - Removido Dashboard daqui pois está dentro do Painel Prof
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
@@ -280,14 +236,51 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
+    # -------------------------------------------------------------
+    # NOVO ESTILO: MENU INTEGRADO (Sem Caixas Pretas)
+    # -------------------------------------------------------------
+    # Usa a mesma cor do fundo para parecer que os ícones flutuam na página
     menu = option_menu(
-        menu_title=None, options=ops, icons=icns, default_index=idx, orientation="horizontal",
+        menu_title=None, 
+        options=ops, 
+        icons=icns, 
+        default_index=idx, 
+        orientation="horizontal",
         styles={
-            "container": {"padding": "0!important", "background-color": "transparent", "border": "none", "margin": "0 auto", "display": "flex", "justify-content": "center", "max-width": "100%"},
-            "icon": {"color": "inherit", "font-size": "16px", "margin-right": "8px", "transition": "all 0.3s ease"},
-            "nav-link": {"font-size": "14px", "text-align": "center", "margin": "4px 2px", "padding": "12px 20px", "border-radius": "50px", "color": "rgba(255, 255, 255, 0.7)", "font-weight": "500", "background": "transparent", "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)", "border": "1px solid transparent", "display": "flex", "align-items": "center", "justify-content": "center", "flex-shrink": "0", "white-space": "nowrap", "min-width": "fit-content"},
-            "nav-link:hover": {"color": COR_DESTAQUE, "background": "rgba(255, 215, 112, 0.1)", "border": f"1px solid rgba(255, 215, 112, 0.3)", "transform": "translateY(-2px)"},
-            "nav-link-selected": {"background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%)", "color": COR_FUNDO, "font-weight": "700", "box-shadow": "0 5px 20px rgba(255, 215, 112, 0.4)", "border": "none", "position": "relative"}
+            "container": {
+                "padding": "5px 10px", 
+                # A MÁGICA: Cor exata do fundo da página (#0e2d26)
+                # Assim ele "some" e só os botões aparecem
+                "background-color": COR_FUNDO, 
+                "margin": "0px auto",
+                "border-radius": "0px", # Reto para integrar
+                "border": "none",
+                "box-shadow": "none" # Remove sombra que cria o efeito de "mancha"
+            },
+            "icon": {
+                "color": COR_DESTAQUE, 
+                "font-size": "16px",
+                "font-weight": "bold"
+            }, 
+            "nav-link": {
+                "font-size": "14px", 
+                "text-align": "center", 
+                "margin": "0px 5px", 
+                "color": "rgba(255, 255, 255, 0.7)",
+                "font-weight": "500",
+                "background-color": "transparent",
+                "border-radius": "8px",
+                "transition": "0.3s"
+            },
+            "nav-link-selected": {
+                # Botão Selecionado: Dourado com texto escuro
+                "background-color": COR_DESTAQUE, 
+                "color": "#0e2d26", 
+                "font-weight": "700",
+                # Borda sutil para destacar
+                "border": f"1px solid {COR_DESTAQUE}",
+                "box-shadow": "0px 4px 10px rgba(0,0,0,0.3)" 
+            },
         }
     )
 
