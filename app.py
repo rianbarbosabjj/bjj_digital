@@ -28,7 +28,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (DARK PREMIUM + HEADER OCULTO)
+# 2. ESTILOS VISUAIS (DARK PREMIUM + MOBILE OPTIMIZED)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -39,6 +39,7 @@ except ImportError:
     COR_BOTAO = "#078B6C"
     COR_HOVER = "#FFD770"
 
+# CORREÇÃO: Note o uso de {{ e }} para o CSS, e {variavel} para o Python
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
@@ -59,55 +60,44 @@ st.markdown(f"""
        HEADER INVISÍVEL COM BOTÃO VISÍVEL ("MODO FANTASMA")
     ============================================================ */
     
-    /* 1. Esconde o container do cabeçalho, mas mantém o espaço clicável */
     header[data-testid="stHeader"] {{
         background-color: transparent !important;
-        visibility: hidden !important; /* Esconde tudo */
-        pointer-events: none; /* Permite clicar "através" da barra vazia */
+        visibility: hidden !important;
+        pointer-events: none;
     }}
 
-    /* 2. Traz o botão da Sidebar de volta à vida */
     [data-testid="stSidebarCollapsedControl"] {{
-        visibility: visible !important; /* Força visibilidade */
+        visibility: visible !important;
         display: block !important;
-        pointer-events: auto; /* Reativa o clique */
-        
-        /* Estilo do Botão */
+        pointer-events: auto;
         color: {COR_DESTAQUE} !important;
-        background-color: rgba(14, 45, 38, 0.6) !important; /* Fundo leve */
+        background-color: rgba(14, 45, 38, 0.6) !important;
         border: 1px solid rgba(255, 215, 112, 0.2);
         border-radius: 8px;
         padding: 4px;
-        
-        /* Posição Fixa no Topo */
         position: fixed !important;
         top: 15px !important;
         left: 15px !important;
-        z-index: 1000001 !important; /* Acima de tudo */
+        z-index: 1000001 !important;
     }}
     
-    /* Ícone Dourado */
     [data-testid="stSidebarCollapsedControl"] svg {{
         fill: {COR_DESTAQUE} !important;
     }}
     
-    /* Hover no Botão */
     [data-testid="stSidebarCollapsedControl"]:hover {{
         background-color: rgba(255, 215, 112, 0.15) !important;
         transform: scale(1.05);
     }}
 
-    /* 3. Remove a linha colorida de decoração do topo */
     [data-testid="stDecoration"] {{
         display: none !important;
     }}
 
-    /* 4. Sobe o conteúdo para aproveitar o espaço */
     .block-container {{
         padding-top: 3rem !important; 
     }}
     
-    /* 5. Esconde Menu de 3 pontos e Rodapé */
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
 
@@ -140,7 +130,7 @@ st.markdown(f"""
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
     }}
-    /* Ajusta o botão de fechar (X) DENTRO da sidebar */
+    
     section[data-testid="stSidebar"] [data-testid="stSidebarCollapsedControl"] {{
         position: relative !important;
         top: 0 !important;
@@ -189,14 +179,14 @@ st.markdown(f"""
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* --- RADIO BUTTONS --- */
-    div.stRadio > div[role="radiogroup"] > label > div:first-child {
+    /* --- RADIO BUTTONS (CORREÇÃO DAS CHAVES AQUI) --- */
+    div.stRadio > div[role="radiogroup"] > label > div:first-child {{
         border-color: {COR_DESTAQUE} !important;
         background-color: transparent !important;
-    }
-    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {
+    }}
+    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
         background-color: {COR_DESTAQUE} !important;
-    }
+    }}
 
     /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
@@ -254,7 +244,6 @@ def app_principal():
 
     def nav(pg): st.session_state.menu_selection = pg
 
-    # SIDEBAR
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
@@ -265,7 +254,7 @@ def app_principal():
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         if tipo in ["admin", "professor"]:
-            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+            if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
             
@@ -276,14 +265,12 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Roteamento Sidebar
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # MENU HORIZONTAL (Sólido e Integrado)
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
