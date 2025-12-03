@@ -182,7 +182,7 @@ def gerar_qrcode(codigo):
         os.makedirs("temp", exist_ok=True)
         caminho_qr = f"temp/qr_{codigo}.png"
         # URL fictícia de validação
-        url_validacao = f"https://bjjdigital.streamlit.app/?validar={codigo}"
+        url_validacao = f"https://bjjdigital.com.br/?validar={codigo}"
         
         qr = qrcode.QRCode(version=1, box_size=10, border=1)
         qr.add_data(url_validacao)
