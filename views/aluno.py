@@ -169,22 +169,46 @@ def exame_de_faixa(usuario):
     qtd = len(qs)
 
     if not st.session_state.exame_iniciado:
-        st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
+        st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
+        
         with st.container(border=True):
-            st.markdown("#### 📜 Instruções")
-            st.markdown("- **Tentativa Única.**\n- **Não recarregue (F5).**\n- **Reprovação:** aguardar 72h.")
+            st.markdown("#### 📜 Instruções para a realização do Exame")
+            st.markdown("""
+- Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
+- Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
+- **Não é permitido** consultar materiais externos de qualquer tipo.
+- Em caso de **reprovação**, você poderá realizar o exame novamente somente após **3 dias**.
+- Realize o exame em um local confortável e silencioso para garantir sua concentração.
+- Não atualize a página, não feche o navegador e não troque de dispositivo durante a prova. Isso pode **encerrar** o exame automaticamente.
+- Utilize um dispositivo com bateria suficiente ou mantido na energia.
+- O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
+- Leia cada questão com atenção antes de responder.
+- Se aprovado, você poderá baixar seu certificado em *Meus Certificados*.
+
+**Boa prova!** 🥋
+            """)
+            
             st.markdown("---")
+
+            # --- ALINHAMENTO SIMÉTRICO AQUI ---
             c1, c2, c3 = st.columns(3)
+            
+            # Esquerda
             c1.markdown(f"📝 **{qtd} Questões**")
-            c2.markdown(f"<div style='text-align:center'>⏱️ <b>{tempo_limite} min</b></div>", unsafe_allow_html=True)
-            c3.markdown(f"<div style='text-align:right'>✅ Min: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
+            
+            # Centro
+            c2.markdown(f"<div style='text-align: center'>⏱️ <b>{tempo_limite} min</b></div>", unsafe_allow_html=True)
+            
+            # Direita
+            c3.markdown(f"<div style='text-align: right'>✅ Mínimo: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
         
         if qtd > 0:
-            if st.button("✅ INICIAR EXAME", type="primary", use_container_width=True):
+            if st.button("✅ (Estou Ciente) INICIAR EXAME", type="primary", use_container_width=True):
                 registrar_inicio_exame(usuario['id'])
                 st.session_state.exame_iniciado = True
+                st.session_state.inicio_prova = datetime.utcnow()
                 st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
-                st.session_state.questoes_prova = qs
+                st.session_state.questoes_prova = lista_questoes
                 st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
                 st.rerun()
         else: st.warning("Sem questões disponíveis.")
