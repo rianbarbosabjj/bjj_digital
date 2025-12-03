@@ -1,352 +1,261 @@
 import streamlit as st
+import time
+import random
 import os
-import sys
-import bcrypt 
+import json
+import pandas as pd
+from datetime import datetime, timedelta
+import streamlit.components.v1 as components 
 from database import get_db
+from firebase_admin import firestore
 
-# =========================================================
-# FUNÇÃO PARA ENCONTRAR O LOGO
-# =========================================================
-def get_logo_path():
-    """Procura o logo na pasta assets ou na raiz."""
-    if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
-    if os.path.exists("logo.jpg"): return "logo.jpg"
-    if os.path.exists("assets/logo.png"): return "assets/logo.png"
-    if os.path.exists("logo.png"): return "logo.png"
-    return None
-
-logo_file = get_logo_path()
-
-# =========================================================
-# 1. CONFIGURAÇÃO
-# =========================================================
-st.set_page_config(
-    page_title="BJJ Digital", 
-    page_icon=logo_file, 
-    layout="wide",
-    initial_sidebar_state="expanded" 
-)
-
-# =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" + HEADER REMOVIDO)
-# =========================================================
+# Importações do Utils com Fallback de Segurança
 try:
-    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
-except ImportError:
-    COR_FUNDO = "#0e2d26"
-    COR_TEXTO = "#FFFFFF"
-    COR_DESTAQUE = "#FFD770"
-    COR_BOTAO = "#078B6C"
-    COR_HOVER = "#FFD770"
-
-st.markdown(f"""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
-
-    /* --- GLOBAL --- */
-    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
-        font-family: 'Poppins', sans-serif;
-        color: {COR_TEXTO} !important;
-    }}
-
-    /* --- BACKGROUND --- */
-    .stApp {{
-        background-color: {COR_FUNDO} !important;
-        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
-    }}
-
-    /* ============================================================
-       HEADER INVISÍVEL (CORREÇÃO DEFINITIVA)
-    ============================================================ */
-    
-    /* 1. Esconde totalmente o container do cabeçalho */
-    header[data-testid="stHeader"] {{
-        visibility: hidden !important;
-        background: transparent !important;
-    }}
-    
-    /* 2. Traz de volta APENAS o botão de abrir a sidebar */
-    [data-testid="stSidebarCollapsedControl"] {{
-        visibility: visible !important;
-        display: block !important;
-        color: {COR_DESTAQUE} !important;
-        background-color: rgba(14, 45, 38, 0.8) !important; /* Fundo escuro p/ contraste */
-        border: 1px solid rgba(255, 215, 112, 0.2);
-        border-radius: 8px;
-        padding: 4px;
-        
-        /* Posicionamento Fixo para garantir que fique no topo */
-        position: fixed !important;
-        top: 15px !important;
-        left: 15px !important;
-        z-index: 1000001 !important;
-    }}
-
-    /* 3. Garante cor do ícone */
-    [data-testid="stSidebarCollapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
-        stroke: {COR_DESTAQUE} !important;
-    }}
-
-    /* 4. Efeito Hover no botão */
-    [data-testid="stSidebarCollapsedControl"]:hover {{
-        background-color: rgba(255, 215, 112, 0.15) !important;
-        transform: scale(1.05);
-        transition: 0.3s;
-    }}
-
-    /* 5. Remove a linha colorida de decoração */
-    [data-testid="stDecoration"] {{
-        display: none !important;
-    }}
-
-    /* 6. Sobe o conteúdo para o topo da tela */
-    .block-container {{
-        padding-top: 3rem !important; /* Espaço apenas para o botão não cobrir o título */
-    }}
-    
-    /* 7. Esconde Menu de 3 pontos e Rodapé */
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-
-    /* ============================================================ */
-    
-    /* --- LINHAS DIVISÓRIAS --- */
-    hr {{
-        margin: 2em 0 !important;
-        border: 0 !important;
-        height: 1px !important;
-        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
-    }}
-
-    /* --- TÍTULOS --- */
-    h1, h2, h3, h4, h5, h6 {{ 
-        color: {COR_DESTAQUE} !important; 
-        text-align: center !important; 
-        font-weight: 700 !important; 
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }}
-
-    /* --- SIDEBAR --- */
-    section[data-testid="stSidebar"] {{
-        background-color: #091f1a !important; 
-        border-right: 1px solid rgba(255, 215, 112, 0.15);
-        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
-    }}
-    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
-        color: {COR_DESTAQUE} !important;
-    }}
-
-    /* --- CONTAINERS E CARDS --- */
-    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
-    div[data-testid="stForm"] {{
-        background-color: rgba(0, 0, 0, 0.3) !important; 
-        border: 1px solid rgba(255, 215, 112, 0.2) !important; 
-        border-radius: 12px; 
-        padding: 20px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
-        margin-bottom: 20px;
-    }}
-    
-    /* --- EXPANDER --- */
-    .streamlit-expanderHeader {{
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        color: {COR_DESTAQUE} !important;
-        border: 1px solid {COR_DESTAQUE} !important;
-        border-radius: 8px;
-    }}
-    .streamlit-expanderHeader svg {{
-        fill: {COR_TEXTO} !important; 
-        color: {COR_TEXTO} !important;
-    }}
-
-    /* --- BOTÕES --- */
-    div.stButton > button, div.stFormSubmitButton > button {{ 
-        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
-        color: white !important; 
-        border: 1px solid rgba(255,255,255,0.1) !important; 
-        padding: 0.6em 1.5em !important; 
-        font-weight: 600 !important;
-        border-radius: 8px !important; 
-        transition: all 0.3s ease !important;
-    }}
-    div.stButton > button:hover {{ 
-        background: {COR_HOVER} !important; 
-        color: #0e2d26 !important; 
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
-    }}
-
-    /* --- RADIO BUTTONS (Marcador Dourado) --- */
-    div.stRadio > div[role="radiogroup"] > label > div:first-child {
-        border-color: #FFD770 !important;
-        background-color: transparent !important;
-    }
-    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {
-        background-color: #FFD770 !important;
-    }
-
-    /* --- INPUTS --- */
-    input, textarea, select, div[data-baseweb="select"] > div {{
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important; 
-        border-radius: 8px !important;
-    }}
-    .stTextInput input, .stTextArea textarea {{ color: white !important; }}
-
-</style>
-""", unsafe_allow_html=True)
-
-if "SECRETS_TOML" in os.environ:
-    if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
-    with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
-
-try:
-    from streamlit_option_menu import option_menu
-    from views import login, geral, aluno, professor, admin
-except ImportError as e:
-    st.error(f"❌ Erro crítico nas importações: {e}")
-    st.stop()
-
-def tela_troca_senha_obrigatoria():
-    c1, c2, c3 = st.columns([1, 2, 1])
-    with c2:
-        if logo_file:
-            cl, cc, cr = st.columns([1, 1, 1])
-            with cc: st.image(logo_file, use_container_width=True)
-        st.write("") 
-        with st.container(border=True):
-            st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
-            st.warning("Por segurança, redefina sua senha.")
-            with st.form("frm_troca"):
-                ns = st.text_input("Nova Senha:", type="password")
-                cs = st.text_input("Confirmar:", type="password")
-                if st.form_submit_button("Atualizar", use_container_width=True):
-                    if ns and ns == cs:
-                        try:
-                            uid = st.session_state.usuario['id']
-                            hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
-                            db = get_db()
-                            db.collection('usuarios').document(uid).update({"senha": hashed, "precisa_trocar_senha": False})
-                            st.success("Sucesso! Entrando..."); st.session_state.usuario['precisa_trocar_senha'] = False; st.rerun()
-                        except: st.error("Erro ao salvar.")
-                    else: st.error("Senhas não conferem.")
-
-def app_principal():
-    if not st.session_state.get('usuario'):
-        st.session_state.clear(); st.rerun(); return
-
-    usuario = st.session_state.usuario
-    tipo = str(usuario.get("tipo", "aluno")).lower()
-
-    def nav(pg): st.session_state.menu_selection = pg
-
-    with st.sidebar:
-        if logo_file: st.image(logo_file, use_container_width=True)
-        st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
-        st.markdown("---")
-        
-        if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
-        if tipo != "admin":
-            if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
-        if tipo in ["admin", "professor"]:
-            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
-        if tipo == "admin":
-            if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
-            
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚪 Sair", use_container_width=True):
-            st.session_state.clear(); st.rerun()
-
-    if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
-    pg = st.session_state.menu_selection
-
-    if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
-    if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
-    if pg == "Painel do Professor": professor.painel_professor(); return
-    if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
-    if pg == "Início": geral.tela_inicio(); return
-
-    ops, icns = [], []
-    if tipo in ["admin", "professor"]:
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-        icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
-    else:
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
-        icns = ["house", "people", "journal", "trophy"]
-
-    try: idx = ops.index(pg)
-    except: idx = 0
-    
-    menu = option_menu(
-        menu_title=None, 
-        options=ops, 
-        icons=icns, 
-        default_index=idx, 
-        orientation="horizontal",
-        styles={
-            "container": {
-                "padding": "5px 10px", 
-                "background-color": COR_FUNDO, 
-                "margin": "0px auto",
-                "border-radius": "12px", 
-                "border": "1px solid rgba(255, 215, 112, 0.15)", 
-                "box-shadow": "0 4px 15px rgba(0,0,0,0.3)",
-                "width": "100%",      
-                "max-width": "100%",  
-                "display": "flex",    
-                "justify-content": "space-between" 
-            },
-            "icon": {
-                "color": COR_DESTAQUE, 
-                "font-size": "16px",
-                "font-weight": "bold"
-            }, 
-            "nav-link": {
-                "font-size": "14px", 
-                "text-align": "center", 
-                "margin": "0px 2px",  
-                "color": "rgba(255, 255, 255, 0.8)",
-                "font-weight": "400",
-                "border-radius": "8px",
-                "transition": "0.3s",
-                "width": "100%",      
-                "flex-grow": "1",     
-                "display": "flex",
-                "justify-content": "center",
-                "align-items": "center"
-            },
-            "nav-link-selected": {
-                "background-color": COR_DESTAQUE, 
-                "color": "#0e2d26", 
-                "font-weight": "700",
-                "box-shadow": "0px 2px 8px rgba(0,0,0,0.2)",
-            },
-        }
+    from utils import (
+        registrar_inicio_exame, 
+        registrar_fim_exame, 
+        bloquear_por_abandono,
+        verificar_elegibilidade_exame,
+        carregar_todas_questoes,
+        gerar_codigo_verificacao,
+        gerar_pdf,
+        normalizar_link_video 
     )
+except ImportError:
+    def normalizar_link_video(u): return u
+    def registrar_inicio_exame(u): pass
+    def registrar_fim_exame(u, a): pass
+    def bloquear_por_abandono(u): pass
+    def verificar_elegibilidade_exame(u): return True, "OK"
+    def carregar_todas_questoes(): return []
+    def gerar_codigo_verificacao(): return ""
+    def gerar_pdf(a,b,c,d,e): return None, None
 
-    if menu != pg:
-        if pg == "Meus Certificados" and menu == "Início": pass 
+# =========================================
+# CARREGADOR DE EXAME
+# =========================================
+def carregar_exame_especifico(faixa_alvo):
+    db = get_db()
+    questoes_finais = []
+    tempo = 45; nota = 70; qtd_alvo = 10
+    
+    configs = db.collection('config_exames').where('faixa', '==', faixa_alvo).limit(1).stream()
+    config_doc = None
+    for doc in configs: config_doc = doc.to_dict(); break
+    
+    if config_doc:
+        tempo = int(config_doc.get('tempo_limite', 45))
+        nota = int(config_doc.get('aprovacao_minima', 70))
+        
+        if 'questoes_ids' in config_doc and config_doc['questoes_ids']:
+            ids = config_doc['questoes_ids']
+            for q_id in ids:
+                q_snap = db.collection('questoes').document(q_id).get()
+                if q_snap.exists:
+                    d = q_snap.to_dict()
+                    if 'alternativas' not in d and 'opcoes' in d:
+                        ops = d['opcoes']
+                        d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                    questoes_finais.append(d)
+            random.shuffle(questoes_finais)
+            return questoes_finais, tempo, nota
+        qtd_alvo = int(config_doc.get('qtd_questoes', 10))
+
+    if not questoes_finais:
+        q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
+        pool = []
+        for doc in q_ref:
+            d = doc.to_dict()
+            if 'alternativas' not in d and 'opcoes' in d:
+                ops = d['opcoes']; d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+            pool.append(d)
+        if pool:
+            if len(pool) > qtd_alvo: questoes_finais = random.sample(pool, qtd_alvo)
+            else: questoes_finais = pool
+
+    return questoes_finais, tempo, nota
+
+# =========================================
+# MÓDULOS SECUNDÁRIOS
+# =========================================
+def modo_rola(usuario):
+    st.markdown(f"## 🥋 Modo Rola (Treino Livre)")
+    st.info("Em breve.")
+
+def meus_certificados(usuario):
+    if st.button("🏠 Voltar ao Início", key="btn_back_cert"):
+        st.session_state.menu_selection = "Início"; st.rerun()
+    st.markdown(f"## 🏅 Meus Certificados")
+    db = get_db()
+    docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
+    lista = [d.to_dict() for d in docs]
+    if not lista: st.info("Nenhum certificado disponível."); return
+    for i, cert in enumerate(lista):
+        with st.container(border=True):
+            c1, c2 = st.columns([3, 1])
+            c1.markdown(f"**Faixa {cert.get('faixa')}**")
+            d_str = cert.get('data').strftime('%d/%m/%Y') if cert.get('data') else "-"
+            c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao')}%")
+            try:
+                pdf_bytes, pdf_name = gerar_pdf(usuario['nome'], cert.get('faixa'), cert.get('pontuacao',0), cert.get('total',10), cert.get('codigo_verificacao'))
+                if pdf_bytes: c2.download_button("📄 PDF", pdf_bytes, pdf_name, "application/pdf", key=f"d_{i}")
+            except: pass
+
+def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
+
+# =========================================
+# EXAME DE FAIXA (PRINCIPAL)
+# =========================================
+def exame_de_faixa(usuario):
+    st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
+    
+    if "exame_iniciado" not in st.session_state: st.session_state.exame_iniciado = False
+    if "resultado_prova" not in st.session_state: st.session_state.resultado_prova = None
+
+    db = get_db()
+    doc_ref = db.collection('usuarios').document(usuario['id'])
+    doc = doc_ref.get()
+    if not doc.exists: st.error("Erro perfil."); return
+    dados = doc.to_dict()
+    
+    if st.session_state.resultado_prova:
+        res = st.session_state.resultado_prova
+        st.balloons(); st.success(f"Aprovado! Nota: {res['nota']:.1f}%")
+        
+        # Botão de Download Corrigido
+        p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
+        if p_b: st.download_button("📥 Baixar Certificado", p_b, p_n, "application/pdf")
+        
+        if st.button("Voltar"): st.session_state.resultado_prova = None; st.rerun()
+        return
+
+    if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
+        is_timeout = False
+        try:
+            start_str = dados.get("inicio_exame_temp")
+            if start_str:
+                start_dt = datetime.fromisoformat(start_str.replace('Z', '')) if isinstance(start_str, str) else start_str
+                _, t_lim, _ = carregar_exame_especifico(dados.get('faixa_exame'))
+                limit_dt = start_dt + timedelta(minutes=t_lim)
+                if datetime.utcnow() > limit_dt.replace(tzinfo=None): is_timeout = True
+        except: pass
+
+        if is_timeout:
+            registrar_fim_exame(usuario['id'], False)
+            st.error("⌛ TEMPO ESGOTADO!"); st.warning("Reprovado por tempo."); return
         else:
-            st.session_state.menu_selection = menu
-            st.rerun()
+            bloquear_por_abandono(usuario['id'])
+            st.error("🚨 BLOQUEADO!"); st.warning("Página recarregada ou fechada."); return
 
-    if pg == "Modo Rola": aluno.modo_rola(usuario)
-    elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
-    elif pg == "Ranking": aluno.ranking()
-    elif pg == "Gestão de Equipes": professor.gestao_equipes()
-    elif pg == "Gestão de Questões": admin.gestao_questoes()
-    elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
+    if not dados.get('exame_habilitado') or not dados.get('faixa_exame'):
+        st.warning("🔒 Exame não autorizado."); return
 
-if __name__ == "__main__":
-    if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
-        login.tela_login()
-    elif st.session_state.get('registration_pending'):
-        login.tela_completar_cadastro(st.session_state.registration_pending)
-    elif st.session_state.get('usuario'):
-        if st.session_state.usuario.get("precisa_trocar_senha"): tela_troca_senha_obrigatoria()
-        else: app_principal()
+    elegivel, motivo = verificar_elegibilidade_exame(dados)
+    if not elegivel:
+        st.error(f"🚫 {motivo}") if "bloqueado" in motivo.lower() or "reprovado" in motivo.lower() else st.success(motivo)
+        return
+
+    try:
+        dt_ini = dados.get('exame_inicio')
+        if isinstance(dt_ini, str): dt_ini = datetime.fromisoformat(dt_ini.replace('Z',''))
+        if dt_ini: dt_ini = dt_ini.replace(tzinfo=None)
+        if dt_ini and datetime.utcnow() < dt_ini: st.warning(f"⏳ Início em: {dt_ini}"); return
+    except: pass
+
+    qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
+    qtd = len(qs)
+
+    # TELA DE INSTRUÇÕES (Corrigida)
+    if not st.session_state.exame_iniciado:
+        st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
+        
+        with st.container(border=True):
+            st.markdown("#### 📜 Instruções para a realização do Exame")
+            st.markdown("""
+- Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
+- Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
+- **Não é permitido** consultar materiais externos de qualquer tipo.
+- Em caso de **reprovação**, você poderá realizar o exame novamente somente após **3 dias**.
+- Realize o exame em um local confortável e silencioso para garantir sua concentração.
+- Não atualize a página, não feche o navegador e não troque de dispositivo durante a prova. Isso pode **encerrar** o exame automaticamente.
+- Utilize um dispositivo com bateria suficiente ou mantido na energia.
+- O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
+- Leia cada questão com atenção antes de responder.
+- Se aprovado, você poderá baixar seu certificado em *Meus Certificados*.
+
+**Boa prova!** 🥋
+            """)
+            
+            st.markdown("---")
+            c1, c2, c3 = st.columns(3)
+            c1.markdown(f"📝 **{qtd} Questões**")
+            c2.markdown(f"<div style='text-align: center'>⏱️ <b>{tempo_limite} min</b></div>", unsafe_allow_html=True)
+            c3.markdown(f"<div style='text-align: right'>✅ Mínimo: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
+        
+        if qtd > 0:
+            if st.button("✅ (Estou Ciente) INICIAR EXAME", type="primary", use_container_width=True):
+                registrar_inicio_exame(usuario['id'])
+                st.session_state.exame_iniciado = True
+                st.session_state.inicio_prova = datetime.utcnow()
+                st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
+                st.session_state.questoes_prova = qs
+                st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
+                st.rerun()
+        else: st.warning("Sem questões disponíveis.")
+
+    # PROVA EM ANDAMENTO
+    else:
+        qs = st.session_state.get('questoes_prova', [])
+        restante = int(st.session_state.fim_prova_ts - time.time())
+        if restante <= 0:
+            st.error("⌛ Tempo esgotado!"); registrar_fim_exame(usuario['id'], False)
+            st.session_state.exame_iniciado = False; time.sleep(2); st.rerun()
+
+        cor = "#FFD770" if restante > 300 else "#FF4B4B"
+        
+        # CORREÇÃO DO JS DO TIMER
+        components.html(f"""<div style="border:2px solid {cor};border-radius:10px;padding:10px;text-align:center;background:rgba(0,0,0,0.3);"><span style="color:white;font-family:sans-serif;">TEMPO RESTANTE</span><br><span id="t" style="color:{cor};font-family:monospace;font-size:30px;font-weight:bold;">--:--</span></div><script>var t={restante};setInterval(function(){{var m=Math.floor(t/60),s=t%60;document.getElementById('t').innerHTML=m+":"+(s<10?"0"+s:s);if(t--<=0)window.parent.location.reload();}},1000);</script>""", height=100)
+
+        with st.form("prova"):
+            resps = {}
+            for i, q in enumerate(qs):
+                st.markdown(f"**{i+1}. {q.get('pergunta')}**")
+                
+                if q.get('url_imagem'):
+                    st.image(q.get('url_imagem'), caption="Imagem de Apoio", use_container_width=True)
+                
+                if q.get('url_video'):
+                    link_v = normalizar_link_video(q.get('url_video'))
+                    try: st.video(link_v)
+                    except: st.markdown(f"🔗 [Ver Vídeo]({link_v})")
+
+                opts = []
+                if 'alternativas' in q: opts = [q['alternativas'].get(k) for k in ["A","B","C","D"]]
+                elif 'opcoes' in q: opts = q['opcoes']
+                
+                # Radio sem pré-seleção
+                resps[i] = st.radio("R:", opts, key=f"q{i}", index=None, label_visibility="collapsed")
+                st.markdown("---")
+                
+            if st.form_submit_button("Finalizar"):
+                acertos = 0
+                for i, q in enumerate(qs):
+                    resp_aluno = str(resps.get(i) or "").strip().lower()
+                    certa_letra = q.get('resposta_correta', 'A')
+                    certa_texto = q.get('alternativas', {}).get(certa_letra, "").strip().lower()
+                    if resp_aluno == certa_texto: acertos += 1
+
+                nota = (acertos/len(qs))*100
+                aprovado = nota >= st.session_state.params_prova['min']
+                registrar_fim_exame(usuario['id'], aprovado)
+                st.session_state.exame_iniciado = False
+                
+                cod = None
+                if aprovado:
+                    cod = gerar_codigo_verificacao()
+                    st.session_state.resultado_prova = {"nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), "acertos": acertos, "total": len(qs), "codigo": cod}
+                
+                try: db.collection('resultados').add({"usuario": usuario['nome'], "faixa": dados.get('faixa_exame'), "pontuacao": nota, "acertos": acertos, "total": len(qs), "aprovado": aprovado, "codigo_verificacao": cod, "data": firestore.SERVER_TIMESTAMP})
+                except: pass
+                if not aprovado: st.error(f"Reprovado. {nota:.0f}%"); time.sleep(3)
+                st.rerun()
