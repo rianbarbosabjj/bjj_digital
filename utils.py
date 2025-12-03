@@ -18,38 +18,44 @@ from database import get_db
 from firebase_admin import firestore, storage 
 
 # =========================================
-# FUNÇÃO DE UPLOAD (CORRIGIDA PARA URL ASSINADA)
+# FUNÇÃO DE UPLOAD ROBUSTA (TIPO FIREBASE)
 # =========================================
 def fazer_upload_imagem(arquivo):
     """
-    Envia imagem para o Firebase Storage e retorna uma URL Assinada.
-    Isso evita erros de permissão em buckets com 'Acesso Uniforme'.
+    Envia imagem para o Storage e gera um link estilo Firebase (público e permanente).
     """
     if not arquivo: return None
     
     try:
         bucket = storage.bucket() 
         
-        # Cria um nome único
+        # Gera nomes únicos
         ext = arquivo.name.split('.')[-1]
-        nome_final = f"questoes/{uuid.uuid4()}.{ext}"
+        blob_name = f"questoes/{uuid.uuid4()}.{ext}"
+        blob = bucket.blob(blob_name)
         
-        blob = bucket.blob(nome_final)
+        # Gera um token de acesso manual (igual o Firebase faz no frontend)
+        access_token = str(uuid.uuid4())
+        metadata = {"firebaseStorageDownloadTokens": access_token}
+        blob.metadata = metadata
+        
+        # Faz o upload
         blob.upload_from_file(arquivo, content_type=arquivo.type)
         
-        # GERA URL ASSINADA (Válida por 10 anos - 3650 dias)
-        # Isso funciona mesmo se o bucket for Privado.
-        url_assinada = blob.generate_signed_url(
-            version="v4",
-            expiration=timedelta(days=3650),
-            method="GET"
-        )
+        # Reconecta para aplicar o metadata (garantia)
+        blob.patch()
+
+        # Monta a URL manual do Firebase (Essa funciona sempre!)
+        # Formato: https://firebasestorage.googleapis.com/v0/b/[BUCKET]/o/[NOME_COM_SLASH_ENCODED]?alt=media&token=[TOKEN]
+        bucket_name = blob.bucket.name
+        blob_path_encoded = blob_name.replace("/", "%2F") # Encode na barra é obrigatório
         
-        return url_assinada
+        final_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket_name}/o/{blob_path_encoded}?alt=media&token={access_token}"
+        
+        return final_url
         
     except Exception as e:
         print(f"Erro no upload: {e}")
-        # Retorna None para não quebrar, mas avisa no console
         return None
 
 # =========================================
