@@ -30,13 +30,10 @@ def get_db():
 
             cred = credentials.Certificate(key_dict)
             
-            # --- CORREÇÃO DO STORAGE ---
-            # Tenta pegar o nome do bucket do secrets ou monta o padrão
+            # Tenta pegar o bucket dos secrets ou usa o padrão
             project_id = key_dict.get("project_id")
-            # O nome padrão geralmente é 'project-id.appspot.com'
             bucket_name = st.secrets.get("storage_bucket", f"{project_id}.appspot.com")
 
-            # Inicializa com o parâmetro 'storageBucket'
             firebase_admin.initialize_app(cred, {
                 'storageBucket': bucket_name
             })
