@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 from database import get_db
 from firebase_admin import firestore
 
-# Importa a função de normalizar vídeo
+# Importações do Utils
 try:
     from utils import (
         registrar_inicio_exame, 
@@ -22,6 +22,7 @@ try:
         normalizar_link_video 
     )
 except ImportError:
+    # Fallback de segurança caso utils falhe
     def normalizar_link_video(u): return u
     def registrar_inicio_exame(u): pass
     def registrar_fim_exame(u, a): pass
@@ -46,20 +47,26 @@ def carregar_exame_especifico(faixa_alvo):
     if config_doc:
         tempo = int(config_doc.get('tempo_limite', 45))
         nota = int(config_doc.get('aprovacao_minima', 70))
+        
+        # MODO MANUAL (Prioridade)
         if 'questoes_ids' in config_doc and config_doc['questoes_ids']:
             ids = config_doc['questoes_ids']
             for q_id in ids:
                 q_snap = db.collection('questoes').document(q_id).get()
                 if q_snap.exists:
                     d = q_snap.to_dict()
+                    # Compatibilidade de alternativas
                     if 'alternativas' not in d and 'opcoes' in d:
                         ops = d['opcoes']
                         d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
                     questoes_finais.append(d)
             random.shuffle(questoes_finais)
             return questoes_finais, tempo, nota
+        
+        # MODO ANTIGO (Sorteio numérico)
         qtd_alvo = int(config_doc.get('qtd_questoes', 10))
 
+    # FALLBACK (Busca genérica se não houver config)
     if not questoes_finais:
         q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         pool = []
@@ -107,6 +114,7 @@ def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 # =========================================
 def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
+    
     if "exame_iniciado" not in st.session_state: st.session_state.exame_iniciado = False
     if "resultado_prova" not in st.session_state: st.session_state.resultado_prova = None
 
@@ -116,14 +124,16 @@ def exame_de_faixa(usuario):
     if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
+    # --- TELA DE RESULTADO ---
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons(); st.success(f"Aprovado! Nota: {res['nota']:.1f}%")
         p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['acertos'], res['total'], res['codigo'])
-        if p_b: st.download_button("📥 Baixar Certificado", p_b, p_n, "application/pdf")
+        if p_b: st.download_button("📥 Baixar Certificado", p_b, p_n, "application/pdf", use_container_width=True)
         if st.button("Voltar"): st.session_state.resultado_prova = None; st.rerun()
         return
 
+    # --- VERIFICAÇÃO DE ABANDONO ---
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
         is_timeout = False
         try:
@@ -142,6 +152,7 @@ def exame_de_faixa(usuario):
             bloquear_por_abandono(usuario['id'])
             st.error("🚨 BLOQUEADO!"); st.warning("Página recarregada ou fechada."); return
 
+    # --- PERMISSÕES ---
     if not dados.get('exame_habilitado') or not dados.get('faixa_exame'):
         st.warning("🔒 Exame não autorizado."); return
 
@@ -160,32 +171,32 @@ def exame_de_faixa(usuario):
     qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
     qtd = len(qs)
 
+    # --- TELA DE INSTRUÇÕES (TEXTO COMPLETO) ---
     if not st.session_state.exame_iniciado:
         st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
         
         with st.container(border=True):
             st.markdown("#### 📜 Instruções para a realização do Exame")
             st.markdown("""
-- Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
-- Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
-- **Não é permitido** consultar materiais externos de qualquer tipo.
-- Em caso de **reprovação**, você poderá realizar o exame novamente somente após **3 dias**.
-- Realize o exame em um local confortável e silencioso para garantir sua concentração.
-- Não atualize a página, não feche o navegador e não troque de dispositivo durante a prova. Isso pode **encerrar** o exame automaticamente.
-- Utilize um dispositivo com bateria suficiente ou mantido na energia.
-- O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
-- Leia cada questão com atenção antes de responder.
-- Se aprovado, você poderá baixar seu certificado em *Meus Certificados*.
+* Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
+* Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
+* **Não é permitido** consultar materiais externos de qualquer tipo.
+* Em caso de **reprovação**, você poderá realizar o exame novamente somente após **3 dias (72h)**.
+* Realize o exame em um local confortável e silencioso para garantir sua concentração.
+* **Não atualize a página (F5)**, não feche o navegador e não troque de dispositivo durante a prova. Isso **bloqueia** o exame automaticamente.
+* Utilize um dispositivo com bateria suficiente ou mantido na energia.
+* O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
+* Leia cada questão com atenção antes de responder.
+* Se aprovado, você poderá baixar seu certificado na aba *Meus Certificados*.
 
 **Boa prova!** 🥋
             """)
             
             st.markdown("---")
-
             c1, c2, c3 = st.columns(3)
             c1.markdown(f"📝 **{qtd} Questões**")
-            c2.markdown(f"<div style='text-align: center'>⏱️ <b>{tempo_limite} min</b></div>", unsafe_allow_html=True)
-            c3.markdown(f"<div style='text-align: right'>✅ Mínimo: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
+            c2.markdown(f"<div style='text-align:center'>⏱️ <b>{tempo_limite} min</b></div>", unsafe_allow_html=True)
+            c3.markdown(f"<div style='text-align:right'>✅ Min: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
         
         if qtd > 0:
             if st.button("✅ (Estou Ciente) INICIAR EXAME", type="primary", use_container_width=True):
@@ -196,8 +207,9 @@ def exame_de_faixa(usuario):
                 st.session_state.questoes_prova = qs
                 st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
                 st.rerun()
-        else: st.warning(f"⚠️ Sem questões encontradas para **{dados.get('faixa_exame')}**.")
+        else: st.warning("Sem questões disponíveis.")
 
+    # --- PROVA EM ANDAMENTO ---
     else:
         qs = st.session_state.get('questoes_prova', [])
         restante = int(st.session_state.fim_prova_ts - time.time())
@@ -213,13 +225,14 @@ def exame_de_faixa(usuario):
             for i, q in enumerate(qs):
                 st.markdown(f"**{i+1}. {q.get('pergunta')}**")
                 
+                # Exibição de Mídia
                 if q.get('url_imagem'):
                     st.image(q.get('url_imagem'), caption="Imagem de Apoio", use_container_width=True)
                 
                 if q.get('url_video'):
-                    link_vid = normalizar_link_video(q.get('url_video'))
-                    try: st.video(link_vid)
-                    except: st.markdown(f"🔗 [Abrir Vídeo]({q.get('url_video')})")
+                    link_v = normalizar_link_video(q.get('url_video'))
+                    try: st.video(link_v)
+                    except: st.markdown(f"🔗 [Ver Vídeo]({link_v})")
 
                 opts = []
                 if 'alternativas' in q and isinstance(q['alternativas'], dict):
