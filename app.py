@@ -50,7 +50,6 @@ st.markdown(f"""
     }}
 
     /* --- BACKGROUND --- */
-    /* O gradiente começa com #164036 no topo (50% 0%) */
     .stApp {{
         background-color: {COR_FUNDO} !important;
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
@@ -238,9 +237,8 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU SÓLIDO (COR DO TOPO DO GRADIENTE)
+    # MENU SÓLIDO (COR DO FUNDO)
     # -------------------------------------------------------------
-    # Usamos #164036 para se fundir com o brilho superior do gradiente
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -250,11 +248,13 @@ def app_principal():
         styles={
             "container": {
                 "padding": "5px 10px", 
-                "background-color": "#164036", # <--- COR DA LUZ DO TOPO
+                # Fundo Sólido (Cor da Página)
+                "background-color": COR_FUNDO, 
                 "margin": "0px auto",
-                "border-radius": "50px", # Borda bem arredondada (Pílula gigante)
-                "border": "none",
-                "box-shadow": "0 4px 20px rgba(0,0,0,0.3)" # Sombra suave para destacar
+                "border-radius": "12px", 
+                # Borda sutil e sombra para definição
+                "border": "1px solid rgba(255, 215, 112, 0.15)", 
+                "box-shadow": "0 4px 15px rgba(0,0,0,0.3)"
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -266,16 +266,15 @@ def app_principal():
                 "text-align": "center", 
                 "margin": "0px 5px", 
                 "color": "rgba(255, 255, 255, 0.8)",
-                "font-weight": "500",
-                "background-color": "transparent",
-                "border-radius": "30px",
+                "font-weight": "400",
+                "border-radius": "8px",
                 "transition": "0.3s"
             },
             "nav-link-selected": {
                 "background-color": COR_DESTAQUE, 
                 "color": "#0e2d26", 
                 "font-weight": "700",
-                "box-shadow": "0px 4px 10px rgba(0,0,0,0.3)" 
+                "box-shadow": "0px 2px 8px rgba(0,0,0,0.2)",
             },
         }
     )
