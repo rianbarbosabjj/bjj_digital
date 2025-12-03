@@ -6,14 +6,14 @@ import json
 def get_db():
     """
     Conexão ESTRITA com o banco 'bjj-digital'.
-    Inicializa também o Storage para upload de imagens.
+    Inicializa também o Storage com o bucket correto.
     """
     # 1. Inicializa o App (se ainda não estiver rodando)
     if not firebase_admin._apps:
         try:
             key_dict = None
             
-            # Procura as credenciais em vários formatos comuns
+            # Procura as credenciais
             if "firebase" in st.secrets:
                 key_dict = dict(st.secrets["firebase"])
             elif "textkey" in st.secrets:
@@ -30,23 +30,27 @@ def get_db():
 
             cred = credentials.Certificate(key_dict)
             
-            # --- LÓGICA DE BUSCA DO BUCKET (CORRIGIDA) ---
-            project_id = key_dict.get("project_id")
-            bucket_name = None
-
-            # 1. Tenta pegar de dentro da chave [firebase] (Onde pedimos para colocar)
-            if "storage_bucket" in key_dict:
-                bucket_name = key_dict["storage_bucket"]
+            # --- LÓGICA DE BUCKET (SEM ADIVINHAÇÃO) ---
+            # 1. Tenta pegar direto da chave [firebase]
+            bucket_name = key_dict.get("storage_bucket")
             
-            # 2. Se não achou, tenta na raiz dos secrets
+            # 2. Se não tiver lá, tenta na raiz dos secrets
             if not bucket_name:
                 bucket_name = st.secrets.get("storage_bucket")
             
-            # 3. Se ainda não achou, tenta o padrão do projeto (project-id.appspot.com)
-            if not bucket_name and project_id:
-                bucket_name = f"{project_id}.appspot.com"
+            # 3. Se ainda não achou, tenta montar o padrão NOVO (.firebasestorage.app)
+            # O padrão antigo era .appspot.com, mas o seu é o novo.
+            if not bucket_name:
+                project_id = key_dict.get("project_id")
+                if project_id:
+                    # Tenta o novo padrão primeiro
+                    bucket_name = f"{project_id}.firebasestorage.app"
+            
+            if not bucket_name:
+                st.error("❌ Erro Crítico: 'storage_bucket' não encontrado no secrets.toml.")
+                st.stop()
 
-            # Inicializa o app com o bucket configurado
+            # Inicializa
             firebase_admin.initialize_app(cred, {
                 'storageBucket': bucket_name
             })
@@ -57,11 +61,9 @@ def get_db():
 
     # 2. Conecta ESPECIFICAMENTE ao banco 'bjj-digital'
     try:
-        # Tenta conectar com database_id explícito
         db = firestore.client(database_id='bjj-digital')
         return db
     except TypeError:
-        # Fallback para versões antigas da lib que não aceitam database_id
         return firestore.client()
     except Exception as e:
         st.error(f"❌ Não foi possível conectar ao banco 'bjj-digital'. Erro: {e}")
