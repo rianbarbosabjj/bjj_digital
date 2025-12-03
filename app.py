@@ -119,8 +119,8 @@ st.markdown(f"""
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
-        border-color: {COR_DESTAQUE} !important;
         transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
     /* --- INPUTS --- */
@@ -237,8 +237,9 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU SÓLIDO (COR DO FUNDO)
+    # NOVO ESTILO: MENU INTEGRADO (Sem Caixas Pretas)
     # -------------------------------------------------------------
+    # Usa a mesma cor do fundo para parecer que os ícones flutuam na página
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -248,13 +249,13 @@ def app_principal():
         styles={
             "container": {
                 "padding": "5px 10px", 
-                # Fundo Sólido (Cor da Página)
+                # A MÁGICA: Cor exata do fundo da página (#0e2d26)
+                # Assim ele "some" e só os botões aparecem
                 "background-color": COR_FUNDO, 
                 "margin": "0px auto",
-                "border-radius": "12px", 
-                # Borda sutil e sombra para definição
-                "border": "1px solid rgba(255, 215, 112, 0.15)", 
-                "box-shadow": "0 4px 15px rgba(0,0,0,0.3)"
+                "border-radius": "0px", # Reto para integrar
+                "border": "none",
+                "box-shadow": "none" # Remove sombra que cria o efeito de "mancha"
             },
             "icon": {
                 "color": COR_DESTAQUE, 
@@ -265,16 +266,20 @@ def app_principal():
                 "font-size": "14px", 
                 "text-align": "center", 
                 "margin": "0px 5px", 
-                "color": "rgba(255, 255, 255, 0.8)",
-                "font-weight": "400",
+                "color": "rgba(255, 255, 255, 0.7)",
+                "font-weight": "500",
+                "background-color": "transparent",
                 "border-radius": "8px",
                 "transition": "0.3s"
             },
             "nav-link-selected": {
+                # Botão Selecionado: Dourado com texto escuro
                 "background-color": COR_DESTAQUE, 
                 "color": "#0e2d26", 
                 "font-weight": "700",
-                "box-shadow": "0px 2px 8px rgba(0,0,0,0.2)",
+                # Borda sutil para destacar
+                "border": f"1px solid {COR_DESTAQUE}",
+                "box-shadow": "0px 4px 10px rgba(0,0,0,0.3)" 
             },
         }
     )
