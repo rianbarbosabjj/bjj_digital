@@ -75,7 +75,6 @@ def gestao_questoes():
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
-    # --- LISTAR ---
     with tab1:
         questoes_ref = list(db.collection('questoes').stream())
         c_f1, c_f2 = st.columns(2)
@@ -89,7 +88,7 @@ def gestao_questoes():
             if filtro_n and d.get('dificuldade', 1) not in filtro_n: continue
             questoes_filtradas.append(d)
             
-        if not questoes_filtradas:
+        if not questões_filtradas:
             st.info("Nenhuma questão encontrada.")
         else:
             st.caption(f"Exibindo {len(questoes_filtradas)} questões")
@@ -112,7 +111,8 @@ def gestao_questoes():
                     with c_head.expander("👁️ Ver Detalhes"):
                         alts = q.get('alternativas', {})
                         if not alts and 'opcoes' in q:
-                            ops = q['opcoes']; alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
+                            ops = q['opcoes']
+                            alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
                         st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')} | **C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
                         resp = q.get('resposta_correta') or q.get('correta') or "?"
                         st.success(f"**Correta:** {resp}")
@@ -183,7 +183,7 @@ def gestao_questoes():
             input_video = cm2.text_input("Link do Vídeo (YouTube/Vimeo):")
             
             c1, c2 = st.columns(2)
-            dificuldade = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
+            dificuldade = c1.selectbox("Nível de Dificuldade:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
             categoria = c2.text_input("Categoria:", "Geral")
             
             st.markdown("**Alternativas:**")
@@ -218,7 +218,6 @@ def gestao_exame_de_faixa():
 
     tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
 
-    # --- ABA 1: MONTAR PROVA ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
@@ -266,8 +265,6 @@ def gestao_exame_de_faixa():
                         
                         with st.expander("Ver Detalhes"):
                             alts = d.get('alternativas', {})
-                            if not alts and 'opcoes' in d:
-                                ops = d['opcoes']; alts = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
                             st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
                             st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
                             st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'}")
@@ -298,7 +295,6 @@ def gestao_exame_de_faixa():
                     else: db.collection('config_exames').add(dados)
                     st.success("Salvo!"); time.sleep(1.5); st.rerun()
 
-    # --- ABA 2: VISUALIZAR ---
     with tab2:
         st.write("Configurações atuais:")
         for doc in db.collection('config_exames').stream():
@@ -309,7 +305,6 @@ def gestao_exame_de_faixa():
                     db.collection('config_exames').document(doc.id).delete()
                     st.success("Deletado."); st.rerun()
 
-    # --- ABA 3: AUTORIZAR ---
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
