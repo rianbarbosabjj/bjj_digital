@@ -161,7 +161,7 @@ def exame_de_faixa(usuario):
     qtd = len(qs)
 
     if not st.session_state.exame_iniciado:
-        st.markdown(f"### 📋 Exame de Faixa **{faixa_alvo.upper()}**")
+        st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
         
         with st.container(border=True):
             st.markdown("#### 📜 Instruções para a realização do Exame")
@@ -182,16 +182,9 @@ def exame_de_faixa(usuario):
             
             st.markdown("---")
 
-            # --- ALINHAMENTO SIMÉTRICO AQUI ---
             c1, c2, c3 = st.columns(3)
-            
-            # Esquerda
             c1.markdown(f"📝 **{qtd} Questões**")
-            
-            # Centro
             c2.markdown(f"<div style='text-align: center'>⏱️ <b>{tempo_limite} min</b></div>", unsafe_allow_html=True)
-            
-            # Direita
             c3.markdown(f"<div style='text-align: right'>✅ Mínimo: <b>{min_aprovacao}%</b></div>", unsafe_allow_html=True)
         
         if qtd > 0:
@@ -200,10 +193,10 @@ def exame_de_faixa(usuario):
                 st.session_state.exame_iniciado = True
                 st.session_state.inicio_prova = datetime.utcnow()
                 st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
-                st.session_state.questoes_prova = lista_questoes
+                st.session_state.questoes_prova = qs
                 st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
                 st.rerun()
-        else: st.warning(f"⚠️ Sem questões encontradas para **{faixa_alvo}**.")
+        else: st.warning(f"⚠️ Sem questões encontradas para **{dados.get('faixa_exame')}**.")
 
     else:
         qs = st.session_state.get('questoes_prova', [])
@@ -234,16 +227,13 @@ def exame_de_faixa(usuario):
                 elif 'opcoes' in q: opts = q['opcoes']
                 if not opts: opts = ["-", "-", "-", "-"]
 
-                # AQUI A MUDANÇA: index=None para vir vazio
                 resps[i] = st.radio("R:", opts, key=f"q{i}", label_visibility="collapsed", index=None)
                 st.markdown("---")
                 
             if st.form_submit_button("Finalizar"):
                 acertos = 0
                 for i, q in enumerate(qs):
-                    # Trata caso não responda (None)
                     resp_aluno = str(resps.get(i) or "").strip().lower()
-                    
                     certa_bd = q.get('resposta_correta') or q.get('resposta') or q.get('correta')
                     certa_texto = ""
                     if str(certa_bd).upper() in ["A","B","C","D"] and 'alternativas' in q:
