@@ -30,10 +30,15 @@ def get_db():
 
             cred = credentials.Certificate(key_dict)
             
-            # Tenta pegar o bucket dos secrets ou usa o padrão
+            # TENTA PEGAR O BUCKET DO SECRETS OU USA O PADRÃO
             project_id = key_dict.get("project_id")
-            bucket_name = st.secrets.get("storage_bucket", f"{project_id}.appspot.com")
+            bucket_name = st.secrets.get("storage_bucket")
+            
+            # Se não tiver no secrets, tenta montar o padrão
+            if not bucket_name and project_id:
+                bucket_name = f"{project_id}.appspot.com"
 
+            # Inicializa com o parâmetro 'storageBucket'
             firebase_admin.initialize_app(cred, {
                 'storageBucket': bucket_name
             })
@@ -44,9 +49,11 @@ def get_db():
 
     # 2. Conecta ESPECIFICAMENTE ao banco 'bjj-digital'
     try:
+        # Tenta conectar com database_id explícito
         db = firestore.client(database_id='bjj-digital')
         return db
     except TypeError:
+        # Fallback para versões antigas da lib
         return firestore.client()
     except Exception as e:
         st.error(f"❌ Não foi possível conectar ao banco 'bjj-digital'. Erro: {e}")
