@@ -28,28 +28,32 @@ def fazer_upload_imagem(arquivo):
     if not arquivo: return None
     
     try:
+        # Pega o bucket configurado no database.py
         bucket = storage.bucket() 
+        
+        # Verificação de segurança
         if not bucket.name:
-            st.error("Erro: Bucket não configurado no secrets.toml")
+            st.error("Erro Crítico: Nome do Bucket não encontrado. Verifique se o 'database.py' foi atualizado e se o 'secrets.toml' tem o project_id.")
             return None
 
-        # 1. Define o caminho do arquivo
+        # 1. Prepara o arquivo
+        arquivo.seek(0) # Garante que está no inicio do arquivo
         ext = arquivo.name.split('.')[-1]
         blob_name = f"questoes/{uuid.uuid4()}.{ext}"
         blob = bucket.blob(blob_name)
         
-        # 2. Faz o Upload PRIMEIRO
+        # 2. Faz o Upload
+        # Define o content type para o navegador saber que é imagem
         blob.upload_from_file(arquivo, content_type=arquivo.type)
         
-        # 3. Define o Token
+        # 3. Configura Token de Acesso Público
         access_token = str(uuid.uuid4())
         metadata = {"firebaseStorageDownloadTokens": access_token}
         blob.metadata = metadata
-        blob.patch() # Grava o metadado na nuvem
+        blob.patch() # Salva o metadado
 
-        # 4. Monta a URL codificada corretamente
+        # 4. Monta a URL Manualmente (Formato Firebase)
         blob_path_encoded = quote(blob_name, safe='') 
-        
         final_url = f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{blob_path_encoded}?alt=media&token={access_token}"
         
         return final_url
