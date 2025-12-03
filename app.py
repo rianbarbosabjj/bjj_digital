@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - MENU FLUTUANTE)
+# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - CLEAN)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -127,18 +127,16 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
-    /* --- NOVO MENU FLUTUANTE (PREMIUM) --- */
+    /* --- MENU SUPERIOR FLUTUANTE (TRANSPARENTE) --- */
     
     /* CONTAINER DO MENU */
     .st-emotion-cache-1v7f65g {{
-        background: rgba(14, 45, 38, 0.9) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(255, 215, 112, 0.2) !important;
-        border-radius: 12px !important;
-        padding: 8px !important;
+        background: transparent !important; /* <--- AQUI: TIREI O FUNDO PRETO */
+        border: none !important;
+        box-shadow: none !important;
+        padding: 0 !important;
         margin: 10px auto 30px auto !important;
         max-width: 95% !important;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
         display: flex !important;
         justify-content: center !important;
         flex-wrap: nowrap !important;
@@ -148,26 +146,26 @@ st.markdown(f"""
     /* ITENS DO MENU */
     .st-emotion-cache-1v7f65g .st-ae .st-af {{
         padding: 10px 20px !important;
-        border-radius: 8px !important;
-        margin: 0 4px !important;
+        border-radius: 50px !important; /* Mais arredondado */
+        margin: 0 6px !important;
         transition: all 0.3s ease !important;
         position: relative !important;
         overflow: hidden !important;
         white-space: nowrap !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important; /* Borda sutil */
+        background: rgba(0,0,0,0.2) !important; /* Fundo leve para leitura */
     }}
     
     /* ITEM NORMAL */
     .st-emotion-cache-1v7f65g .st-ae .st-af:not(.st-ag) {{
-        background: transparent !important;
         color: rgba(255, 255, 255, 0.7) !important;
-        border: 1px solid transparent !important;
     }}
     
     /* ITEM NORMAL HOVER */
     .st-emotion-cache-1v7f65g .st-ae .st-af:not(.st-ag):hover {{
         color: {COR_DESTAQUE} !important;
         background: rgba(255, 215, 112, 0.1) !important;
-        border: 1px solid rgba(255, 215, 112, 0.3) !important;
+        border-color: rgba(255, 215, 112, 0.3) !important;
         transform: translateY(-2px) !important;
     }}
     
@@ -178,21 +176,6 @@ st.markdown(f"""
         font-weight: 700 !important;
         border: none !important;
         box-shadow: 0 4px 15px rgba(255, 215, 112, 0.4) !important;
-        position: relative !important;
-    }}
-    
-    /* EFEITO BRILHO NO ITEM SELECIONADO */
-    .st-emotion-cache-1v7f65g .st-ae .st-ag::before {{
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: -2px;
-        right: -2px;
-        bottom: -2px;
-        background: linear-gradient(45deg, {COR_DESTAQUE}, transparent, {COR_DESTAQUE});
-        z-index: -1;
-        border-radius: 10px;
-        animation: pulse-glow 2s infinite;
     }}
     
     /* ÍCONES */
@@ -201,12 +184,7 @@ st.markdown(f"""
         filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
     }}
     
-    @keyframes pulse-glow {{
-        0%, 100% {{ opacity: 0.7; }}
-        50% {{ opacity: 1; }}
-    }}
-    
-    /* Scrollbar do menu para mobile */
+    /* Scrollbar */
     .st-emotion-cache-1v7f65g > div > div::-webkit-scrollbar {{
         height: 4px;
     }}
@@ -300,7 +278,7 @@ def app_principal():
     except: idx = 0
     
     # -------------------------------------------------------------
-    # MENU SUPERIOR - NOVO DESIGN "PREMIUM FLOATING"
+    # MENU SUPERIOR - TRANSPARENTE E FLUIDO
     # -------------------------------------------------------------
     menu = option_menu(
         menu_title=None, 
@@ -311,7 +289,7 @@ def app_principal():
         styles={
             "container": {
                 "padding": "0!important", 
-                "background-color": "transparent",
+                "background-color": "transparent", # Transparente
                 "border": "none",
                 "display": "flex",
                 "justify-content": "center"
@@ -326,16 +304,15 @@ def app_principal():
                 "text-align": "center", 
                 "margin": "0px 4px", 
                 "padding": "12px 20px",
-                "border-radius": "8px",
+                "border-radius": "50px", # Redondinho
                 "color": "rgba(255, 255, 255, 0.7)",
                 "font-weight": "500",
-                "background": "transparent",
+                "background": "rgba(0,0,0,0.2)", # Leve fundo para ler o texto
                 "transition": "all 0.3s ease",
                 "display": "flex",
                 "align-items": "center",
                 "justify-content": "center",
-                "white-space": "nowrap",
-                "min-width": "fit-content"
+                "border": "1px solid rgba(255,255,255,0.1)"
             },
             "nav-link-selected": {
                 "background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%)",
