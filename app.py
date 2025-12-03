@@ -27,7 +27,7 @@ st.set_page_config(
 )
 
 # =========================================================
-# 2. ESTILOS VISUAIS (CSS "DARK PREMIUM" - MINIMALISTA)
+# 2. ESTILOS VISUAIS (DARK PREMIUM + MOBILE OPTIMIZED)
 # =========================================================
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -72,6 +72,7 @@ st.markdown(f"""
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
+        z-index: 999990 !important; /* Garante que fique acima do conteúdo no mobile */
     }}
     
     section[data-testid="stSidebar"] svg {{
@@ -79,20 +80,64 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- BOTÃO SIDEBAR (SAFE MODE) --- */
-    [data-testid="stSidebarCollapsedControl"] {{
-        color: {COR_DESTAQUE} !important;
-    }}
-    [data-testid="stSidebarCollapsedControl"] button {{
-        background-color: rgba(0,0,0,0.2) !important;
-        color: {COR_DESTAQUE} !important;
-    }}
-    [data-testid="stSidebarCollapsedControl"] button:hover {{
-        background-color: {COR_HOVER} !important;
-        color: {COR_FUNDO} !important;
+    /* --- CONTROLE DA SIDEBAR (BOTÃO) --- */
+    header[data-testid="stHeader"] {{
+        background-color: transparent !important;
+        visibility: visible !important;
+        z-index: 1000 !important;
     }}
 
-    /* --- CARDS & CONTAINERS --- */
+    /* Estilo do botão de abrir/fechar (Desktop) */
+    [data-testid="stSidebarCollapsedControl"] button, 
+    [data-testid="collapsedControl"] button {{
+        color: {COR_DESTAQUE} !important;
+        background-color: rgba(9, 31, 26, 0.8) !important;
+        border: 1px solid rgba(255, 215, 112, 0.3) !important;
+        border-radius: 8px !important;
+        transition: all 0.3s ease !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }}
+
+    [data-testid="stSidebarCollapsedControl"] button svg,
+    [data-testid="collapsedControl"] button svg {{
+        fill: {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
+    }}
+
+    [data-testid="stSidebarCollapsedControl"] button:hover,
+    [data-testid="collapsedControl"] button:hover {{
+        background-color: rgba(255, 215, 112, 0.2) !important;
+        border-color: {COR_HOVER} !important;
+        transform: scale(1.1);
+    }}
+
+    /* --- REGRAS ESPECÍFICAS PARA MOBILE (Celular/Tablet) --- */
+    @media (max-width: 768px) {{
+        /* No mobile, a sidebar ocupa 85% da tela, não tudo */
+        section[data-testid="stSidebar"] {{
+            width: 85vw !important;
+            min-width: 250px !important;
+        }}
+        
+        /* Aumenta o botão de abrir para facilitar o toque */
+        [data-testid="stSidebarCollapsedControl"] button,
+        [data-testid="collapsedControl"] button {{
+            width: 45px !important;
+            height: 45px !important;
+            margin-top: 5px !important;
+            background-color: #091f1a !important; /* Fundo sólido para ver melhor */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5) !important;
+        }}
+        
+        /* Ajusta o padding do topo para o conteúdo não ficar embaixo do botão */
+        .block-container {{
+            padding-top: 3.5rem !important;
+        }}
+    }}
+
+    /* --- COMPONENTES GERAIS --- */
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
     div[data-testid="stForm"] {{
         background-color: rgba(0, 0, 0, 0.3) !important; 
@@ -103,7 +148,6 @@ st.markdown(f"""
         margin-bottom: 20px;
     }}
     
-    /* --- BOTÕES --- */
     div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
@@ -117,9 +161,9 @@ st.markdown(f"""
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
         transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* --- INPUTS --- */
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
@@ -127,9 +171,24 @@ st.markdown(f"""
         border-radius: 8px !important;
     }}
     
-    /* --- REMOVE PADDING EXTRA --- */
-    #MainMenu {{visibility: hidden;}} footer {{visibility: hidden;}} header {{visibility: hidden;}}
-    .block-container {{padding-top: 1.5rem !important;}}
+    /* Menu Superior (Option Menu) */
+    .st-emotion-cache-1v7f65g {{
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px solid rgba(255, 215, 112, 0.15) !important;
+        border-radius: 50px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+        margin: 20px auto !important;
+        padding: 0 !important;
+    }}
+    .st-emotion-cache-1v7f65g .st-ae .st-af {{ color: rgba(255, 255, 255, 0.7) !important; background: transparent !important; }}
+    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{ color: {COR_DESTAQUE} !important; background: rgba(255, 215, 112, 0.1) !important; }}
+    .st-emotion-cache-1v7f65g .st-ae .st-ag {{ background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important; color: {COR_FUNDO} !important; font-weight: 700 !important; }}
+    
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    [data-testid="stDecoration"] {{display: none;}}
+    .block-container {{padding-top: 1rem !important;}}
 
 </style>
 """, unsafe_allow_html=True)
@@ -148,8 +207,13 @@ except ImportError as e:
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
+        if logo_file:
+            cl, cc, cr = st.columns([1, 1, 1])
+            with cc: st.image(logo_file, use_container_width=True)
+        st.write("") 
         with st.container(border=True):
             st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
+            st.warning("Por segurança, redefina sua senha.")
             with st.form("frm_troca"):
                 ns = st.text_input("Nova Senha:", type="password")
                 cs = st.text_input("Confirmar:", type="password")
@@ -160,8 +224,8 @@ def tela_troca_senha_obrigatoria():
                             hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
                             db = get_db()
                             db.collection('usuarios').document(uid).update({"senha": hashed, "precisa_trocar_senha": False})
-                            st.success("Sucesso!"); st.session_state.usuario['precisa_trocar_senha'] = False; st.rerun()
-                        except: st.error("Erro.")
+                            st.success("Sucesso! Entrando..."); st.session_state.usuario['precisa_trocar_senha'] = False; st.rerun()
+                        except: st.error("Erro ao salvar.")
                     else: st.error("Senhas não conferem.")
 
 def app_principal():
@@ -180,10 +244,14 @@ def app_principal():
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
+        
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
+
         if tipo in ["admin", "professor"]:
+            # Botão do Painel do Professor (onde está o Dashboard)
             if st.button("👩‍🏫 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+            
         if tipo == "admin":
             if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
             
@@ -202,6 +270,7 @@ def app_principal():
 
     ops, icns = [], []
     if tipo in ["admin", "professor"]:
+        # Menu horizontal - Removido Dashboard daqui pois está dentro do Painel Prof
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
@@ -211,40 +280,14 @@ def app_principal():
     try: idx = ops.index(pg)
     except: idx = 0
     
-    # -------------------------------------------------------------
-    # MENU SUPERIOR - NOVO DESIGN "CLEAN TABS"
-    # -------------------------------------------------------------
     menu = option_menu(
-        menu_title=None, 
-        options=ops, 
-        icons=icns, 
-        default_index=idx, 
-        orientation="horizontal",
+        menu_title=None, options=ops, icons=icns, default_index=idx, orientation="horizontal",
         styles={
-            "container": {
-                "padding": "0!important", 
-                "background-color": "transparent", # Fundo transparente
-                "margin": "0",
-                "border-bottom": "1px solid rgba(255,255,255,0.1)" # Linha sutil separando o menu
-            },
-            "icon": {
-                "color": COR_DESTAQUE, # Ícone Dourado
-                "font-size": "16px"
-            }, 
-            "nav-link": {
-                "font-size": "15px",
-                "text-align": "center",
-                "margin": "0px 10px",
-                "color": "rgba(255,255,255,0.6)", # Texto meio apagado quando não selecionado
-                "font-weight": "400",
-                "border-radius": "0px" # Sem bordas arredondadas (visual de aba)
-            },
-            "nav-link-selected": {
-                "background-color": "transparent",
-                "color": "#FFFFFF", # Texto Branco Forte
-                "font-weight": "600",
-                "border-bottom": f"3px solid {COR_DESTAQUE}", # Linha Dourada embaixo
-            }
+            "container": {"padding": "0!important", "background-color": "transparent", "border": "none", "margin": "0 auto", "display": "flex", "justify-content": "center", "max-width": "100%"},
+            "icon": {"color": "inherit", "font-size": "16px", "margin-right": "8px", "transition": "all 0.3s ease"},
+            "nav-link": {"font-size": "14px", "text-align": "center", "margin": "4px 2px", "padding": "12px 20px", "border-radius": "50px", "color": "rgba(255, 255, 255, 0.7)", "font-weight": "500", "background": "transparent", "transition": "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)", "border": "1px solid transparent", "display": "flex", "align-items": "center", "justify-content": "center", "flex-shrink": "0", "white-space": "nowrap", "min-width": "fit-content"},
+            "nav-link:hover": {"color": COR_DESTAQUE, "background": "rgba(255, 215, 112, 0.1)", "border": f"1px solid rgba(255, 215, 112, 0.3)", "transform": "translateY(-2px)"},
+            "nav-link-selected": {"background": f"linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%)", "color": COR_FUNDO, "font-weight": "700", "box-shadow": "0 5px 20px rgba(255, 215, 112, 0.4)", "border": "none", "position": "relative"}
         }
     )
 
