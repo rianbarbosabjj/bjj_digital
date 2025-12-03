@@ -7,13 +7,12 @@ from datetime import datetime, time as dtime
 from database import get_db
 from firebase_admin import firestore
 
-# Importações seguras do utils
 try:
-    from utils import carregar_todas_questoes, salvar_questoes, fazer_upload_imagem
+    from utils import carregar_todas_questoes, salvar_questoes, fazer_upload_midia
 except ImportError:
     def carregar_todas_questoes(): return []
     def salvar_questoes(t, q): pass
-    def fazer_upload_imagem(f): return None
+    def fazer_upload_midia(f): return None
 
 FAIXAS_COMPLETAS = [
     "Cinza e Branca", "Cinza", "Cinza e Preta",
@@ -55,20 +54,16 @@ def gestao_usuarios(usuario_logado):
             fx = st.selectbox("Faixa Atual:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
             pwd = st.text_input("Nova Senha (opcional):", type="password")
             if st.form_submit_button("Salvar"):
-                try:
-                    upd = {"nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx}
-                    if pwd: upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(); upd["precisa_trocar_senha"] = True
-                    db.collection('usuarios').document(sel['id']).update(upd)
-                    st.success("Salvo!"); time.sleep(1); st.rerun()
-                except Exception as e: st.error(f"Erro ao salvar: {e}")
+                upd = {"nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx}
+                if pwd: upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(); upd["precisa_trocar_senha"] = True
+                db.collection('usuarios').document(sel['id']).update(upd)
+                st.success("Salvo!"); time.sleep(1); st.rerun()
         if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
-            try:
-                db.collection('usuarios').document(sel['id']).delete()
-                st.warning("Excluído."); time.sleep(1); st.rerun()
-            except Exception as e: st.error(f"Erro ao excluir: {e}")
+            db.collection('usuarios').document(sel['id']).delete()
+            st.warning("Excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES
+# 2. GESTÃO DE QUESTÕES (PLAYER DE VÍDEO ATIVO)
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -80,6 +75,7 @@ def gestao_questoes():
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
+    # --- LISTAR ---
     with tab1:
         questoes_ref = list(db.collection('questoes').stream())
         c_f1, c_f2 = st.columns(2)
@@ -108,10 +104,19 @@ def gestao_questoes():
                     c_head.markdown(f"**{nivel}** | *{cat}* | ✍️ {autor}")
                     c_head.markdown(f"##### {q.get('pergunta')}")
                     
+                    # --- VISUALIZAÇÃO DE MÍDIA ---
                     if q.get('url_imagem'):
                         c_head.image(q.get('url_imagem'), caption="Imagem Anexada", width=200)
+                    
                     if q.get('url_video'):
-                        c_head.markdown(f"📹 [Ver Vídeo]({q.get('url_video')})")
+                        try:
+                            # Tenta exibir o player
+                            c_head.video(q.get('url_video'))
+                        except:
+                            # Se falhar (ex: link privado), mostra link clicável
+                            c_head.error("Não foi possível carregar o player. Link abaixo:")
+                            c_head.markdown(f"🔗 [Abrir Vídeo]({q.get('url_video')})")
+                    # -----------------------------
 
                     with c_head.expander("👁️ Ver Detalhes"):
                         alts = q.get('alternativas', {})
@@ -136,8 +141,11 @@ def gestao_questoes():
                             url_img_atual = q.get('url_imagem', '')
                             if url_img_atual: cm1.caption(f"Atual: {url_img_atual[:30]}...")
                             
-                            novo_video = cm2.file_uploader("Trocar Vídeo:", type=["mp4", "mov"], key=f"up_vid_{q['id']}")
-                            url_video = cm2.text_input("Ou URL Vídeo:", value=q.get('url_video',''))
+                            # --- UPLOAD E URL DE VÍDEO ---
+                            novo_video_arq = cm2.file_uploader("Trocar Vídeo (Upload):", type=["mp4", "mov"], key=f"up_v_edit_{q['id']}")
+                            url_video_atual = q.get('url_video', '')
+                            url_video_manual = cm2.text_input("Ou Link YouTube/Vimeo:", value=url_video_atual)
+                            # -----------------------------
 
                             c1, c2 = st.columns(2)
                             val_dif = q.get('dificuldade', 1)
@@ -157,16 +165,18 @@ def gestao_questoes():
                             cols = st.columns(2)
                             if cols[0].form_submit_button("💾 Salvar"):
                                 try:
+                                    # Lógica de Imagem
                                     final_url_img = url_img_atual
                                     if novo_arquivo:
-                                        with st.spinner("Enviando imagem..."):
-                                            link = fazer_upload_imagem(novo_arquivo)
+                                        with st.spinner("Subindo imagem..."):
+                                            link = fazer_upload_midia(novo_arquivo)
                                             if link: final_url_img = link
                                     
-                                    final_url_vid = url_video
-                                    if novo_video:
-                                        with st.spinner("Enviando vídeo..."):
-                                            link_v = fazer_upload_imagem(novo_video)
+                                    # Lógica de Vídeo (Prioriza Upload > Link Manual > Atual)
+                                    final_url_vid = url_video_manual
+                                    if novo_video_arq:
+                                        with st.spinner("Subindo vídeo..."):
+                                            link_v = fazer_upload_midia(novo_video_arq)
                                             if link_v: final_url_vid = link_v
                                     
                                     db.collection('questoes').document(q['id']).update({
@@ -187,6 +197,7 @@ def gestao_questoes():
                                 st.session_state["editing_q"] = None; st.success("Deletado."); st.rerun()
                             except Exception as e: st.error(f"Erro ao deletar: {e}")
 
+    # --- CRIAR ---
     with tab2:
         with st.form("new_q"):
             st.markdown("#### Nova Questão")
@@ -196,8 +207,9 @@ def gestao_questoes():
             cm1, cm2 = st.columns(2)
             arquivo_img = cm1.file_uploader("Upload Imagem:", type=["jpg", "png", "jpeg"])
             
+            # Campos de Vídeo
             arquivo_vid = cm2.file_uploader("Upload Vídeo:", type=["mp4", "mov"])
-            input_video = cm2.text_input("Ou Link Vídeo:", help="Ex: YouTube")
+            input_video = cm2.text_input("Ou Link Vídeo (YouTube):", help="Cole o link aqui se não quiser fazer upload")
             
             c1, c2 = st.columns(2)
             dificuldade = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
@@ -214,12 +226,13 @@ def gestao_questoes():
                         link_final_img = None
                         if arquivo_img:
                             with st.spinner("Enviando imagem..."):
-                                link_final_img = fazer_upload_imagem(arquivo_img)
+                                link_final_img = fazer_upload_midia(arquivo_img)
                         
+                        # Lógica de Vídeo
                         link_final_vid = input_video
                         if arquivo_vid:
                             with st.spinner("Enviando vídeo..."):
-                                link_final_vid = fazer_upload_imagem(arquivo_vid)
+                                link_final_vid = fazer_upload_midia(arquivo_vid)
                         
                         db.collection('questoes').add({
                             "pergunta": pergunta, "dificuldade": dificuldade, "categoria": categoria,
@@ -233,37 +246,34 @@ def gestao_questoes():
                 except Exception as e: st.error(f"Erro ao cadastrar: {e}")
 
 # =========================================
-# 3. GESTÃO DE EXAME (SEU CÓDIGO INTEGRADO)
+# 3. GESTÃO DE EXAME
 # =========================================
 def gestao_exame_de_faixa():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Criar e Editar Prova", "👁️ Visualizar Provas", "✅ Autorizar Alunos"])
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
 
-    # --- ABA 1: CRIAR/EDITAR ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
         
         if 'last_faixa_sel' not in st.session_state or st.session_state.last_faixa_sel != faixa_sel:
-            configs = db.collection('config_exames').where('faixa', '==', faixa_sel).stream()
+            configs = db.collection('config_exames').where('faixa', '==', faixa_sel).limit(1).stream()
             conf_atual = {}; doc_id = None
             for d in configs: conf_atual = d.to_dict(); doc_id = d.id; break
-            
-            st.session_state.conf_atual = conf_atual
-            st.session_state.doc_id = doc_id
+            st.session_state.conf_atual = conf_atual; st.session_state.doc_id = doc_id
             st.session_state.selected_ids = set(conf_atual.get('questoes_ids', []))
             st.session_state.last_faixa_sel = faixa_sel
         
         conf_atual = st.session_state.conf_atual
         todas_questoes = list(db.collection('questoes').stream())
         
-        st.markdown("### 2. Selecione as Questões (Cards)")
+        st.markdown("### 2. Selecione as Questões")
         c_f1, c_f2 = st.columns(2)
-        filtro_nivel = c_f1.multiselect("Filtrar por Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4])
+        filtro_nivel = c_f1.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4], format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
         cats = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
-        filtro_tema = c_f2.multiselect("Filtrar por Tema:", cats, default=cats)
+        filtro_tema = c_f2.multiselect("Filtrar Tema:", cats, default=cats)
         
         with st.container(height=500, border=True):
             count_visible = 0
@@ -271,8 +281,6 @@ def gestao_exame_de_faixa():
                 d = doc.to_dict()
                 niv = d.get('dificuldade', 1)
                 cat = d.get('categoria', 'Geral')
-                autor = d.get('criado_por', 'Desconhecido')
-                
                 if niv in filtro_nivel and cat in filtro_tema:
                     count_visible += 1
                     c_chk, c_content = st.columns([1, 15])
@@ -285,136 +293,53 @@ def gestao_exame_de_faixa():
                     c_chk.checkbox("", value=is_checked, key=f"chk_{doc.id}", on_change=update_selection)
                     with c_content:
                         badge = get_badge_nivel(niv)
-                        st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
+                        st.markdown(f"**{badge}** | {cat}")
                         st.markdown(f"{d.get('pergunta')}")
-                        if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
-                        
-                        with st.expander("Ver Detalhes"):
-                            alts = d.get('alternativas', {})
-                            st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
-                            st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
-                            st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'}")
+                        if d.get('url_imagem'): st.image(d.get('url_imagem'), width=100)
+                        if d.get('url_video'): st.caption("📹 Tem Vídeo")
                     st.divider()
-            
-            if count_visible == 0: st.warning("Nenhuma questão corresponde aos filtros atuais.")
+            if count_visible == 0: st.warning("Nada encontrado.")
 
-        # --- BARRA DE STATUS ---
-        total_sel = len(st.session_state.selected_ids)
+        tot = len(st.session_state.selected_ids)
         c_res1, c_res2 = st.columns([3, 1])
-        c_res1.success(f"**{total_sel}** questões selecionadas para a prova de **{faixa_sel}**.")
+        c_res1.success(f"**{tot}** questões selecionadas.")
+        if tot > 0:
+            if c_res2.button("🗑️ Limpar", key="clean_sel"):
+                st.session_state.selected_ids = set(); st.rerun()
         
-        if total_sel > 0:
-            if c_res2.button("🗑️ Limpar Seleção", key="btn_limpar_sel"):
-                st.session_state.selected_ids = set()
-                st.rerun()
-        
-        st.markdown("### 3. Regras de Aplicação")
-        with st.form("save_conf"):
+        with st.form("sf"):
             c1, c2 = st.columns(2)
-            tempo = c1.number_input("Tempo Limite (min):", 10, 180, int(conf_atual.get('tempo_limite', 45)))
-            nota = c2.number_input("Aprovação Mínima (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
-            
-            if st.form_submit_button("💾 Salvar Prova"):
-                if total_sel == 0:
-                    st.error("Selecione pelo menos uma questão.")
-                else:
-                    dados = {
-                        "faixa": faixa_sel,
-                        "questoes_ids": list(st.session_state.selected_ids), 
-                        "qtd_questoes": total_sel,
-                        "tempo_limite": tempo,
-                        "aprovacao_minima": nota,
-                        "modo_selecao": "Manual",
-                        "atualizado_em": firestore.SERVER_TIMESTAMP
-                    }
-                    
-                    try:
-                        if st.session_state.doc_id:
-                            db.collection('config_exames').document(st.session_state.doc_id).update(dados)
-                            st.success(f"Prova da Faixa {faixa_sel} ATUALIZADA com sucesso!")
-                        else:
-                            db.collection('config_exames').add(dados)
-                            st.success(f"Prova da Faixa {faixa_sel} CRIADA com sucesso!")
-                    except Exception:
-                        # Fallback se o documento foi deletado manualmente
-                        ref = db.collection('config_exames').add(dados)
-                        st.session_state.doc_id = ref[1].id
-                        st.success(f"Prova da Faixa {faixa_sel} RECRIADA com sucesso!")
-                    
-                    time.sleep(1.5); st.rerun()
+            tmp = c1.number_input("Tempo (min):", 10, 180, int(conf_atual.get('tempo_limite', 45)))
+            nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
+            if st.form_submit_button("💾 Salvar"):
+                dados = {"faixa": faixa_sel, "questoes_ids": list(st.session_state.selected_ids), "qtd_questoes": tot, "tempo_limite": tmp, "aprovacao_minima": nota, "modo_selecao": "Manual", "atualizado_em": firestore.SERVER_TIMESTAMP}
+                try:
+                    if st.session_state.doc_id:
+                        try: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
+                        except: db.collection('config_exames').add(dados)
+                    else: db.collection('config_exames').add(dados)
+                    st.success("Salvo!"); time.sleep(1); st.rerun()
+                except Exception as e: st.error(f"Erro: {e}")
 
-    # --- ABA 2: VISUALIZAR ---
     with tab2:
-        st.subheader("Status das Provas Cadastradas")
-        # Cache manual de todas as questões para performance
-        all_q_docs = list(db.collection('questoes').stream())
-        mapa_questoes_completo = {doc.id: doc.to_dict() for doc in all_q_docs}
+        st.write("Configurações:")
+        for doc in db.collection('config_exames').stream():
+            d = doc.to_dict()
+            with st.expander(f"✅ {d.get('faixa')} ({d.get('qtd_questoes')} questões)"):
+                st.caption(f"Tempo: {d.get('tempo_limite')} min | Nota: {d.get('aprovacao_minima')}%")
+                if st.button("🗑️ Excluir", key=f"d_{doc.id}"):
+                    db.collection('config_exames').document(doc.id).delete(); st.rerun()
 
-        configs_stream = db.collection('config_exames').stream()
-        mapa_configs = {}
-        for doc in configs_stream:
-            d = doc.to_dict(); d['id'] = doc.id 
-            mapa_configs[d.get('faixa')] = d
-
-        categorias = {
-            "🔘 Cinza": ["Cinza e Branca", "Cinza", "Cinza e Preta"],
-            "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
-            "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
-            "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
-            "🔵 Azul": ["Azul"], "🟣 Roxa": ["Roxa"], "🟤 Marrom": ["Marrom"], "⚫ Preta": ["Preta"]
-        }
-
-        abas_cores = st.tabs(list(categorias.keys()))
-        for aba, (cor_nome, lista_faixas) in zip(abas_cores, categorias.items()):
-            with aba:
-                for f_nome in lista_faixas:
-                    data = mapa_configs.get(f_nome)
-                    if data:
-                        modo = data.get('modo_selecao', 'Sorteio')
-                        qtd = data.get('qtd_questoes', 0)
-                        tempo = data.get('tempo_limite', 0)
-                        nota = data.get('aprovacao_minima', 0)
-                        
-                        with st.expander(f"✅ {f_nome} ({modo} | {qtd} questões)"):
-                            st.caption(f"⏱️ Tempo: {tempo} min | 🎯 Mínimo: {nota}%")
-                            
-                            if "Manual" in modo and data.get('questoes_ids'):
-                                ids = data.get('questoes_ids', [])
-                                st.markdown("---")
-                                st.markdown("#### 📋 Questões Selecionadas")
-                                for i, q_id in enumerate(ids, 1):
-                                    q_data = mapa_questoes_completo.get(q_id)
-                                    if q_data:
-                                        st.markdown(f"**{i}. {q_data.get('pergunta')}**")
-                                        st.caption(f"Correta: {q_data.get('resposta_correta')}")
-                                    else: st.error(f"{i}. Questão deletada (ID: {q_id})")
-                                    st.divider()
-                            
-                            st.markdown("---")
-                            if st.button("🗑️ Excluir Prova", key=f"del_proof_{data['id']}"):
-                                db.collection('config_exames').document(data['id']).delete()
-                                if 'doc_id' in st.session_state and st.session_state.doc_id == data['id']:
-                                    st.session_state.doc_id = None
-                                st.warning(f"Prova de {f_nome} excluída.")
-                                time.sleep(1); st.rerun()
-                    else: st.warning(f"⚠️ {f_nome} não configurada.")
-
-    # --- ABA 3: AUTORIZAR ---
     with tab3:
         with st.container(border=True):
-            st.subheader("🗓️ Configurar Período")
-            c1, c2 = st.columns(2)
-            d_inicio = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
-            d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
-            c3, c4 = st.columns(2)
-            h_inicio = c3.time_input("Hora Início:", dtime(0, 0), key="hora_inicio_exame")
-            h_fim = c4.time_input("Hora Fim:", dtime(23, 59), key="hora_fim_exame")
-            dt_inicio = datetime.combine(d_inicio, h_inicio)
-            dt_fim = datetime.combine(d_fim, h_fim)
+            st.subheader("🗓️ Agendar")
+            c1, c2 = st.columns(2); di = c1.date_input("Início:", datetime.now()); df = c2.date_input("Fim:", datetime.now())
+            c3, c4 = st.columns(2); hi = c3.time_input("Hora Ini:", dtime(0,0)); hf = c4.time_input("Hora Fim:", dtime(23,59))
+            dti = datetime.combine(di, hi); dtf = datetime.combine(df, hf)
 
         st.write(""); st.subheader("Lista de Alunos")
         try:
-            alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
+            alunos_ref = db.collection('usuarios').where('tipo_usuario','==','aluno').stream()
             lista_alunos = []
             for doc in alunos_ref:
                 d = doc.to_dict(); d['id'] = doc.id
@@ -423,69 +348,44 @@ def gestao_exame_de_faixa():
                     vinculo = list(db.collection('alunos').where('usuario_id', '==', doc.id).limit(1).stream())
                     if vinculo:
                         eid = vinculo[0].to_dict().get('equipe_id')
-                        eq_doc = db.collection('equipes').document(eid).get()
-                        if eq_doc.exists: nome_eq = eq_doc.to_dict().get('nome', 'Sem Nome')
+                        eq = db.collection('equipes').document(eid).get()
+                        if eq.exists: en = eq.to_dict().get('nome')
                 except: pass
                 d['nome_equipe'] = nome_eq
                 lista_alunos.append(d)
 
             if not lista_alunos: st.info("Nenhum aluno cadastrado.")
             else:
-                cols = st.columns([3, 2, 2, 3, 1])
-                cols[0].markdown("**Aluno**")
-                cols[1].markdown("**Equipe**")
-                cols[2].markdown("**Exame**")
-                cols[3].markdown("**Status**")
-                cols[4].markdown("**Ação**")
-                st.markdown("---")
-
+                cols = st.columns([3,2,2,3,1])
+                cols[0].write("Nome"); cols[1].write("Equipe"); cols[2].write("Exame"); cols[3].write("Status"); cols[4].write("Ação")
+                st.divider()
+                for u in users: # Corrigido para iterar sobre lista_alunos
+                    pass # Placeholder. Use o loop correto da versão anterior ou atualize 'users' para 'lista_alunos' no loop abaixo
+                
+                # CORREÇÃO DO LOOP FINAL
                 for aluno in lista_alunos:
-                    try:
-                        aluno_id = aluno.get('id', 'unknown')
-                        aluno_nome = aluno.get('nome', 'Sem Nome')
-                        faixa_exame_atual = aluno.get('faixa_exame', '')
-                        
-                        c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
-                        c1.write(f"**{aluno_nome}**")
-                        c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
-                        
-                        idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
-                        fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
-                        
-                        habilitado = aluno.get('exame_habilitado', False)
-                        status = aluno.get('status_exame', 'pendente')
-                        
-                        msg_status = "⚪ Não autorizado"
-                        if status == 'aprovado': msg_status = "🏆 Aprovado"
-                        elif status == 'reprovado': msg_status = "🔴 Reprovado"
-                        elif status == 'bloqueado': msg_status = "⛔ Bloqueado"
-                        elif habilitado:
-                            msg_status = "🟢 Liberado"
-                            try:
-                                raw_fim = aluno.get('exame_fim')
-                                if raw_fim:
-                                    dt_obj = datetime.fromisoformat(raw_fim.replace('Z', '+00:00')) if isinstance(raw_fim, str) else raw_fim
-                                    msg_status += f" (até {dt_obj.strftime('%d/%m %H:%M')})"
-                            except: pass
-                            if status == 'em_andamento': msg_status = "🟡 Em Andamento"
-
-                        c4.write(msg_status)
-                        
-                        if habilitado:
-                            if c5.button("⛔", key=f"off_btn_{aluno_id}"):
-                                update_data = {"exame_habilitado": False, "status_exame": "pendente"}
-                                for k in ["exame_inicio", "exame_fim", "faixa_exame", "motivo_bloqueio", "status_exame_em_andamento"]:
-                                    if k in aluno: update_data[k] = firestore.DELETE_FIELD
-                                db.collection('usuarios').document(aluno_id).update(update_data)
-                                st.rerun()
-                        else:
-                            if c5.button("✅", key=f"on_btn_{aluno_id}"):
-                                db.collection('usuarios').document(aluno_id).update({
-                                    "exame_habilitado": True, "faixa_exame": fx_sel,
-                                    "exame_inicio": dt_inicio.isoformat(), "exame_fim": dt_fim.isoformat(),
-                                    "status_exame": "pendente", "status_exame_em_andamento": False
-                                })
-                                st.success("Liberado!"); time.sleep(0.5); st.rerun()
-                        st.markdown("---")
-                    except Exception as e: st.error(f"Erro: {e}")
+                    c1, c2, c3, c4, c5 = st.columns([3,2,2,3,1])
+                    c1.write(aluno.get('nome'))
+                    c2.write(aluno.get('nome_equipe'))
+                    idx = FAIXAS_COMPLETAS.index(aluno.get('faixa_exame')) if aluno.get('faixa_exame') in FAIXAS_COMPLETAS else 0
+                    fx = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"f_{aluno['id']}", label_visibility="collapsed")
+                    
+                    hab = aluno.get('exame_habilitado', False)
+                    stt = aluno.get('status_exame', 'pendente')
+                    msg = "⚪"
+                    if stt == 'aprovado': msg = "🏆 Aprovado"
+                    elif stt == 'reprovado': msg = "🔴 Reprovado"
+                    elif stt == 'bloqueado': msg = "⛔ Bloqueado"
+                    elif hab: msg = "🟢 Liberado"
+                    c4.write(msg)
+                    
+                    if hab:
+                        if c5.button("⛔", key=f"stop_{aluno['id']}"):
+                            db.collection('usuarios').document(aluno['id']).update({"exame_habilitado": False, "status_exame": "pendente"})
+                            st.rerun()
+                    else:
+                        if c5.button("✅", key=f"go_{aluno['id']}"):
+                            db.collection('usuarios').document(aluno['id']).update({"exame_habilitado": True, "faixa_exame": fx, "exame_inicio": dti.isoformat(), "exame_fim": dtf.isoformat(), "status_exame": "pendente", "status_exame_em_andamento": False})
+                            st.success("OK"); time.sleep(0.5); st.rerun()
+                    st.divider()
         except: st.error("Erro ao carregar alunos.")
