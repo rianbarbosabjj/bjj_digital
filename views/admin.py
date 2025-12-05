@@ -225,7 +225,6 @@ def gestao_questoes_tab():
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
-    # --- LISTAR ---
     with tab1:
         q_ref = list(db.collection('questoes').stream())
         c1, c2 = st.columns(2)
@@ -310,7 +309,6 @@ def gestao_questoes_tab():
                             db.collection('questoes').document(q['id']).delete()
                             st.session_state['edit_q'] = None; st.success("Deletado."); st.rerun()
 
-    # --- ADICIONAR ---
     with tab2:
         with st.form("new_q"):
             st.markdown("#### Nova Questão")
@@ -472,8 +470,11 @@ def gestao_exame_de_faixa_route():
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
-            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
-            d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
+            # --- CORREÇÃO DA DATA FORMATADA ---
+            c1, c2 = st.columns(2)
+            d_ini = c1.date_input("Início:", datetime.now(), key="data_inicio_exame", format="DD/MM/YYYY")
+            d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame", format="DD/MM/YYYY")
+            # ----------------------------------
             c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
