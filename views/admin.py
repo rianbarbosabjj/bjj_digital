@@ -50,15 +50,17 @@ def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 def gestao_usuarios_tab():
     db = get_db()
     
-    # 1. Carregar Dados Iniciais (Usuários, Equipes, Professores)
+    # 1. Carregar Listas Auxiliares (Equipes e Professores) para os Selectbox
     users_ref = list(db.collection('usuarios').stream())
     users = [d.to_dict() | {"id": d.id} for d in users_ref]
     
+    # Lista de Equipes
     equipes_ref = list(db.collection('equipes').stream())
     mapa_equipes = {d.id: d.to_dict().get('nome', 'Sem Nome') for d in equipes_ref} # ID -> Nome
     mapa_equipes_inv = {v: k for k, v in mapa_equipes.items()} # Nome -> ID
     lista_equipes = ["Sem Equipe"] + list(mapa_equipes.values())
 
+    # Lista de Professores
     profs_ref = [u for u in users if u.get('tipo_usuario') == 'professor']
     mapa_profs = {u['id']: u.get('nome', 'Sem Nome') for u in profs_ref} # ID -> Nome
     mapa_profs_inv = {v: k for k, v in mapa_profs.items()} # Nome -> ID
@@ -66,7 +68,7 @@ def gestao_usuarios_tab():
 
     if not users: st.warning("Vazio."); return
     
-    # 2. Tabela e Filtros
+    # 2. Tabela Principal
     df = pd.DataFrame(users)
     c1, c2 = st.columns(2)
     filtro_nome = c1.text_input("🔍 Buscar Nome/Email/CPF:")
@@ -95,7 +97,7 @@ def gestao_usuarios_tab():
     sel = st.selectbox("Selecione o usuário:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
     
     if sel:
-        # --- Busca Vínculos Atuais (Equipe/Professor) ---
+        # --- Lógica para buscar vínculo atual (Equipe/Professor) ---
         vinculo_equipe_id = None
         vinculo_prof_id = None
         
@@ -114,6 +116,7 @@ def gestao_usuarios_tab():
                 d_vinc = vincs[0].to_dict()
                 vinculo_equipe_id = d_vinc.get('equipe_id')
 
+        # --- Início do Formulário ---
         with st.form(f"edt_{sel['id']}"):
             # BLOCO 1: DADOS PESSOAIS
             st.markdown("##### 👤 Dados Pessoais")
@@ -148,26 +151,25 @@ def gestao_usuarios_tab():
             cid = e6.text_input("Cidade:", value=sel.get('cidade',''))
             uf = e7.text_input("UF:", value=sel.get('uf',''))
 
-            # BLOCO 3: PERFIL E VÍNCULOS
+            # BLOCO 3: PERFIL E VÍNCULOS (AQUI ESTÁ A MUDANÇA)
             st.markdown("##### 🥋 Perfil e Vínculos")
             p1, p2 = st.columns(2)
             tipo_sel = p1.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
             
-            # Faixa
             idx_fx = 0
             faixa_atual = sel.get('faixa_atual', 'Branca')
             if faixa_atual in FAIXAS_COMPLETAS: idx_fx = FAIXAS_COMPLETAS.index(faixa_atual)
             fx = p2.selectbox("Faixa:", FAIXAS_COMPLETAS, index=idx_fx)
 
-            # Equipe e Professor (Novos Campos)
+            # Seletores de Equipe e Professor
             v1, v2 = st.columns(2)
             
-            # Recupera nome da equipe atual pelo ID
+            # Recupera o nome da equipe atual baseada no ID
             nome_eq_atual = mapa_equipes.get(vinculo_equipe_id, "Sem Equipe")
             idx_eq = lista_equipes.index(nome_eq_atual) if nome_eq_atual in lista_equipes else 0
             nova_equipe_nome = v1.selectbox("Equipe:", lista_equipes, index=idx_eq)
             
-            # Se for aluno, permite trocar professor
+            # Se for aluno, mostra seletor de Professor
             novo_prof_nome = "Sem Professor"
             if tipo_sel == 'aluno':
                 nome_prof_atual = mapa_profs.get(vinculo_prof_id, "Sem Professor")
@@ -180,7 +182,7 @@ def gestao_usuarios_tab():
             
             # --- SALVAR ---
             if st.form_submit_button("💾 Salvar Todas as Alterações"):
-                # 1. Atualiza Dados Básicos (Usuario)
+                # 1. Atualiza Usuário (Dados Pessoais)
                 upd = {
                     "nome": nm.upper(), "email": email.lower().strip(), "cpf": cpf,
                     "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
@@ -193,27 +195,24 @@ def gestao_usuarios_tab():
                     upd["precisa_trocar_senha"] = True
                 
                 try:
-                    # Atualiza User
                     db.collection('usuarios').document(sel['id']).update(upd)
                     
-                    # 2. Atualiza Vínculos (Alunos/Professores)
+                    # 2. Atualiza Vínculos (Equipe/Professor)
                     novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
                     
                     if tipo_sel == 'aluno':
                         novo_p_id = mapa_profs_inv.get(novo_prof_nome)
-                        # Busca doc de vinculo
                         vincs = list(db.collection('alunos').where('usuario_id', '==', sel['id']).stream())
                         dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id, "faixa_atual": fx}
                         
-                        if vincs: # Atualiza existente
+                        if vincs: # Atualiza
                             db.collection('alunos').document(vincs[0].id).update(dados_vinc)
-                        else: # Cria novo se não existir
+                        else: # Cria
                             dados_vinc['usuario_id'] = sel['id']
                             dados_vinc['status_vinculo'] = 'ativo'
                             db.collection('alunos').add(dados_vinc)
                             
                     elif tipo_sel == 'professor':
-                        # Busca doc de vinculo
                         vincs = list(db.collection('professores').where('usuario_id', '==', sel['id']).stream())
                         dados_vinc = {"equipe_id": novo_eq_id}
                         
@@ -224,13 +223,12 @@ def gestao_usuarios_tab():
                             dados_vinc['status_vinculo'] = 'ativo'
                             db.collection('professores').add(dados_vinc)
 
-                    st.success("✅ Cadastro e vínculos atualizados!"); time.sleep(1.5); st.rerun()
+                    st.success("✅ Cadastro e vínculos atualizados com sucesso!"); time.sleep(1.5); st.rerun()
                 except Exception as e:
                     st.error(f"Erro ao salvar: {e}")
                 
         if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
             db.collection('usuarios').document(sel['id']).delete()
-            # Opcional: deletar vínculos também, mas Firestore não faz cascade automático
             st.warning("Usuário excluído."); time.sleep(1); st.rerun()
 
 # =========================================
