@@ -51,34 +51,42 @@ def gestao_usuarios_tab():
     
     df = pd.DataFrame(users)
     c1, c2 = st.columns(2)
-    filtro_nome = c1.text_input("🔍 Buscar Nome/Email:")
+    filtro_nome = c1.text_input("🔍 Buscar Nome/Email/CPF:")
     filtro_tipo = c2.multiselect("Filtrar Tipo:", df['tipo_usuario'].unique() if 'tipo_usuario' in df.columns else [])
 
     if filtro_nome:
-        df = df[df['nome'].str.contains(filtro_nome.upper()) | df['email'].str.contains(filtro_nome.lower())]
+        termo = filtro_nome.upper()
+        # Busca flexível por Nome, Email ou CPF
+        df = df[
+            df['nome'].str.upper().str.contains(termo) | 
+            df['email'].str.upper().str.contains(termo) |
+            df['cpf'].str.contains(termo)
+        ]
     if filtro_tipo:
         df = df[df['tipo_usuario'].isin(filtro_tipo)]
 
-    cols_show = ['nome', 'email', 'tipo_usuario', 'faixa_atual', 'sexo']
+    cols_show = ['nome', 'email', 'cpf', 'tipo_usuario', 'faixa_atual']
     for c in cols_show: 
         if c not in df.columns: df[c] = "-"
     
     st.dataframe(df[cols_show], use_container_width=True, hide_index=True)
     
     st.markdown("---")
-    st.subheader("🛠️ Editar Usuário")
+    st.subheader("🛠️ Editar Cadastro Completo")
     
     opcoes = df.to_dict('records')
-    sel = st.selectbox("Selecione para editar:", opcoes, format_func=lambda x: f"{x.get('nome')} | {x.get('tipo_usuario')}")
+    sel = st.selectbox("Selecione o usuário para editar:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
     
     if sel:
         with st.form(f"edt_{sel['id']}"):
+            # --- BLOCO 1: DADOS PESSOAIS ---
+            st.markdown("##### 👤 Dados Pessoais")
             c1, c2 = st.columns(2)
-            nm = c1.text_input("Nome:", value=sel.get('nome',''))
-            tp = c2.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
+            nm = c1.text_input("Nome Completo:", value=sel.get('nome',''))
+            email = c2.text_input("E-mail (Login):", value=sel.get('email',''))
             
-            c3, c4 = st.columns(2)
-            fx = c3.selectbox("Faixa:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
+            c3, c4, c5 = st.columns([1.5, 1, 1])
+            cpf = c3.text_input("CPF:", value=sel.get('cpf',''))
             
             idx_s = 0
             if sel.get('sexo') in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sel.get('sexo'))
@@ -88,25 +96,81 @@ def gestao_usuarios_tab():
             if sel.get('data_nascimento'):
                 try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
                 except: pass
-            nasc_edit = st.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
+            nasc_edit = c5.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
-            pwd = st.text_input("Nova Senha (opcional):", type="password")
+            # --- BLOCO 2: ENDEREÇO ---
+            st.markdown("##### 📍 Endereço")
+            e1, e2 = st.columns([1, 3])
+            cep = e1.text_input("CEP:", value=sel.get('cep',''))
+            logr = e2.text_input("Logradouro (Rua/Av):", value=sel.get('logradouro',''))
             
-            if st.form_submit_button("Salvar Alterações"):
+            e3, e4, e5 = st.columns([1, 2, 2])
+            num = e3.text_input("Número:", value=sel.get('numero',''))
+            comp = e4.text_input("Complemento:", value=sel.get('complemento',''))
+            bairro = e5.text_input("Bairro:", value=sel.get('bairro',''))
+            
+            e6, e7 = st.columns(2)
+            cid = e6.text_input("Cidade:", value=sel.get('cidade',''))
+            uf = e7.text_input("UF:", value=sel.get('uf',''))
+
+            # --- BLOCO 3: PERFIL ACADEMIA ---
+            st.markdown("##### 🥋 Perfil na Academia")
+            p1, p2 = st.columns(2)
+            tp = p1.selectbox("Tipo de Usuário:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
+            
+            idx_fx = 0
+            faixa_banco = sel.get('faixa_atual', 'Branca')
+            # Ajuste simples para encontrar a faixa na lista, mesmo se tiver espaço extra
+            for i, f in enumerate(FAIXAS_COMPLETAS):
+                if f.strip().lower() == faixa_banco.strip().lower():
+                    idx_fx = i
+                    break
+            
+            fx = p2.selectbox("Faixa Atual:", FAIXAS_COMPLETAS, index=idx_fx)
+
+            # --- BLOCO 4: SEGURANÇA ---
+            st.markdown("##### 🔒 Segurança")
+            pwd = st.text_input("Redefinir Senha (deixe em branco para manter a atual):", type="password", help="O usuário será forçado a trocar esta senha no próximo login.")
+            
+            st.markdown("---")
+            if st.form_submit_button("💾 Salvar Todas as Alterações", type="primary", use_container_width=True):
                 upd = {
-                    "nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx,
-                    "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None
+                    "nome": nm.upper(), 
+                    "email": email.lower().strip(),
+                    "cpf": cpf,
+                    "sexo": sexo_edit, 
+                    "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
+                    
+                    # Endereço
+                    "cep": cep,
+                    "logradouro": logr.upper(),
+                    "numero": num,
+                    "complemento": comp.upper(),
+                    "bairro": bairro.upper(),
+                    "cidade": cid.upper(),
+                    "uf": uf.upper(),
+                    
+                    # Perfil
+                    "tipo_usuario": tp, 
+                    "faixa_atual": fx,
                 }
+                
                 if pwd: 
                     upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
                     upd["precisa_trocar_senha"] = True
                 
-                db.collection('usuarios').document(sel['id']).update(upd)
-                st.success("Salvo!"); time.sleep(1); st.rerun()
+                try:
+                    db.collection('usuarios').document(sel['id']).update(upd)
+                    st.success("✅ Cadastro atualizado com sucesso!"); time.sleep(1.5); st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao atualizar: {e}")
                 
-        if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
-            db.collection('usuarios').document(sel['id']).delete()
-            st.warning("Usuário excluído."); st.rerun()
+        if st.button("🗑️ Excluir Usuário (Cuidado!)", key=f"del_{sel['id']}"):
+            try:
+                db.collection('usuarios').document(sel['id']).delete()
+                st.warning("Usuário excluído permanentemente."); time.sleep(1); st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao excluir: {e}")
 
 # =========================================
 # GESTÃO DE QUESTÕES
