@@ -1,5 +1,4 @@
 import os
-import json
 import re
 import requests
 import streamlit as st
@@ -36,7 +35,7 @@ def get_cor_faixa(nome_faixa):
     return (0, 0, 0) 
 
 # =========================================
-# FUNÇÃO: NORMALIZAR VÍDEO
+# FUNÇÕES DE MÍDIA E UPLOAD
 # =========================================
 def normalizar_link_video(url):
     if not url: return None
@@ -52,9 +51,6 @@ def normalizar_link_video(url):
         return url
     except: return url
 
-# =========================================
-# FUNÇÃO: UPLOAD DE MÍDIA
-# =========================================
 def fazer_upload_midia(arquivo):
     if not arquivo: return None
     try:
@@ -83,20 +79,51 @@ def fazer_upload_midia(arquivo):
         return None
 
 # =========================================
-# FUNÇÕES DE BANCO (LEGADO)
+# IA ANTI-DUPLICIDADE (SAFE MODE)
 # =========================================
-def carregar_todas_questoes():
-    try:
-        db = get_db()
-        docs = db.collection('questoes').where('status', '==', 'aprovada').stream()
-        return [doc.to_dict() for doc in docs]
-    except: return []
-def carregar_questoes(t): return []
-def salvar_questoes(t, q): pass
+# Tenta importar as bibliotecas de IA. Se falhar, usa função dummy.
+try:
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+    import numpy as np
+    
+    @st.cache_resource
+    def carregar_modelo_ia():
+        return SentenceTransformer('all-MiniLM-L6-v2')
+
+    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.85):
+        if not lista_existentes: return False, None
+        try:
+            model = carregar_modelo_ia()
+            embedding_novo = model.encode([nova_pergunta])
+            
+            textos_existentes = [str(q.get('pergunta', '')) for q in lista_existentes]
+            if not textos_existentes: return False, None
+            
+            embeddings_existentes = model.encode(textos_existentes)
+            scores = cosine_similarity(embedding_novo, embeddings_existentes)[0]
+            
+            max_score = np.max(scores)
+            idx_max = np.argmax(scores)
+            
+            if max_score >= threshold:
+                return True, f"{textos_existentes[idx_max]} ({max_score*100:.1f}%)"
+            return False, None
+        except Exception as e:
+            print(f"Erro IA: {e}")
+            return False, None
+
+except ImportError:
+    # Fallback caso não tenha as bibliotecas instaladas
+    def verificar_duplicidade_ia(n, l, t=0.85): 
+        return False, None
 
 # =========================================
-# FUNÇÕES GERAIS
+# DEMAIS FUNÇÕES (LEGACY & TOOLS)
 # =========================================
+def carregar_todas_questoes(): return []
+def salvar_questoes(t, q): pass
+
 def normalizar_nome(nome):
     if not nome: return "sem_nome"
     return "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split()).lower()
@@ -123,9 +150,6 @@ def buscar_cep(cep):
     except: pass
     return None
 
-# =========================================
-# SEGURANÇA
-# =========================================
 def gerar_senha_temporaria(t=8):
     return ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(t))
 
@@ -147,26 +171,15 @@ def enviar_email_recuperacao(dest, senha):
         return True
     except: return False
 
-# =========================================
-# CÓDIGO SEQUENCIAL E QR CODE
-# =========================================
 def gerar_codigo_verificacao():
-    """Gera BJJDIGITAL-{ANO}-{SEQUENCIA} consultando o banco."""
     try:
         db = get_db()
-        # Conta quantos documentos existem na coleção 'resultados'
         aggregate_query = db.collection('resultados').count()
         snapshots = aggregate_query.get()
         total_existente = int(snapshots[0][0].value)
-        
         proximo_num = total_existente + 1
-        ano = datetime.now().year
-        
-        # Formata com 4 dígitos (ex: 0001, 0042)
-        return f"BJJDIGITAL-{ano}-{proximo_num:04d}"
-    except Exception as e:
-        print(f"Erro ao gerar sequencia: {e}")
-        # Fallback para aleatório se o banco falhar
+        return f"BJJDIGITAL-{datetime.now().year}-{proximo_num:04d}"
+    except:
         return f"BJJDIGITAL-{datetime.now().year}-{random.randint(1000,9999)}"
 
 def gerar_qrcode(codigo):
@@ -180,46 +193,29 @@ def gerar_qrcode(codigo):
         return path
     except: return None
 
-# =========================================
-# GERADOR DE PDF BLINDADO
-# =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
     try:
         pdf = FPDF("L", "mm", "A4")
         pdf.add_page()
-        
-        # Cores
         CF, CV, CD = (255, 255, 252), (14, 45, 38), (218, 165, 32)
-        
-        # Fundo e Bordas
         pdf.set_fill_color(*CF); pdf.rect(0,0,297,210,"F")
         pdf.set_fill_color(*CV); pdf.rect(0,0,35,210,"F")
         pdf.set_fill_color(*CD); pdf.rect(35,0,2,210,"F")
         pdf.set_draw_color(*CD); pdf.set_line_width(1); pdf.rect(10,10,277,190)
-        pdf.set_line_width(0.3); pdf.rect(37,12,248,186)
-
-        # Helper para achar imagens
+        
         def find_img(name):
             if os.path.exists(f"assets/{name}"): return f"assets/{name}"
             if os.path.exists(name): return name
             return None
 
-        # Logo
         logo = find_img("logo.jpg") or find_img("logo.png")
         if logo: pdf.image(logo, x=45, y=20, w=30)
 
-        # QR Code
         qr = gerar_qrcode(codigo)
         if qr and os.path.exists(qr):
-            pdf.set_xy(240, 20)
-            pdf.set_font("Helvetica", "B", 8); pdf.set_text_color(100,100,100)
-            pdf.cell(40, 5, "Autenticidade", align="C")
             pdf.image(qr, x=250, y=26, w=20)
-            pdf.set_xy(240, 47); pdf.set_font("Courier", "B", 9); pdf.set_text_color(0,0,0)
-            pdf.cell(40, 5, codigo, align="C")
 
-        # Título
         pdf.set_y(50); pdf.set_left_margin(45)
         pdf.set_font("Helvetica", "B", 36); pdf.set_text_color(*CV)
         pdf.cell(0, 15, "CERTIFICADO", ln=True, align="C")
@@ -227,23 +223,16 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.cell(0, 10, "DE CONCLUSÃO DE EXAME TEÓRICO", ln=True, align="C")
         pdf.ln(10)
 
-        # Texto
         pdf.set_font("Helvetica", "", 16); pdf.set_text_color(0,0,0)
         pdf.cell(0, 10, "Certificamos que o aluno(a)", ln=True, align="C")
         
-        # Nome
         pdf.ln(5)
         try: nm = usuario_nome.upper().encode('latin-1','replace').decode('latin-1')
         except: nm = str(usuario_nome).upper()
         
-        sz = 32
-        pdf.set_font("Helvetica", "B", sz)
-        while pdf.get_string_width(nm) > 230 and sz > 12:
-            sz -= 2; pdf.set_font("Helvetica", "B", sz)
-            
+        pdf.set_font("Helvetica", "B", 30)
         pdf.set_text_color(*CD); pdf.cell(0, 15, nm, ln=True, align="C")
         
-        # Faixa
         pdf.ln(5); pdf.set_font("Helvetica", "", 16); pdf.set_text_color(0,0,0)
         pdf.cell(0, 10, "Concluiu com êxito a avaliação para a faixa", ln=True, align="C")
         pdf.ln(5)
@@ -251,31 +240,12 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor=None):
         pdf.set_font("Helvetica", "B", 32)
         pdf.cell(0, 15, faixa.upper(), ln=True, align="C")
 
-        # Dados
         pdf.ln(10); pdf.set_font("Helvetica", "", 11); pdf.set_text_color(100,100,100)
-        pdf.cell(0, 8, f"Emissão: {datetime.now().strftime('%d/%m/%Y')}  |  Nota: {pontuacao:.1f}%", ln=True, align="C")
+        pdf.cell(0, 8, f"Emissão: {datetime.now().strftime('%d/%m/%Y')} | Nota: {pontuacao:.1f}%", ln=True, align="C")
 
-        # Assinatura
-        pdf.ln(15); y = pdf.get_y()
-        pdf.set_draw_color(50,50,50); pdf.set_line_width(0.5)
-        pdf.line(100, y, 200, y)
-        pdf.ln(2); pdf.set_font("Helvetica", "B", 11); pdf.set_text_color(*CV)
-        pdf.cell(0, 6, "COORDENAÇÃO TÉCNICA - BJJ DIGITAL", align="C")
+        return pdf.output(dest='S').encode('latin-1'), f"Certificado.pdf"
+    except: return None, None
 
-        # Selo
-        selo = find_img("selo_dourado.jpg")
-        if selo: pdf.image(selo, x=245, y=155, w=35)
-
-        # Retorno seguro de Bytes
-        return pdf.output(dest='S').encode('latin-1'), f"Certificado_{nm.split()[0]}.pdf"
-
-    except Exception as e:
-        print(f"Erro PDF: {e}")
-        return None, None
-
-# =========================================
-# 6. REGRAS DO EXAME
-# =========================================
 def verificar_elegibilidade_exame(ud):
     stt = ud.get('status_exame','pendente')
     if stt=='aprovado': return False, "Aprovado."
@@ -304,52 +274,3 @@ def registrar_fim_exame(uid, apr):
 def bloquear_por_abandono(uid):
     try: get_db().collection('usuarios').document(uid).update({"status_exame":"bloqueado", "motivo_bloqueio":"Anti-Cola", "data_ultimo_exame":datetime.utcnow().isoformat()})
     except: pass
-
-# =========================================
-# 7. IA ANTI-DUPLICIDADE (SEMÂNTICA)
-# =========================================
-try:
-    from sentence_transformers import SentenceTransformer
-    from sklearn.metrics.pairwise import cosine_similarity
-    import numpy as np
-    
-    # Carrega o modelo apenas uma vez (Cache)
-    @st.cache_resource
-    def carregar_modelo_ia():
-        # Modelo leve e rápido, ideal para Streamlit
-        return SentenceTransformer('all-MiniLM-L6-v2')
-
-    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.85):
-        """
-        Retorna (True, Pergunta_Similar) se encontrar duplicidade.
-        threshold=0.85 significa 85% de similaridade mínima.
-        """
-        if not lista_existentes: 
-            return False, None
-            
-        model = carregar_modelo_ia()
-        
-        # 1. Gera o embedding da nova pergunta
-        embedding_novo = model.encode([nova_pergunta])
-        
-        # 2. Gera embeddings das existentes (Idealmente, cachear isso em produção)
-        # Extrai apenas os textos das perguntas
-        textos_existentes = [q.get('pergunta', '') for q in lista_existentes]
-        embeddings_existentes = model.encode(textos_existentes)
-        
-        # 3. Calcula similaridade (Cosseno)
-        scores = cosine_similarity(embedding_novo, embeddings_existentes)[0]
-        
-        # 4. Verifica o maior score
-        max_score = np.max(scores)
-        idx_max = np.argmax(scores)
-        
-        if max_score >= threshold:
-            pergunta_similar = textos_existentes[idx_max]
-            return True, f"{pergunta_similar} (Similaridade: {max_score*100:.1f}%)"
-            
-        return False, None
-
-except ImportError:
-    # Fallback se as libs não estiverem instaladas
-    def verificar_duplicidade_ia(n, l, t=0.85): return False, None
