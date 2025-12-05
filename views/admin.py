@@ -7,14 +7,13 @@ from datetime import datetime, date, time as dtime
 from database import get_db, OPCOES_SEXO
 from firebase_admin import firestore
 
-# Importa o Dashboard separado
-# Se der erro aqui, certifique-se de que o arquivo views/dashboard_admin.py existe
+# Tenta importar o dashboard. Se falhar, cria função vazia para não quebrar.
 try:
     from views.dashboard_admin import render_dashboard_geral
 except ImportError:
-    def render_dashboard_geral(): st.warning("Dashboard não encontrado.")
+    def render_dashboard_geral(): st.warning("Erro ao carregar Dashboard.")
 
-# Importa utils com tratamento de erro
+# Importa utils com tratamento de erro e variáveis opcionais
 try:
     from utils import (
         carregar_todas_questoes, 
@@ -46,7 +45,7 @@ MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS
+# GESTÃO DE USUÁRIOS (TAB INTERNA)
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
@@ -55,11 +54,16 @@ def gestao_usuarios_tab():
     
     df = pd.DataFrame(users)
     c1, c2 = st.columns(2)
-    filtro_nome = c1.text_input("🔍 Buscar Nome/Email:")
+    filtro_nome = c1.text_input("🔍 Buscar Nome/Email/CPF:")
     filtro_tipo = c2.multiselect("Filtrar Tipo:", df['tipo_usuario'].unique() if 'tipo_usuario' in df.columns else [])
 
     if filtro_nome:
-        df = df[df['nome'].str.contains(filtro_nome.upper()) | df['email'].str.contains(filtro_nome.lower())]
+        termo = filtro_nome.upper()
+        df = df[
+            df['nome'].str.upper().str.contains(termo) | 
+            df['email'].str.upper().str.contains(termo) |
+            df['cpf'].str.contains(termo)
+        ]
     if filtro_tipo:
         df = df[df['tipo_usuario'].isin(filtro_tipo)]
 
@@ -70,19 +74,20 @@ def gestao_usuarios_tab():
     st.dataframe(df[cols_show], use_container_width=True, hide_index=True)
     
     st.markdown("---")
-    st.subheader("🛠️ Editar Usuário")
+    st.subheader("🛠️ Editar Cadastro Completo")
     
     opcoes = df.to_dict('records')
-    sel = st.selectbox("Selecione para editar:", opcoes, format_func=lambda x: f"{x.get('nome')} | {x.get('tipo_usuario')}")
+    sel = st.selectbox("Selecione o usuário:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
     
     if sel:
         with st.form(f"edt_{sel['id']}"):
+            st.markdown("##### 👤 Dados Pessoais")
             c1, c2 = st.columns(2)
-            nm = c1.text_input("Nome:", value=sel.get('nome',''))
-            tp = c2.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
+            nm = c1.text_input("Nome Completo:", value=sel.get('nome',''))
+            email = c2.text_input("E-mail:", value=sel.get('email',''))
             
-            c3, c4 = st.columns(2)
-            fx = c3.selectbox("Faixa:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
+            c3, c4, c5 = st.columns([1.5, 1, 1])
+            cpf = c3.text_input("CPF:", value=sel.get('cpf',''))
             
             idx_s = 0
             if sel.get('sexo') in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sel.get('sexo'))
@@ -92,25 +97,57 @@ def gestao_usuarios_tab():
             if sel.get('data_nascimento'):
                 try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
                 except: pass
-            nasc_edit = st.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
+            nasc_edit = c5.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
+            st.markdown("##### 📍 Endereço")
+            e1, e2 = st.columns([1, 3])
+            cep = e1.text_input("CEP:", value=sel.get('cep',''))
+            logr = e2.text_input("Logradouro:", value=sel.get('logradouro',''))
+            
+            e3, e4, e5 = st.columns([1, 2, 2])
+            num = e3.text_input("Número:", value=sel.get('numero',''))
+            comp = e4.text_input("Complemento:", value=sel.get('complemento',''))
+            bairro = e5.text_input("Bairro:", value=sel.get('bairro',''))
+            
+            e6, e7 = st.columns(2)
+            cid = e6.text_input("Cidade:", value=sel.get('cidade',''))
+            uf = e7.text_input("UF:", value=sel.get('uf',''))
+
+            st.markdown("##### 🥋 Perfil Academia")
+            p1, p2 = st.columns(2)
+            tp = p1.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
+            
+            idx_fx = 0
+            # Lógica para encontrar a faixa na lista, evitando erro se não existir
+            faixa_atual = sel.get('faixa_atual', 'Branca')
+            if faixa_atual in FAIXAS_COMPLETAS:
+                idx_fx = FAIXAS_COMPLETAS.index(faixa_atual)
+            fx = p2.selectbox("Faixa:", FAIXAS_COMPLETAS, index=idx_fx)
+
+            st.markdown("##### 🔒 Segurança")
             pwd = st.text_input("Nova Senha (opcional):", type="password")
             
-            if st.form_submit_button("Salvar Alterações"):
+            if st.form_submit_button("💾 Salvar Alterações"):
                 upd = {
-                    "nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx,
-                    "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None
+                    "nome": nm.upper(), "email": email.lower().strip(), "cpf": cpf,
+                    "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
+                    "cep": cep, "logradouro": logr.upper(), "numero": num, "complemento": comp.upper(),
+                    "bairro": bairro.upper(), "cidade": cid.upper(), "uf": uf.upper(),
+                    "tipo_usuario": tp, "faixa_atual": fx
                 }
                 if pwd: 
                     upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
                     upd["precisa_trocar_senha"] = True
                 
-                db.collection('usuarios').document(sel['id']).update(upd)
-                st.success("Salvo!"); time.sleep(1); st.rerun()
+                try:
+                    db.collection('usuarios').document(sel['id']).update(upd)
+                    st.success("Salvo!"); time.sleep(1); st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
                 
         if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
             db.collection('usuarios').document(sel['id']).delete()
-            st.warning("Usuário excluído."); st.rerun()
+            st.warning("Usuário excluído."); time.sleep(1); st.rerun()
 
 # =========================================
 # GESTÃO DE QUESTÕES
@@ -191,11 +228,9 @@ def gestao_questoes_tab():
             with st.form("new_q"):
                 st.markdown("#### Nova Questão")
                 
-                # Indicador de Status da IA
-                if IA_ATIVADA:
-                    st.caption("🟢 IA de Anti-Duplicidade Ativada")
-                else:
-                    st.caption("🔴 IA Não Detectada (Instale sentence-transformers)")
+                # Indicador IA
+                if IA_ATIVADA: st.caption("🟢 IA de Anti-Duplicidade Ativada")
+                else: st.caption("🔴 IA Não Detectada (Instale sentence-transformers)")
 
                 perg = st.text_area("Enunciado:")
                 c1, c2 = st.columns(2)
@@ -210,37 +245,33 @@ def gestao_questoes_tab():
                 alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
                 correta = st.selectbox("Correta:", ["A","B","C","D"])
                 
+                # --- BOTÃO CADASTRAR COM IA BLINDADA ---
                 if st.form_submit_button("💾 Cadastrar"):
                     if perg and alt_a and alt_b:
-                        
-                        # --- BLOCO DE IA BLINDADO ---
-                        # Evita que erros na IA travem o cadastro (TypeError)
                         pode_salvar = True
+                        
+                        # Bloco IA
                         if IA_ATIVADA:
                             try:
                                 with st.spinner("Estamos verificando se há outra questão igual em nosso banco..."):
                                     all_qs_snap = list(db.collection('questoes').stream())
                                     lista_qs = [d.to_dict() for d in all_qs_snap]
                                     
-                                    # Chamada segura
+                                    # Chamada segura com desempacotamento protegido
                                     resultado_ia = verificar_duplicidade_ia(perg, lista_qs, threshold=0.75)
                                     
-                                    # Garante que o retorno é válido antes de desempacotar
-                                    if resultado_ia and isinstance(resultado_ia, tuple) and len(resultado_ia) == 2:
+                                    if isinstance(resultado_ia, tuple) and len(resultado_ia) == 2:
                                         is_dup, dup_msg = resultado_ia
                                         if is_dup:
                                             st.error("⚠️ Detectamos que há uma questão igual em nosso banco de questões")
                                             st.warning(f"Similar encontrada: {dup_msg}")
                                             pode_salvar = False
                                     else:
-                                        # Se a IA retornar algo estranho, ignoramos e deixamos salvar
-                                        print("Aviso: Retorno inválido da IA, ignorando verificação.")
-                                        
+                                        print(f"IA retornou formato inválido: {resultado_ia}")
+
                             except Exception as e:
-                                print(f"Erro silencioso na IA: {e}")
-                                # Se der erro, permitimos salvar para não travar o usuário
-                                pode_salvar = True 
-                        # ----------------------------
+                                st.warning(f"Aviso: Verificação de duplicidade falhou, mas vamos salvar. Erro: {e}")
+                                pode_salvar = True # Salva mesmo com erro na IA
 
                         if pode_salvar:
                             f_img = fazer_upload_midia(up_img) if up_img else None
@@ -254,14 +285,24 @@ def gestao_questoes_tab():
                             })
                             st.success("Sucesso! Questão cadastrada."); time.sleep(1); st.rerun()
                         else:
-                            st.stop() # Para a execução se for duplicada
+                            st.stop()
                     else:
                         st.warning("Preencha dados básicos.")
         
         with sub_tab_lote:
              st.info("Utilize esta opção para carregar uma planilha (Excel ou CSV).")
-             # ... (Código de importação mantido simplificado para caber, igual ao anterior)
-             pass
+             col_info, col_btn = st.columns([3, 1])
+             df_modelo = pd.DataFrame({
+                "pergunta": ["Qual a cor da faixa inicial?"], "alt_a": ["Branca"], "alt_b": ["Azul"], 
+                "alt_c": ["Preta"], "alt_d": ["Rosa"], "correta": ["A"], "dificuldade": [1], "categoria": ["História"]
+             })
+             csv_buffer = io.StringIO()
+             df_modelo.to_csv(csv_buffer, index=False)
+             col_btn.download_button("⬇️ Modelo CSV", data=csv_buffer.getvalue(), file_name="modelo.csv", mime="text/csv")
+             arquivo = st.file_uploader("Upload CSV/XLSX:", type=["csv", "xlsx"])
+             if arquivo:
+                 if st.button("🚀 Importar (Simulação)"):
+                     st.success("Importação em lote iniciada.")
 
 # =========================================
 # GESTÃO DE EXAMES
@@ -340,9 +381,11 @@ def gestao_exames_tab():
 # =========================================
 # CONTROLADOR PRINCIPAL (ROTEAMENTO)
 # =========================================
+# Estas funções são chamadas pelo app.py se alguém tentar acessar diretamente pela URL
 def gestao_questoes(): gestao_questoes_tab()
 def gestao_exame_de_faixa(): gestao_exames_tab()
 
+# Função principal chamada pelo menu lateral
 def gestao_usuarios(usuario_logado):
     st.markdown(f"<h1 style='color:#FFD700;'>Gestão e Estatísticas</h1>", unsafe_allow_html=True)
     
@@ -350,6 +393,7 @@ def gestao_usuarios(usuario_logado):
         st.session_state.menu_selection = "Início"
         st.rerun()
 
+    # Menu de abas interno do Admin
     menu = st.radio("", ["👥 Gestão de Usuários", "📊 Dashboard"], 
                     horizontal=True, label_visibility="collapsed")
     st.markdown("---")
