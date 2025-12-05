@@ -20,6 +20,7 @@ try:
         verificar_duplicidade_ia 
     )
 except ImportError:
+    # Definição de fallback caso o utils.py esteja com problemas
     def carregar_todas_questoes(): return []
     def salvar_questoes(t, q): pass
     def fazer_upload_midia(f): return None
@@ -107,7 +108,7 @@ def gestao_usuarios_tab():
             st.warning("Usuário excluído."); st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (Mantido para acesso externo)
+# GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes_tab():
     db = get_db()
@@ -199,17 +200,20 @@ def gestao_questoes_tab():
                 
                 if st.form_submit_button("💾 Cadastrar"):
                     if perg and alt_a and alt_b:
-                        # --- BLOCO DE IA / ANTI-DUPLICIDADE ---
-                        with st.spinner("🤖 A IA está verificando duplicidade semântica..."):
-                            all_qs_snap = list(db.collection('questoes').stream())
-                            lista_qs = [d.to_dict() for d in all_qs_snap]
-                            is_dup, dup_msg = verificar_duplicidade_ia(perg, lista_qs, threshold=0.85)
-                            
-                            if is_dup:
-                                st.error("⚠️ Bloqueado: A IA detectou uma questão semanticamente idêntica!")
-                                st.warning(f"Similar encontrada: {dup_msg}")
-                                st.info("Altere a redação se for uma questão realmente nova.")
-                                st.stop()
+                        # --- BLOCO DE IA / ANTI-DUPLICIDADE (BLINDADO) ---
+                        try:
+                            with st.spinner("🤖 A IA está verificando duplicidade semântica..."):
+                                all_qs_snap = list(db.collection('questoes').stream())
+                                lista_qs = [d.to_dict() for d in all_qs_snap]
+                                is_dup, dup_msg = verificar_duplicidade_ia(perg, lista_qs, threshold=0.85)
+                                
+                                if is_dup:
+                                    st.error("⚠️ Bloqueado: A IA detectou uma questão semanticamente idêntica!")
+                                    st.warning(f"Similar encontrada: {dup_msg}")
+                                    st.info("Altere a redação se for uma questão realmente nova.")
+                                    st.stop()
+                        except Exception as e:
+                            print(f"Aviso: Verificação IA falhou, prosseguindo. Erro: {e}")
                         # --------------------------------------
 
                         f_img = fazer_upload_midia(up_img) if up_img else None
@@ -241,7 +245,7 @@ def gestao_questoes_tab():
                      st.success("Importação simulada.")
 
 # =========================================
-# GESTÃO DE EXAMES (Mantido para acesso externo)
+# GESTÃO DE EXAMES
 # =========================================
 def gestao_exames_tab():
     st.markdown("### ⚙️ Montador de Exames")
@@ -323,7 +327,6 @@ def gestao_exame_de_faixa(): gestao_exames_tab()
 def gestao_usuarios(usuario_logado):
     st.markdown(f"<h1 style='color:#FFD700;'>Gestão e Estatísticas</h1>", unsafe_allow_html=True)
     
-    # Menu simplificado, sem questões e exames (já estão na sidebar)
     menu = st.radio("", ["📊 Dashboard", "👥 Usuários"], 
                     horizontal=True, label_visibility="collapsed")
     st.markdown("---")
