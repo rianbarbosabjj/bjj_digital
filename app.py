@@ -173,12 +173,10 @@ def app_principal():
     usuario = st.session_state.usuario
     raw_tipo = str(usuario.get("tipo", "aluno")).lower()
     
-    # Normalização lógica (para o código funcionar)
     if "admin" in raw_tipo: tipo_code = "admin"
     elif "professor" in raw_tipo: tipo_code = "professor"
     else: tipo_code = "aluno"
 
-    # Normalização Visual (para aparecer bonito na tela)
     label_tipo = raw_tipo.capitalize()
     if tipo_code == "admin": label_tipo = "Administrador(a)"
     elif tipo_code == "professor": label_tipo = "Professor(a)"
@@ -190,19 +188,21 @@ def app_principal():
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         
-        # Exibe o tipo formatado (ex: Professor(a))
         st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{label_tipo}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
+        # 1. Meu Perfil (Sempre primeiro)
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
         
+        # 2. Painel do Professor (Movido para cima conforme pedido)
+        if tipo_code in ["admin", "professor"]:
+            if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
+        
+        # 3. Meus Certificados (Movido para baixo)
         if tipo_code != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         
-        if tipo_code in ["admin", "professor"]:
-            # Botão Inclusivo
-            if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
-        
+        # 4. Gestão Admin (Sempre por último)
         if tipo_code == "admin":
             if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
             
