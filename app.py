@@ -171,7 +171,7 @@ def app_principal():
         st.session_state.clear(); st.rerun(); return
 
     usuario = st.session_state.usuario
-    tipo = str(usuario.get("tipo", "aluno")).lower()
+    tipo = str(usuario.get("tipo", "aluno(a)")).lower()
 
     def nav(pg): st.session_state.menu_selection = pg
 
@@ -184,8 +184,8 @@ def app_principal():
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
-        if tipo in ["admin", "professor"]:
-            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+        if tipo in ["admin", "professor(a)"]:
+            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor(a)")
         if tipo == "admin":
             # --- MUDANÇA AQUI: Botão renomeado ---
             if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
@@ -200,7 +200,7 @@ def app_principal():
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     # --- MUDANÇA AQUI: Rota atualizada ---
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
-    if pg == "Painel do Professor": professor.painel_professor(); return
+    if pg == "Painel do Professor(a)": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
