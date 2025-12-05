@@ -7,17 +7,24 @@ from datetime import datetime, date, time as dtime
 from database import get_db, OPCOES_SEXO
 from firebase_admin import firestore
 
-# Importa o novo Dashboard separado
+# Importa o Dashboard separado
 from views.dashboard_admin import render_dashboard_geral
 
-# Importa utils
+# Importa utils com a nova função de IA
 try:
-    from utils import carregar_todas_questoes, salvar_questoes, fazer_upload_midia, normalizar_link_video
+    from utils import (
+        carregar_todas_questoes, 
+        salvar_questoes, 
+        fazer_upload_midia, 
+        normalizar_link_video, 
+        verificar_duplicidade_ia # <--- Nova função importada
+    )
 except ImportError:
     def carregar_todas_questoes(): return []
     def salvar_questoes(t, q): pass
     def fazer_upload_midia(f): return None
     def normalizar_link_video(u): return u
+    def verificar_duplicidade_ia(n, l, t=0.85): return False, None
 
 # --- CONSTANTES ---
 FAIXAS_COMPLETAS = [
@@ -100,7 +107,7 @@ def gestao_usuarios_tab():
             st.warning("Usuário excluído."); st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES
+# GESTÃO DE QUESTÕES (COM IA)
 # =========================================
 def gestao_questoes_tab():
     db = get_db()
@@ -189,8 +196,24 @@ def gestao_questoes_tab():
                 alt_a = ca.text_input("A)"); alt_b = cb_col.text_input("B)")
                 alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
                 correta = st.selectbox("Correta:", ["A","B","C","D"])
+                
                 if st.form_submit_button("💾 Cadastrar"):
                     if perg and alt_a and alt_b:
+                        # --- BLOCO DE IA / ANTI-DUPLICIDADE ---
+                        with st.spinner("🤖 A IA está verificando duplicidade semântica..."):
+                            # Busca questões existentes para comparar
+                            all_qs_snap = list(db.collection('questoes').stream())
+                            lista_qs = [d.to_dict() for d in all_qs_snap]
+                            
+                            is_dup, dup_msg = verificar_duplicidade_ia(perg, lista_qs, threshold=0.85)
+                            
+                            if is_dup:
+                                st.error("⚠️ Bloqueado: A IA detectou uma questão semanticamente idêntica!")
+                                st.warning(f"Similar encontrada: {dup_msg}")
+                                st.info("Altere a redação se for uma questão realmente nova.")
+                                st.stop()
+                        # --------------------------------------
+
                         f_img = fazer_upload_midia(up_img) if up_img else None
                         f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
                         db.collection('questoes').add({
@@ -200,7 +223,9 @@ def gestao_questoes_tab():
                             "resposta_correta": correta, "status": "aprovada",
                             "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
                         })
-                        st.success("Sucesso!"); st.rerun()
+                        st.success("Sucesso! Questão cadastrada."); time.sleep(1); st.rerun()
+                    else:
+                        st.warning("Preencha dados básicos.")
         
         with sub_tab_lote:
              st.info("Utilize esta opção para carregar uma planilha (Excel ou CSV).")
@@ -215,7 +240,7 @@ def gestao_questoes_tab():
              arquivo = st.file_uploader("Upload CSV/XLSX:", type=["csv", "xlsx"])
              if arquivo:
                  if st.button("🚀 Importar"):
-                     st.success("Importação simulada com sucesso.")
+                     st.success("Importação simulada. (Adicione a lógica de loop com inserção aqui se necessário).")
 
 # =========================================
 # GESTÃO DE EXAMES
