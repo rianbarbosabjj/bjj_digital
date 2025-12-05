@@ -41,7 +41,7 @@ def tela_inicio():
     with col3: render_card("🏆 Ranking", "Posição no ranking.", "Acessar", "n3", "Ranking")
 
     tipo = str(st.session_state.usuario.get("tipo", "aluno")).lower()
-    if tipo in ["admin", "professor"]:
+    if tipo in ["admin", "professor(a)"]:
         st.markdown("---"); st.markdown(f"<h2 style='color:{COR_DESTAQUE};text-align:center;'>Gestão</h2>", unsafe_allow_html=True)
         c1, c2, c3 = st.columns(3)
         with c1: render_card("🧠 Questões", "Editar banco.", "Gerenciar", "g1", "Gestão de Questões")
