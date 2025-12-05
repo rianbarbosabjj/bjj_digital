@@ -161,19 +161,19 @@ def gestao_usuarios_tab():
             idx_eq = lista_equipes.index(nome_eq_atual) if nome_eq_atual in lista_equipes else 0
             nova_equipe_nome = v1.selectbox("Equipe:", lista_equipes, index=idx_eq)
             
-            novo_prof_display = "Sem Professor"
+            novo_prof_display = "Sem Professor(a)"
             if tipo_sel == 'aluno':
                 id_equipe_selecionada = mapa_equipes_inv.get(nova_equipe_nome)
-                lista_profs_filtrada = ["Sem Professor"]
+                lista_profs_filtrada = ["Sem Professor(a)"]
                 if id_equipe_selecionada in profs_por_equipe:
                     lista_profs_filtrada += sorted(profs_por_equipe[id_equipe_selecionada])
-                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor")
+                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor(a)")
                 idx_prof = 0
                 if nome_prof_atual_display in lista_profs_filtrada:
                     idx_prof = lista_profs_filtrada.index(nome_prof_atual_display)
-                novo_prof_display = v2.selectbox("Professor Responsável:", lista_profs_filtrada, index=idx_prof)
+                novo_prof_display = v2.selectbox("Professor(a) Responsável:", lista_profs_filtrada, index=idx_prof)
                 if nova_equipe_nome == "Sem Equipe":
-                    v2.caption("Selecione uma equipe para ver os professores.")
+                    v2.caption("Selecione uma equipe para ver os professores(as).")
 
             st.markdown("##### 🔒 Segurança")
             pwd = st.text_input("Nova Senha (opcional):", type="password")
@@ -365,7 +365,7 @@ def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>📝 Gestão de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Criar e Editar Examens", "👁️ Visualizar Exames", "✅ Autorizar Alunos"])
+    tab1, tab2, tab3 = st.tabs(["📝 Criar e Editar Examens", "👁️ Visualizar Exames", "✅ Autorizar Alunos(as)"])
 
     with tab1:
         st.subheader("1. Selecione a Faixa")
@@ -478,7 +478,7 @@ def gestao_exame_de_faixa_route():
             c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
-        st.write(""); st.subheader("Lista de Alunos")
+        st.write(""); st.subheader("Lista de Alunos(as)")
         try:
             alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
             lista_alunos = []
