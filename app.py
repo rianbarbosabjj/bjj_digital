@@ -196,7 +196,7 @@ def app_principal():
         
         # 2. Painel do Professor (Movido para cima conforme pedido)
         if tipo_code in ["admin", "professor"]:
-            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
+            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor(a)")
         
         # 3. Meus Certificados (Movido para baixo)
         if tipo_code != "admin":
@@ -215,7 +215,7 @@ def app_principal():
 
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
-    if pg == "Painel do Professor": professor.painel_professor(); return
+    if pg == "Painel do Professor(a)": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
