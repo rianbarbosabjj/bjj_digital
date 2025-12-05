@@ -1,377 +1,495 @@
-import os
-import re
-import requests
 import streamlit as st
-import smtplib
-import secrets
-import string
-import unicodedata
-import random
-import uuid
-import qrcode
-from urllib.parse import quote
-from datetime import datetime
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from fpdf import FPDF
-from database import get_db
-from firebase_admin import firestore, storage 
+import pandas as pd
+import bcrypt
+import time 
+import io 
+from datetime import datetime, date, time as dtime 
+from database import get_db, OPCOES_SEXO
+from firebase_admin import firestore
 
-# =========================================
-# CONFIGURAÇÃO DE CORES DAS FAIXAS (RGB)
-# =========================================
-CORES_FAIXAS = {
-    "CINZA E BRANCA": (150, 150, 150), "CINZA": (128, 128, 128), "CINZA E PRETA": (100, 100, 100), 
-    "AMARELA E BRANCA": (240, 230, 140), "AMARELA": (255, 215, 0), "AMARELA E PRETA": (184, 134, 11),
-    "LARANJA E BRANCA": (255, 160, 122), "LARANJA": (255, 140, 0), "LARANJA E PRETA": (200, 100, 0),
-    "VERDE e BRANCA": (144, 238, 144), "VERDE": (0, 128, 0), "VERDE E PRETA": (0, 100, 0),
-    "AZUL": (0, 0, 205), "ROXA": (128, 0, 128), "MARROM": (139, 69, 19), "PRETA": (0, 0, 0)
-}
-
-def get_cor_faixa(nome_faixa):
-    for chave, cor in CORES_FAIXAS.items():
-        if chave in nome_faixa.upper():
-            return cor
-    return (255, 255, 255) # Branco padrão se não achar
-
-# =========================================
-# FUNÇÕES DE MÍDIA E UPLOAD
-# =========================================
-def normalizar_link_video(url):
-    if not url: return None
-    try:
-        if "shorts/" in url:
-            base = url.split("shorts/")[1]
-            video_id = base.split("?")[0]
-            return f"https://www.youtube.com/watch?v={video_id}"
-        elif "youtu.be/" in url:
-            base = url.split("youtu.be/")[1]
-            video_id = base.split("?")[0]
-            return f"https://www.youtube.com/watch?v={video_id}"
-        return url
-    except: return url
-
-def fazer_upload_midia(arquivo):
-    if not arquivo: return None
-    try:
-        bucket = storage.bucket()
-        if not bucket.name:
-            bucket_name = st.secrets.get("firebase", {}).get("storage_bucket")
-            if not bucket_name: bucket_name = st.secrets.get("storage_bucket")
-            if not bucket_name: return None
-        
-        ext = arquivo.name.split('.')[-1]
-        blob_name = f"questoes/{uuid.uuid4()}.{ext}"
-        blob = bucket.blob(blob_name)
-        
-        arquivo.seek(0)
-        blob.upload_from_file(arquivo, content_type=arquivo.type)
-        
-        access_token = str(uuid.uuid4())
-        metadata = {"firebaseStorageDownloadTokens": access_token}
-        blob.metadata = metadata
-        blob.patch()
-
-        blob_path_encoded = quote(blob_name, safe='')
-        return f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{blob_path_encoded}?alt=media&token={access_token}"
-    except Exception as e:
-        st.error(f"Erro Upload: {e}")
-        return None
-
-# =========================================
-# IA ANTI-DUPLICIDADE (SAFE MODE)
-# =========================================
-IA_ATIVADA = False 
+# Tenta importar o dashboard
 try:
-    from sentence_transformers import SentenceTransformer
-    from sklearn.metrics.pairwise import cosine_similarity
-    import numpy as np
-    
-    IA_ATIVADA = True
+    from views.dashboard_admin import render_dashboard_geral
+except ImportError:
+    def render_dashboard_geral(): st.warning("Dashboard não encontrado.")
 
-    @st.cache_resource
-    def carregar_modelo_ia():
-        return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-
-    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.75):
-        if not lista_existentes: return False, None
-        try:
-            model = carregar_modelo_ia()
-            embedding_novo = model.encode([nova_pergunta])
-            textos_existentes = [str(q.get('pergunta', '')) for q in lista_existentes]
-            if not textos_existentes: return False, None
-            embeddings_existentes = model.encode(textos_existentes)
-            scores = cosine_similarity(embedding_novo, embeddings_existentes)[0]
-            max_score = np.max(scores)
-            idx_max = np.argmax(scores)
-            if max_score >= threshold:
-                return True, f"{textos_existentes[idx_max]} ({max_score*100:.1f}%)"
-            return False, None
-        except Exception as e:
-            print(f"Erro IA: {e}")
-            return False, None
-
+# Importa utils
+try:
+    from utils import (
+        carregar_todas_questoes, 
+        salvar_questoes, 
+        fazer_upload_midia, 
+        normalizar_link_video, 
+        verificar_duplicidade_ia,
+        IA_ATIVADA 
+    )
 except ImportError:
     IA_ATIVADA = False
-    def verificar_duplicidade_ia(n, l, t=0.75): 
-        return False, "IA não instalada"
+    def carregar_todas_questoes(): return []
+    def salvar_questoes(t, q): pass
+    def fazer_upload_midia(f): return None
+    def normalizar_link_video(u): return u
+    def verificar_duplicidade_ia(n, l, t=0.85): return False, None
+
+# --- CONSTANTES ---
+FAIXAS_COMPLETAS = [
+    " ", "Cinza e Branca", "Cinza", "Cinza e Preta",
+    "Amarela e Branca", "Amarela", "Amarela e Preta",
+    "Laranja e Branca", "Laranja", "Laranja e Preta",
+    "Verde e Branca", "Verde", "Verde e Preta",
+    "Azul", "Roxa", "Marrom", "Preta"
+]
+NIVEIS_DIFICULDADE = [1, 2, 3, 4]
+MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
+
+def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# DEMAIS FUNÇÕES GERAIS
+# GESTÃO DE USUÁRIOS
 # =========================================
-def carregar_todas_questoes(): return []
-def salvar_questoes(t, q): pass
+def gestao_usuarios_tab():
+    db = get_db()
+    
+    # 1. Carregar Listas Auxiliares
+    users_ref = list(db.collection('usuarios').stream())
+    users = [d.to_dict() | {"id": d.id} for d in users_ref]
+    
+    equipes_ref = list(db.collection('equipes').stream())
+    mapa_equipes = {d.id: d.to_dict().get('nome', 'Sem Nome') for d in equipes_ref} 
+    mapa_equipes_inv = {v: k for k, v in mapa_equipes.items()} 
+    lista_equipes = ["Sem Equipe"] + sorted(list(mapa_equipes.values()))
 
-def normalizar_nome(nome):
-    if not nome: return "sem_nome"
-    return "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split()).lower()
+    # Lógica de Professores (carregamento prévio)
+    profs_users = list(db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream())
+    mapa_nomes_profs = {u.id: u.to_dict().get('nome', 'Sem Nome') for u in profs_users}
+    mapa_nomes_profs_inv = {v: k for k, v in mapa_nomes_profs.items()}
 
-def formatar_e_validar_cpf(cpf):
-    if not cpf: return None
-    c = re.sub(r'\D', '', str(cpf))
-    if len(c) != 11 or c == c[0]*11: return None
-    return f"{c[:3]}.{c[3:6]}.{c[6:9]}-{c[9:]}"
+    vincs_profs = list(db.collection('professores').where('status_vinculo', '==', 'ativo').stream())
+    profs_por_equipe = {}
+    for v in vincs_profs:
+        d = v.to_dict()
+        eid = d.get('equipe_id')
+        uid = d.get('usuario_id')
+        if eid and uid and uid in mapa_nomes_profs:
+            if eid not in profs_por_equipe: profs_por_equipe[eid] = []
+            profs_por_equipe[eid].append(mapa_nomes_profs[uid])
 
-def formatar_cep(cep):
-    if not cep: return None
-    c = ''.join(filter(str.isdigit, cep))
-    return c if len(c) == 8 else None
+    if not users: st.warning("Vazio."); return
+    
+    # Tabela
+    df = pd.DataFrame(users)
+    c1, c2 = st.columns(2)
+    filtro_nome = c1.text_input("🔍 Buscar Nome/Email/CPF:")
+    filtro_tipo = c2.multiselect("Filtrar Tipo:", df['tipo_usuario'].unique() if 'tipo_usuario' in df.columns else [])
 
-def buscar_cep(cep):
-    c = formatar_cep(cep)
-    if not c: return None
-    try:
-        r = requests.get(f"https://viacep.com.br/ws/{c}/json/", timeout=3)
-        if r.status_code == 200 and "erro" not in r.json():
-            d = r.json()
-            return {"logradouro": d.get("logradouro","").upper(), "bairro": d.get("bairro","").upper(), "cidade": d.get("localidade","").upper(), "uf": d.get("uf","").upper()}
-    except: pass
-    return None
+    if filtro_nome:
+        termo = filtro_nome.upper()
+        df = df[
+            df['nome'].str.upper().str.contains(termo) | 
+            df['email'].str.upper().str.contains(termo) |
+            df['cpf'].str.contains(termo)
+        ]
+    if filtro_tipo:
+        df = df[df['tipo_usuario'].isin(filtro_tipo)]
 
-def gerar_senha_temporaria(t=8):
-    return ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(t))
-
-def enviar_email_recuperacao(dest, senha):
-    try:
-        s_email = st.secrets.get("EMAIL_SENDER")
-        s_pwd = st.secrets.get("EMAIL_PASSWORD")
-        if not s_email or not s_pwd: return False
-        msg = MIMEMultipart()
-        msg['Subject'] = "Recuperação BJJ"
-        msg['From'] = s_email
-        msg['To'] = dest
-        msg.attach(MIMEText(f"Senha: {senha}", 'html'))
-        server = smtplib.SMTP("smtp.gmail.com", 587)
-        server.starttls()
-        server.login(s_email, s_pwd)
-        server.sendmail(s_email, dest, msg.as_string())
-        server.quit()
-        return True
-    except: return False
-
-def gerar_codigo_verificacao():
-    try:
-        db = get_db()
-        aggregate_query = db.collection('resultados').count()
-        snapshots = aggregate_query.get()
-        total = int(snapshots[0][0].value)
-        return f"BJJDIGITAL-{datetime.now().year}-{total+1:04d}"
-    except:
-        return f"BJJDIGITAL-{datetime.now().year}-{random.randint(1000,9999)}"
-
-def gerar_qrcode(codigo):
-    try:
-        os.makedirs("temp", exist_ok=True)
-        path = f"temp/qr_{codigo}.png"
-        qr = qrcode.QRCode(box_size=10, border=1)
-        qr.add_data(f"https://bjjdigital.streamlit.app/?validar={codigo}")
-        qr.make(fit=True)
-        qr.make_image(fill_color="black", back_color="white").save(path)
-        return path
-    except: return None
-
-# =========================================
-# GERADOR DE PDF (FIXED & IMPROVED)
-# =========================================
-@st.cache_data(show_spinner=False)
-def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor Responsável"):
-    try:
-        # Helper para limpar acentos (FPDF Standard compatibility)
-        def limpar_texto(txt):
-            if not txt: return ""
-            try:
-                return txt.encode('latin-1', 'replace').decode('latin-1')
-            except:
-                return str(txt)
-
-        pdf = FPDF("L", "mm", "A4")
-        pdf.add_page()
+    cols_show = ['nome', 'email', 'tipo_usuario', 'faixa_atual', 'sexo']
+    for c in cols_show: 
+        if c not in df.columns: df[c] = "-"
+    
+    st.dataframe(df[cols_show], use_container_width=True, hide_index=True)
+    
+    st.markdown("---")
+    st.subheader("🛠️ Editar Cadastro Completo")
+    
+    opcoes = df.to_dict('records')
+    sel = st.selectbox("Selecione o usuário:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
+    
+    if sel:
+        # Vínculos atuais
+        vinculo_equipe_id = None
+        vinculo_prof_id = None
+        doc_vinculo_id = None
         
-        # Cores (Tema BJJ Digital)
-        C_BRANCO = (255, 255, 255)
-        C_DOURADO = (218, 165, 32)
-        C_FUNDO = (14, 45, 38) # Verde Escuro
-
-        # 1. Fundo (Imagem ou Cor)
-        fundo_path = None
-        # Verifica extensões possíveis
-        if os.path.exists("assets/fundo_certificado.jpg"): fundo_path = "assets/fundo_certificado.jpg"
-        elif os.path.exists("assets/fundo_certificado.png"): fundo_path = "assets/fundo_certificado.png"
+        if sel.get('tipo_usuario') == 'aluno':
+            vincs = list(db.collection('alunos').where('usuario_id', '==', sel['id']).limit(1).stream())
+            if vincs:
+                doc_vinculo_id = vincs[0].id
+                d_vinc = vincs[0].to_dict()
+                vinculo_equipe_id = d_vinc.get('equipe_id')
+                vinculo_prof_id = d_vinc.get('professor_id')
         
-        if fundo_path:
-            pdf.image(fundo_path, x=0, y=0, w=297, h=210)
+        elif sel.get('tipo_usuario') == 'professor':
+            vincs = list(db.collection('professores').where('usuario_id', '==', sel['id']).limit(1).stream())
+            if vincs:
+                doc_vinculo_id = vincs[0].id
+                d_vinc = vincs[0].to_dict()
+                vinculo_equipe_id = d_vinc.get('equipe_id')
+
+        with st.form(f"edt_{sel['id']}"):
+            st.markdown("##### 👤 Dados Pessoais")
+            c1, c2 = st.columns(2)
+            nm = c1.text_input("Nome Completo:", value=sel.get('nome',''))
+            email = c2.text_input("E-mail:", value=sel.get('email',''))
+            
+            c3, c4, c5 = st.columns([1.5, 1, 1])
+            cpf = c3.text_input("CPF:", value=sel.get('cpf',''))
+            
+            idx_s = 0
+            if sel.get('sexo') in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sel.get('sexo'))
+            sexo_edit = c4.selectbox("Sexo:", OPCOES_SEXO, index=idx_s)
+            
+            val_n = None
+            if sel.get('data_nascimento'):
+                try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
+                except: pass
+            nasc_edit = c5.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
+
+            st.markdown("##### 📍 Endereço")
+            e1, e2 = st.columns([1, 3])
+            cep = e1.text_input("CEP:", value=sel.get('cep',''))
+            logr = e2.text_input("Logradouro:", value=sel.get('logradouro',''))
+            e3, e4, e5 = st.columns([1, 2, 2])
+            num = e3.text_input("Número:", value=sel.get('numero',''))
+            comp = e4.text_input("Complemento:", value=sel.get('complemento',''))
+            bairro = e5.text_input("Bairro:", value=sel.get('bairro',''))
+            e6, e7 = st.columns(2)
+            cid = e6.text_input("Cidade:", value=sel.get('cidade',''))
+            uf = e7.text_input("UF:", value=sel.get('uf',''))
+
+            st.markdown("##### 🥋 Perfil e Vínculos")
+            p1, p2 = st.columns(2)
+            tipo_sel = p1.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
+            
+            idx_fx = 0
+            faixa_atual = sel.get('faixa_atual', 'Branca')
+            if faixa_atual in FAIXAS_COMPLETAS: idx_fx = FAIXAS_COMPLETAS.index(faixa_atual)
+            fx = p2.selectbox("Faixa:", FAIXAS_COMPLETAS, index=idx_fx)
+
+            v1, v2 = st.columns(2)
+            # Equipe
+            nome_eq_atual = mapa_equipes.get(vinculo_equipe_id, "Sem Equipe")
+            idx_eq = lista_equipes.index(nome_eq_atual) if nome_eq_atual in lista_equipes else 0
+            nova_equipe_nome = v1.selectbox("Equipe:", lista_equipes, index=idx_eq)
+            
+            # Professor Dinâmico
+            novo_prof_display = "Sem Professor"
+            if tipo_sel == 'aluno':
+                id_equipe_selecionada = mapa_equipes_inv.get(nova_equipe_nome)
+                lista_profs_filtrada = ["Sem Professor"]
+                if id_equipe_selecionada in profs_por_equipe:
+                    lista_profs_filtrada += sorted(profs_por_equipe[id_equipe_selecionada])
+                
+                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor")
+                idx_prof = 0
+                if nome_prof_atual_display in lista_profs_filtrada:
+                    idx_prof = lista_profs_filtrada.index(nome_prof_atual_display)
+                
+                novo_prof_display = v2.selectbox("Professor Responsável:", lista_profs_filtrada, index=idx_prof)
+                if nova_equipe_nome == "Sem Equipe":
+                    v2.caption("Selecione uma equipe para ver os professores.")
+
+            st.markdown("##### 🔒 Segurança")
+            pwd = st.text_input("Nova Senha (opcional):", type="password")
+            
+            if st.form_submit_button("💾 Salvar Todas as Alterações"):
+                upd = {
+                    "nome": nm.upper(), "email": email.lower().strip(), "cpf": cpf,
+                    "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
+                    "cep": cep, "logradouro": logr.upper(), "numero": num, "complemento": comp.upper(),
+                    "bairro": bairro.upper(), "cidade": cid.upper(), "uf": uf.upper(),
+                    "tipo_usuario": tipo_sel, "faixa_atual": fx
+                }
+                if pwd: 
+                    upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
+                    upd["precisa_trocar_senha"] = True
+                
+                try:
+                    db.collection('usuarios').document(sel['id']).update(upd)
+                    novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
+                    
+                    if tipo_sel == 'aluno':
+                        novo_p_id = mapa_nomes_profs_inv.get(novo_prof_display)
+                        dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id, "faixa_atual": fx}
+                        if doc_vinculo_id:
+                            db.collection('alunos').document(doc_vinculo_id).update(dados_vinc)
+                        else:
+                            dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
+                            db.collection('alunos').add(dados_vinc)
+                            
+                    elif tipo_sel == 'professor':
+                        dados_vinc = {"equipe_id": novo_eq_id}
+                        if doc_vinculo_id:
+                            db.collection('professores').document(doc_vinculo_id).update(dados_vinc)
+                        else:
+                            dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
+                            db.collection('professores').add(dados_vinc)
+
+                    st.success("✅ Cadastro atualizado!"); time.sleep(1.5); st.rerun()
+                except Exception as e:
+                    st.error(f"Erro ao salvar: {e}")
+                
+        if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
+            db.collection('usuarios').document(sel['id']).delete()
+            st.warning("Usuário excluído."); time.sleep(1); st.rerun()
+
+# =========================================
+# GESTÃO DE QUESTÕES (ATUALIZADA)
+# =========================================
+def gestao_questoes_tab():
+    st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
+    db = get_db()
+    user = st.session_state.usuario
+    
+    # Verifica permissão
+    if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
+        st.error("Acesso negado."); return
+
+    tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
+
+    # --- LISTAR ---
+    with tab1:
+        q_ref = list(db.collection('questoes').stream())
+        c1, c2 = st.columns(2)
+        termo = c1.text_input("🔍 Buscar:")
+        filt_n = c2.multiselect("Nível:", NIVEIS_DIFICULDADE)
+        
+        q_filtro = []
+        for doc in q_ref:
+            d = doc.to_dict(); d['id'] = doc.id
+            if termo and termo.lower() not in d.get('pergunta','').lower(): continue
+            if filt_n and d.get('dificuldade',1) not in filt_n: continue
+            q_filtro.append(d)
+            
+        if not q_filtro: st.info("Nada encontrado.")
         else:
-            # Fundo de emergência se a imagem não existir
-            pdf.set_fill_color(*C_FUNDO)
-            pdf.rect(0,0,297,210,"F")
-            pdf.set_draw_color(*C_DOURADO)
-            pdf.set_line_width(2)
-            pdf.rect(10,10,277,190)
+            st.caption(f"{len(q_filtro)} questões")
+            for q in q_filtro:
+                with st.container(border=True):
+                    ch, cb = st.columns([5, 1])
+                    bdg = get_badge_nivel(q.get('dificuldade',1))
+                    ch.markdown(f"**{bdg}** | {q.get('categoria','Geral')} | ✍️ {q.get('criado_por','?')}")
+                    ch.markdown(f"##### {q.get('pergunta')}")
+                    
+                    # --- PREVIEW ---
+                    if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
+                    
+                    if q.get('url_video'):
+                        link_limpo = normalizar_link_video(q.get('url_video'))
+                        try: ch.video(link_limpo)
+                        except: ch.markdown(f"🔗 [Ver Vídeo Externo]({q.get('url_video')})")
+                    
+                    with ch.expander("Alternativas"):
+                        alts = q.get('alternativas', {})
+                        st.write(f"A) {alts.get('A','')} | B) {alts.get('B','')}")
+                        st.write(f"C) {alts.get('C','')} | D) {alts.get('D','')}")
+                        st.success(f"Correta: {q.get('resposta_correta')}")
+                    
+                    if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
+                
+                # --- EDITAR ---
+                if st.session_state.get('edit_q') == q['id']:
+                    with st.container(border=True):
+                        st.markdown("#### ✏️ Editando")
+                        with st.form(f"f_ed_{q['id']}"):
+                            perg = st.text_area("Enunciado:", value=q.get('pergunta',''))
+                            
+                            st.markdown("🖼️ **Mídia**")
+                            c_img, c_vid = st.columns(2)
+                            up_img = c_img.file_uploader("Nova Imagem:", type=["jpg","png"], key=f"u_i_{q['id']}")
+                            url_i_at = q.get('url_imagem','')
+                            if url_i_at: c_img.caption("Imagem atual salva.")
+                            
+                            up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
+                            url_v_at = q.get('url_video','')
+                            url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
+                            
+                            c1, c2 = st.columns(2)
+                            dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(q.get('dificuldade',1)))
+                            cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
+                            
+                            alts = q.get('alternativas',{})
+                            ca, cb = st.columns(2); cc, cd = st.columns(2)
+                            rA = ca.text_input("A)", alts.get('A','')); rB = cb.text_input("B)", alts.get('B',''))
+                            rC = cc.text_input("C)", alts.get('C','')); rD = cd.text_input("D)", alts.get('D',''))
+                            corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(q.get('resposta_correta','A')))
+                            
+                            cols = st.columns(2)
+                            if cols[0].form_submit_button("💾 Salvar"):
+                                fin_img = url_i_at
+                                if up_img:
+                                    with st.spinner("Subindo imagem..."): fin_img = fazer_upload_midia(up_img)
+                                
+                                fin_vid = url_v_manual
+                                if up_vid:
+                                    with st.spinner("Subindo vídeo..."): fin_vid = fazer_upload_midia(up_vid)
+                                
+                                db.collection('questoes').document(q['id']).update({
+                                    "pergunta": perg, "dificuldade": dif, "categoria": cat,
+                                    "url_imagem": fin_img, "url_video": fin_vid,
+                                    "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
+                                    "resposta_correta": corr
+                                })
+                                st.session_state['edit_q'] = None; st.success("Salvo!"); time.sleep(1); st.rerun()
+                                
+                            if cols[1].form_submit_button("Cancelar"):
+                                st.session_state['edit_q'] = None; st.rerun()
+                                
+                        if st.button("🗑️ Deletar", key=f"del_q_{q['id']}", type="primary"):
+                            db.collection('questoes').document(q['id']).delete()
+                            st.session_state['edit_q'] = None; st.success("Deletado."); st.rerun()
 
-        # 2. Fonte da Assinatura
-        font_assinatura = "Helvetica"
-        # Tenta carregar a fonte Allura (sem o parametro uni=True que bugava)
-        if os.path.exists("assets/Allura-Regular.ttf"):
-            try:
-                pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True)
-                font_assinatura = 'Allura'
-            except: 
-                # Se der erro no add_font, segue com Helvetica Itálico
-                font_assinatura = "Helvetica"
-
-        # 3. Cabeçalho
-        pdf.set_y(40)
-        pdf.set_font("Helvetica", "B", 32)
-        pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpar_texto("CERTIFICADO"), ln=True, align="C")
-        
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(200, 200, 200)
-        pdf.cell(0, 8, limpar_texto("DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
-        
-        # 4. Texto Introdutório
-        pdf.ln(15)
-        pdf.set_font("Helvetica", "", 16)
-        pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpar_texto("Certificamos que o aluno(a)"), ln=True, align="C")
-
-        # 5. Nome do Aluno (Com redimensionamento automático)
-        pdf.ln(5)
-        nome_upper = usuario_nome.upper().strip()
-        nome_limpo = limpar_texto(nome_upper)
-        
-        tamanho_fonte = 40
-        pdf.set_font("Helvetica", "B", tamanho_fonte)
-        
-        # Reduz a fonte enquanto o texto for maior que 250mm
-        while pdf.get_string_width(nome_limpo) > 250 and tamanho_fonte > 12:
-            tamanho_fonte -= 2
-            pdf.set_font("Helvetica", "B", tamanho_fonte)
+    # --- ADICIONAR ---
+    with tab2:
+        with st.form("new_q"):
+            st.markdown("#### Nova Questão")
             
-        pdf.set_text_color(*C_DOURADO)
-        pdf.cell(0, 15, nome_limpo, ln=True, align="C")
+            # --- IA Check ---
+            if IA_ATIVADA: st.caption("🟢 IA de Anti-Duplicidade Ativada")
+            else: st.caption("🔴 IA Não Detectada")
 
-        # 6. Texto de Aprovação
-        pdf.ln(5)
-        pdf.set_font("Helvetica", "", 16)
-        pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpar_texto("foi APROVADO(A) no Exame teórico, estando apto(a) à faixa:"), ln=True, align="C")
-        
-        # 7. Nome da Faixa
-        pdf.ln(5)
-        pdf.set_font("Helvetica", "B", 32)
-        cor_fx = get_cor_faixa(faixa)
-        # Se a faixa for muito escura, usa contorno branco ou texto branco
-        if sum(cor_fx) < 100: pdf.set_text_color(255,255,255)
-        else: pdf.set_text_color(*cor_fx)
-        
-        pdf.cell(0, 15, limpar_texto(faixa.upper()), ln=True, align="C")
+            perg = st.text_area("Enunciado:")
+            
+            st.markdown("🖼️ **Mídia**")
+            c1, c2 = st.columns(2)
+            up_img = c1.file_uploader("Imagem (JPG/PNG):", type=["jpg","png","jpeg"])
+            up_vid = c2.file_uploader("Vídeo (MP4/MOV):", type=["mp4","mov"])
+            link_vid = c2.text_input("Ou Link YouTube:")
+            
+            c3, c4 = st.columns(2)
+            dif = c3.selectbox("Nível:", NIVEIS_DIFICULDADE)
+            cat = c4.text_input("Categoria:", "Geral")
+            
+            st.markdown("**Alternativas:**")
+            ca, cb = st.columns(2); cc, cd = st.columns(2)
+            alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
+            alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
+            correta = st.selectbox("Correta:", ["A","B","C","D"])
+            
+            if st.form_submit_button("💾 Cadastrar"):
+                if perg and alt_a and alt_b:
+                    # --- BLOCO DE IA / ANTI-DUPLICIDADE ---
+                    pode_salvar = True
+                    if IA_ATIVADA:
+                        try:
+                            with st.spinner("Estamos verificando se há outra questão igual em nosso banco..."):
+                                all_qs_snap = list(db.collection('questoes').stream())
+                                lista_qs = [d.to_dict() for d in all_qs_snap]
+                                res_ia = verificar_duplicidade_ia(perg, lista_qs, threshold=0.75)
+                                
+                                if res_ia and isinstance(res_ia, tuple) and res_ia[0]:
+                                    st.error("⚠️ Detectamos que há uma questão igual em nosso banco de questões")
+                                    st.warning(f"Similar encontrada: {res_ia[1]}")
+                                    pode_salvar = False
+                        except Exception as e:
+                            st.warning(f"Aviso IA: {e}")
+                            pode_salvar = True
 
-        # 8. Rodapé (Data e Assinatura)
-        pdf.set_y(155)
-        
-        # --- LADO ESQUERDO: Data e Código ---
-        col_esq_x = 35
-        pdf.set_xy(col_esq_x, 160)
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(200, 200, 200)
-        
-        data_hj = datetime.now().strftime('%d/%m/%Y')
-        pdf.cell(60, 6, limpar_texto(f"Data de Emissão: {data_hj}"), ln=True, align="L")
-        
-        pdf.set_xy(col_esq_x, 166)
-        pdf.set_font("Courier", "", 9)
-        pdf.cell(60, 5, f"Cód: {codigo}", align="L")
+                    if pode_salvar:
+                        f_img = fazer_upload_midia(up_img) if up_img else None
+                        f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
+                        
+                        db.collection('questoes').add({
+                            "pergunta": perg, "dificuldade": dif, "categoria": cat,
+                            "url_imagem": f_img, "url_video": f_vid,
+                            "alternativas": {"A":alt_a, "B":alt_b, "C":alt_c, "D":alt_d},
+                            "resposta_correta": correta, "status": "aprovada",
+                            "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
+                        })
+                        st.success("Sucesso!"); time.sleep(1); st.rerun()
+                    else:
+                        st.stop()
+                else: st.warning("Preencha dados básicos.")
 
-        # --- LADO DIREITO: Assinatura do Professor ---
-        # Centro da assinatura no eixo X (ajustado para a direita)
-        centro_ass = 220 
-        pdf.set_xy(centro_ass - 40, 150)
+# =========================================
+# GESTÃO DE EXAMES
+# =========================================
+def gestao_exames_tab():
+    st.markdown("### ⚙️ Montador de Exames")
+    db = get_db()
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar Configs", "✅ Autorizar Alunos"])
+    
+    with tab1:
+        st.subheader("Configurar Prova por Faixa")
+        faixa_sel = st.selectbox("Faixa Alvo:", FAIXAS_COMPLETAS)
+        configs = list(db.collection('config_exames').where('faixa', '==', faixa_sel).limit(1).stream())
+        conf_atual = configs[0].to_dict() if configs else {}
+        doc_id = configs[0].id if configs else None
+        if 'sel_ids' not in st.session_state: st.session_state.sel_ids = set(conf_atual.get('questoes_ids', []))
+
+        c1, c2 = st.columns(2)
+        tempo = c1.number_input("Tempo (min):", 10, 180, int(conf_atual.get('tempo_limite', 45)))
+        nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
         
-        # Nome do Professor (Fonte Cursiva ou Itálica)
-        if font_assinatura == 'Allura':
-            pdf.set_font('Allura', "", 28)
+        st.write("Selecione as questões abaixo:")
+        all_q = list(db.collection('questoes').stream())
+        cf1, cf2 = st.columns(2)
+        filtro_dif = cf1.multiselect("Dificuldade:", NIVEIS_DIFICULDADE, default=[1,2])
+        filtro_cat = cf2.text_input("Filtrar Categoria:")
+        
+        with st.container(height=400, border=True):
+            for doc in all_q:
+                d = doc.to_dict()
+                if d.get('dificuldade',1) not in filtro_dif: continue
+                if filtro_cat and filtro_cat.lower() not in d.get('categoria','').lower(): continue
+                chk = st.checkbox(f"{d.get('pergunta')} ({d.get('categoria')})", value=(doc.id in st.session_state.sel_ids), key=f"ex_{doc.id}")
+                if chk: st.session_state.sel_ids.add(doc.id)
+                else: st.session_state.sel_ids.discard(doc.id)
+        
+        if st.button("💾 Salvar Configuração"):
+            dados = {"faixa": faixa_sel, "questoes_ids": list(st.session_state.sel_ids), "qtd_questoes": len(st.session_state.sel_ids), "tempo_limite": tempo, "aprovacao_minima": nota, "atualizado_em": firestore.SERVER_TIMESTAMP}
+            if doc_id: db.collection('config_exames').document(doc_id).update(dados)
+            else: db.collection('config_exames').add(dados)
+            st.success("Salvo!"); st.rerun()
+
+    with tab2:
+        st.write("Configurações Salvas:")
+        for d in db.collection('config_exames').stream():
+            dt = d.to_dict()
+            with st.expander(f"Faixa {dt.get('faixa')}"):
+                st.write(f"Questões: {dt.get('qtd_questoes')} | Tempo: {dt.get('tempo_limite')}m")
+                if st.button("Excluir", key=f"del_c_{d.id}"):
+                    db.collection('config_exames').document(d.id).delete(); st.rerun()
+
+    with tab3:
+        st.subheader("Liberação de Exame")
+        c1, c2 = st.columns(2)
+        d_ini = c1.date_input("Início:", datetime.now(), format="DD/MM/YYYY")
+        d_fim = c2.date_input("Fim:", datetime.now(), format="DD/MM/YYYY")
+        dt_ini = datetime.combine(d_ini, dtime(0,0)); dt_fim = datetime.combine(d_fim, dtime(23,59))
+
+        alunos = list(db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream())
+        if not alunos: st.info("Sem alunos.")
         else:
-            pdf.set_font("Helvetica", "I", 24)
-            
-        pdf.set_text_color(*C_DOURADO)
-        pdf.cell(80, 10, limpar_texto(professor), ln=True, align="C")
-        
-        # Linha da assinatura
-        pdf.set_xy(centro_ass - 30, 162)
-        pdf.set_draw_color(255, 255, 255)
-        pdf.set_line_width(0.5)
-        pdf.line(centro_ass - 30, 162, centro_ass + 30, 162)
-        
-        # Cargo abaixo da linha
-        pdf.set_xy(centro_ass - 40, 165)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_text_color(200, 200, 200)
-        pdf.cell(80, 5, limpar_texto("Professor Responsável"), align="C")
+            for doc in alunos:
+                a = doc.to_dict()
+                c1, c2, c3 = st.columns([3, 2, 1])
+                c1.write(f"**{a.get('nome')}** ({a.get('faixa_atual')})")
+                c2.write(f"Status: {a.get('status_exame', 'pendente')}")
+                if a.get('exame_habilitado'):
+                    if c3.button("Bloquear", key=f"blk_{doc.id}"):
+                        db.collection('usuarios').document(doc.id).update({"exame_habilitado": False}); st.rerun()
+                else:
+                    fx_alvo = c2.selectbox("Faixa Exame:", FAIXAS_COMPLETAS, key=f"fx_{doc.id}")
+                    if c3.button("Liberar", key=f"lib_{doc.id}"):
+                        db.collection('usuarios').document(doc.id).update({"exame_habilitado": True, "faixa_exame": fx_alvo, "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(), "status_exame": "pendente", "status_exame_em_andamento": False}); st.success("Liberado!"); st.rerun()
+                st.divider()
 
-        # 9. QR Code (Centralizado ou Discreto)
-        qr_path = gerar_qrcode(codigo)
-        if qr_path and os.path.exists(qr_path):
-            # Coloca o QR code mais centralizado na parte inferior
-            pdf.image(qr_path, x=136, y=160, w=25)
-            
-            pdf.set_xy(128, 186)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(150, 150, 150)
-            pdf.cell(40, 4, limpar_texto("Verificar Autenticidade"), align="C")
+# =========================================
+# CONTROLADOR PRINCIPAL (ROTEAMENTO)
+# =========================================
+def gestao_questoes(): gestao_questoes_tab()
+def gestao_exame_de_faixa(): gestao_exames_tab()
 
-        # Retorno seguro dos bytes
-        return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
+def gestao_usuarios(usuario_logado):
+    st.markdown(f"<h1 style='color:#FFD700;'>Gestão e Estatísticas</h1>", unsafe_allow_html=True)
+    
+    if st.button("🏠 Voltar ao Início", key="btn_back_admin_main"):
+        st.session_state.menu_selection = "Início"
+        st.rerun()
 
-    except Exception as e:
-        print(f"❌ ERRO CRÍTICO PDF: {e}")
-        return None, None
-
-def verificar_elegibilidade_exame(ud):
-    stt = ud.get('status_exame','pendente')
-    if stt=='aprovado': return False, "Aprovado."
-    if stt=='bloqueado': return False, "Bloqueado."
-    if stt=='reprovado':
-        u = ud.get('data_ultimo_exame')
-        if u:
-            try:
-                dt = datetime.fromisoformat(u.replace('Z','')) if isinstance(u,str) else u
-                if (datetime.utcnow()-dt.replace(tzinfo=None)).total_seconds() < 72*3600: return False, "Aguarde 72h."
-            except: pass
-    return True, "OK"
-
-def registrar_inicio_exame(uid):
-    try: get_db().collection('usuarios').document(uid).update({"status_exame":"em_andamento", "inicio_exame_temp":datetime.utcnow().isoformat()})
-    except: pass
-
-def registrar_fim_exame(uid, apr):
-    try:
-        s = "aprovado" if apr else "reprovado"
-        d = {"status_exame":s, "data_ultimo_exame":datetime.utcnow().isoformat(), "status_exame_em_andamento":False}
-        if apr: d.update({"exame_habilitado":firestore.DELETE_FIELD, "exame_inicio":firestore.DELETE_FIELD, "exame_fim":firestore.DELETE_FIELD})
-        get_db().collection('usuarios').document(uid).update(d)
-    except: pass
-
-def bloquear_por_abandono(uid):
-    try: get_db().collection('usuarios').document(uid).update({"status_exame":"bloqueado", "motivo_bloqueio":"Anti-Cola", "data_ultimo_exame":datetime.utcnow().isoformat()})
-    except: pass
+    menu = st.radio("", ["👥 Gestão de Usuários", "📊 Dashboard"], 
+                    horizontal=True, label_visibility="collapsed")
+    st.markdown("---")
+    
+    if menu == "📊 Dashboard": render_dashboard_geral()
+    elif menu == "👥 Gestão de Usuários": gestao_usuarios_tab()
