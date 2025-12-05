@@ -6,6 +6,7 @@ import time
 from datetime import datetime, time as dtime 
 from database import get_db
 from firebase_admin import firestore
+import io # Importante para baixar o modelo CSV
 
 # Importa a nova função normalizadora
 try:
@@ -65,13 +66,14 @@ def gestao_usuarios(usuario_logado):
             st.warning("Excluído."); st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES (CORRIGIDO VÍDEO)
+# 2. GESTÃO DE QUESTÕES (MODIFICADO: IMPORTAÇÃO EM LOTE)
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
     db = get_db()
     user = st.session_state.usuario
-    if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
+    # Verifica permissão básica
+    if str(user.get("tipo_usuario", "")).lower() not in ["admin", "professor"]:
         st.error("Acesso negado."); return
 
     tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
@@ -103,7 +105,6 @@ def gestao_questoes():
                     # --- PREVIEW ---
                     if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
                     
-                    # CORREÇÃO VÍDEO: Usa o normalizador
                     if q.get('url_video'):
                         link_limpo = normalizar_link_video(q.get('url_video'))
                         try:
@@ -141,8 +142,8 @@ def gestao_questoes():
                             cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
                             
                             alts = q.get('alternativas',{})
-                            ca, cb = st.columns(2); cc, cd = st.columns(2)
-                            rA = ca.text_input("A)", alts.get('A','')); rB = cb.text_input("B)", alts.get('B',''))
+                            ca, cb_col = st.columns(2); cc, cd = st.columns(2)
+                            rA = ca.text_input("A)", alts.get('A','')); rB = cb_col.text_input("B)", alts.get('B',''))
                             rC = cc.text_input("C)", alts.get('C','')); rD = cd.text_input("D)", alts.get('D',''))
                             corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(q.get('resposta_correta','A')))
                             
@@ -171,41 +172,153 @@ def gestao_questoes():
                             db.collection('questoes').document(q['id']).delete()
                             st.session_state['edit_q'] = None; st.success("Deletado."); st.rerun()
 
-    # --- ADICIONAR ---
+    # --- ADICIONAR (Unitário ou Lote) ---
     with tab2:
-        with st.form("new_q"):
-            st.markdown("#### Nova Questão")
-            perg = st.text_area("Enunciado:")
-            st.markdown("🖼️ **Mídia**")
-            c1, c2 = st.columns(2)
-            up_img = c1.file_uploader("Imagem (JPG/PNG):", type=["jpg","png","jpeg"])
-            up_vid = c2.file_uploader("Vídeo (MP4/MOV):", type=["mp4","mov"])
-            link_vid = c2.text_input("Ou Link YouTube:")
-            
-            c3, c4 = st.columns(2)
-            dif = c3.selectbox("Nível:", NIVEIS_DIFICULDADE)
-            cat = c4.text_input("Categoria:", "Geral")
-            
-            st.markdown("**Alternativas:**")
-            ca, cb = st.columns(2); cc, cd = st.columns(2)
-            alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
-            alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
-            correta = st.selectbox("Correta:", ["A","B","C","D"])
-            
-            if st.form_submit_button("💾 Cadastrar"):
-                if perg and alt_a and alt_b:
-                    f_img = fazer_upload_midia(up_img) if up_img else None
-                    f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
-                    
-                    db.collection('questoes').add({
-                        "pergunta": perg, "dificuldade": dif, "categoria": cat,
-                        "url_imagem": f_img, "url_video": f_vid,
-                        "alternativas": {"A":alt_a, "B":alt_b, "C":alt_c, "D":alt_d},
-                        "resposta_correta": corr, "status": "aprovada",
-                        "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
-                    })
-                    st.success("Sucesso!"); time.sleep(1); st.rerun()
-                else: st.warning("Preencha dados básicos.")
+        # Cria sub-abas para separar o modo de cadastro
+        sub_tab_manual, sub_tab_lote = st.tabs(["✍️ Manual (Uma)", "📂 Em Lote (Várias)"])
+
+        # >>> OPÇÃO 1: MANUAL (CÓDIGO ORIGINAL) <<<
+        with sub_tab_manual:
+            with st.form("new_q"):
+                st.markdown("#### Nova Questão (Individual)")
+                perg = st.text_area("Enunciado:")
+                st.markdown("🖼️ **Mídia**")
+                c1, c2 = st.columns(2)
+                up_img = c1.file_uploader("Imagem (JPG/PNG):", type=["jpg","png","jpeg"])
+                up_vid = c2.file_uploader("Vídeo (MP4/MOV):", type=["mp4","mov"])
+                link_vid = c2.text_input("Ou Link YouTube:")
+                
+                c3, c4 = st.columns(2)
+                dif = c3.selectbox("Nível:", NIVEIS_DIFICULDADE)
+                cat = c4.text_input("Categoria:", "Geral")
+                
+                st.markdown("**Alternativas:**")
+                ca, cb_col = st.columns(2); cc, cd = st.columns(2)
+                alt_a = ca.text_input("A)"); alt_b = cb_col.text_input("B)")
+                alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
+                correta = st.selectbox("Correta:", ["A","B","C","D"])
+                
+                if st.form_submit_button("💾 Cadastrar"):
+                    if perg and alt_a and alt_b:
+                        f_img = fazer_upload_midia(up_img) if up_img else None
+                        f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
+                        
+                        db.collection('questoes').add({
+                            "pergunta": perg, "dificuldade": dif, "categoria": cat,
+                            "url_imagem": f_img, "url_video": f_vid,
+                            "alternativas": {"A":alt_a, "B":alt_b, "C":alt_c, "D":alt_d},
+                            "resposta_correta": correta, "status": "aprovada",
+                            "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
+                        })
+                        st.success("Sucesso!"); time.sleep(1); st.rerun()
+                    else: st.warning("Preencha dados básicos.")
+
+        # >>> OPÇÃO 2: EM LOTE (SOMENTE ADMIN) <<<
+        with sub_tab_lote:
+            # Verifica se é admin para liberar esta parte
+            if str(user.get("tipo_usuario", "")).lower() == "admin":
+                st.markdown("#### 📥 Importação em Massa")
+                st.info("Utilize esta opção para carregar uma planilha (Excel ou CSV) com várias questões.")
+
+                # Botão para baixar modelo
+                col_info, col_btn = st.columns([3, 1])
+                col_info.markdown("**Instruções:** Baixe o modelo, preencha as questões e faça o upload.")
+                
+                # Criação do DataFrame modelo
+                df_modelo = pd.DataFrame({
+                    "pergunta": ["Qual a cor da faixa inicial?", "Quem é o criador do Judô?"],
+                    "alt_a": ["Branca", "Helio Gracie"],
+                    "alt_b": ["Azul", "Jigoro Kano"],
+                    "alt_c": ["Preta", "Mitsuyo Maeda"],
+                    "alt_d": ["Rosa", "Conde Koma"],
+                    "correta": ["A", "B"],
+                    "dificuldade": [1, 2],
+                    "categoria": ["História", "História"]
+                })
+                
+                # Converte para CSV em memória
+                csv_buffer = io.StringIO()
+                df_modelo.to_csv(csv_buffer, index=False)
+                col_btn.download_button(
+                    label="⬇️ Baixar Modelo CSV",
+                    data=csv_buffer.getvalue(),
+                    file_name="modelo_questoes.csv",
+                    mime="text/csv"
+                )
+
+                st.markdown("---")
+                
+                # Upload do arquivo
+                arquivo = st.file_uploader("Selecione o arquivo preenchido:", type=["csv", "xlsx"])
+
+                if arquivo:
+                    try:
+                        # Lê CSV ou Excel
+                        if arquivo.name.endswith('.csv'):
+                            df_upload = pd.read_csv(arquivo)
+                        else:
+                            df_upload = pd.read_excel(arquivo)
+                        
+                        st.write("Pré-visualização dos dados:")
+                        st.dataframe(df_upload.head(3), hide_index=True)
+                        st.caption(f"Total de linhas encontradas: {len(df_upload)}")
+
+                        # Validação das colunas obrigatórias
+                        cols_obrigatorias = ["pergunta", "alt_a", "alt_b", "alt_c", "alt_d", "correta"]
+                        faltam = [c for c in cols_obrigatorias if c not in df_upload.columns]
+
+                        if faltam:
+                            st.error(f"O arquivo está incompleto. Faltam as colunas: {', '.join(faltam)}")
+                        else:
+                            if st.button("🚀 Importar Todas as Questões", type="primary"):
+                                progresso = st.progress(0)
+                                success_count = 0
+                                error_count = 0
+
+                                for i, row in df_upload.iterrows():
+                                    try:
+                                        # Monta o objeto para o Firestore
+                                        nova_q = {
+                                            "pergunta": str(row['pergunta']),
+                                            "dificuldade": int(row.get('dificuldade', 1)),
+                                            "categoria": str(row.get('categoria', 'Geral')),
+                                            "url_imagem": None, # Importação simples não suporta mídia direta
+                                            "url_video": None,
+                                            "alternativas": {
+                                                "A": str(row['alt_a']), "B": str(row['alt_b']),
+                                                "C": str(row['alt_c']), "D": str(row['alt_d'])
+                                            },
+                                            "resposta_correta": str(row['correta']).strip().upper(),
+                                            "status": "aprovada",
+                                            "criado_por": f"{user.get('nome', 'Admin')} (Import)",
+                                            "data_criacao": firestore.SERVER_TIMESTAMP
+                                        }
+                                        
+                                        # Valida se a resposta correta é válida
+                                        if nova_q['resposta_correta'] not in ["A", "B", "C", "D"]:
+                                            nova_q['resposta_correta'] = "A" # Fallback
+
+                                        db.collection('questoes').add(nova_q)
+                                        success_count += 1
+                                    except Exception as e:
+                                        error_count += 1
+                                        print(f"Erro na linha {i}: {e}")
+                                    
+                                    # Atualiza barra
+                                    progresso.progress((i + 1) / len(df_upload))
+
+                                st.success(f"Processo finalizado! {success_count} importadas com sucesso.")
+                                if error_count > 0:
+                                    st.warning(f"{error_count} falhas. Verifique o arquivo.")
+                                time.sleep(2)
+                                st.rerun()
+
+                    except Exception as e:
+                        st.error(f"Erro ao ler arquivo: {e}")
+            else:
+                # Caso seja professor e tente ver essa aba
+                st.warning("🔒 Esta funcionalidade é restrita aos Administradores.")
+                st.info("Entre em contato com o Admin se precisar importar grandes volumes de questões.")
 
 # =========================================
 # 3. GESTÃO DE EXAME
