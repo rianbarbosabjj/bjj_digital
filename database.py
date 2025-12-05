@@ -1,47 +1,13 @@
+
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 
-# ====================================================
-# CONSTANTES GLOBAIS (Centralizadas)
-# ====================================================
-# Use estas listas em todo o sistema importando de database
-# Ex: from database import FAIXAS_COMPLETAS, OPCOES_SEXO
-
-FAIXAS_COMPLETAS = [
-    " ", "Cinza e Branca", "Cinza", "Cinza e Preta",
-    "Amarela e Branca", "Amarela", "Amarela e Preta",
-    "Laranja e Branca", "Laranja", "Laranja e Preta",
-    "Verde e Branca", "Verde", "Verde e Preta",
-    "Azul", "Roxa", "Marrom", "Preta"
-]
-
-OPCOES_SEXO = ["Masculino", "Feminino"]
-
-NIVEIS_DIFICULDADE = [1, 2, 3, 4]
-
-MAPA_NIVEIS = {
-    1: "🟢 Fácil", 
-    2: "🔵 Médio", 
-    3: "🟠 Difícil", 
-    4: "🔴 Muito Difícil"
-}
-
-def get_badge_nivel(n):
-    """Função auxiliar para retornar o badge formatado"""
-    return MAPA_NIVEIS.get(n, "⚪ ?")
-
-
-# ====================================================
-# CONEXÃO COM FIREBASE
-# ====================================================
-
-@st.cache_resource
 def get_db():
     """
     Conexão ESTRITA com o banco 'bjj-digital'.
-    Usa cache_resource para manter a conexão ativa e não reconectar a cada reload.
+    Inicializa também o Storage com o bucket correto.
     """
     # 1. Inicializa o App (se ainda não estiver rodando)
     if not firebase_admin._apps:
@@ -74,9 +40,11 @@ def get_db():
                 bucket_name = st.secrets.get("storage_bucket")
             
             # 3. Se ainda não achou, tenta montar o padrão NOVO (.firebasestorage.app)
+            # O padrão antigo era .appspot.com, mas o seu é o novo.
             if not bucket_name:
                 project_id = key_dict.get("project_id")
                 if project_id:
+                    # Tenta o novo padrão primeiro
                     bucket_name = f"{project_id}.firebasestorage.app"
             
             if not bucket_name:
@@ -94,11 +62,9 @@ def get_db():
 
     # 2. Conecta ESPECIFICAMENTE ao banco 'bjj-digital'
     try:
-        # Tenta conectar ao banco específico (BJJ Digital)
         db = firestore.client(database_id='bjj-digital')
         return db
     except TypeError:
-        # Fallback para ambientes que não suportam database_id (emulador ou versões antigas)
         return firestore.client()
     except Exception as e:
         st.error(f"❌ Não foi possível conectar ao banco 'bjj-digital'. Erro: {e}")
