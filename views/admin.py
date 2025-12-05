@@ -231,7 +231,7 @@ def gestao_questoes_tab():
     
     tabs = st.tabs(titulos)
 
-    # --- ABA 1: LISTAR ---
+    # --- ABA 1: LISTAR (SOMENTE APROVADAS) ---
     with tabs[0]:
         q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         c1, c2 = st.columns(2)
@@ -271,6 +271,7 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
+                # EDITAR (INLINE)
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
@@ -375,6 +376,7 @@ def gestao_questoes_tab():
                         if pode_salvar:
                             f_img = fazer_upload_midia(up_img) if up_img else None
                             f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
+                            
                             status_ini = "aprovada" if user_tipo == "admin" else "pendente"
                             msg_sucesso = "✅ Cadastrada!" if user_tipo == "admin" else "⏳ Enviada para aprovação!"
                             
@@ -393,6 +395,18 @@ def gestao_questoes_tab():
             if user_tipo == "admin":
                 st.markdown("#### 📥 Importação em Massa")
                 st.info("Carregue Excel ou CSV.")
+                col_info, col_btn = st.columns([3, 1])
+                df_modelo = pd.DataFrame({
+                    "pergunta": ["Exemplo 1"], "alt_a": ["A"], "alt_b": ["B"], "alt_c": ["C"], "alt_d": ["D"],
+                    "correta": ["A"], "dificuldade": [1], "categoria": ["Geral"]
+                })
+                csv_buffer = io.StringIO()
+                df_modelo.to_csv(csv_buffer, index=False, sep=';')
+                col_btn.download_button("⬇️ Modelo", data=csv_buffer.getvalue(), file_name="modelo.csv", mime="text/csv")
+                
+                arquivo = st.file_uploader("Arquivo:", type=["csv", "xlsx"])
+                if arquivo and st.button("🚀 Importar"):
+                     st.success("Importação (Simulada)")
             else: st.warning("Restrito a Admin.")
 
     # --- ABA 3: MINHAS SUBMISSÕES ---
@@ -479,13 +493,13 @@ def gestao_questoes_tab():
                                 st.rerun()
 
 # =========================================
-# GESTÃO DE EXAMES (COM PRÉ-VISUALIZAÇÃO REAL)
+# GESTÃO DE EXAMES
 # =========================================
 def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos(as)"])
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
 
     # --- ABA 1: MONTAR ---
     with tab1:
@@ -508,10 +522,8 @@ def gestao_exame_de_faixa_route():
         st.markdown("### 2. Selecione as Questões")
         c_f1, c_f2 = st.columns(2)
         filtro_nivel = c_f1.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4], format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
-        
-        # Extrai categorias únicas para filtro
-        cats_list = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
-        filtro_tema = c_f2.multiselect("Filtrar Tema:", cats_list, default=cats_list)
+        cats = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
+        filtro_tema = c_f2.multiselect("Filtrar Tema:", cats, default=cats)
         
         with st.container(height=500, border=True):
             count_visible = 0
@@ -519,7 +531,6 @@ def gestao_exame_de_faixa_route():
                 d = doc.to_dict()
                 niv = d.get('dificuldade', 1)
                 cat = d.get('categoria', 'Geral')
-                
                 if niv in filtro_nivel and cat in filtro_tema:
                     count_visible += 1
                     c_chk, c_content = st.columns([1, 15])
@@ -535,10 +546,13 @@ def gestao_exame_de_faixa_route():
                         autor = d.get('criado_por', '?')
                         st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
                         st.markdown(f"{d.get('pergunta')}")
-                        
                         if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
                         if d.get('url_video'):
-                            st.markdown(f"[Ver Vídeo]({d.get('url_video')})")
+                            vid_url = d.get('url_video')
+                            link_limpo = normalizar_link_video(vid_url)
+                            try: st.video(link_limpo)
+                            except: pass
+                            st.markdown(f"<small>🔗 [Ver vídeo]({vid_url})</small>", unsafe_allow_html=True)
 
                         with st.expander("Ver Detalhes"):
                             alts = d.get('alternativas', {})
@@ -546,13 +560,13 @@ def gestao_exame_de_faixa_route():
                             st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
                             st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'}")
                     st.divider()
-            if count_visible == 0: st.warning("Nenhuma questão encontrada com esses filtros.")
+            if count_visible == 0: st.warning("Nada encontrado.")
 
         total_sel = len(st.session_state.selected_ids)
         c_res1, c_res2 = st.columns([3, 1])
         c_res1.success(f"**{total_sel}** questões selecionadas para **{faixa_sel}**.")
         if total_sel > 0:
-            if c_res2.button("🗑️ Limpar Seleção", key="clean_sel"):
+            if c_res2.button("🗑️ Limpar", key="clean_sel"):
                 st.session_state.selected_ids = set(); st.rerun()
         
         st.markdown("### 3. Regras de Aplicação")
@@ -560,9 +574,8 @@ def gestao_exame_de_faixa_route():
             c1, c2 = st.columns(2)
             tempo = c1.number_input("Tempo (min):", 10, 180, int(conf_atual.get('tempo_limite', 45)))
             nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
-            
             if st.form_submit_button("💾 Salvar Prova"):
-                if total_sel == 0: st.error("Selecione pelo menos uma questão.")
+                if total_sel == 0: st.error("Selecione questões.")
                 else:
                     try:
                         dados = {
@@ -574,67 +587,47 @@ def gestao_exame_de_faixa_route():
                             try: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
                             except: db.collection('config_exames').add(dados)
                         else: db.collection('config_exames').add(dados)
-                        st.success("Prova Salva com Sucesso!"); time.sleep(1.5); st.rerun()
+                        st.success("Salvo!"); time.sleep(1.5); st.rerun()
                     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
-    # --- ABA 2: VISUALIZAR (COM SIMULAÇÃO) ---
+    # --- ABA 2: VISUALIZAR (GRUPOS) ---
     with tab2:
-        st.subheader("Provas Cadastradas")
-        configs_snap = list(db.collection('config_exames').stream())
-        
-        if not configs_snap:
-            st.info("Nenhuma prova configurada ainda.")
-        
-        for doc in configs_snap:
-            d = doc.to_dict()
-            with st.expander(f"🥋 Faixa {d.get('faixa')} ({d.get('qtd_questoes')} questões)"):
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Tempo", f"{d.get('tempo_limite')} min")
-                c2.metric("Aprovação", f"{d.get('aprovacao_minima')}%")
-                
-                # --- SIMULAÇÃO DA PROVA ---
-                if st.toggle("👁️ Simular Visualização do Aluno", key=f"sim_{doc.id}"):
-                    st.markdown("---")
-                    st.caption("⚠️ Modo de visualização. As respostas não serão salvas.")
-                    
-                    ids = d.get('questoes_ids', [])
-                    if not ids:
-                        st.warning("Esta prova não tem questões vinculadas.")
-                    else:
-                        # Busca as questões no banco
-                        for i, q_id in enumerate(ids):
-                            q_doc = db.collection('questoes').document(q_id).get()
-                            if q_doc.exists:
-                                q = q_doc.to_dict()
-                                st.markdown(f"**{i+1}. {q.get('pergunta')}**")
-                                
-                                # Mídia (Igual ao aluno)
-                                if q.get('url_imagem'): st.image(q.get('url_imagem'), use_container_width=True)
-                                if q.get('url_video'): 
-                                    link_v = normalizar_link_video(q.get('url_video'))
-                                    try: st.video(link_v)
-                                    except: st.markdown(f"[Ver Vídeo]({link_v})")
-                                
-                                # Opções (Radio Button desabilitado para visualização)
-                                alts = q.get('alternativas', {})
-                                opcoes_lista = [
-                                    f"A) {alts.get('A','')}", 
-                                    f"B) {alts.get('B','')}", 
-                                    f"C) {alts.get('C','')}", 
-                                    f"D) {alts.get('D','')}"
-                                ]
-                                st.radio("Opções:", opcoes_lista, key=f"radio_{doc.id}_{i}", label_visibility="collapsed", disabled=True)
-                                
-                                # Gabarito (Só professor vê)
-                                st.success(f"✅ Gabarito: {q.get('resposta_correta')}")
-                                st.markdown("---")
-                            else:
-                                st.error(f"Questão ID {q_id} não encontrada (pode ter sido excluída).")
+        st.subheader("Status das Provas Cadastradas")
+        configs_stream = db.collection('config_exames').stream()
+        mapa_configs = {}
+        for doc in configs_stream:
+            d = doc.to_dict(); d['id'] = doc.id 
+            mapa_configs[d.get('faixa')] = d
 
-                st.markdown("<br>", unsafe_allow_html=True)
-                if st.button("🗑️ Excluir Esta Prova", key=f"del_conf_{doc.id}"):
-                    db.collection('config_exames').document(doc.id).delete()
-                    st.success("Prova deletada."); time.sleep(1); st.rerun()
+        grupos_faixas = {
+            "🔘 Cinza": ["Cinza e Branca", "Cinza", "Cinza e Preta"],
+            "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
+            "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
+            "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
+            "🔵 Azul": ["Azul"], "🟣 Roxa": ["Roxa"], "🟤 Marrom": ["Marrom"], "⚫ Preta": ["Preta"]
+        }
+
+        sub_tabs = st.tabs(list(grupos_faixas.keys()))
+        for i, (grupo, faixas) in enumerate(grupos_faixas.items()):
+            with sub_tabs[i]:
+                cols = st.columns(len(faixas))
+                for j, fx in enumerate(faixas):
+                    conf = mapa_configs.get(fx)
+                    with cols[j]:
+                        with st.container(border=True):
+                            if conf:
+                                st.markdown(f"**{fx}**")
+                                st.caption(f"✅ {conf.get('qtd_questoes')} questões")
+                                if st.toggle("👁️ Simular", key=f"sim_{conf['id']}"):
+                                    ids = conf.get('questoes_ids', [])
+                                    for qid in ids[:3]: # Preview max 3
+                                        qdoc = db.collection('questoes').document(qid).get()
+                                        if qdoc.exists: st.text(f"- {qdoc.to_dict().get('pergunta')}")
+                                if st.button("🗑️", key=f"del_{conf['id']}"):
+                                    db.collection('config_exames').document(conf['id']).delete(); st.rerun()
+                            else:
+                                st.markdown(f"**{fx}**")
+                                st.caption("❌ Pendente")
 
     # --- ABA 3: AUTORIZAR ---
     with tab3:
@@ -663,7 +656,7 @@ def gestao_exame_de_faixa_route():
                 d['nome_equipe'] = nome_eq
                 lista_alunos.append(d)
 
-            if not lista_alunos: st.info("Nenhum aluno(a) cadastrado.")
+            if not lista_alunos: st.info("Nenhum aluno cadastrado.")
             else:
                 cols = st.columns([3, 2, 2, 3, 1])
                 cols[0].markdown("**Aluno(a)**"); cols[1].markdown("**Equipe**")
@@ -675,17 +668,13 @@ def gestao_exame_de_faixa_route():
                         aluno_id = aluno.get('id', 'unknown')
                         aluno_nome = aluno.get('nome', 'Sem Nome')
                         faixa_exame_atual = aluno.get('faixa_exame', '')
-                        
                         c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
                         c1.write(f"**{aluno_nome}**")
                         c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
-                        
                         idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
                         fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
-                        
                         habilitado = aluno.get('exame_habilitado', False)
                         status = aluno.get('status_exame', 'pendente')
-                        
                         msg_status = "⚪ Não autorizado"
                         if status == 'aprovado': msg_status = "🏆 Aprovado"
                         elif status == 'reprovado': msg_status = "🔴 Reprovado"
@@ -699,9 +688,7 @@ def gestao_exame_de_faixa_route():
                                     msg_status += f" (até {dt_obj.strftime('%d/%m %H:%M')})"
                             except: pass
                             if status == 'em_andamento': msg_status = "🟡 Em Andamento"
-
                         c4.write(msg_status)
-                        
                         if habilitado:
                             if c5.button("⛔", key=f"off_btn_{aluno_id}"):
                                 update_data = {"exame_habilitado": False, "status_exame": "pendente"}
@@ -720,6 +707,7 @@ def gestao_exame_de_faixa_route():
                         st.markdown("---")
                     except Exception as e: st.error(f"Erro: {e}")
         except: st.error("Erro ao carregar alunos.")
+
 # =========================================
 # CONTROLADOR PRINCIPAL (ROTEAMENTO)
 # =========================================
