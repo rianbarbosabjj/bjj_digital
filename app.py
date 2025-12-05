@@ -73,9 +73,100 @@ st.markdown(f"""
         border-right: 1px solid rgba(255, 215, 112, 0.15);
         box-shadow: 5px 0 15px rgba(0,0,0,0.3);
     }}
-    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
+    section[data-testid="stSidebar"] svg {{
         fill: {COR_DESTAQUE} !important;
         color: {COR_DESTAQUE} !important;
+    }}
+
+    /* --- HEADER ESCONDIDO COM BOTÃO DA SIDEBAR VISÍVEL --- */
+    /* Esconde completamente o header padrão do Streamlit */
+    header[data-testid="stHeader"] {{
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }}
+    
+    /* Mantém o botão de controle da sidebar visível */
+    [data-testid="collapsedControl"] {{
+        display: flex !important;
+        visibility: visible !important;
+        position: fixed !important;
+        top: 15px !important;
+        left: 15px !important;
+        z-index: 999999 !important;
+        background-color: rgba(9, 31, 26, 0.85) !important;
+        border-radius: 8px !important;
+        border: 1px solid rgba(255, 215, 112, 0.3) !important;
+        padding: 6px !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+        backdrop-filter: blur(5px) !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    [data-testid="collapsedControl"]:hover {{
+        background-color: rgba(255, 215, 112, 0.1) !important;
+        border-color: {COR_HOVER} !important;
+        transform: scale(1.05) !important;
+        box-shadow: 0 6px 20px rgba(255, 215, 112, 0.2) !important;
+    }}
+    
+    [data-testid="collapsedControl"] button {{
+        background-color: transparent !important;
+        border: none !important;
+        color: {COR_DESTAQUE} !important;
+        width: 36px !important;
+        height: 36px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        min-width: unset !important;
+    }}
+    
+    [data-testid="collapsedControl"] button:hover {{
+        background-color: transparent !important;
+        transform: scale(1.1) !important;
+    }}
+    
+    [data-testid="collapsedControl"] button svg {{
+        fill: {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
+        width: 22px !important;
+        height: 22px !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    [data-testid="collapsedControl"]:hover button svg {{
+        fill: {COR_HOVER} !important;
+        color: {COR_HOVER} !important;
+    }}
+
+    /* Ajusta o padding do conteúdo para compensar a falta do header */
+    .block-container {{
+        padding-top: 1.5rem !important;
+    }}
+    
+    /* Responsividade para tablets e celulares */
+    @media (max-width: 768px) {{
+        [data-testid="collapsedControl"] {{
+            top: 10px !important;
+            left: 10px !important;
+            padding: 5px !important;
+        }}
+        
+        [data-testid="collapsedControl"] button {{
+            width: 42px !important;
+            height: 42px !important;
+        }}
+        
+        [data-testid="collapsedControl"] button svg {{
+            width: 24px !important;
+            height: 24px !important;
+        }}
+        
+        .block-container {{
+            padding-top: 2.5rem !important;
+        }}
     }}
 
     div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
@@ -123,10 +214,50 @@ st.markdown(f"""
     }}
     .stTextInput input, .stTextArea textarea {{ color: white !important; }}
     
+    /* --- MENU SUPERIOR (Option Menu) ESTILIZADO --- */
+    .st-emotion-cache-1v7f65g {{
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.9) 100%) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px solid rgba(255, 215, 112, 0.15) !important;
+        border-radius: 50px !important;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3) !important;
+        margin: 20px auto !important;
+        max-width: 95% !important;
+        padding: 0 !important;
+    }}
+    
+    .st-emotion-cache-1v7f65g .st-ae .st-af {{
+        color: rgba(255, 255, 255, 0.7) !important; 
+        background: transparent !important;
+        border: 1px solid transparent !important;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }}
+    
+    .st-emotion-cache-1v7f65g .st-ae .st-af:hover {{
+        color: {COR_DESTAQUE} !important; 
+        background: rgba(255, 215, 112, 0.1) !important;
+        border: 1px solid rgba(255, 215, 112, 0.3) !important;
+        transform: translateY(-2px) !important;
+    }}
+    
+    .st-emotion-cache-1v7f65g .st-ae .st-ag {{
+        background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #ffedb3 100%) !important; 
+        color: {COR_FUNDO} !important; 
+        font-weight: 700 !important;
+        box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4) !important;
+        border: none !important;
+        animation: pulse 2s infinite !important;
+    }}
+    
+    @keyframes pulse {{
+        0% {{ box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }}
+        50% {{ box-shadow: 0 5px 25px rgba(255, 215, 112, 0.6); }}
+        100% {{ box-shadow: 0 5px 20px rgba(255, 215, 112, 0.4); }}
+    }}
+    
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
-    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
 
 </style>
 """, unsafe_allow_html=True)
