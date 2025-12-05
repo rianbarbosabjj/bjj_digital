@@ -42,35 +42,21 @@ FAIXAS_COMPLETAS = [
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
 
-# Mapeamento para exibição bonita vs valor no banco
-TIPO_MAP = {
-    "Aluno(a)": "aluno",
-    "Professor(a)": "professor",
-    "Administrador(a)": "admin"
-}
-# Inverso para achar o index
-TIPO_MAP_INV = {v: k for k, v in TIPO_MAP.items()}
-LISTA_TIPOS_DISPLAY = list(TIPO_MAP.keys())
-
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS (TAB INTERNA)
+# GESTÃO DE USUÁRIOS
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
-    
-    # 1. Carregar Listas Auxiliares
     users_ref = list(db.collection('usuarios').stream())
     users = [d.to_dict() | {"id": d.id} for d in users_ref]
     
-    # Lista de Equipes
     equipes_ref = list(db.collection('equipes').stream())
     mapa_equipes = {d.id: d.to_dict().get('nome', 'Sem Nome') for d in equipes_ref} 
     mapa_equipes_inv = {v: k for k, v in mapa_equipes.items()} 
     lista_equipes = ["Sem Equipe"] + sorted(list(mapa_equipes.values()))
 
-    # Lista de Professores (Interna)
     profs_users = list(db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream())
     mapa_nomes_profs = {u.id: u.to_dict().get('nome', 'Sem Nome') for u in profs_users}
     mapa_nomes_profs_inv = {v: k for k, v in mapa_nomes_profs.items()}
@@ -87,11 +73,9 @@ def gestao_usuarios_tab():
 
     if not users: st.warning("Vazio."); return
     
-    # 2. Tabela Principal
     df = pd.DataFrame(users)
     c1, c2 = st.columns(2)
     filtro_nome = c1.text_input("🔍 Buscar Nome/Email/CPF:")
-    # Filtro visual na tabela
     filtro_tipo = c2.multiselect("Filtrar Tipo:", df['tipo_usuario'].unique() if 'tipo_usuario' in df.columns else [])
 
     if filtro_nome:
@@ -117,7 +101,6 @@ def gestao_usuarios_tab():
     sel = st.selectbox("Selecione o usuário:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
     
     if sel:
-        # Vínculos
         vinculo_equipe_id = None
         vinculo_prof_id = None
         doc_vinculo_id = None
@@ -137,20 +120,16 @@ def gestao_usuarios_tab():
                 d_vinc = vincs[0].to_dict()
                 vinculo_equipe_id = d_vinc.get('equipe_id')
 
-        # Form
         with st.form(f"edt_{sel['id']}"):
             st.markdown("##### 👤 Dados Pessoais")
             c1, c2 = st.columns(2)
             nm = c1.text_input("Nome Completo:", value=sel.get('nome',''))
             email = c2.text_input("E-mail:", value=sel.get('email',''))
-            
             c3, c4, c5 = st.columns([1.5, 1, 1])
             cpf = c3.text_input("CPF:", value=sel.get('cpf',''))
-            
             idx_s = 0
             if sel.get('sexo') in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sel.get('sexo'))
             sexo_edit = c4.selectbox("Sexo:", OPCOES_SEXO, index=idx_s)
-            
             val_n = None
             if sel.get('data_nascimento'):
                 try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
@@ -171,19 +150,7 @@ def gestao_usuarios_tab():
 
             st.markdown("##### 🥋 Perfil e Vínculos")
             p1, p2 = st.columns(2)
-            
-            # --- AJUSTE INCLUSIVO: Selectbox de Tipo ---
-            tipo_atual_banco = sel.get('tipo_usuario', 'aluno') # ex: 'professor'
-            tipo_atual_display = TIPO_MAP_INV.get(tipo_atual_banco, "Aluno(a)") # ex: 'Professor(a)'
-            
-            idx_tipo = 0
-            if tipo_atual_display in LISTA_TIPOS_DISPLAY:
-                idx_tipo = LISTA_TIPOS_DISPLAY.index(tipo_atual_display)
-                
-            tipo_sel_display = p1.selectbox("Tipo:", LISTA_TIPOS_DISPLAY, index=idx_tipo)
-            # Converte de volta para salvar no banco ('Professor(a)' -> 'professor')
-            tipo_sel_valor = TIPO_MAP[tipo_sel_display]
-            
+            tipo_sel = p1.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
             idx_fx = 0
             faixa_atual = sel.get('faixa_atual', 'Branca')
             if faixa_atual in FAIXAS_COMPLETAS: idx_fx = FAIXAS_COMPLETAS.index(faixa_atual)
@@ -194,30 +161,19 @@ def gestao_usuarios_tab():
             idx_eq = lista_equipes.index(nome_eq_atual) if nome_eq_atual in lista_equipes else 0
             nova_equipe_nome = v1.selectbox("Equipe:", lista_equipes, index=idx_eq)
             
-            # --- AJUSTE INCLUSIVO: Label do Professor ---
-            novo_prof_display = "Sem Professor(a)"
-            
-            # Monta lista com rótulo inclusivo
-            lista_profs_inclusiva = ["Sem Professor(a)"]
-            
-            if tipo_sel_valor == 'aluno':
+            novo_prof_display = "Sem Professor"
+            if tipo_sel == 'aluno':
                 id_equipe_selecionada = mapa_equipes_inv.get(nova_equipe_nome)
-                
+                lista_profs_filtrada = ["Sem Professor"]
                 if id_equipe_selecionada in profs_por_equipe:
-                    lista_profs_inclusiva += sorted(profs_por_equipe[id_equipe_selecionada])
-                
-                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor(a)")
-                # Ajuste caso venha sem o (a) do banco antigo
-                if nome_prof_atual_display == "Sem Professor": nome_prof_atual_display = "Sem Professor(a)"
-
+                    lista_profs_filtrada += sorted(profs_por_equipe[id_equipe_selecionada])
+                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor")
                 idx_prof = 0
-                if nome_prof_atual_display in lista_profs_inclusiva:
-                    idx_prof = lista_profs_inclusiva.index(nome_prof_atual_display)
-                
-                novo_prof_display = v2.selectbox("Professor(a) Responsável:", lista_profs_inclusiva, index=idx_prof)
-                
+                if nome_prof_atual_display in lista_profs_filtrada:
+                    idx_prof = lista_profs_filtrada.index(nome_prof_atual_display)
+                novo_prof_display = v2.selectbox("Professor Responsável:", lista_profs_filtrada, index=idx_prof)
                 if nova_equipe_nome == "Sem Equipe":
-                    v2.caption("Selecione uma equipe para ver os professores(as).")
+                    v2.caption("Selecione uma equipe para ver os professores.")
 
             st.markdown("##### 🔒 Segurança")
             pwd = st.text_input("Nova Senha (opcional):", type="password")
@@ -228,8 +184,7 @@ def gestao_usuarios_tab():
                     "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
                     "cep": cep, "logradouro": logr.upper(), "numero": num, "complemento": comp.upper(),
                     "bairro": bairro.upper(), "cidade": cid.upper(), "uf": uf.upper(),
-                    "tipo_usuario": tipo_sel_valor, # Salva o valor minúsculo
-                    "faixa_atual": fx
+                    "tipo_usuario": tipo_sel, "faixa_atual": fx
                 }
                 if pwd: 
                     upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
@@ -238,16 +193,14 @@ def gestao_usuarios_tab():
                 try:
                     db.collection('usuarios').document(sel['id']).update(upd)
                     novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
-                    
-                    if tipo_sel_valor == 'aluno':
+                    if tipo_sel == 'aluno':
                         novo_p_id = mapa_nomes_profs_inv.get(novo_prof_display)
                         dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id, "faixa_atual": fx}
                         if doc_vinculo_id: db.collection('alunos').document(doc_vinculo_id).update(dados_vinc)
                         else:
                             dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
                             db.collection('alunos').add(dados_vinc)
-                            
-                    elif tipo_sel_valor == 'professor':
+                    elif tipo_sel == 'professor':
                         dados_vinc = {"equipe_id": novo_eq_id}
                         if doc_vinculo_id: db.collection('professores').document(doc_vinculo_id).update(dados_vinc)
                         else:
@@ -261,23 +214,33 @@ def gestao_usuarios_tab():
             st.warning("Usuário excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (ATUALIZADA)
+# GESTÃO DE QUESTÕES (COM APROVAÇÃO)
 # =========================================
 def gestao_questoes_tab():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
     db = get_db()
     user = st.session_state.usuario
     
+    # Tipos seguros
     user_tipo = str(user.get("tipo_usuario", user.get("tipo", ""))).lower()
     if user_tipo not in ["admin", "professor"]:
         st.error("Acesso negado."); return
 
-    tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
+    # Define abas baseado no perfil
+    # Admin vê "Aprovação", Professor não
+    abas = ["📚 Listar/Editar", "➕ Adicionar Nova"]
+    if user_tipo == "admin":
+        abas.append("⏳ Aprovações")
 
-    with tab1:
-        q_ref = list(db.collection('questoes').stream())
+    tabs = st.tabs(abas)
+
+    # --- ABA 1: LISTAR (SOMENTE APROVADAS) ---
+    with tabs[0]:
+        # Filtra somente as aprovadas para não poluir
+        q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
+        
         c1, c2 = st.columns(2)
-        termo = c1.text_input("🔍 Buscar:")
+        termo = c1.text_input("🔍 Buscar (Aprovadas):")
         filt_n = c2.multiselect("Nível:", NIVEIS_DIFICULDADE)
         
         q_filtro = []
@@ -287,9 +250,9 @@ def gestao_questoes_tab():
             if filt_n and d.get('dificuldade',1) not in filt_n: continue
             q_filtro.append(d)
             
-        if not q_filtro: st.info("Nada encontrado.")
+        if not q_filtro: st.info("Nenhuma questão aprovada encontrada.")
         else:
-            st.caption(f"{len(q_filtro)} questões")
+            st.caption(f"{len(q_filtro)} questões ativas")
             for q in q_filtro:
                 with st.container(border=True):
                     ch, cb = st.columns([5, 1])
@@ -298,13 +261,12 @@ def gestao_questoes_tab():
                     ch.markdown(f"##### {q.get('pergunta')}")
                     
                     if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
-                    
                     if q.get('url_video'):
                         vid_url = q.get('url_video')
                         link_limpo = normalizar_link_video(vid_url)
                         try: ch.video(link_limpo)
-                        except: ch.warning("⚠️ Erro player.")
-                        ch.markdown(f"<small>🔗 [Abrir vídeo externamente]({vid_url})</small>", unsafe_allow_html=True)
+                        except: pass
+                        ch.markdown(f"<small>🔗 [Ver vídeo externamente]({vid_url})</small>", unsafe_allow_html=True)
                     
                     with ch.expander("Alternativas"):
                         alts = q.get('alternativas', {})
@@ -314,6 +276,7 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
+                # --- EDITAR (In-line) ---
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
@@ -327,6 +290,7 @@ def gestao_questoes_tab():
                             up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
                             url_v_at = q.get('url_video','')
                             url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
+                            
                             c1, c2 = st.columns(2)
                             dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(q.get('dificuldade',1)))
                             cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
@@ -339,11 +303,9 @@ def gestao_questoes_tab():
                             cols = st.columns(2)
                             if cols[0].form_submit_button("💾 Salvar"):
                                 fin_img = url_i_at
-                                if up_img:
-                                    with st.spinner("Subindo imagem..."): fin_img = fazer_upload_midia(up_img)
+                                if up_img: fin_img = fazer_upload_midia(up_img)
                                 fin_vid = url_v_manual
-                                if up_vid:
-                                    with st.spinner("Subindo vídeo..."): fin_vid = fazer_upload_midia(up_vid)
+                                if up_vid: fin_vid = fazer_upload_midia(up_vid)
                                 db.collection('questoes').document(q['id']).update({
                                     "pergunta": perg, "dificuldade": dif, "categoria": cat,
                                     "url_imagem": fin_img, "url_video": fin_vid,
@@ -357,7 +319,8 @@ def gestao_questoes_tab():
                             db.collection('questoes').document(q['id']).delete()
                             st.session_state['edit_q'] = None; st.success("Deletado."); st.rerun()
 
-    with tab2:
+    # --- ABA 2: ADICIONAR ---
+    with tabs[1]:
         sub_tab_manual, sub_tab_lote = st.tabs(["✍️ Manual (Uma)", "📂 Importação em Lote (Excel/CSV)"])
         
         with sub_tab_manual:
@@ -365,15 +328,18 @@ def gestao_questoes_tab():
                 st.markdown("#### Nova Questão")
                 if IA_ATIVADA: st.caption("🟢 IA de Anti-Duplicidade Ativada")
                 else: st.caption("🔴 IA Não Detectada")
+                
                 perg = st.text_area("Enunciado:")
                 st.markdown("🖼️ **Mídia**")
                 c1, c2 = st.columns(2)
-                up_img = c1.file_uploader("Imagem:", type=["jpg","png"])
-                up_vid = c2.file_uploader("Vídeo:", type=["mp4"])
+                up_img = c1.file_uploader("Imagem (JPG/PNG):", type=["jpg","png","jpeg"])
+                up_vid = c2.file_uploader("Vídeo (MP4/MOV):", type=["mp4","mov"])
                 link_vid = c2.text_input("Ou Link YouTube:")
+                
                 c3, c4 = st.columns(2)
                 dif = c3.selectbox("Nível:", NIVEIS_DIFICULDADE)
                 cat = c4.text_input("Categoria:", "Geral")
+                
                 st.markdown("**Alternativas:**")
                 ca, cb = st.columns(2); cc, cd = st.columns(2)
                 alt_a = ca.text_input("A)"); alt_b = cb.text_input("B)")
@@ -385,7 +351,8 @@ def gestao_questoes_tab():
                         pode_salvar = True
                         if IA_ATIVADA:
                             try:
-                                with st.spinner("Estamos verificando se há outra questão igual em nosso banco..."):
+                                with st.spinner("Verificando duplicidade..."):
+                                    # Busca TODAS (aprovadas ou não) para evitar duplicação
                                     all_qs_snap = list(db.collection('questoes').stream())
                                     lista_qs = [d.to_dict() for d in all_qs_snap]
                                     res_ia = verificar_duplicidade_ia(perg, lista_qs, threshold=0.75)
@@ -398,34 +365,40 @@ def gestao_questoes_tab():
                         if pode_salvar:
                             f_img = fazer_upload_midia(up_img) if up_img else None
                             f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
+                            
+                            # --- LÓGICA DE STATUS (FLUXO DE APROVAÇÃO) ---
+                            if user_tipo == "admin":
+                                status_inicial = "aprovada"
+                                msg_sucesso = "✅ Questão cadastrada e aprovada!"
+                            else:
+                                status_inicial = "pendente"
+                                msg_sucesso = "⏳ Questão enviada para análise do Administrador."
+                            # ----------------------------------------------
+
                             db.collection('questoes').add({
                                 "pergunta": perg, "dificuldade": dif, "categoria": cat,
                                 "url_imagem": f_img, "url_video": f_vid,
                                 "alternativas": {"A":alt_a, "B":alt_b, "C":alt_c, "D":alt_d},
-                                "resposta_correta": correta, "status": "aprovada",
-                                "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
+                                "resposta_correta": correta, 
+                                "status": status_inicial, # <--- STATUS DEFINIDO AQUI
+                                "criado_por": user.get('nome', 'Admin'), 
+                                "data_criacao": firestore.SERVER_TIMESTAMP
                             })
-                            st.success("Sucesso!"); time.sleep(1); st.rerun()
+                            st.success(msg_sucesso); time.sleep(2); st.rerun()
                         else: st.stop()
-                    else: st.warning("Preencha dados.")
+                    else: st.warning("Preencha dados básicos.")
 
+        # Importação Lote (Só Admin)
         with sub_tab_lote:
             if user_tipo == "admin":
                 st.markdown("#### 📥 Importação em Massa")
-                st.info("Carregue uma planilha para adicionar várias questões de uma vez.")
+                st.info("Questões importadas em massa entram automaticamente como **Aprovadas**.")
                 
                 col_info, col_btn = st.columns([3, 1])
                 df_modelo = pd.DataFrame({
-                    "pergunta": ["Qual a cor da faixa inicial?", "Quem criou o Judô?"],
-                    "alt_a": ["Branca", "Helio Gracie"],
-                    "alt_b": ["Azul", "Jigoro Kano"],
-                    "alt_c": ["Preta", "Mitsuyo Maeda"],
-                    "alt_d": ["Rosa", "Conde Koma"],
-                    "correta": ["A", "B"],
-                    "dificuldade": [1, 2],
-                    "categoria": ["História", "História"]
+                    "pergunta": ["Qual a cor da faixa inicial?"], "alt_a": ["Branca"], "alt_b": ["Azul"], "alt_c": ["Preta"], "alt_d": ["Rosa"],
+                    "correta": ["A"], "dificuldade": [1], "categoria": ["História"]
                 })
-                
                 csv_buffer = io.StringIO()
                 df_modelo.to_csv(csv_buffer, index=False, sep=';')
                 col_btn.download_button("⬇️ Baixar Modelo CSV", data=csv_buffer.getvalue(), file_name="modelo_questoes.csv", mime="text/csv")
@@ -453,7 +426,7 @@ def gestao_questoes_tab():
                                         "categoria": str(row.get('categoria', 'Geral')),
                                         "alternativas": {"A": str(row['alt_a']), "B": str(row['alt_b']), "C": str(row['alt_c']), "D": str(row['alt_d'])},
                                         "resposta_correta": str(row['correta']).strip().upper(),
-                                        "status": "aprovada",
+                                        "status": "aprovada", # Lote sempre aprovado
                                         "criado_por": f"{user.get('nome', 'Admin')} (Import)",
                                         "data_criacao": firestore.SERVER_TIMESTAMP,
                                         "url_imagem": None, "url_video": None
@@ -465,6 +438,45 @@ def gestao_questoes_tab():
                     except Exception as e: st.error(f"Erro ao ler arquivo: {e}")
             else: st.warning("🔒 Funcionalidade restrita a Administradores.")
 
+    # --- ABA 3: APROVAÇÃO (SOMENTE ADMIN) ---
+    if user_tipo == "admin":
+        with tabs[2]:
+            st.markdown("#### ⏳ Questões Pendentes de Aprovação")
+            # Busca somente pendentes
+            pendentes_ref = list(db.collection('questoes').where('status', '==', 'pendente').stream())
+            
+            if not pendentes_ref:
+                st.success("🎉 Nenhuma pendência! O banco está em dia.")
+            else:
+                st.info(f"Existem {len(pendentes_ref)} questões aguardando análise.")
+                for doc in pendentes_ref:
+                    q = doc.to_dict()
+                    with st.container(border=True):
+                        c_info, c_act = st.columns([4, 1])
+                        with c_info:
+                            bdg = get_badge_nivel(q.get('dificuldade',1))
+                            st.markdown(f"**{bdg}** | {q.get('categoria','?')} | Criado por: **{q.get('criado_por','?')}**")
+                            st.markdown(f"##### {q.get('pergunta')}")
+                            
+                            if q.get('url_imagem'): st.image(q.get('url_imagem'), width=100)
+                            
+                            with st.expander("Ver Alternativas"):
+                                alts = q.get('alternativas', {})
+                                st.write(f"A) {alts.get('A','')} | B) {alts.get('B','')}")
+                                st.write(f"C) {alts.get('C','')} | D) {alts.get('D','')}")
+                                st.success(f"Correta: {q.get('resposta_correta')}")
+
+                        with c_act:
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if st.button("✅ Aprovar", key=f"apr_{doc.id}", type="primary", use_container_width=True):
+                                db.collection('questoes').document(doc.id).update({"status": "aprovada"})
+                                st.toast("Questão Aprovada!"); time.sleep(1); st.rerun()
+                            
+                            st.markdown("<br>", unsafe_allow_html=True)
+                            if st.button("❌ Rejeitar", key=f"rej_{doc.id}", use_container_width=True):
+                                db.collection('questoes').document(doc.id).delete() # Ou update para 'rejeitada'
+                                st.toast("Questão Deletada."); time.sleep(1); st.rerun()
+
 # =========================================
 # GESTÃO DE EXAMES
 # =========================================
@@ -472,7 +484,7 @@ def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos(as)"])
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
 
     with tab1:
         st.subheader("1. Selecione a Faixa")
@@ -581,7 +593,7 @@ def gestao_exame_de_faixa_route():
             c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
-        st.write(""); st.subheader("Lista de Alunos(as)")
+        st.write(""); st.subheader("Lista de Alunos")
         try:
             alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
             lista_alunos = []
@@ -598,10 +610,10 @@ def gestao_exame_de_faixa_route():
                 d['nome_equipe'] = nome_eq
                 lista_alunos.append(d)
 
-            if not lista_alunos: st.info("Nenhum aluno(a) cadastrado.")
+            if not lista_alunos: st.info("Nenhum aluno cadastrado.")
             else:
                 cols = st.columns([3, 2, 2, 3, 1])
-                cols[0].markdown("**Aluno(a)**"); cols[1].markdown("**Equipe**")
+                cols[0].markdown("**Aluno**"); cols[1].markdown("**Equipe**")
                 cols[2].markdown("**Exame**"); cols[3].markdown("**Status**"); cols[4].markdown("**Ação**")
                 st.markdown("---")
 
