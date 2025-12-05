@@ -234,7 +234,7 @@ def gestao_questoes_tab():
     
     tabs = st.tabs(titulos)
 
-    # --- ABA 1: LISTAR ---
+    # --- ABA 1: LISTAR (SOMENTE APROVADAS) ---
     with tabs[0]:
         q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         c1, c2 = st.columns(2)
@@ -394,23 +394,83 @@ def gestao_questoes_tab():
                         else: st.stop()
                     else: st.warning("Preencha dados básicos.")
 
+        # --- IMPORTAÇÃO EM LOTE (REAL) ---
         with sub_tab_lote:
             if user_tipo == "admin":
                 st.markdown("#### 📥 Importação em Massa")
-                st.info("Carregue Excel ou CSV.")
+                st.info("Carregue uma planilha para adicionar várias questões de uma vez.")
+                
                 col_info, col_btn = st.columns([3, 1])
+                # Modelo para download
                 df_modelo = pd.DataFrame({
-                    "pergunta": ["Exemplo 1"], "alt_a": ["A"], "alt_b": ["B"], "alt_c": ["C"], "alt_d": ["D"],
-                    "correta": ["A"], "dificuldade": [1], "categoria": ["Geral"]
+                    "pergunta": ["Qual a cor da faixa inicial?", "Quem criou o Judô?"],
+                    "alt_a": ["Branca", "Helio Gracie"],
+                    "alt_b": ["Azul", "Jigoro Kano"],
+                    "alt_c": ["Preta", "Mitsuyo Maeda"],
+                    "alt_d": ["Rosa", "Conde Koma"],
+                    "correta": ["A", "B"],
+                    "dificuldade": [1, 2],
+                    "categoria": ["História", "História"]
                 })
                 csv_buffer = io.StringIO()
                 df_modelo.to_csv(csv_buffer, index=False, sep=';')
-                col_btn.download_button("⬇️ Modelo", data=csv_buffer.getvalue(), file_name="modelo.csv", mime="text/csv")
+                col_btn.download_button("⬇️ Baixar Modelo CSV", data=csv_buffer.getvalue(), file_name="modelo_questoes.csv", mime="text/csv")
                 
-                arquivo = st.file_uploader("Arquivo:", type=["csv", "xlsx"])
-                if arquivo and st.button("🚀 Importar"):
-                     st.success("Importação (Simulada)")
-            else: st.warning("Restrito a Admin.")
+                st.markdown("---")
+                arquivo = st.file_uploader("Selecione o arquivo:", type=["csv", "xlsx"])
+
+                if arquivo:
+                    try:
+                        if arquivo.name.endswith('.csv'):
+                            try: df_upload = pd.read_csv(arquivo, sep=';')
+                            except: df_upload = pd.read_csv(arquivo, sep=',')
+                        else:
+                            df_upload = pd.read_excel(arquivo)
+                        
+                        st.write("Pré-visualização:")
+                        st.dataframe(df_upload.head(3), hide_index=True)
+                        st.caption(f"Total: {len(df_upload)} linhas")
+                        
+                        if st.button("🚀 Importar Todas as Questões", type="primary"):
+                            progresso = st.progress(0)
+                            sucesso_cnt = 0
+                            erro_cnt = 0
+                            total_linhas = len(df_upload)
+
+                            for i, row in df_upload.iterrows():
+                                try:
+                                    nova_q = {
+                                        "pergunta": str(row['pergunta']).strip(),
+                                        "dificuldade": int(row.get('dificuldade', 1)),
+                                        "categoria": str(row.get('categoria', 'Geral')).strip(),
+                                        "alternativas": {
+                                            "A": str(row['alt_a']).strip(), 
+                                            "B": str(row['alt_b']).strip(), 
+                                            "C": str(row['alt_c']).strip(), 
+                                            "D": str(row['alt_d']).strip()
+                                        },
+                                        "resposta_correta": str(row['correta']).strip().upper(),
+                                        "status": "aprovada", # Importação de Admin já aprova
+                                        "criado_por": f"{user.get('nome', 'Admin')} (Import)",
+                                        "data_criacao": firestore.SERVER_TIMESTAMP,
+                                        "url_imagem": None, "url_video": None
+                                    }
+                                    # Validação simples
+                                    if nova_q['resposta_correta'] not in ["A", "B", "C", "D"]:
+                                         nova_q['resposta_correta'] = "A"
+
+                                    db.collection('questoes').add(nova_q)
+                                    sucesso_cnt += 1
+                                except: 
+                                    erro_cnt += 1
+                                
+                                progresso.progress((i + 1) / total_linhas)
+                            
+                            st.success(f"Processo finalizado! {sucesso_cnt} importadas.")
+                            if erro_cnt > 0: st.warning(f"{erro_cnt} falharam.")
+                            time.sleep(2); st.rerun()
+                    except Exception as e: st.error(f"Erro ao ler arquivo: {e}")
+            else: st.warning("🔒 Restrito a Administradores.")
 
     # --- ABA 3: MINHAS SUBMISSÕES ---
     with tabs[2]:
@@ -425,6 +485,7 @@ def gestao_questoes_tab():
             for doc in minhas:
                 q = doc.to_dict()
                 stt = q.get('status', 'aprovada')
+                
                 cor, icon = "gray", "⏳ PENDENTE"
                 if stt == 'aprovada': cor, icon = "green", "✅ APROVADA"
                 elif stt == 'correcao': cor, icon = "orange", "🟠 CORREÇÃO SOLICITADA"
@@ -479,7 +540,9 @@ def gestao_questoes_tab():
                             st.toast("Aprovada!"); time.sleep(1); st.rerun()
                         
                         with c2.expander("❌ Solicitar Correção / Rejeitar"):
+                            # CAMPO OBRIGATÓRIO DE JUSTIFICATIVA
                             fb_txt = st.text_area("Justificativa *", key=f"fb_{doc.id}", height=100)
+                            
                             if st.button("Enviar Solicitação", key=f"send_fb_{doc.id}"):
                                 if not fb_txt.strip():
                                     st.error("⚠️ A justificativa é obrigatória!")
@@ -621,7 +684,6 @@ def gestao_exame_de_faixa_route():
                                 st.markdown(f"**{fx}**")
                                 st.caption(f"✅ {conf.get('qtd_questoes')} questões")
                                 
-                                # CORREÇÃO DA VISUALIZAÇÃO SIMULADA
                                 if st.toggle("👁️ Simular", key=f"sim_{conf['id']}"):
                                     ids = conf.get('questoes_ids', [])
                                     for q_idx, qid in enumerate(ids): 
@@ -629,7 +691,6 @@ def gestao_exame_de_faixa_route():
                                         if qdoc.exists:
                                             qd = qdoc.to_dict()
                                             st.markdown(f"**{q_idx+1}. {qd.get('pergunta')}**")
-                                            
                                             if qd.get('url_imagem'): st.image(qd.get('url_imagem'), use_container_width=True)
                                             
                                             if qd.get('url_video'):
@@ -637,7 +698,7 @@ def gestao_exame_de_faixa_route():
                                                 link_limpo = normalizar_link_video(vid_url)
                                                 try: st.video(link_limpo)
                                                 except: pass
-                                                st.markdown(f"<small>🔗 [Ver vídeo]({vid_url})</small>", unsafe_allow_html=True)
+                                                st.markdown(f"[Ver vídeo]({vid_url})")
                                             
                                             alts = qd.get('alternativas', {})
                                             ops = [f"A) {alts.get('A','')}", f"B) {alts.get('B','')}", f"C) {alts.get('C','')}", f"D) {alts.get('D','')}"]
