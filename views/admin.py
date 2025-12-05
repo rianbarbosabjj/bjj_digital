@@ -123,17 +123,13 @@ def gestao_usuarios_tab():
         with st.form(f"edt_{sel['id']}"):
             st.markdown("##### 👤 Dados Pessoais")
             c1, c2 = st.columns(2)
-            # CAMPOS OBRIGATÓRIOS COM *
-            nm = c1.text_input("Nome Completo *", value=sel.get('nome',''))
-            email = c2.text_input("E-mail *", value=sel.get('email',''))
-            
+            nm = c1.text_input("Nome Completo:", value=sel.get('nome',''))
+            email = c2.text_input("E-mail:", value=sel.get('email',''))
             c3, c4, c5 = st.columns([1.5, 1, 1])
-            cpf = c3.text_input("CPF *", value=sel.get('cpf',''))
-            
+            cpf = c3.text_input("CPF:", value=sel.get('cpf',''))
             idx_s = 0
             if sel.get('sexo') in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sel.get('sexo'))
             sexo_edit = c4.selectbox("Sexo:", OPCOES_SEXO, index=idx_s)
-            
             val_n = None
             if sel.get('data_nascimento'):
                 try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
@@ -235,7 +231,7 @@ def gestao_questoes_tab():
     
     tabs = st.tabs(titulos)
 
-    # --- ABA 1: LISTAR (SOMENTE APROVADAS) ---
+    # --- ABA 1: LISTAR ---
     with tabs[0]:
         q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         c1, c2 = st.columns(2)
@@ -275,12 +271,10 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
-                # --- EDITAR ---
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
                         with st.form(f"f_ed_{q['id']}"):
-                            # CAMPOS OBRIGATÓRIOS
                             perg = st.text_area("Enunciado *", value=q.get('pergunta',''))
                             st.markdown("🖼️ **Mídia**")
                             c_img, c_vid = st.columns(2)
@@ -290,7 +284,6 @@ def gestao_questoes_tab():
                             up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
                             url_v_at = q.get('url_video','')
                             url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
-                            
                             c1, c2 = st.columns(2)
                             dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(q.get('dificuldade',1)))
                             cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
@@ -351,8 +344,6 @@ def gestao_questoes_tab():
                 st.markdown("#### Nova Questão")
                 if IA_ATIVADA: st.caption("🟢 IA Ativada")
                 else: st.caption("🔴 IA Off")
-                
-                # CAMPOS OBRIGATÓRIOS COM *
                 perg = st.text_area("Enunciado *")
                 c1, c2 = st.columns(2)
                 up_img = c1.file_uploader("Imagem:", type=["jpg","png"])
@@ -384,7 +375,6 @@ def gestao_questoes_tab():
                         if pode_salvar:
                             f_img = fazer_upload_midia(up_img) if up_img else None
                             f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
-                            
                             status_ini = "aprovada" if user_tipo == "admin" else "pendente"
                             msg_sucesso = "✅ Cadastrada!" if user_tipo == "admin" else "⏳ Enviada para aprovação!"
                             
@@ -403,7 +393,6 @@ def gestao_questoes_tab():
             if user_tipo == "admin":
                 st.markdown("#### 📥 Importação em Massa")
                 st.info("Carregue Excel ou CSV.")
-                # (CSV aqui)
             else: st.warning("Restrito a Admin.")
 
     # --- ABA 3: MINHAS SUBMISSÕES ---
@@ -419,7 +408,6 @@ def gestao_questoes_tab():
             for doc in minhas:
                 q = doc.to_dict()
                 stt = q.get('status', 'aprovada')
-                
                 cor, icon = "gray", "⏳ PENDENTE"
                 if stt == 'aprovada': cor, icon = "green", "✅ APROVADA"
                 elif stt == 'correcao': cor, icon = "orange", "🟠 CORREÇÃO SOLICITADA"
@@ -474,9 +462,7 @@ def gestao_questoes_tab():
                             st.toast("Aprovada!"); time.sleep(1); st.rerun()
                         
                         with c2.expander("❌ Solicitar Correção / Rejeitar"):
-                            # CAMPO OBRIGATÓRIO DE JUSTIFICATIVA
                             fb_txt = st.text_area("Justificativa *", key=f"fb_{doc.id}", height=100)
-                            
                             if st.button("Enviar Solicitação", key=f"send_fb_{doc.id}"):
                                 if not fb_txt.strip():
                                     st.error("⚠️ A justificativa é obrigatória!")
@@ -493,13 +479,13 @@ def gestao_questoes_tab():
                                 st.rerun()
 
 # =========================================
-# GESTÃO DE EXAMES
+# GESTÃO DE EXAMES (COM STATUS VISUAL)
 # =========================================
 def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Criar e Editar Exames", "👁️ Visualizar Exames", "✅ Autorizar Alunos(as)"])
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
 
     with tab1:
         st.subheader("1. Selecione a Faixa")
@@ -589,15 +575,50 @@ def gestao_exame_de_faixa_route():
                         st.success("Salvo!"); time.sleep(1.5); st.rerun()
                     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
+    # --- ABA 2: VISUALIZAR (MARCADORES COLORIDOS) ---
     with tab2:
-        st.write("Configurações atuais:")
-        for doc in db.collection('config_exames').stream():
-            d = doc.to_dict()
-            with st.expander(f"✅ {d.get('faixa')} ({d.get('qtd_questoes')} questões)"):
-                st.caption(f"⏱️ {d.get('tempo_limite')} min | 🎯 Min: {d.get('aprovacao_minima')}%")
-                if st.button("🗑️ Excluir Config", key=f"del_conf_{doc.id}"):
-                    db.collection('config_exames').document(doc.id).delete()
-                    st.success("Deletado."); st.rerun()
+        st.subheader("Status das Provas Cadastradas")
+        # 1. Coleta Dados
+        all_q_docs = list(db.collection('questoes').stream())
+        # Conta questões por categoria/faixa pode ser complexo se não tiver o campo 'faixa' na questão
+        # Vamos assumir que a 'config_exames' é a fonte da verdade
+        
+        configs_stream = db.collection('config_exames').stream()
+        mapa_configs = {}
+        for doc in configs_stream:
+            d = doc.to_dict(); d['id'] = doc.id 
+            mapa_configs[d.get('faixa')] = d
+
+        # 2. Define Grupos
+        categorias_faixas = {
+            "🔘 Cinza": ["Cinza e Branca", "Cinza", "Cinza e Preta"],
+            "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
+            "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
+            "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
+            "🔵 Azul": ["Azul"], "🟣 Roxa": ["Roxa"], "🟤 Marrom": ["Marrom"], "⚫ Preta": ["Preta"]
+        }
+
+        # 3. Renderiza Cards
+        for grupo, faixas in categorias_faixas.items():
+            with st.expander(grupo, expanded=True):
+                cols = st.columns(len(faixas))
+                for i, fx in enumerate(faixas):
+                    conf = mapa_configs.get(fx)
+                    
+                    with cols[i]:
+                        with st.container(border=True):
+                            if conf:
+                                qtd = conf.get('qtd_questoes', 0)
+                                st.markdown(f"**{fx}**")
+                                st.markdown(f":green[✅ Ativa]")
+                                st.caption(f"{qtd} Questões | {conf.get('tempo_limite')} min")
+                                if st.button("🗑️", key=f"del_cnf_{conf['id']}"):
+                                    db.collection('config_exames').document(conf['id']).delete()
+                                    st.rerun()
+                            else:
+                                st.markdown(f"**{fx}**")
+                                st.markdown(":red[❌ Pendente]")
+                                st.caption("Sem prova montada")
 
     with tab3:
         with st.container(border=True):
