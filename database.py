@@ -1,8 +1,10 @@
-
 import streamlit as st
 import firebase_admin
 from firebase_admin import credentials, firestore
 import json
+
+# --- CONSTANTES GLOBAIS ---
+OPCOES_SEXO = ["Masculino", "Feminino"]
 
 def get_db():
     """
@@ -31,20 +33,14 @@ def get_db():
 
             cred = credentials.Certificate(key_dict)
             
-            # --- LÓGICA DE BUCKET (SEM ADIVINHAÇÃO) ---
-            # 1. Tenta pegar direto da chave [firebase]
+            # --- LÓGICA DE BUCKET ---
             bucket_name = key_dict.get("storage_bucket")
-            
-            # 2. Se não tiver lá, tenta na raiz dos secrets
             if not bucket_name:
                 bucket_name = st.secrets.get("storage_bucket")
             
-            # 3. Se ainda não achou, tenta montar o padrão NOVO (.firebasestorage.app)
-            # O padrão antigo era .appspot.com, mas o seu é o novo.
             if not bucket_name:
                 project_id = key_dict.get("project_id")
                 if project_id:
-                    # Tenta o novo padrão primeiro
                     bucket_name = f"{project_id}.firebasestorage.app"
             
             if not bucket_name:
