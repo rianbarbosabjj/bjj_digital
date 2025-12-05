@@ -214,7 +214,7 @@ def tela_cadastro_interno():
         st.error(f"Erro ao carregar listas: {e}"); return
 
     # --- FORMULÁRIO ---
-    nome = st.text_input("Nome de Usuário:") 
+    nome = st.text_input("Nome completo:") 
     email = st.text_input("E-mail:")
     
     c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
