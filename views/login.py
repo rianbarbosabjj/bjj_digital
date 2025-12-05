@@ -218,12 +218,12 @@ def tela_cadastro_interno():
     conf = c2.text_input("Confirmar senha:", type="password")
     
     st.markdown("---")
-    tipo = st.selectbox("Tipo:", ["Aluno", "Professor"])
+    tipo = st.selectbox("Tipo:", ["Aluno(a)", "Professor(a)"])
     
     cf, ce = st.columns(2)
     nome_nova_equipe = None; desc_nova_equipe = None
     
-    if tipo == "Aluno":
+    if tipo == "Aluno(a)":
         with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
@@ -252,18 +252,18 @@ def tela_cadastro_interno():
         
     else: 
         with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
-        st.caption("Professores devem ser Marrom ou Preta.")
+        st.caption("Professores(as) devem ser Marrom ou Preta.")
         with ce:
             opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
             eq_sel = st.selectbox("Equipe:", opcoes_prof_eq)
         
         if eq_sel == "🆕 Criar Nova Equipe":
-            st.info("⭐ Você será cadastrado como **Professor Responsável**.")
+            st.info("⭐ Você será cadastrado como **Professor(a) Responsável**.")
             nome_nova_equipe = st.text_input("Nome da Nova Equipe:")
             desc_nova_equipe = st.text_input("Descrição (Opcional):")
         else:
-            st.info("ℹ️ Solicitação para **Professor Adjunto**.")
-            st.checkbox("Confirmar: Sou Professor Adjunto", value=True)
+            st.info("ℹ️ Solicitação para **Professor(a) Adjunto**.")
+            st.checkbox("Confirmar: Sou Professor(a) Adjunto", value=True)
 
     st.markdown("#### Endereço")
     if 'cad_cep' not in st.session_state: st.session_state.cad_cep = ''
@@ -349,7 +349,7 @@ def tela_cadastro_interno():
                         })
                 else:
                     eq_id = mapa_equipes.get(eq_sel)
-                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno" and prof_sel) else None
+                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno(a)" and prof_sel) else None
                     db.collection('alunos').add({
                         "usuario_id": user_id, "faixa_atual": faixa, "equipe_id": eq_id, 
                         "professor_id": prof_id, "status_vinculo": "pendente"
@@ -407,13 +407,20 @@ def tela_completar_cadastro(user_data):
     # Formato DD/MM/YYYY
     data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
-    tipo = st.selectbox("Sou:", ["Aluno", "Professor"])
+    tipo = st.selectbox("Sou:", ["Aluno(a)", "Professor(a)"])
     
     cf, ce = st.columns(2)
     nome_nova_equipe = None; desc_nova_equipe = None
     
     if tipo == "Aluno":
-        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        with cf: faixa = st.selectbox("Faixa:", [
+    " ", "Cinza e Branca", "Cinza", "Cinza e Preta",
+    "Amarela e Branca", "Amarela", "Amarela e Preta",
+    "Laranja e Branca", "Laranja", "Laranja e Preta",
+    "Verde e Branca", "Verde", "Verde e Preta",
+    "Azul", "Roxa", "Marrom", "Preta"
+]
+    )
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
@@ -511,7 +518,7 @@ def tela_completar_cadastro(user_data):
                         })
                 else:
                     eq_id = mapa_equipes.get(eq_sel)
-                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno" and prof_sel) else None
+                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno(a)" and prof_sel) else None
                     db.collection('alunos').add({
                         "usuario_id": uid, "faixa_atual": faixa, "equipe_id": eq_id, 
                         "professor_id": prof_id, "status_vinculo": "pendente"
