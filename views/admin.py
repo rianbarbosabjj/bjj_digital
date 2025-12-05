@@ -214,7 +214,7 @@ def gestao_usuarios_tab():
             st.warning("Usuário excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (VERSÃO COMPLETA)
+# GESTÃO DE QUESTÕES (COM CORREÇÃO DE VÍDEO)
 # =========================================
 def gestao_questoes_tab():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -251,10 +251,19 @@ def gestao_questoes_tab():
                     
                     if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
                     
+                    # --- CORREÇÃO DO PLAYER DE VÍDEO ---
                     if q.get('url_video'):
-                        link_limpo = normalizar_link_video(q.get('url_video'))
-                        try: ch.video(link_limpo)
-                        except: ch.markdown(f"🔗 [Ver Vídeo Externo]({q.get('url_video')})")
+                        vid_url = q.get('url_video')
+                        link_limpo = normalizar_link_video(vid_url)
+                        
+                        try:
+                            ch.video(link_limpo)
+                        except Exception:
+                            ch.warning("⚠️ Erro ao carregar player.")
+                        
+                        # Link de backup sempre visível
+                        ch.markdown(f"<small>🔗 [Abrir vídeo externamente]({vid_url})</small>", unsafe_allow_html=True)
+                    # -----------------------------------
                     
                     with ch.expander("Alternativas"):
                         alts = q.get('alternativas', {})
@@ -335,7 +344,7 @@ def gestao_questoes_tab():
                     pode_salvar = True
                     if IA_ATIVADA:
                         try:
-                            with st.spinner("Verificando duplicidade..."):
+                            with st.spinner("Estamos verificando se há outra questão igual em nosso banco..."):
                                 all_qs_snap = list(db.collection('questoes').stream())
                                 lista_qs = [d.to_dict() for d in all_qs_snap]
                                 res_ia = verificar_duplicidade_ia(perg, lista_qs, threshold=0.75)
@@ -360,9 +369,9 @@ def gestao_questoes_tab():
                 else: st.warning("Preencha dados básicos.")
 
 # =========================================
-# GESTÃO DE EXAME DE FAIXA (ATUALIZADA)
+# GESTÃO DE EXAME DE FAIXA
 # =========================================
-def gestao_exame_de_faixa():
+def gestao_exame_de_faixa_route(): # Função Wrapper chamada pelo app.py
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
@@ -491,53 +500,61 @@ def gestao_exame_de_faixa():
                 st.markdown("---")
 
                 for aluno in lista_alunos:
-                    aluno_id = aluno.get('id', 'unknown')
-                    c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
-                    c1.write(f"**{aluno.get('nome', 'Sem Nome')}**")
-                    c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
-                    
-                    faixa_exame_atual = aluno.get('faixa_exame', '')
-                    idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
-                    fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
-                    
-                    habilitado = aluno.get('exame_habilitado', False)
-                    status = aluno.get('status_exame', 'pendente')
-                    msg_status = "⚪ Não autorizado"
-                    if status == 'aprovado': msg_status = "🏆 Aprovado"
-                    elif status == 'reprovado': msg_status = "🔴 Reprovado"
-                    elif status == 'bloqueado': msg_status = "⛔ Bloqueado"
-                    elif habilitado:
-                        msg_status = "🟢 Liberado"
-                        try:
-                            raw_fim = aluno.get('exame_fim')
-                            if raw_fim:
-                                dt_obj = datetime.fromisoformat(raw_fim.replace('Z', '+00:00')) if isinstance(raw_fim, str) else raw_fim
-                                msg_status += f" (até {dt_obj.strftime('%d/%m %H:%M')})"
-                        except: pass
-                        if status == 'em_andamento': msg_status = "🟡 Em Andamento"
+                    try:
+                        aluno_id = aluno.get('id', 'unknown')
+                        aluno_nome = aluno.get('nome', 'Sem Nome')
+                        faixa_exame_atual = aluno.get('faixa_exame', '')
+                        
+                        c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
+                        c1.write(f"**{aluno_nome}**")
+                        c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
+                        
+                        idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
+                        fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
+                        
+                        habilitado = aluno.get('exame_habilitado', False)
+                        status = aluno.get('status_exame', 'pendente')
+                        
+                        msg_status = "⚪ Não autorizado"
+                        if status == 'aprovado': msg_status = "🏆 Aprovado"
+                        elif status == 'reprovado': msg_status = "🔴 Reprovado"
+                        elif status == 'bloqueado': msg_status = "⛔ Bloqueado"
+                        elif habilitado:
+                            msg_status = "🟢 Liberado"
+                            try:
+                                raw_fim = aluno.get('exame_fim')
+                                if raw_fim:
+                                    dt_obj = datetime.fromisoformat(raw_fim.replace('Z', '+00:00')) if isinstance(raw_fim, str) else raw_fim
+                                    msg_status += f" (até {dt_obj.strftime('%d/%m %H:%M')})"
+                            except: pass
+                            if status == 'em_andamento': msg_status = "🟡 Em Andamento"
 
-                    c4.write(msg_status)
-                    
-                    if habilitado:
-                        if c5.button("⛔", key=f"off_btn_{aluno_id}"):
-                            db.collection('usuarios').document(aluno_id).update({"exame_habilitado": False, "status_exame": "pendente"})
-                            st.rerun()
-                    else:
-                        if c5.button("✅", key=f"on_btn_{aluno_id}"):
-                            db.collection('usuarios').document(aluno_id).update({
-                                "exame_habilitado": True, "faixa_exame": fx_sel,
-                                "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
-                                "status_exame": "pendente", "status_exame_em_andamento": False
-                            })
-                            st.success("Liberado!"); time.sleep(0.5); st.rerun()
-                    st.markdown("---")
-        except Exception as e: st.error(f"Erro: {e}")
+                        c4.write(msg_status)
+                        
+                        if habilitado:
+                            if c5.button("⛔", key=f"off_btn_{aluno_id}"):
+                                update_data = {"exame_habilitado": False, "status_exame": "pendente"}
+                                for k in ["exame_inicio", "exame_fim", "faixa_exame", "motivo_bloqueio", "status_exame_em_andamento"]:
+                                    if k in aluno: update_data[k] = firestore.DELETE_FIELD
+                                db.collection('usuarios').document(aluno_id).update(update_data)
+                                st.rerun()
+                        else:
+                            if c5.button("✅", key=f"on_btn_{aluno_id}"):
+                                db.collection('usuarios').document(aluno_id).update({
+                                    "exame_habilitado": True, "faixa_exame": fx_sel,
+                                    "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
+                                    "status_exame": "pendente", "status_exame_em_andamento": False
+                                })
+                                st.success("Liberado!"); time.sleep(0.5); st.rerun()
+                        st.markdown("---")
+                    except Exception as e: st.error(f"Erro: {e}")
+        except: st.error("Erro ao carregar alunos.")
 
 # =========================================
 # CONTROLADOR PRINCIPAL (ROTEAMENTO)
 # =========================================
 def gestao_questoes(): gestao_questoes_tab()
-def gestao_exame_de_faixa_route(): gestao_exame_de_faixa() # Renomeado para evitar conflito
+def gestao_exame_de_faixa(): gestao_exame_de_faixa_route()
 
 def gestao_usuarios(usuario_logado):
     st.markdown(f"<h1 style='color:#FFD700;'>Gestão e Estatísticas</h1>", unsafe_allow_html=True)
