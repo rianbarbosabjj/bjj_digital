@@ -78,7 +78,7 @@ st.markdown(f"""
         color: {COR_DESTAQUE} !important;
     }}
 
-    /* --- HEADER ESCONDIDO COM BOTÃO DA SIDEBAR VISÍVEL --- */
+    /* --- HEADER ESCONDIDO COM BOTÃO DA SIDEBAR CUSTOMIZADO --- */
     /* Esconde completamente o header padrão do Streamlit */
     header[data-testid="stHeader"] {{
         display: none !important;
@@ -88,57 +88,56 @@ st.markdown(f"""
         margin: 0 !important;
     }}
     
-    /* Mantém o botão de controle da sidebar visível */
+    /* Remove o botão original da sidebar que está dentro do header */
     [data-testid="collapsedControl"] {{
-        display: flex !important;
-        visibility: visible !important;
+        display: none !important;
+    }}
+    
+    /* BOTÃO HAMBURGUER CUSTOMIZADO */
+    .custom-sidebar-toggle {{
         position: fixed !important;
         top: 15px !important;
         left: 15px !important;
         z-index: 999999 !important;
-        background-color: rgba(9, 31, 26, 0.85) !important;
+        background-color: rgba(9, 31, 26, 0.9) !important;
         border-radius: 8px !important;
         border: 1px solid rgba(255, 215, 112, 0.3) !important;
-        padding: 6px !important;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4) !important;
+        padding: 8px 10px !important;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5) !important;
         backdrop-filter: blur(5px) !important;
+        transition: all 0.3s ease !important;
+        cursor: pointer !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }}
+    
+    .custom-sidebar-toggle:hover {{
+        background-color: rgba(255, 215, 112, 0.15) !important;
+        border-color: {COR_HOVER} !important;
+        transform: scale(1.05) !important;
+        box-shadow: 0 6px 20px rgba(255, 215, 112, 0.3) !important;
+    }}
+    
+    /* Ícone hamburguer personalizado (três traços) */
+    .custom-sidebar-toggle::before {{
+        content: "☰";
+        color: {COR_DESTAQUE} !important;
+        font-size: 24px !important;
+        font-weight: bold !important;
+        line-height: 1 !important;
         transition: all 0.3s ease !important;
     }}
     
-    [data-testid="collapsedControl"]:hover {{
-        background-color: rgba(255, 215, 112, 0.1) !important;
-        border-color: {COR_HOVER} !important;
-        transform: scale(1.05) !important;
-        box-shadow: 0 6px 20px rgba(255, 215, 112, 0.2) !important;
-    }}
-    
-    [data-testid="collapsedControl"] button {{
-        background-color: transparent !important;
-        border: none !important;
-        color: {COR_DESTAQUE} !important;
-        width: 36px !important;
-        height: 36px !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        min-width: unset !important;
-    }}
-    
-    [data-testid="collapsedControl"] button:hover {{
-        background-color: transparent !important;
+    .custom-sidebar-toggle:hover::before {{
+        color: {COR_HOVER} !important;
         transform: scale(1.1) !important;
     }}
     
-    [data-testid="collapsedControl"] button svg {{
-        fill: {COR_DESTAQUE} !important;
-        color: {COR_DESTAQUE} !important;
-        width: 22px !important;
-        height: 22px !important;
-        transition: all 0.3s ease !important;
-    }}
-    
-    [data-testid="collapsedControl"]:hover button svg {{
-        fill: {COR_HOVER} !important;
-        color: {COR_HOVER} !important;
+    /* Ícone quando a sidebar está aberta (X) */
+    .custom-sidebar-toggle.open::before {{
+        content: "✕";
+        font-size: 20px !important;
     }}
 
     /* Ajusta o padding do conteúdo para compensar a falta do header */
@@ -148,24 +147,42 @@ st.markdown(f"""
     
     /* Responsividade para tablets e celulares */
     @media (max-width: 768px) {{
-        [data-testid="collapsedControl"] {{
+        .custom-sidebar-toggle {{
             top: 10px !important;
             left: 10px !important;
-            padding: 5px !important;
+            padding: 10px 12px !important;
+            min-width: 48px !important;
+            min-height: 48px !important;
         }}
         
-        [data-testid="collapsedControl"] button {{
-            width: 42px !important;
-            height: 42px !important;
+        .custom-sidebar-toggle::before {{
+            font-size: 26px !important;
         }}
         
-        [data-testid="collapsedControl"] button svg {{
-            width: 24px !important;
-            height: 24px !important;
+        .custom-sidebar-toggle.open::before {{
+            font-size: 22px !important;
         }}
         
         .block-container {{
             padding-top: 2.5rem !important;
+        }}
+    }}
+    
+    @media (max-width: 480px) {{
+        .custom-sidebar-toggle {{
+            top: 8px !important;
+            left: 8px !important;
+            padding: 8px 10px !important;
+            min-width: 44px !important;
+            min-height: 44px !important;
+        }}
+        
+        .custom-sidebar-toggle::before {{
+            font-size: 22px !important;
+        }}
+        
+        .custom-sidebar-toggle.open::before {{
+            font-size: 18px !important;
         }}
     }}
 
@@ -260,6 +277,51 @@ st.markdown(f"""
     [data-testid="stDecoration"] {{display: none;}}
 
 </style>
+""", unsafe_allow_html=True)
+
+# Adiciona o botão hamburguer customizado com JavaScript
+st.markdown("""
+<script>
+// Aguarda o DOM carregar
+document.addEventListener('DOMContentLoaded', function() {
+    // Cria o botão hamburguer customizado
+    const toggleButton = document.createElement('div');
+    toggleButton.className = 'custom-sidebar-toggle';
+    toggleButton.title = 'Abrir/Fechar Menu';
+    
+    // Adiciona ao corpo do documento
+    document.body.appendChild(toggleButton);
+    
+    // Função para alternar a sidebar
+    function toggleSidebar() {
+        // Encontra o botão original do Streamlit
+        const originalButton = document.querySelector('[data-testid="collapsedControl"] button');
+        if (originalButton) {
+            // Simula o clique no botão original
+            originalButton.click();
+            
+            // Alterna a classe para mudar o ícone
+            const sidebar = document.querySelector('section[data-testid="stSidebar"]');
+            if (sidebar && sidebar.getAttribute('aria-expanded') === 'true') {
+                toggleButton.classList.add('open');
+            } else {
+                toggleButton.classList.remove('open');
+            }
+        }
+    }
+    
+    // Adiciona evento de clique ao botão customizado
+    toggleButton.addEventListener('click', toggleSidebar);
+    
+    // Verifica o estado inicial da sidebar
+    setTimeout(function() {
+        const sidebar = document.querySelector('section[data-testid="stSidebar"]');
+        if (sidebar && sidebar.getAttribute('aria-expanded') === 'true') {
+            toggleButton.classList.add('open');
+        }
+    }, 500);
+});
+</script>
 """, unsafe_allow_html=True)
 
 if "SECRETS_TOML" in os.environ:
