@@ -3,9 +3,9 @@ import pandas as pd
 import bcrypt
 import random
 import time 
-import io  # Necessário para baixar o modelo CSV
-from datetime import datetime, time as dtime 
-from database import get_db
+import io 
+from datetime import datetime, date, time as dtime 
+from database import get_db, OPCOES_SEXO
 from firebase_admin import firestore
 
 # Importa a nova função normalizadora
@@ -41,8 +41,9 @@ def gestao_usuarios(usuario_logado):
     db = get_db()
     users = [d.to_dict() | {"id": d.id} for d in db.collection('usuarios').stream()]
     if not users: st.warning("Vazio."); return
+    
     df = pd.DataFrame(users)
-    cols = ['nome', 'email', 'tipo_usuario', 'faixa_atual']
+    cols = ['nome', 'email', 'tipo_usuario', 'faixa_atual', 'sexo']
     for c in cols:
         if c not in df.columns: df[c] = "-"
     st.dataframe(df[cols], use_container_width=True, hide_index=True)
@@ -50,33 +51,58 @@ def gestao_usuarios(usuario_logado):
     st.markdown("---")
     st.subheader("🛠️ Editar")
     sel = st.selectbox("Usuário:", users, format_func=lambda x: f"{x.get('nome')} ({x.get('email')})")
+    
     if sel:
         with st.form(f"edt_{sel['id']}"):
-            nm = st.text_input("Nome:", value=sel.get('nome',''))
-            tp = st.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
-            fx = st.selectbox("Faixa:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
-            pwd = st.text_input("Nova Senha:", type="password")
-            if st.form_submit_button("Salvar"):
-                upd = {"nome": nm.upper(), "tipo_usuario": tp, "faixa_atual": fx}
-                if pwd: upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode(); upd["precisa_trocar_senha"] = True
+            c1, c2 = st.columns(2)
+            nm = c1.text_input("Nome:", value=sel.get('nome',''))
+            tp = c2.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
+            
+            c3, c4 = st.columns(2)
+            fx = c3.selectbox("Faixa:", ["Branca"] + FAIXAS_COMPLETAS, index=(["Branca"] + FAIXAS_COMPLETAS).index(sel.get('faixa_atual', 'Branca')) if sel.get('faixa_atual') in FAIXAS_COMPLETAS else 0)
+            
+            # Sexo
+            idx_s = 0
+            if sel.get('sexo') in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sel.get('sexo'))
+            sexo_edit = c4.selectbox("Sexo:", OPCOES_SEXO, index=idx_s)
+            
+            # Nascimento
+            val_n = None
+            if sel.get('data_nascimento'):
+                try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
+                except: pass
+            nasc_edit = st.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today())
+
+            pwd = st.text_input("Nova Senha (deixe em branco para manter):", type="password")
+            
+            if st.form_submit_button("Salvar Alterações"):
+                upd = {
+                    "nome": nm.upper(), 
+                    "tipo_usuario": tp, 
+                    "faixa_atual": fx,
+                    "sexo": sexo_edit,
+                    "data_nascimento": nasc_edit.isoformat() if nasc_edit else None
+                }
+                if pwd: 
+                    upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
+                    upd["precisa_trocar_senha"] = True
+                
                 db.collection('usuarios').document(sel['id']).update(upd)
                 st.success("Salvo!"); time.sleep(1); st.rerun()
-        if st.button("🗑️ Excluir", key=f"del_{sel['id']}"):
+                
+        if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
             db.collection('usuarios').document(sel['id']).delete()
-            st.warning("Excluído."); st.rerun()
+            st.warning("Usuário excluído."); st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES (CORRIGIDO E ATUALIZADO)
+# 2. GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
     db = get_db()
     user = st.session_state.usuario
     
-    # --- CORREÇÃO DE PERMISSÃO ---
-    # Verifica 'tipo_usuario' OU 'tipo' para garantir compatibilidade
     tipo_perm = str(user.get("tipo_usuario", user.get("tipo", ""))).lower()
-
     if tipo_perm not in ["admin", "professor"]:
         st.error(f"Acesso negado. Seu perfil ({tipo_perm}) não tem permissão.")
         return
@@ -107,15 +133,11 @@ def gestao_questoes():
                     ch.markdown(f"**{bdg}** | {q.get('categoria','Geral')} | ✍️ {q.get('criado_por','?')}")
                     ch.markdown(f"##### {q.get('pergunta')}")
                     
-                    # --- PREVIEW ---
                     if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
-                    
                     if q.get('url_video'):
                         link_limpo = normalizar_link_video(q.get('url_video'))
-                        try:
-                            ch.video(link_limpo)
-                        except:
-                            ch.markdown(f"🔗 [Ver Vídeo Externo]({q.get('url_video')})")
+                        try: ch.video(link_limpo)
+                        except: ch.markdown(f"🔗 [Ver Vídeo Externo]({q.get('url_video')})")
                     
                     with ch.expander("Alternativas"):
                         alts = q.get('alternativas', {})
@@ -217,9 +239,8 @@ def gestao_questoes():
                         st.success("Sucesso!"); time.sleep(1); st.rerun()
                     else: st.warning("Preencha dados básicos.")
 
-        # >>> OPÇÃO 2: EM LOTE (SOMENTE ADMIN) <<<
+        # >>> OPÇÃO 2: EM LOTE <<<
         with sub_tab_lote:
-            # Usa a variável 'tipo_perm' que normaliza o tipo de usuário
             if tipo_perm == "admin":
                 st.markdown("#### 📥 Importação em Massa")
                 st.info("Utilize esta opção para carregar uma planilha (Excel ou CSV) com várias questões.")
@@ -227,7 +248,6 @@ def gestao_questoes():
                 col_info, col_btn = st.columns([3, 1])
                 col_info.markdown("**Instruções:** Baixe o modelo, preencha as questões e faça o upload.")
                 
-                # DataFrame Modelo
                 df_modelo = pd.DataFrame({
                     "pergunta": ["Qual a cor da faixa inicial?", "Quem é o criador do Judô?"],
                     "alt_a": ["Branca", "Helio Gracie"],
@@ -241,24 +261,14 @@ def gestao_questoes():
                 
                 csv_buffer = io.StringIO()
                 df_modelo.to_csv(csv_buffer, index=False)
-                col_btn.download_button(
-                    label="⬇️ Baixar Modelo CSV",
-                    data=csv_buffer.getvalue(),
-                    file_name="modelo_questoes.csv",
-                    mime="text/csv"
-                )
+                col_btn.download_button("⬇️ Baixar Modelo CSV", data=csv_buffer.getvalue(), file_name="modelo_questoes.csv", mime="text/csv")
 
                 st.markdown("---")
-                
                 arquivo = st.file_uploader("Selecione o arquivo preenchido:", type=["csv", "xlsx"])
 
                 if arquivo:
                     try:
-                        if arquivo.name.endswith('.csv'):
-                            df_upload = pd.read_csv(arquivo)
-                        else:
-                            df_upload = pd.read_excel(arquivo)
-                        
+                        df_upload = pd.read_csv(arquivo) if arquivo.name.endswith('.csv') else pd.read_excel(arquivo)
                         st.write("Pré-visualização dos dados:")
                         st.dataframe(df_upload.head(3), hide_index=True)
                         st.caption(f"Total de linhas encontradas: {len(df_upload)}")
@@ -271,8 +281,7 @@ def gestao_questoes():
                         else:
                             if st.button("🚀 Importar Todas as Questões", type="primary"):
                                 progresso = st.progress(0)
-                                success_count = 0
-                                error_count = 0
+                                success_count, error_count = 0, 0
 
                                 for i, row in df_upload.iterrows():
                                     try:
@@ -280,39 +289,26 @@ def gestao_questoes():
                                             "pergunta": str(row['pergunta']),
                                             "dificuldade": int(row.get('dificuldade', 1)),
                                             "categoria": str(row.get('categoria', 'Geral')),
-                                            "url_imagem": None,
-                                            "url_video": None,
-                                            "alternativas": {
-                                                "A": str(row['alt_a']), "B": str(row['alt_b']),
-                                                "C": str(row['alt_c']), "D": str(row['alt_d'])
-                                            },
+                                            "url_imagem": None, "url_video": None,
+                                            "alternativas": {"A": str(row['alt_a']), "B": str(row['alt_b']), "C": str(row['alt_c']), "D": str(row['alt_d'])},
                                             "resposta_correta": str(row['correta']).strip().upper(),
                                             "status": "aprovada",
                                             "criado_por": f"{user.get('nome', 'Admin')} (Import)",
                                             "data_criacao": firestore.SERVER_TIMESTAMP
                                         }
-                                        
-                                        if nova_q['resposta_correta'] not in ["A", "B", "C", "D"]:
-                                            nova_q['resposta_correta'] = "A"
+                                        if nova_q['resposta_correta'] not in ["A", "B", "C", "D"]: nova_q['resposta_correta'] = "A"
 
                                         db.collection('questoes').add(nova_q)
                                         success_count += 1
-                                    except Exception as e:
-                                        error_count += 1
-                                        print(f"Erro na linha {i}: {e}")
-                                    
+                                    except: error_count += 1
                                     progresso.progress((i + 1) / len(df_upload))
 
                                 st.success(f"Processo finalizado! {success_count} importadas com sucesso.")
-                                if error_count > 0:
-                                    st.warning(f"{error_count} falhas. Verifique o arquivo.")
-                                time.sleep(2)
-                                st.rerun()
+                                if error_count > 0: st.warning(f"{error_count} falhas.")
+                                time.sleep(2); st.rerun()
 
-                    except Exception as e:
-                        st.error(f"Erro ao ler arquivo: {e}")
-            else:
-                st.warning("🔒 Esta funcionalidade é restrita aos Administradores.")
+                    except Exception as e: st.error(f"Erro ao ler arquivo: {e}")
+            else: st.warning("🔒 Restrito a Administradores.")
 
 # =========================================
 # 3. GESTÃO DE EXAME
@@ -364,11 +360,9 @@ def gestao_exame_de_faixa():
                     c_chk.checkbox("", value=is_checked, key=f"chk_{doc.id}", on_change=update_selection)
                     with c_content:
                         badge = get_badge_nivel(niv)
-                        autor = d.get('criado_por', '?')
-                        st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
+                        st.markdown(f"**{badge}** | {cat} | ✍️ {d.get('criado_por', '?')}")
                         st.markdown(f"{d.get('pergunta')}")
                         if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
-                        
                         with st.expander("Ver Detalhes"):
                             alts = d.get('alternativas', {})
                             st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
@@ -392,18 +386,14 @@ def gestao_exame_de_faixa():
             if st.form_submit_button("💾 Salvar Prova"):
                 if total_sel == 0: st.error("Selecione questões.")
                 else:
+                    dados = {
+                        "faixa": faixa_sel, "questoes_ids": list(st.session_state.selected_ids), 
+                        "qtd_questoes": total_sel, "tempo_limite": tempo, "aprovacao_minima": nota,
+                        "modo_selecao": "Manual", "atualizado_em": firestore.SERVER_TIMESTAMP
+                    }
                     try:
-                        dados = {
-                            "faixa": faixa_sel, "questoes_ids": list(st.session_state.selected_ids), 
-                            "qtd_questoes": total_sel, "tempo_limite": tempo, "aprovacao_minima": nota,
-                            "modo_selecao": "Manual", "atualizado_em": firestore.SERVER_TIMESTAMP
-                        }
-                        if st.session_state.doc_id:
-                            # Tenta atualizar, se falhar (doc apagado), cria novo
-                            try: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
-                            except: db.collection('config_exames').add(dados)
-                        else:
-                            db.collection('config_exames').add(dados)
+                        if st.session_state.doc_id: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
+                        else: db.collection('config_exames').add(dados)
                         st.success("Salvo!"); time.sleep(1.5); st.rerun()
                     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
@@ -445,60 +435,42 @@ def gestao_exame_de_faixa():
             if not lista_alunos: st.info("Nenhum aluno cadastrado.")
             else:
                 cols = st.columns([3, 2, 2, 3, 1])
-                cols[0].markdown("**Aluno**")
-                cols[1].markdown("**Equipe**")
-                cols[2].markdown("**Exame**")
-                cols[3].markdown("**Status**")
-                cols[4].markdown("**Ação**")
+                cols[0].markdown("**Aluno**"); cols[1].markdown("**Equipe**")
+                cols[2].markdown("**Exame**"); cols[3].markdown("**Status**"); cols[4].markdown("**Ação**")
                 st.markdown("---")
 
                 for aluno in lista_alunos:
-                    try:
-                        aluno_id = aluno.get('id', 'unknown')
-                        aluno_nome = aluno.get('nome', 'Sem Nome')
-                        faixa_exame_atual = aluno.get('faixa_exame', '')
-                        
-                        c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
-                        c1.write(f"**{aluno_nome}**")
-                        c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
-                        
-                        idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
-                        fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
-                        
-                        habilitado = aluno.get('exame_habilitado', False)
-                        status = aluno.get('status_exame', 'pendente')
-                        
-                        msg_status = "⚪ Não autorizado"
-                        if status == 'aprovado': msg_status = "🏆 Aprovado"
-                        elif status == 'reprovado': msg_status = "🔴 Reprovado"
-                        elif status == 'bloqueado': msg_status = "⛔ Bloqueado"
-                        elif habilitado:
-                            msg_status = "🟢 Liberado"
-                            try:
-                                raw_fim = aluno.get('exame_fim')
-                                if raw_fim:
-                                    dt_obj = datetime.fromisoformat(raw_fim.replace('Z', '+00:00')) if isinstance(raw_fim, str) else raw_fim
-                                    msg_status += f" (até {dt_obj.strftime('%d/%m %H:%M')})"
-                            except: pass
-                            if status == 'em_andamento': msg_status = "🟡 Em Andamento"
+                    aluno_id = aluno.get('id', 'unknown')
+                    c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
+                    c1.write(f"**{aluno.get('nome', 'Sem Nome')}**")
+                    c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
+                    
+                    faixa_exame_atual = aluno.get('faixa_exame', '')
+                    idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
+                    fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
+                    
+                    habilitado = aluno.get('exame_habilitado', False)
+                    status = aluno.get('status_exame', 'pendente')
+                    msg_status = "⚪ Não autorizado"
+                    if status == 'aprovado': msg_status = "🏆 Aprovado"
+                    elif status == 'reprovado': msg_status = "🔴 Reprovado"
+                    elif status == 'bloqueado': msg_status = "⛔ Bloqueado"
+                    elif habilitado: msg_status = "🟢 Liberado"
+                    elif status == 'em_andamento': msg_status = "🟡 Em Andamento"
 
-                        c4.write(msg_status)
-                        
-                        if habilitado:
-                            if c5.button("⛔", key=f"off_btn_{aluno_id}"):
-                                update_data = {"exame_habilitado": False, "status_exame": "pendente"}
-                                for k in ["exame_inicio", "exame_fim", "faixa_exame", "motivo_bloqueio", "status_exame_em_andamento"]:
-                                    if k in aluno: update_data[k] = firestore.DELETE_FIELD
-                                db.collection('usuarios').document(aluno_id).update(update_data)
-                                st.rerun()
-                        else:
-                            if c5.button("✅", key=f"on_btn_{aluno_id}"):
-                                db.collection('usuarios').document(aluno_id).update({
-                                    "exame_habilitado": True, "faixa_exame": fx_sel,
-                                    "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
-                                    "status_exame": "pendente", "status_exame_em_andamento": False
-                                })
-                                st.success("Liberado!"); time.sleep(0.5); st.rerun()
-                        st.markdown("---")
-                    except Exception as e: st.error(f"Erro: {e}")
+                    c4.write(msg_status)
+                    
+                    if habilitado:
+                        if c5.button("⛔", key=f"off_btn_{aluno_id}"):
+                            db.collection('usuarios').document(aluno_id).update({"exame_habilitado": False, "status_exame": "pendente", "exame_inicio": firestore.DELETE_FIELD})
+                            st.rerun()
+                    else:
+                        if c5.button("✅", key=f"on_btn_{aluno_id}"):
+                            db.collection('usuarios').document(aluno_id).update({
+                                "exame_habilitado": True, "faixa_exame": fx_sel,
+                                "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
+                                "status_exame": "pendente", "status_exame_em_andamento": False
+                            })
+                            st.success("Liberado!"); time.sleep(0.5); st.rerun()
+                    st.markdown("---")
         except: st.error("Erro ao carregar alunos.")
