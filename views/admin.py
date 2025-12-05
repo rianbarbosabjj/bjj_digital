@@ -71,7 +71,8 @@ def gestao_usuarios(usuario_logado):
             if sel.get('data_nascimento'):
                 try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
                 except: pass
-            nasc_edit = st.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today())
+            # FORMATO DD/MM/YYYY
+            nasc_edit = st.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
             pwd = st.text_input("Nova Senha (deixe em branco para manter):", type="password")
             
@@ -410,8 +411,9 @@ def gestao_exame_de_faixa():
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
-            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now(), key="data_inicio_exame")
-            d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame")
+            # FORMATO DD/MM/YYYY
+            c1, c2 = st.columns(2); d_ini = c1.date_input("Início:", datetime.now(), key="data_inicio_exame", format="DD/MM/YYYY")
+            d_fim = c2.date_input("Fim:", datetime.now(), key="data_fim_exame", format="DD/MM/YYYY")
             c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
