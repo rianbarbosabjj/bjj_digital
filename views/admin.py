@@ -478,22 +478,20 @@ def gestao_questoes_tab():
                             db.collection('questoes').document(doc.id).update({"status": "aprovada"})
                             st.toast("Aprovada!"); time.sleep(1); st.rerun()
                         
-                        with c2.container():
-                            st.markdown("**Solicitar Correção / Rejeitar:**")
-                            fb_txt = st.text_area("Justificativa (Obrigatória) *", key=f"fb_{doc.id}", height=80)
-                            
-                            col_env, col_rej = st.columns(2)
-                            if col_env.button("Enviar Solicitação", key=f"send_fb_{doc.id}"):
+                        with c2.expander("❌ Solicitar Correção / Rejeitar"):
+                            fb_txt = st.text_area("Justificativa *", key=f"fb_{doc.id}", height=100)
+                            if st.button("Enviar Solicitação", key=f"send_fb_{doc.id}"):
                                 if not fb_txt.strip():
-                                    st.error("⚠️ Escreva a justificativa!")
+                                    st.error("⚠️ A justificativa é obrigatória!")
                                 else:
                                     db.collection('questoes').document(doc.id).update({
                                         "status": "correcao",
                                         "feedback_admin": fb_txt
                                     })
-                                    st.toast("Enviado!"); time.sleep(1); st.rerun()
+                                    st.toast("Enviado para correção!"); time.sleep(1); st.rerun()
                             
-                            if col_rej.button("🗑️ Rejeitar Definitivamente", key=f"kill_{doc.id}"):
+                            st.markdown("---")
+                            if st.button("🗑️ Rejeitar (Excluir)", key=f"kill_{doc.id}"):
                                 db.collection('questoes').document(doc.id).delete()
                                 st.rerun()
 
@@ -506,7 +504,6 @@ def gestao_exame_de_faixa_route():
 
     tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
 
-    # --- ABA 1: MONTAR ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
@@ -552,13 +549,14 @@ def gestao_exame_de_faixa_route():
                         st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
                         st.markdown(f"{d.get('pergunta')}")
                         if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
+                        
                         if d.get('url_video'):
                             vid_url = d.get('url_video')
                             link_limpo = normalizar_link_video(vid_url)
                             try: st.video(link_limpo)
                             except: st.warning("Erro player")
-                            st.markdown(f"<small>🔗 [Ver vídeo]({vid_url})</small>", unsafe_allow_html=True)
-                        
+                            st.markdown(f"<small>🔗 [Ver link]({vid_url})</small>", unsafe_allow_html=True)
+
                         with st.expander("Ver Detalhes"):
                             alts = d.get('alternativas', {})
                             st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
@@ -595,7 +593,6 @@ def gestao_exame_de_faixa_route():
                         st.success("Salvo!"); time.sleep(1.5); st.rerun()
                     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
-    # --- ABA 2: VISUALIZAR (GRUPOS) ---
     with tab2:
         st.subheader("Status das Provas Cadastradas")
         configs_stream = db.collection('config_exames').stream()
@@ -624,6 +621,7 @@ def gestao_exame_de_faixa_route():
                                 st.markdown(f"**{fx}**")
                                 st.caption(f"✅ {conf.get('qtd_questoes')} questões")
                                 
+                                # CORREÇÃO DA VISUALIZAÇÃO SIMULADA
                                 if st.toggle("👁️ Simular", key=f"sim_{conf['id']}"):
                                     ids = conf.get('questoes_ids', [])
                                     for q_idx, qid in enumerate(ids): 
@@ -631,6 +629,7 @@ def gestao_exame_de_faixa_route():
                                         if qdoc.exists:
                                             qd = qdoc.to_dict()
                                             st.markdown(f"**{q_idx+1}. {qd.get('pergunta')}**")
+                                            
                                             if qd.get('url_imagem'): st.image(qd.get('url_imagem'), use_container_width=True)
                                             
                                             if qd.get('url_video'):
@@ -638,9 +637,10 @@ def gestao_exame_de_faixa_route():
                                                 link_limpo = normalizar_link_video(vid_url)
                                                 try: st.video(link_limpo)
                                                 except: pass
-                                                st.markdown(f"[Ver vídeo]({vid_url})")
-
-                                            ops = [f"A) {qd['alternativas']['A']}", f"B) {qd['alternativas']['B']}"] 
+                                                st.markdown(f"<small>🔗 [Ver vídeo]({vid_url})</small>", unsafe_allow_html=True)
+                                            
+                                            alts = qd.get('alternativas', {})
+                                            ops = [f"A) {alts.get('A','')}", f"B) {alts.get('B','')}", f"C) {alts.get('C','')}", f"D) {alts.get('D','')}"]
                                             st.radio("", ops, key=f"r_{qid}_{conf['id']}", disabled=True, label_visibility="collapsed")
                                             st.success(f"Gabarito: {qd.get('resposta_correta')}")
 
@@ -650,7 +650,6 @@ def gestao_exame_de_faixa_route():
                                 st.markdown(f"**{fx}**")
                                 st.caption("❌ Pendente")
 
-    # --- ABA 3: AUTORIZAR ---
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
