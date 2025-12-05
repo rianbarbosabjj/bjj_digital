@@ -171,15 +171,18 @@ def app_principal():
         st.session_state.clear(); st.rerun(); return
 
     usuario = st.session_state.usuario
-    
-    # --- CORREÇÃO DA LÓGICA DE TIPO ---
-    # Normaliza o tipo para garantir que variações como "professor(a)" funcionem
     raw_tipo = str(usuario.get("tipo", "aluno")).lower()
     
-    if "admin" in raw_tipo: tipo = "admin"
-    elif "professor" in raw_tipo: tipo = "professor(a)"
-    else: tipo = "aluno"
-    # ----------------------------------
+    # Normalização lógica (para o código funcionar)
+    if "admin" in raw_tipo: tipo_code = "admin"
+    elif "professor" in raw_tipo: tipo_code = "professor"
+    else: tipo_code = "aluno"
+
+    # Normalização Visual (para aparecer bonito na tela)
+    label_tipo = raw_tipo.capitalize()
+    if tipo_code == "admin": label_tipo = "Administrador(a)"
+    elif tipo_code == "professor": label_tipo = "Professor(a)"
+    elif tipo_code == "aluno": label_tipo = "Aluno(a)"
 
     def nav(pg): st.session_state.menu_selection = pg
 
@@ -187,20 +190,20 @@ def app_principal():
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         
-        # Exibe o tipo de forma bonita (capitalizada)
-        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{raw_tipo.capitalize()}</p>", unsafe_allow_html=True)
+        # Exibe o tipo formatado (ex: Professor(a))
+        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{label_tipo}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
         
-        if tipo != "admin":
+        if tipo_code != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         
-        # Agora verifica usando a variável normalizada 'tipo'
-        if tipo in ["admin", "professor(a)"]:
-            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor(a)")
+        if tipo_code in ["admin", "professor"]:
+            # Botão Inclusivo
+            if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
         
-        if tipo == "admin":
+        if tipo_code == "admin":
             if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
             
         st.markdown("<br>", unsafe_allow_html=True)
@@ -217,7 +220,7 @@ def app_principal():
     if pg == "Início": geral.tela_inicio(); return
 
     ops, icns = [], []
-    if tipo in ["admin", "professor"]:
+    if tipo_code in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
