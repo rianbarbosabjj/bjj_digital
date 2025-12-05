@@ -314,7 +314,7 @@ def gestao_questoes_tab():
                             justificativa_edicao = ""
                             if user_tipo != "admin":
                                 st.markdown("---")
-                                justificativa_edicao = st.text_area("📝 Justificativa da Edição (Obrigatório para Professores):")
+                                justificativa_edicao = st.text_area("📝 Justificaticar correção:*")
 
                             cols = st.columns(2)
                             if cols[0].form_submit_button("💾 Salvar Alterações"):
