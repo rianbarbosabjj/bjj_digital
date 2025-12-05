@@ -479,35 +479,39 @@ def gestao_questoes_tab():
                                 st.rerun()
 
 # =========================================
-# GESTÃO DE EXAMES (COM STATUS VISUAL)
+# GESTÃO DE EXAMES (COM PRÉ-VISUALIZAÇÃO REAL)
 # =========================================
 def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos(as)"])
 
+    # --- ABA 1: MONTAR ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
         
         if 'last_faixa_sel' not in st.session_state or st.session_state.last_faixa_sel != faixa_sel:
-            configs = db.collection('config_exames').where('faixa', '==', faixa_sel).limit(1).stream()
-            conf_atual = {}; doc_id = None
-            for d in configs: conf_atual = d.to_dict(); doc_id = d.id; break
+            configs = list(db.collection('config_exames').where('faixa', '==', faixa_sel).limit(1).stream())
+            conf_atual = configs[0].to_dict() if configs else {}
+            doc_id = configs[0].id if configs else None
+            
             st.session_state.conf_atual = conf_atual
             st.session_state.doc_id = doc_id
             st.session_state.selected_ids = set(conf_atual.get('questoes_ids', []))
             st.session_state.last_faixa_sel = faixa_sel
         
         conf_atual = st.session_state.conf_atual
-        todas_questoes = list(db.collection('questoes').stream())
+        todas_questoes = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         
         st.markdown("### 2. Selecione as Questões")
         c_f1, c_f2 = st.columns(2)
         filtro_nivel = c_f1.multiselect("Filtrar Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4], format_func=lambda x: MAPA_NIVEIS.get(x, str(x)))
-        cats = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
-        filtro_tema = c_f2.multiselect("Filtrar Tema:", cats, default=cats)
+        
+        # Extrai categorias únicas para filtro
+        cats_list = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
+        filtro_tema = c_f2.multiselect("Filtrar Tema:", cats_list, default=cats_list)
         
         with st.container(height=500, border=True):
             count_visible = 0
@@ -515,6 +519,7 @@ def gestao_exame_de_faixa_route():
                 d = doc.to_dict()
                 niv = d.get('dificuldade', 1)
                 cat = d.get('categoria', 'Geral')
+                
                 if niv in filtro_nivel and cat in filtro_tema:
                     count_visible += 1
                     c_chk, c_content = st.columns([1, 15])
@@ -530,14 +535,10 @@ def gestao_exame_de_faixa_route():
                         autor = d.get('criado_por', '?')
                         st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
                         st.markdown(f"{d.get('pergunta')}")
-                        if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
                         
+                        if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
                         if d.get('url_video'):
-                            vid_url = d.get('url_video')
-                            link_limpo = normalizar_link_video(vid_url)
-                            try: st.video(link_limpo)
-                            except: st.warning("Erro player")
-                            st.markdown(f"<small>🔗 [Ver link]({vid_url})</small>", unsafe_allow_html=True)
+                            st.markdown(f"[Ver Vídeo]({d.get('url_video')})")
 
                         with st.expander("Ver Detalhes"):
                             alts = d.get('alternativas', {})
@@ -545,13 +546,13 @@ def gestao_exame_de_faixa_route():
                             st.markdown(f"**C)** {alts.get('C','')} | **D)** {alts.get('D','')}")
                             st.info(f"✅ Correta: {d.get('resposta_correta') or 'A'}")
                     st.divider()
-            if count_visible == 0: st.warning("Nada encontrado.")
+            if count_visible == 0: st.warning("Nenhuma questão encontrada com esses filtros.")
 
         total_sel = len(st.session_state.selected_ids)
         c_res1, c_res2 = st.columns([3, 1])
         c_res1.success(f"**{total_sel}** questões selecionadas para **{faixa_sel}**.")
         if total_sel > 0:
-            if c_res2.button("🗑️ Limpar", key="clean_sel"):
+            if c_res2.button("🗑️ Limpar Seleção", key="clean_sel"):
                 st.session_state.selected_ids = set(); st.rerun()
         
         st.markdown("### 3. Regras de Aplicação")
@@ -559,8 +560,9 @@ def gestao_exame_de_faixa_route():
             c1, c2 = st.columns(2)
             tempo = c1.number_input("Tempo (min):", 10, 180, int(conf_atual.get('tempo_limite', 45)))
             nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
+            
             if st.form_submit_button("💾 Salvar Prova"):
-                if total_sel == 0: st.error("Selecione questões.")
+                if total_sel == 0: st.error("Selecione pelo menos uma questão.")
                 else:
                     try:
                         dados = {
@@ -572,54 +574,69 @@ def gestao_exame_de_faixa_route():
                             try: db.collection('config_exames').document(st.session_state.doc_id).update(dados)
                             except: db.collection('config_exames').add(dados)
                         else: db.collection('config_exames').add(dados)
-                        st.success("Salvo!"); time.sleep(1.5); st.rerun()
+                        st.success("Prova Salva com Sucesso!"); time.sleep(1.5); st.rerun()
                     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
-    # --- ABA 2: VISUALIZAR (MARCADORES COLORIDOS) ---
+    # --- ABA 2: VISUALIZAR (COM SIMULAÇÃO) ---
     with tab2:
-        st.subheader("Status das Provas Cadastradas")
-        # 1. Coleta Dados
-        all_q_docs = list(db.collection('questoes').stream())
-        # Conta questões por categoria/faixa pode ser complexo se não tiver o campo 'faixa' na questão
-        # Vamos assumir que a 'config_exames' é a fonte da verdade
+        st.subheader("Provas Cadastradas")
+        configs_snap = list(db.collection('config_exames').stream())
         
-        configs_stream = db.collection('config_exames').stream()
-        mapa_configs = {}
-        for doc in configs_stream:
-            d = doc.to_dict(); d['id'] = doc.id 
-            mapa_configs[d.get('faixa')] = d
-
-        # 2. Define Grupos
-        categorias_faixas = {
-            "🔘 Cinza": ["Cinza e Branca", "Cinza", "Cinza e Preta"],
-            "🟡 Amarela": ["Amarela e Branca", "Amarela", "Amarela e Preta"],
-            "🟠 Laranja": ["Laranja e Branca", "Laranja", "Laranja e Preta"],
-            "🟢 Verde": ["Verde e Branca", "Verde", "Verde e Preta"],
-            "🔵 Azul": ["Azul"], "🟣 Roxa": ["Roxa"], "🟤 Marrom": ["Marrom"], "⚫ Preta": ["Preta"]
-        }
-
-        # 3. Renderiza Cards
-        for grupo, faixas in categorias_faixas.items():
-            with st.expander(grupo, expanded=True):
-                cols = st.columns(len(faixas))
-                for i, fx in enumerate(faixas):
-                    conf = mapa_configs.get(fx)
+        if not configs_snap:
+            st.info("Nenhuma prova configurada ainda.")
+        
+        for doc in configs_snap:
+            d = doc.to_dict()
+            with st.expander(f"🥋 Faixa {d.get('faixa')} ({d.get('qtd_questoes')} questões)"):
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Tempo", f"{d.get('tempo_limite')} min")
+                c2.metric("Aprovação", f"{d.get('aprovacao_minima')}%")
+                
+                # --- SIMULAÇÃO DA PROVA ---
+                if st.toggle("👁️ Simular Visualização do Aluno", key=f"sim_{doc.id}"):
+                    st.markdown("---")
+                    st.caption("⚠️ Modo de visualização. As respostas não serão salvas.")
                     
-                    with cols[i]:
-                        with st.container(border=True):
-                            if conf:
-                                qtd = conf.get('qtd_questoes', 0)
-                                st.markdown(f"**{fx}**")
-                                st.markdown(f":green[✅ Ativa]")
-                                st.caption(f"{qtd} Questões | {conf.get('tempo_limite')} min")
-                                if st.button("🗑️", key=f"del_cnf_{conf['id']}"):
-                                    db.collection('config_exames').document(conf['id']).delete()
-                                    st.rerun()
+                    ids = d.get('questoes_ids', [])
+                    if not ids:
+                        st.warning("Esta prova não tem questões vinculadas.")
+                    else:
+                        # Busca as questões no banco
+                        for i, q_id in enumerate(ids):
+                            q_doc = db.collection('questoes').document(q_id).get()
+                            if q_doc.exists:
+                                q = q_doc.to_dict()
+                                st.markdown(f"**{i+1}. {q.get('pergunta')}**")
+                                
+                                # Mídia (Igual ao aluno)
+                                if q.get('url_imagem'): st.image(q.get('url_imagem'), use_container_width=True)
+                                if q.get('url_video'): 
+                                    link_v = normalizar_link_video(q.get('url_video'))
+                                    try: st.video(link_v)
+                                    except: st.markdown(f"[Ver Vídeo]({link_v})")
+                                
+                                # Opções (Radio Button desabilitado para visualização)
+                                alts = q.get('alternativas', {})
+                                opcoes_lista = [
+                                    f"A) {alts.get('A','')}", 
+                                    f"B) {alts.get('B','')}", 
+                                    f"C) {alts.get('C','')}", 
+                                    f"D) {alts.get('D','')}"
+                                ]
+                                st.radio("Opções:", opcoes_lista, key=f"radio_{doc.id}_{i}", label_visibility="collapsed", disabled=True)
+                                
+                                # Gabarito (Só professor vê)
+                                st.success(f"✅ Gabarito: {q.get('resposta_correta')}")
+                                st.markdown("---")
                             else:
-                                st.markdown(f"**{fx}**")
-                                st.markdown(":red[❌ Pendente]")
-                                st.caption("Sem prova montada")
+                                st.error(f"Questão ID {q_id} não encontrada (pode ter sido excluída).")
 
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("🗑️ Excluir Esta Prova", key=f"del_conf_{doc.id}"):
+                    db.collection('config_exames').document(doc.id).delete()
+                    st.success("Prova deletada."); time.sleep(1); st.rerun()
+
+    # --- ABA 3: AUTORIZAR ---
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
@@ -629,7 +646,7 @@ def gestao_exame_de_faixa_route():
             c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
-        st.write(""); st.subheader("Lista de Alunos")
+        st.write(""); st.subheader("Lista de Alunos(as)")
         try:
             alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
             lista_alunos = []
@@ -646,10 +663,10 @@ def gestao_exame_de_faixa_route():
                 d['nome_equipe'] = nome_eq
                 lista_alunos.append(d)
 
-            if not lista_alunos: st.info("Nenhum aluno cadastrado.")
+            if not lista_alunos: st.info("Nenhum aluno(a) cadastrado.")
             else:
                 cols = st.columns([3, 2, 2, 3, 1])
-                cols[0].markdown("**Aluno**"); cols[1].markdown("**Equipe**")
+                cols[0].markdown("**Aluno(a)**"); cols[1].markdown("**Equipe**")
                 cols[2].markdown("**Exame**"); cols[3].markdown("**Status**"); cols[4].markdown("**Ação**")
                 st.markdown("---")
 
@@ -703,7 +720,6 @@ def gestao_exame_de_faixa_route():
                         st.markdown("---")
                     except Exception as e: st.error(f"Erro: {e}")
         except: st.error("Erro ao carregar alunos.")
-
 # =========================================
 # CONTROLADOR PRINCIPAL (ROTEAMENTO)
 # =========================================
