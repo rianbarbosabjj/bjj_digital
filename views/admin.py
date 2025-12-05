@@ -214,33 +214,28 @@ def gestao_usuarios_tab():
             st.warning("Usuário excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (COM APROVAÇÃO)
+# GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes_tab():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
     db = get_db()
     user = st.session_state.usuario
     
-    # Tipos seguros
     user_tipo = str(user.get("tipo_usuario", user.get("tipo", ""))).lower()
     if user_tipo not in ["admin", "professor"]:
         st.error("Acesso negado."); return
 
-    # Define abas baseado no perfil
-    # Admin vê "Aprovação", Professor não
-    abas = ["📚 Listar/Editar", "➕ Adicionar Nova"]
-    if user_tipo == "admin":
-        abas.append("⏳ Aprovações")
+    # --- LÓGICA DE ABAS DINÂMICAS ---
+    # Se for Admin, vê a aba de Importação. Se for Prof, não vê.
+    titulos_abas = ["📚 Listar/Editar", "➕ Adicionar Nova"]
+    
+    tabs = st.tabs(titulos_abas)
 
-    tabs = st.tabs(abas)
-
-    # --- ABA 1: LISTAR (SOMENTE APROVADAS) ---
+    # --- ABA 1: LISTAR ---
     with tabs[0]:
-        # Filtra somente as aprovadas para não poluir
-        q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
-        
+        q_ref = list(db.collection('questoes').stream())
         c1, c2 = st.columns(2)
-        termo = c1.text_input("🔍 Buscar (Aprovadas):")
+        termo = c1.text_input("🔍 Buscar:")
         filt_n = c2.multiselect("Nível:", NIVEIS_DIFICULDADE)
         
         q_filtro = []
@@ -250,9 +245,9 @@ def gestao_questoes_tab():
             if filt_n and d.get('dificuldade',1) not in filt_n: continue
             q_filtro.append(d)
             
-        if not q_filtro: st.info("Nenhuma questão aprovada encontrada.")
+        if not q_filtro: st.info("Nada encontrado.")
         else:
-            st.caption(f"{len(q_filtro)} questões ativas")
+            st.caption(f"{len(q_filtro)} questões")
             for q in q_filtro:
                 with st.container(border=True):
                     ch, cb = st.columns([5, 1])
@@ -265,8 +260,8 @@ def gestao_questoes_tab():
                         vid_url = q.get('url_video')
                         link_limpo = normalizar_link_video(vid_url)
                         try: ch.video(link_limpo)
-                        except: pass
-                        ch.markdown(f"<small>🔗 [Ver vídeo externamente]({vid_url})</small>", unsafe_allow_html=True)
+                        except: ch.warning("⚠️ Erro player.")
+                        ch.markdown(f"<small>🔗 [Abrir vídeo externamente]({vid_url})</small>", unsafe_allow_html=True)
                     
                     with ch.expander("Alternativas"):
                         alts = q.get('alternativas', {})
@@ -276,7 +271,6 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
-                # --- EDITAR (In-line) ---
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
@@ -290,7 +284,6 @@ def gestao_questoes_tab():
                             up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
                             url_v_at = q.get('url_video','')
                             url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
-                            
                             c1, c2 = st.columns(2)
                             dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(q.get('dificuldade',1)))
                             cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
@@ -303,9 +296,11 @@ def gestao_questoes_tab():
                             cols = st.columns(2)
                             if cols[0].form_submit_button("💾 Salvar"):
                                 fin_img = url_i_at
-                                if up_img: fin_img = fazer_upload_midia(up_img)
+                                if up_img:
+                                    with st.spinner("Subindo imagem..."): fin_img = fazer_upload_midia(up_img)
                                 fin_vid = url_v_manual
-                                if up_vid: fin_vid = fazer_upload_midia(up_vid)
+                                if up_vid:
+                                    with st.spinner("Subindo vídeo..."): fin_vid = fazer_upload_midia(up_vid)
                                 db.collection('questoes').document(q['id']).update({
                                     "pergunta": perg, "dificuldade": dif, "categoria": cat,
                                     "url_imagem": fin_img, "url_video": fin_vid,
@@ -319,11 +314,17 @@ def gestao_questoes_tab():
                             db.collection('questoes').document(q['id']).delete()
                             st.session_state['edit_q'] = None; st.success("Deletado."); st.rerun()
 
-    # --- ABA 2: ADICIONAR ---
+    # --- ABA 2: ADICIONAR (COM SUB-ABAS DINÂMICAS) ---
     with tabs[1]:
-        sub_tab_manual, sub_tab_lote = st.tabs(["✍️ Manual (Uma)", "📂 Importação em Lote (Excel/CSV)"])
+        # Define quais sub-abas exibir
+        opcoes_sub = ["✍️ Manual (Uma)"]
+        if user_tipo == "admin":
+            opcoes_sub.append("📂 Importação em Lote (Excel/CSV)")
+            
+        sub_tabs = st.tabs(opcoes_sub)
         
-        with sub_tab_manual:
+        # 1. CADASTRO MANUAL (Sempre existe)
+        with sub_tabs[0]:
             with st.form("new_q"):
                 st.markdown("#### Nova Questão")
                 if IA_ATIVADA: st.caption("🟢 IA de Anti-Duplicidade Ativada")
@@ -351,8 +352,7 @@ def gestao_questoes_tab():
                         pode_salvar = True
                         if IA_ATIVADA:
                             try:
-                                with st.spinner("Verificando duplicidade..."):
-                                    # Busca TODAS (aprovadas ou não) para evitar duplicação
+                                with st.spinner("Estamos verificando se há outra questão igual em nosso banco..."):
                                     all_qs_snap = list(db.collection('questoes').stream())
                                     lista_qs = [d.to_dict() for d in all_qs_snap]
                                     res_ia = verificar_duplicidade_ia(perg, lista_qs, threshold=0.75)
@@ -366,39 +366,39 @@ def gestao_questoes_tab():
                             f_img = fazer_upload_midia(up_img) if up_img else None
                             f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
                             
-                            # --- LÓGICA DE STATUS (FLUXO DE APROVAÇÃO) ---
-                            if user_tipo == "admin":
-                                status_inicial = "aprovada"
-                                msg_sucesso = "✅ Questão cadastrada e aprovada!"
-                            else:
-                                status_inicial = "pendente"
-                                msg_sucesso = "⏳ Questão enviada para análise do Administrador."
-                            # ----------------------------------------------
+                            # Define status
+                            status_ini = "aprovada" if user_tipo == "admin" else "pendente"
+                            msg_final = "Questão Cadastrada!" if user_tipo == "admin" else "Enviada para aprovação!"
 
                             db.collection('questoes').add({
                                 "pergunta": perg, "dificuldade": dif, "categoria": cat,
                                 "url_imagem": f_img, "url_video": f_vid,
                                 "alternativas": {"A":alt_a, "B":alt_b, "C":alt_c, "D":alt_d},
-                                "resposta_correta": correta, 
-                                "status": status_inicial, # <--- STATUS DEFINIDO AQUI
-                                "criado_por": user.get('nome', 'Admin'), 
-                                "data_criacao": firestore.SERVER_TIMESTAMP
+                                "resposta_correta": correta, "status": status_ini,
+                                "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
                             })
-                            st.success(msg_sucesso); time.sleep(2); st.rerun()
+                            st.success(f"Sucesso! {msg_final}"); time.sleep(1); st.rerun()
                         else: st.stop()
                     else: st.warning("Preencha dados básicos.")
 
-        # Importação Lote (Só Admin)
-        with sub_tab_lote:
-            if user_tipo == "admin":
+        # 2. IMPORTAÇÃO EM LOTE (Só se for Admin)
+        if user_tipo == "admin":
+            with sub_tabs[1]:
                 st.markdown("#### 📥 Importação em Massa")
-                st.info("Questões importadas em massa entram automaticamente como **Aprovadas**.")
+                st.info("Carregue uma planilha para adicionar várias questões de uma vez.")
                 
                 col_info, col_btn = st.columns([3, 1])
                 df_modelo = pd.DataFrame({
-                    "pergunta": ["Qual a cor da faixa inicial?"], "alt_a": ["Branca"], "alt_b": ["Azul"], "alt_c": ["Preta"], "alt_d": ["Rosa"],
-                    "correta": ["A"], "dificuldade": [1], "categoria": ["História"]
+                    "pergunta": ["Qual a cor da faixa inicial?", "Quem criou o Judô?"],
+                    "alt_a": ["Branca", "Helio Gracie"],
+                    "alt_b": ["Azul", "Jigoro Kano"],
+                    "alt_c": ["Preta", "Mitsuyo Maeda"],
+                    "alt_d": ["Rosa", "Conde Koma"],
+                    "correta": ["A", "B"],
+                    "dificuldade": [1, 2],
+                    "categoria": ["História", "História"]
                 })
+                
                 csv_buffer = io.StringIO()
                 df_modelo.to_csv(csv_buffer, index=False, sep=';')
                 col_btn.download_button("⬇️ Baixar Modelo CSV", data=csv_buffer.getvalue(), file_name="modelo_questoes.csv", mime="text/csv")
@@ -418,6 +418,7 @@ def gestao_questoes_tab():
                         
                         if st.button("🚀 Importar Todas as Questões", type="primary"):
                             progresso = st.progress(0)
+                            count = 0
                             for i, row in df_upload.iterrows():
                                 try:
                                     nova_q = {
@@ -426,56 +427,17 @@ def gestao_questoes_tab():
                                         "categoria": str(row.get('categoria', 'Geral')),
                                         "alternativas": {"A": str(row['alt_a']), "B": str(row['alt_b']), "C": str(row['alt_c']), "D": str(row['alt_d'])},
                                         "resposta_correta": str(row['correta']).strip().upper(),
-                                        "status": "aprovada", # Lote sempre aprovado
+                                        "status": "aprovada",
                                         "criado_por": f"{user.get('nome', 'Admin')} (Import)",
                                         "data_criacao": firestore.SERVER_TIMESTAMP,
                                         "url_imagem": None, "url_video": None
                                     }
                                     db.collection('questoes').add(nova_q)
+                                    count += 1
                                 except: pass
                                 progresso.progress((i + 1) / len(df_upload))
-                            st.success("Questões importadas!"); time.sleep(2); st.rerun()
+                            st.success(f"{count} questões importadas!"); time.sleep(2); st.rerun()
                     except Exception as e: st.error(f"Erro ao ler arquivo: {e}")
-            else: st.warning("🔒 Funcionalidade restrita a Administradores.")
-
-    # --- ABA 3: APROVAÇÃO (SOMENTE ADMIN) ---
-    if user_tipo == "admin":
-        with tabs[2]:
-            st.markdown("#### ⏳ Questões Pendentes de Aprovação")
-            # Busca somente pendentes
-            pendentes_ref = list(db.collection('questoes').where('status', '==', 'pendente').stream())
-            
-            if not pendentes_ref:
-                st.success("🎉 Nenhuma pendência! O banco está em dia.")
-            else:
-                st.info(f"Existem {len(pendentes_ref)} questões aguardando análise.")
-                for doc in pendentes_ref:
-                    q = doc.to_dict()
-                    with st.container(border=True):
-                        c_info, c_act = st.columns([4, 1])
-                        with c_info:
-                            bdg = get_badge_nivel(q.get('dificuldade',1))
-                            st.markdown(f"**{bdg}** | {q.get('categoria','?')} | Criado por: **{q.get('criado_por','?')}**")
-                            st.markdown(f"##### {q.get('pergunta')}")
-                            
-                            if q.get('url_imagem'): st.image(q.get('url_imagem'), width=100)
-                            
-                            with st.expander("Ver Alternativas"):
-                                alts = q.get('alternativas', {})
-                                st.write(f"A) {alts.get('A','')} | B) {alts.get('B','')}")
-                                st.write(f"C) {alts.get('C','')} | D) {alts.get('D','')}")
-                                st.success(f"Correta: {q.get('resposta_correta')}")
-
-                        with c_act:
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            if st.button("✅ Aprovar", key=f"apr_{doc.id}", type="primary", use_container_width=True):
-                                db.collection('questoes').document(doc.id).update({"status": "aprovada"})
-                                st.toast("Questão Aprovada!"); time.sleep(1); st.rerun()
-                            
-                            st.markdown("<br>", unsafe_allow_html=True)
-                            if st.button("❌ Rejeitar", key=f"rej_{doc.id}", use_container_width=True):
-                                db.collection('questoes').document(doc.id).delete() # Ou update para 'rejeitada'
-                                st.toast("Questão Deletada."); time.sleep(1); st.rerun()
 
 # =========================================
 # GESTÃO DE EXAMES
@@ -484,7 +446,7 @@ def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos(as)"])
 
     with tab1:
         st.subheader("1. Selecione a Faixa")
@@ -530,7 +492,6 @@ def gestao_exame_de_faixa_route():
                         st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
                         st.markdown(f"{d.get('pergunta')}")
                         if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
-                        
                         if d.get('url_video'):
                             vid_url = d.get('url_video')
                             link_limpo = normalizar_link_video(vid_url)
@@ -593,7 +554,7 @@ def gestao_exame_de_faixa_route():
             c3, c4 = st.columns(2); h_ini = c3.time_input("Hora Ini:", dtime(0,0)); h_fim = c4.time_input("Hora Fim:", dtime(23,59))
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
 
-        st.write(""); st.subheader("Lista de Alunos")
+        st.write(""); st.subheader("Lista de Alunos(as)")
         try:
             alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
             lista_alunos = []
@@ -610,10 +571,10 @@ def gestao_exame_de_faixa_route():
                 d['nome_equipe'] = nome_eq
                 lista_alunos.append(d)
 
-            if not lista_alunos: st.info("Nenhum aluno cadastrado.")
+            if not lista_alunos: st.info("Nenhum aluno(a) cadastrado.")
             else:
                 cols = st.columns([3, 2, 2, 3, 1])
-                cols[0].markdown("**Aluno**"); cols[1].markdown("**Equipe**")
+                cols[0].markdown("**Aluno(a)**"); cols[1].markdown("**Equipe**")
                 cols[2].markdown("**Exame**"); cols[3].markdown("**Status**"); cols[4].markdown("**Ação**")
                 st.markdown("---")
 
