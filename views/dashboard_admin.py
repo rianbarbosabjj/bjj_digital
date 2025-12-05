@@ -56,7 +56,7 @@ def render_dashboard_geral():
     
     col1, col2, col3, col4, col5 = st.columns(5)
     col1.metric("👥 Usuários", total_users)
-    col2.metric("🥋 Professores", total_profs)
+    col2.metric("🥋 Professores(as)", total_profs)
     col3.metric("🧠 Questões", total_questoes)
     col4.metric("🏛️ Equipes", total_equipes)
     
@@ -82,7 +82,7 @@ def render_dashboard_geral():
             df_counts = df_counts.sort_values('mes_dt')
             
             fig_line = px.line(df_counts, x='mes_dt', y='Qtd', color='Tipo', markers=True,
-                               color_discrete_map={'Aluno': '#078B6C', 'Professor': '#FFD770'},
+                               color_discrete_map={'Aluno': '#078B6C', 'Professor(a)': '#FFD770'},
                                labels={'mes_dt': 'Mês', 'Qtd': 'Novos Usuários'})
             
             st.plotly_chart(estilizar_grafico(fig_line), use_container_width=True)
@@ -148,8 +148,8 @@ def render_dashboard_geral():
             df_top_eq = df_merged.sort_values(by='Total', ascending=False).head(5)
             
             fig_eq = go.Figure(data=[
-                go.Bar(name='Alunos', x=df_top_eq['nome'], y=df_top_eq['Alunos'], marker_color='#078B6C'),
-                go.Bar(name='Professores', x=df_top_eq['nome'], y=df_top_eq['Professores'], marker_color='#FFD770')
+                go.Bar(name='Alunos(as)', x=df_top_eq['nome'], y=df_top_eq['Alunos'], marker_color='#078B6C'),
+                go.Bar(name='Professores(as)', x=df_top_eq['nome'], y=df_top_eq['Professores'], marker_color='#FFD770')
             ])
             fig_eq.update_layout(barmode='stack', title="Top 5 Equipes (Membros)")
             st.plotly_chart(estilizar_grafico(fig_eq), use_container_width=True)
@@ -172,7 +172,7 @@ def render_dashboard_geral():
             st.info("Banco de questões vazio.")
 
     with c4:
-        st.markdown("##### 🥋 Distribuição de Alunos por Faixa")
+        st.markdown("##### 🥋 Distribuição de Alunos(as) por Faixa")
         if not df_users.empty and 'faixa_atual' in df_users.columns:
             df_faixas = df_users[df_users['tipo_usuario'] == 'aluno']['faixa_atual'].value_counts().reset_index()
             df_faixas.columns = ['Faixa', 'Qtd']
