@@ -3,10 +3,10 @@ import pandas as pd
 import bcrypt
 import random
 import time 
+import io  # Necessário para baixar o modelo CSV
 from datetime import datetime, time as dtime 
 from database import get_db
 from firebase_admin import firestore
-import io # Importante para baixar o modelo CSV
 
 # Importa a nova função normalizadora
 try:
@@ -66,222 +66,7 @@ def gestao_usuarios(usuario_logado):
             st.warning("Excluído."); st.rerun()
 
 # =========================================
-# 2. GESTÃO DE QUESTÕES (MODIFICADO: IMPORTAÇÃO EM LOTE)
-# =========================================
-def gestao_questoes():
-    st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
-    db = get_db()
-    user = st.session_state.usuario
-    # Verifica permissão básica
-    if str(user.get("tipo_usuario", "")).lower() not in ["admin", "professor"]:
-        st.error("Acesso negado."); return
-
-    tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
-
-    # --- LISTAR ---
-    with tab1:
-        q_ref = list(db.collection('questoes').stream())
-        c1, c2 = st.columns(2)
-        termo = c1.text_input("🔍 Buscar:")
-        filt_n = c2.multiselect("Nível:", NIVEIS_DIFICULDADE)
-        
-        q_filtro = []
-        for doc in q_ref:
-            d = doc.to_dict(); d['id'] = doc.id
-            if termo and termo.lower() not in d.get('pergunta','').lower(): continue
-            if filt_n and d.get('dificuldade',1) not in filt_n: continue
-            q_filtro.append(d)
-            
-        if not q_filtro: st.info("Nada encontrado.")
-        else:
-            st.caption(f"{len(q_filtro)} questões")
-            for q in q_filtro:
-                with st.container(border=True):
-                    ch, cb = st.columns([5, 1])
-                    bdg = get_badge_nivel(q.get('dificuldade',1))
-                    ch.markdown(f"**{bdg}** | {q.get('categoria','Geral')} | ✍️ {q.get('criado_por','?')}")
-                    ch.markdown(f"##### {q.get('pergunta')}")
-                    
-                    # --- PREVIEW ---
-                    if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
-                    
-                    if q.get('url_video'):
-                        link_limpo = normalizar_link_video(q.get('url_video'))
-                        try:
-                            ch.video(link_limpo)
-                        except:
-                            ch.markdown(f"🔗 [Ver Vídeo Externo]({q.get('url_video')})")
-                    
-                    with ch.expander("Alternativas"):
-                        alts = q.get('alternativas', {})
-                        st.write(f"A) {alts.get('A','')} | B) {alts.get('B','')}")
-                        st.write(f"C) {alts.get('C','')} | D) {alts.get('D','')}")
-                        st.success(f"Correta: {q.get('resposta_correta')}")
-                    
-                    if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
-                
-                # --- EDITAR ---
-                if st.session_state.get('edit_q') == q['id']:
-                    with st.container(border=True):
-                        st.markdown("#### ✏️ Editando")
-                        with st.form(f"f_ed_{q['id']}"):
-                            perg = st.text_area("Enunciado:", value=q.get('pergunta',''))
-                            
-                            st.markdown("🖼️ **Mídia**")
-                            c_img, c_vid = st.columns(2)
-                            up_img = c_img.file_uploader("Nova Imagem:", type=["jpg","png"], key=f"u_i_{q['id']}")
-                            url_i_at = q.get('url_imagem','')
-                            if url_i_at: c_img.caption("Imagem atual salva.")
-                            
-                            up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
-                            url_v_at = q.get('url_video','')
-                            url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
-                            
-                            c1, c2 = st.columns(2)
-                            dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(q.get('dificuldade',1)))
-                            cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
-                            
-                            alts = q.get('alternativas',{})
-                            ca, cb_col = st.columns(2); cc, cd = st.columns(2)
-                            rA = ca.text_input("A)", alts.get('A','')); rB = cb_col.text_input("B)", alts.get('B',''))
-                            rC = cc.text_input("C)", alts.get('C','')); rD = cd.text_input("D)", alts.get('D',''))
-                            corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(q.get('resposta_correta','A')))
-                            
-                            cols = st.columns(2)
-                            if cols[0].form_submit_button("💾 Salvar"):
-                                fin_img = url_i_at
-                                if up_img:
-                                    with st.spinner("Subindo imagem..."): fin_img = fazer_upload_midia(up_img)
-                                
-                                fin_vid = url_v_manual
-                                if up_vid:
-                                    with st.spinner("Subindo vídeo..."): fin_vid = fazer_upload_midia(up_vid)
-                                
-                                db.collection('questoes').document(q['id']).update({
-                                    "pergunta": perg, "dificuldade": dif, "categoria": cat,
-                                    "url_imagem": fin_img, "url_video": fin_vid,
-                                    "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
-                                    "resposta_correta": corr
-                                })
-                                st.session_state['edit_q'] = None; st.success("Salvo!"); time.sleep(1); st.rerun()
-                                
-                            if cols[1].form_submit_button("Cancelar"):
-                                st.session_state['edit_q'] = None; st.rerun()
-                                
-                        if st.button("🗑️ Deletar", key=f"del_q_{q['id']}", type="primary"):
-                            db.collection('questoes').document(q['id']).delete()
-                            st.session_state['edit_q'] = None; st.success("Deletado."); st.rerun()
-
-    # --- ADICIONAR (Unitário ou Lote) ---
-    with tab2:
-        # Cria sub-abas para separar o modo de cadastro
-        sub_tab_manual, sub_tab_lote = st.tabs(["✍️ Manual (Uma)", "📂 Em Lote (Várias)"])
-
-        # >>> OPÇÃO 1: MANUAL (CÓDIGO ORIGINAL) <<<
-        with sub_tab_manual:
-            with st.form("new_q"):
-                st.markdown("#### Nova Questão (Individual)")
-                perg = st.text_area("Enunciado:")
-                st.markdown("🖼️ **Mídia**")
-                c1, c2 = st.columns(2)
-                up_img = c1.file_uploader("Imagem (JPG/PNG):", type=["jpg","png","jpeg"])
-                up_vid = c2.file_uploader("Vídeo (MP4/MOV):", type=["mp4","mov"])
-                link_vid = c2.text_input("Ou Link YouTube:")
-                
-                c3, c4 = st.columns(2)
-                dif = c3.selectbox("Nível:", NIVEIS_DIFICULDADE)
-                cat = c4.text_input("Categoria:", "Geral")
-                
-                st.markdown("**Alternativas:**")
-                ca, cb_col = st.columns(2); cc, cd = st.columns(2)
-                alt_a = ca.text_input("A)"); alt_b = cb_col.text_input("B)")
-                alt_c = cc.text_input("C)"); alt_d = cd.text_input("D)")
-                correta = st.selectbox("Correta:", ["A","B","C","D"])
-                
-                if st.form_submit_button("💾 Cadastrar"):
-                    if perg and alt_a and alt_b:
-                        f_img = fazer_upload_midia(up_img) if up_img else None
-                        f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
-                        
-                        db.collection('questoes').add({
-                            "pergunta": perg, "dificuldade": dif, "categoria": cat,
-                            "url_imagem": f_img, "url_video": f_vid,
-                            "alternativas": {"A":alt_a, "B":alt_b, "C":alt_c, "D":alt_d},
-                            "resposta_correta": correta, "status": "aprovada",
-                            "criado_por": user.get('nome', 'Admin'), "data_criacao": firestore.SERVER_TIMESTAMP
-                        })
-                        st.success("Sucesso!"); time.sleep(1); st.rerun()
-                    else: st.warning("Preencha dados básicos.")
-
-        # >>> OPÇÃO 2: EM LOTE (SOMENTE ADMIN) <<<
-        with sub_tab_lote:
-            # Verifica se é admin para liberar esta parte
-            if str(user.get("tipo_usuario", "")).lower() == "admin":
-                st.markdown("#### 📥 Importação em Massa")
-                st.info("Utilize esta opção para carregar uma planilha (Excel ou CSV) com várias questões.")
-
-                # Botão para baixar modelo
-                col_info, col_btn = st.columns([3, 1])
-                col_info.markdown("**Instruções:** Baixe o modelo, preencha as questões e faça o upload.")
-                
-                # Criação do DataFrame modelo
-                df_modelo = pd.DataFrame({
-                    "pergunta": ["Qual a cor da faixa inicial?", "Quem é o criador do Judô?"],
-                    "alt_a": ["Branca", "Helio Gracie"],
-                    "alt_b": ["Azul", "Jigoro Kano"],
-                    "alt_c": ["Preta", "Mitsuyo Maeda"],
-                    "alt_d": ["Rosa", "Conde Koma"],
-                    "correta": ["A", "B"],
-                    "dificuldade": [1, 2],
-                    "categoria": ["História", "História"]
-                })
-                
-                # Converte para CSV em memória
-                csv_buffer = io.StringIO()
-                df_modelo.to_csv(csv_buffer, index=False)
-                col_btn.download_button(
-                    label="⬇️ Baixar Modelo CSV",
-                    data=csv_buffer.getvalue(),
-                    file_name="modelo_questoes.csv",
-                    mime="text/csv"
-                )
-
-                st.markdown("---")
-                
-                # Upload do arquivo
-                arquivo = st.file_uploader("Selecione o arquivo preenchido:", type=["csv", "xlsx"])
-
-                if arquivo:
-                    try:
-                        # Lê CSV ou Excel
-                        if arquivo.name.endswith('.csv'):
-                            df_upload = pd.read_csv(arquivo)
-                        else:
-                            df_upload = pd.read_excel(arquivo)
-                        
-                        st.write("Pré-visualização dos dados:")
-                        st.dataframe(df_upload.head(3), hide_index=True)
-                        st.caption(f"Total de linhas encontradas: {len(df_upload)}")
-
-                        # Validação das colunas obrigatórias
-                        cols_obrigatorias = ["pergunta", "alt_a", "alt_b", "alt_c", "alt_d", "correta"]
-                        faltam = [c for c in cols_obrigatorias if c not in df_upload.columns]
-
-                        if faltam:
-                            st.error(f"O arquivo está incompleto. Faltam as colunas: {', '.join(faltam)}")
-                        else:
-                            if st.button("🚀 Importar Todas as Questões", type="primary"):
-                                progresso = st.progress(0)
-                                success_count = 0
-                                error_count = 0
-
-                                for i, row in df_upload.iterrows():
-                                    try:
-                                        # Monta o objeto para o Firestore
-                                        nova_q = {
-                                            "pergunta": str(row['pergunta']),
-   # =========================================
-# 2. GESTÃO DE QUESTÕES (CORRIGIDO: PERMISSÃO E IMPORTAÇÃO)
+# 2. GESTÃO DE QUESTÕES (CORRIGIDO E ATUALIZADO)
 # =========================================
 def gestao_questoes():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -289,7 +74,7 @@ def gestao_questoes():
     user = st.session_state.usuario
     
     # --- CORREÇÃO DE PERMISSÃO ---
-    # Verifica se a chave é 'tipo' ou 'tipo_usuario' para evitar erro
+    # Verifica 'tipo_usuario' OU 'tipo' para garantir compatibilidade
     tipo_perm = str(user.get("tipo_usuario", user.get("tipo", ""))).lower()
 
     if tipo_perm not in ["admin", "professor"]:
@@ -434,7 +219,7 @@ def gestao_questoes():
 
         # >>> OPÇÃO 2: EM LOTE (SOMENTE ADMIN) <<<
         with sub_tab_lote:
-            # Usa a variável corrigida 'tipo_perm'
+            # Usa a variável 'tipo_perm' que normaliza o tipo de usuário
             if tipo_perm == "admin":
                 st.markdown("#### 📥 Importação em Massa")
                 st.info("Utilize esta opção para carregar uma planilha (Excel ou CSV) com várias questões.")
@@ -528,6 +313,7 @@ def gestao_questoes():
                         st.error(f"Erro ao ler arquivo: {e}")
             else:
                 st.warning("🔒 Esta funcionalidade é restrita aos Administradores.")
+
 # =========================================
 # 3. GESTÃO DE EXAME
 # =========================================
