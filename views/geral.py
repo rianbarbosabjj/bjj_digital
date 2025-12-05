@@ -170,30 +170,30 @@ def tela_meu_perfil(usuario_logado):
             nova_equipe_nome = v1.selectbox("Minha Equipe:", lista_equipes, index=idx_eq)
             
             # --- SELEÇÃO DE PROFESSOR (Dinâmica) ---
-            novo_prof_display = "Sem Professor"
+            novo_prof_display = "Sem Professor(a)"
             
             if tipo_user == 'aluno':
                 # 1. Descobre o ID da equipe que o usuário ACABOU de escolher no selectbox acima
                 id_equipe_selecionada = mapa_equipes_inv.get(nova_equipe_nome)
                 
                 # 2. Busca lista de professores DESSA equipe específica
-                lista_profs_filtrada = ["Sem Professor"]
+                lista_profs_filtrada = ["Sem Professor(a)"]
                 if id_equipe_selecionada in profs_por_equipe:
                     lista_profs_filtrada += sorted(profs_por_equipe[id_equipe_selecionada])
                 
                 # 3. Tenta manter o professor atual selecionado, MAS SÓ SE ele estiver na nova equipe
-                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor")
+                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor(a)")
                 idx_prof = 0
                 if nome_prof_atual_display in lista_profs_filtrada:
                     idx_prof = lista_profs_filtrada.index(nome_prof_atual_display)
                 
                 # 4. Renderiza o selectbox filtrado
-                novo_prof_display = v2.selectbox("Meu Professor:", lista_profs_filtrada, index=idx_prof)
+                novo_prof_display = v2.selectbox("Meu Professor(a):", lista_profs_filtrada, index=idx_prof)
                 
                 if nova_equipe_nome == "Sem Equipe":
                     v2.caption("Selecione uma equipe para ver os professores.")
             else:
-                v2.info("Professores gerenciam seus próprios alunos.")
+                v2.info("Professores gerenciam seus próprios alunos(as).")
 
             st.markdown("<br>", unsafe_allow_html=True)
             
