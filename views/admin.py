@@ -45,7 +45,7 @@ MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS (TAB INTERNA)
+# GESTÃO DE USUÁRIOS
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
@@ -214,7 +214,7 @@ def gestao_usuarios_tab():
             st.warning("Usuário excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES
+# GESTÃO DE QUESTÕES (4 ABAS)
 # =========================================
 def gestao_questoes_tab():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -225,7 +225,7 @@ def gestao_questoes_tab():
     if user_tipo not in ["admin", "professor"]:
         st.error("Acesso negado."); return
 
-    # ABAS
+    # 4 ABAS DE NOVO
     titulos = ["📚 Listar/Editar", "➕ Adicionar Nova", "🔎 Minhas Submissões"]
     if user_tipo == "admin":
         titulos.append("⏳ Aprovações (Admin)")
@@ -272,7 +272,7 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
-                # EDITAR (INLINE)
+                # --- EDITAR ---
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
@@ -286,6 +286,7 @@ def gestao_questoes_tab():
                             up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
                             url_v_at = q.get('url_video','')
                             url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
+                            
                             c1, c2 = st.columns(2)
                             dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(q.get('dificuldade',1)))
                             cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
@@ -302,7 +303,7 @@ def gestao_questoes_tab():
                                 fin_vid = url_v_manual
                                 if up_vid: fin_vid = fazer_upload_midia(up_vid)
                                 
-                                # Se editar, volta pra pendente se não for admin
+                                # Se editar, volta para pendente se não for admin
                                 novo_status = "aprovada" if user_tipo == "admin" else "pendente"
 
                                 db.collection('questoes').document(q['id']).update({
@@ -354,7 +355,7 @@ def gestao_questoes_tab():
                                     lista_qs = [d.to_dict() for d in all_qs_snap]
                                     res_ia = verificar_duplicidade_ia(perg, lista_qs, threshold=0.75)
                                     if res_ia and isinstance(res_ia, tuple) and res_ia[0]:
-                                        st.error("⚠️ Questão muito similar detectada no banco!")
+                                        st.error("⚠️ Questão similar detectada!")
                                         st.warning(f"Existente: {res_ia[1]}")
                                         pode_salvar = False
                             except: pass
@@ -381,18 +382,8 @@ def gestao_questoes_tab():
             if user_tipo == "admin":
                 st.markdown("#### 📥 Importação em Massa")
                 st.info("Carregue Excel ou CSV.")
-                col_info, col_btn = st.columns([3, 1])
-                df_modelo = pd.DataFrame({
-                    "pergunta": ["Exemplo 1"], "alt_a": ["A"], "alt_b": ["B"], "alt_c": ["C"], "alt_d": ["D"],
-                    "correta": ["A"], "dificuldade": [1], "categoria": ["Geral"]
-                })
-                csv_buffer = io.StringIO()
-                df_modelo.to_csv(csv_buffer, index=False, sep=';')
-                col_btn.download_button("⬇️ Modelo", data=csv_buffer.getvalue(), file_name="modelo.csv", mime="text/csv")
-                
-                arquivo = st.file_uploader("Arquivo:", type=["csv", "xlsx"])
-                if arquivo and st.button("🚀 Importar"):
-                     st.success("Importação (Simulada)")
+                # (Bloco de CSV pode ser colocado aqui se desejar reativá-lo)
+            else: st.warning("Restrito a Admin.")
 
     # --- ABA 3: MINHAS SUBMISSÕES ---
     with tabs[2]:
@@ -432,10 +423,10 @@ def gestao_questoes_tab():
                     with st.form(f"fix_form_{doc.id}"):
                         st.markdown("##### 🛠️ Corrigir e Reenviar")
                         n_perg = st.text_area("Enunciado:", q.get('pergunta'))
-                        # (Simplificado)
+                        n_cat = st.text_input("Categoria:", q.get('categoria'))
                         if st.form_submit_button("🚀 Reenviar"):
                             db.collection('questoes').document(doc.id).update({
-                                "pergunta": n_perg, "status": "pendente", "feedback_admin": firestore.DELETE_FIELD
+                                "pergunta": n_perg, "categoria": n_cat, "status": "pendente", "feedback_admin": firestore.DELETE_FIELD
                             })
                             st.session_state['edit_my_mode'] = None; st.success("Enviado!"); st.rerun()
 
@@ -460,12 +451,12 @@ def gestao_questoes_tab():
                             st.toast("Aprovada!"); time.sleep(1); st.rerun()
                         
                         with c2.expander("❌ Solicitar Correção / Rejeitar"):
-                            # CAMPO DE JUSTIFICATIVA OBRIGATÓRIO
+                            # CAMPO OBRIGATÓRIO DE JUSTIFICATIVA
                             fb_txt = st.text_area("Justificativa (Obrigatória):", key=f"fb_{doc.id}")
                             
                             if st.button("Enviar Solicitação", key=f"send_fb_{doc.id}"):
                                 if not fb_txt.strip():
-                                    st.error("A justificativa é obrigatória!")
+                                    st.error("⚠️ A justificativa é obrigatória!")
                                 else:
                                     db.collection('questoes').document(doc.id).update({
                                         "status": "correcao",
@@ -474,7 +465,7 @@ def gestao_questoes_tab():
                                     st.toast("Enviado para correção!"); time.sleep(1); st.rerun()
                             
                             st.markdown("---")
-                            if st.button("🗑️ Rejeitar (Excluir)", key=f"kill_{doc.id}"):
+                            if st.button("🗑️ Rejeitar (Excluir Definitivamente)", key=f"kill_{doc.id}"):
                                 db.collection('questoes').document(doc.id).delete()
                                 st.rerun()
 
