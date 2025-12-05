@@ -304,3 +304,52 @@ def registrar_fim_exame(uid, apr):
 def bloquear_por_abandono(uid):
     try: get_db().collection('usuarios').document(uid).update({"status_exame":"bloqueado", "motivo_bloqueio":"Anti-Cola", "data_ultimo_exame":datetime.utcnow().isoformat()})
     except: pass
+
+# =========================================
+# 7. IA ANTI-DUPLICIDADE (SEMÂNTICA)
+# =========================================
+try:
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+    import numpy as np
+    
+    # Carrega o modelo apenas uma vez (Cache)
+    @st.cache_resource
+    def carregar_modelo_ia():
+        # Modelo leve e rápido, ideal para Streamlit
+        return SentenceTransformer('all-MiniLM-L6-v2')
+
+    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.85):
+        """
+        Retorna (True, Pergunta_Similar) se encontrar duplicidade.
+        threshold=0.85 significa 85% de similaridade mínima.
+        """
+        if not lista_existentes: 
+            return False, None
+            
+        model = carregar_modelo_ia()
+        
+        # 1. Gera o embedding da nova pergunta
+        embedding_novo = model.encode([nova_pergunta])
+        
+        # 2. Gera embeddings das existentes (Idealmente, cachear isso em produção)
+        # Extrai apenas os textos das perguntas
+        textos_existentes = [q.get('pergunta', '') for q in lista_existentes]
+        embeddings_existentes = model.encode(textos_existentes)
+        
+        # 3. Calcula similaridade (Cosseno)
+        scores = cosine_similarity(embedding_novo, embeddings_existentes)[0]
+        
+        # 4. Verifica o maior score
+        max_score = np.max(scores)
+        idx_max = np.argmax(scores)
+        
+        if max_score >= threshold:
+            pergunta_similar = textos_existentes[idx_max]
+            return True, f"{pergunta_similar} (Similaridade: {max_score*100:.1f}%)"
+            
+        return False, None
+
+except ImportError:
+    # Fallback se as libs não estiverem instaladas
+    def verificar_duplicidade_ia(n, l, t=0.85): return False, None
