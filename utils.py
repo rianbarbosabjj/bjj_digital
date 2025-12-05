@@ -32,7 +32,7 @@ def get_cor_faixa(nome_faixa):
     for chave, cor in CORES_FAIXAS.items():
         if chave in nome_faixa.upper():
             return cor
-    return (255, 255, 255)
+    return (255, 255, 255) 
 
 # =========================================
 # FUNÇÕES DE MÍDIA E UPLOAD
@@ -79,7 +79,7 @@ def fazer_upload_midia(arquivo):
         return None
 
 # =========================================
-# IA ANTI-DUPLICIDADE
+# IA ANTI-DUPLICIDADE (SAFE MODE)
 # =========================================
 IA_ATIVADA = False 
 try:
@@ -117,7 +117,7 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# DEMAIS FUNÇÕES
+# DEMAIS FUNÇÕES GERAIS
 # =========================================
 def carregar_todas_questoes(): return []
 def salvar_questoes(t, q): pass
@@ -191,161 +191,157 @@ def gerar_qrcode(codigo):
     except: return None
 
 # =========================================
-# GERADOR DE PDF (CORRIGIDO)
+# GERADOR DE PDF (LAYOUT MODELO FINAL)
 # =========================================
 @st.cache_data(show_spinner=False)
-def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
+def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor Responsável"):
     try:
-        # 1. Preparação
-        # Limpa texto para evitar erros de encode latin-1
-        def limpa(txt):
+        def limpar_texto(txt):
             if not txt: return ""
-            return str(txt).encode('latin-1', 'replace').decode('latin-1')
+            try: return txt.encode('latin-1', 'replace').decode('latin-1')
+            except: return str(txt)
 
-        pdf = FPDF("L", "mm", "A4")
+        pdf = FPDF("L", "mm", "A4") # 297mm x 210mm
         pdf.add_page()
         
-        # Cores
+        # Cores do Tema (BJJ Digital)
         C_BRANCO = (255, 255, 255)
         C_DOURADO = (218, 165, 32)
-        C_FUNDO = (14, 45, 38) 
+        C_FUNDO = (14, 45, 38)
 
-        # 2. Fundo
-        fundo_ok = False
-        for ext in [".jpg", ".png", ".jpeg"]:
-            path = f"assets/fundo_certificado{ext}"
-            if os.path.exists(path):
-                pdf.image(path, x=0, y=0, w=297, h=210)
-                fundo_ok = True
-                break
+        # 1. FUNDO (IMAGEM OU COR)
+        # Tenta carregar a imagem de fundo. Se não tiver, pinta de verde escuro.
+        fundo_path = None
+        if os.path.exists("assets/fundo_certificado.jpg"): fundo_path = "assets/fundo_certificado.jpg"
+        elif os.path.exists("assets/fundo_certificado.png"): fundo_path = "assets/fundo_certificado.png"
         
-        if not fundo_ok:
-            # Fallback se não achar imagem
+        if fundo_path:
+            pdf.image(fundo_path, x=0, y=0, w=297, h=210)
+        else:
             pdf.set_fill_color(*C_FUNDO)
             pdf.rect(0,0,297,210,"F")
             pdf.set_draw_color(*C_DOURADO)
             pdf.set_line_width(2)
             pdf.rect(10,10,277,190)
 
-        # 3. Fonte Assinatura
-        fonte_ass = "Helvetica"
+        # 2. CARREGAR FONTE DE ASSINATURA (ALLURA)
+        font_assinatura = "Helvetica"
         if os.path.exists("assets/Allura-Regular.ttf"):
             try:
-                # REMOVIDO o uni=True que causava erro
-                pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True) 
-                fonte_ass = 'Allura'
+                # Tenta carregar sem uni=True para compatibilidade padrão
+                pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True)
+                font_assinatura = 'Allura'
             except:
-                # Se falhar (ex: versão lib), tenta sem uni=True ou fallback
-                try: 
+                try:
                     pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf')
-                    fonte_ass = 'Allura'
+                    font_assinatura = 'Allura'
                 except: pass
 
-        # 4. Textos do Certificado (Coordenadas calibradas)
-        
-        # Cabeçalho
-        pdf.set_y(40)
-        pdf.set_font("Helvetica", "B", 32)
-        pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpa("CERTIFICADO"), ln=True, align="C")
-        
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(200, 200, 200)
-        pdf.cell(0, 8, limpa("DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
-        
-        # Texto "Certificamos que..."
-        pdf.ln(15)
-        pdf.set_font("Helvetica", "", 16)
-        pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpa("Certificamos que o aluno(a)"), ln=True, align="C")
+        # 3. LOGO / CABEÇALHO (Se não estiver na imagem de fundo)
+        # Se você já tem o logo "BJJ DIGITAL" na imagem de fundo, comente as linhas abaixo.
+        # Caso contrário, vamos desenhar:
+        pdf.set_y(35)
+        # (Opcional: Se quiser carregar o logo como imagem sobreposta)
+        if os.path.exists("assets/logo.png"):
+             pdf.image("assets/logo.png", x=128, y=15, w=40)
 
-        # NOME DO ALUNO (Auto-ajuste)
-        pdf.ln(5)
-        nome_final = limpa(usuario_nome.upper().strip())
+        # CERTIFICADO DE EXAME TEÓRICO DE FAIXA
+        pdf.set_y(60)
+        pdf.set_font("Helvetica", "B", 24)
+        pdf.set_text_color(*C_DOURADO) # Dourado para destaque
+        pdf.cell(0, 10, limpar_texto("CERTIFICADO DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
+
+        # Certificamos que o aluno(a)
+        pdf.ln(10)
+        pdf.set_font("Helvetica", "", 14)
+        pdf.set_text_color(*C_BRANCO)
+        pdf.cell(0, 10, limpar_texto("Certificamos que o aluno(a)"), ln=True, align="C")
+
+        # NOME DO ALUNO (FLEXÍVEL / AUTO-SIZE)
+        pdf.ln(2)
+        nome_limpo = limpar_texto(usuario_nome.upper().strip())
         
-        # Começa com fonte 40 e diminui se não couber
-        sz = 40
-        pdf.set_font("Helvetica", "B", sz)
-        while pdf.get_string_width(nome_final) > 250 and sz > 12:
-            sz -= 2
-            pdf.set_font("Helvetica", "B", sz)
+        # Começa grande (42) e diminui até caber na largura segura (250mm)
+        tamanho_fonte = 42
+        pdf.set_font("Helvetica", "B", tamanho_fonte)
+        while pdf.get_string_width(nome_limpo) > 250 and tamanho_fonte > 12:
+            tamanho_fonte -= 2
+            pdf.set_font("Helvetica", "B", tamanho_fonte)
             
         pdf.set_text_color(*C_DOURADO)
-        pdf.cell(0, 15, nome_final, ln=True, align="C")
+        pdf.cell(0, 18, nome_limpo, ln=True, align="C")
 
-        # Texto "Foi aprovado..."
-        pdf.ln(5)
-        pdf.set_font("Helvetica", "", 16)
+        # foi APROVADO(A)...
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpa("foi APROVADO(A) no Exame teórico, estando apto(a) à faixa:"), ln=True, align="C")
+        texto_aprovacao = "foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"
+        pdf.cell(0, 10, limpar_texto(texto_aprovacao), ln=True, align="C")
         
-        # FAIXA
-        pdf.ln(5)
-        pdf.set_font("Helvetica", "B", 32)
+        # FAIXA (Colorida)
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "B", 36)
         cor_fx = get_cor_faixa(faixa)
-        if sum(cor_fx) < 100: pdf.set_text_color(255,255,255) # Branco se faixa for preta
+        # Se a faixa for muito escura (ex: Preta), usa borda branca ou texto branco
+        if sum(cor_fx) < 100: pdf.set_text_color(255, 255, 255)
         else: pdf.set_text_color(*cor_fx)
         
-        pdf.cell(0, 15, limpa(faixa.upper()), ln=True, align="C")
+        pdf.cell(0, 18, limpar_texto(faixa.upper()), ln=True, align="C")
 
-        # 5. Rodapé
+        # --- RODAPÉ (COLUNAS) ---
+        y_rodape = 160
         
-        # Esquerda: Data e Código
-        pdf.set_y(155)
-        pos_x_esq = 35
-        
-        pdf.set_xy(pos_x_esq, 160)
+        # Data de Emissão (ESQUERDA)
+        pdf.set_xy(30, y_rodape)
         pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(200, 200, 200)
+        pdf.set_text_color(200, 200, 200) # Cinza claro
+        data_hj = datetime.now().strftime('%d/%m/%Y')
+        pdf.cell(60, 6, limpar_texto(f"Data de Emissão: {data_hj}"), ln=True, align="L")
         
-        data_txt = datetime.now().strftime('%d/%m/%Y')
-        pdf.cell(60, 6, limpa(f"Data de Emissão: {data_txt}"), ln=True, align="L")
-        
-        pdf.set_xy(pos_x_esq, 166)
+        # Código (Embaixo da data)
+        pdf.set_x(30)
         pdf.set_font("Courier", "", 9)
-        pdf.cell(60, 5, f"Cód: {codigo}", align="L")
+        pdf.cell(60, 5, f"Ref: {codigo}", align="L")
 
-        # Direita: Assinatura
-        centro_dir = 220 
-        pdf.set_xy(centro_dir - 40, 150)
+        # Assinatura (DIREITA)
+        centro_ass = 220 
+        pdf.set_xy(centro_ass - 40, y_rodape - 10)
         
-        # Nome Professor
-        if fonte_ass == 'Allura': pdf.set_font('Allura', "", 28)
-        else: pdf.set_font("Helvetica", "I", 24)
+        # Nome do Professor (Fonte Cursiva se existir)
+        if font_assinatura == 'Allura':
+            pdf.set_font('Allura', "", 30)
+        else:
+            pdf.set_font("Helvetica", "I", 20)
             
         pdf.set_text_color(*C_DOURADO)
-        pdf.cell(80, 10, limpa(professor(a)), ln=True, align="C")
+        pdf.cell(80, 10, limpar_texto(professor), ln=True, align="C")
         
-        # Linha
-        pdf.set_xy(centro_dir - 30, 162)
+        # Linha da Assinatura
+        pdf.set_xy(centro_ass - 35, y_rodape + 2)
         pdf.set_draw_color(255, 255, 255)
         pdf.set_line_width(0.5)
-        pdf.line(centro_dir - 30, 162, centro_dir + 30, 162)
+        pdf.line(centro_ass - 35, y_rodape + 2, centro_ass + 35, y_rodape + 2)
         
         # Cargo
-        pdf.set_xy(centro_dir - 40, 165)
+        pdf.set_xy(centro_ass - 40, y_rodape + 4)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(200, 200, 200)
-        pdf.cell(80, 5, limpa("Professor(a) Responsável"), align="C")
+        pdf.cell(80, 5, limpar_texto("Professor Responsável"), align="C")
 
-        # 6. QR Code
+        # QR Code (CENTRO INFERIOR)
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
-            # No centro inferior
-            pdf.image(qr_path, x=136, y=160, w=25)
-            
-            pdf.set_xy(128, 186)
+            pdf.image(qr_path, x=136, y=y_rodape, w=25)
+            pdf.set_xy(128, y_rodape + 26)
             pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(150, 150, 150)
-            pdf.cell(40, 4, limpa("Verificar Autenticidade"), align="C")
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(40, 4, limpar_texto("Autenticidade"), align="C")
 
-        # GERA O BINÁRIO
-        # Importante: dest='S' retorna string em latin-1 por padrão no FPDF antigo
+        # Retorna binário
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
 
     except Exception as e:
-        # ISSO VAI MOSTRAR O ERRO NA TELA SE FALHAR
-        st.error(f"Erro ao gerar PDF: {e}")
+        print(f"❌ ERRO PDF: {e}")
         return None, None
 
 def verificar_elegibilidade_exame(ud):
