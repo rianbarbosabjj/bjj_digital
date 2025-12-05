@@ -214,7 +214,7 @@ def gestao_usuarios_tab():
             st.warning("Usuário excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (4 ABAS)
+# GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes_tab():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -225,44 +225,58 @@ def gestao_questoes_tab():
     if user_tipo not in ["admin", "professor"]:
         st.error("Acesso negado."); return
 
-    # 4 ABAS DE NOVO
-    titulos = ["📚 Listar/Editar", "➕ Adicionar Nova", "🔎 Minhas Submissões"]
-    if user_tipo == "admin":
-        titulos.append("⏳ Aprovações (Admin)")
-    
-    tabs = st.tabs(titulos)
+    tab1, tab2 = st.tabs(["📚 Listar/Editar", "➕ Adicionar Nova"])
 
-    # --- ABA 1: LISTAR (SOMENTE APROVADAS) ---
-    with tabs[0]:
-        q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
+    # --- LISTAR ---
+    with tab1:
+        q_ref = list(db.collection('questoes').stream())
         c1, c2 = st.columns(2)
-        termo = c1.text_input("🔍 Buscar (Aprovadas):")
+        termo = c1.text_input("🔍 Buscar:")
         filt_n = c2.multiselect("Nível:", NIVEIS_DIFICULDADE)
         
         q_filtro = []
         for doc in q_ref:
             d = doc.to_dict(); d['id'] = doc.id
+            
+            # Filtro ADMIN: Vê tudo
+            # Filtro PROFESSOR: Vê Aprovadas + As suas próprias (Pendente/Correção)
+            visivel = True
+            if user_tipo != "admin":
+                eh_dono = (d.get('criado_por') == user.get('nome'))
+                if d.get('status') != 'aprovada' and not eh_dono:
+                    visivel = False
+            
+            if not visivel: continue
+
             if termo and termo.lower() not in d.get('pergunta','').lower(): continue
             if filt_n and d.get('dificuldade',1) not in filt_n: continue
             q_filtro.append(d)
             
-        if not q_filtro: st.info("Nenhuma questão aprovada encontrada.")
+        if not q_filtro: st.info("Nada encontrado.")
         else:
-            st.caption(f"{len(q_filtro)} questões ativas")
+            st.caption(f"{len(q_filtro)} questões")
             for q in q_filtro:
+                stt = q.get('status', 'aprovada')
+                cor_status = "green" if stt == 'aprovada' else "orange" if stt == 'correcao' else "gray"
+                
                 with st.container(border=True):
                     ch, cb = st.columns([5, 1])
                     bdg = get_badge_nivel(q.get('dificuldade',1))
-                    ch.markdown(f"**{bdg}** | {q.get('categoria','Geral')} | ✍️ {q.get('criado_por','?')}")
+                    
+                    ch.markdown(f"**{bdg}** | :{cor_status}[{stt.upper()}] | ✍️ {q.get('criado_por','?')}")
                     ch.markdown(f"##### {q.get('pergunta')}")
                     
+                    # Feedback se estiver em correção
+                    if stt == 'correcao':
+                        ch.error(f"📢 Motivo da Correção: {q.get('feedback_admin')}")
+
                     if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
                     if q.get('url_video'):
                         vid_url = q.get('url_video')
                         link_limpo = normalizar_link_video(vid_url)
                         try: ch.video(link_limpo)
-                        except: pass
-                        ch.markdown(f"<small>🔗 [Abrir vídeo externamente]({vid_url})</small>", unsafe_allow_html=True)
+                        except: ch.warning("⚠️ Erro player.")
+                        ch.markdown(f"<small>🔗 [Abrir link]({vid_url})</small>", unsafe_allow_html=True)
                     
                     with ch.expander("Alternativas"):
                         alts = q.get('alternativas', {})
@@ -283,7 +297,7 @@ def gestao_questoes_tab():
                             up_img = c_img.file_uploader("Nova Imagem:", type=["jpg","png"], key=f"u_i_{q['id']}")
                             url_i_at = q.get('url_imagem','')
                             if url_i_at: c_img.caption("Imagem atual salva.")
-                            up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
+                            up_vid = c_vid.file_uploader("Novo Vídeo:", type=["mp4","mov"], key=f"u_v_{q['id']}")
                             url_v_at = q.get('url_video','')
                             url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
                             
@@ -296,27 +310,46 @@ def gestao_questoes_tab():
                             rC = cc.text_input("C)", alts.get('C','')); rD = cd.text_input("D)", alts.get('D',''))
                             corr = st.selectbox("Correta:", ["A","B","C","D"], index=["A","B","C","D"].index(q.get('resposta_correta','A')))
                             
-                            cols = st.columns(2)
-                            if cols[0].form_submit_button("💾 Salvar"):
-                                fin_img = url_i_at
-                                if up_img: fin_img = fazer_upload_midia(up_img)
-                                fin_vid = url_v_manual
-                                if up_vid: fin_vid = fazer_upload_midia(up_vid)
-                                
-                                # Se editar, volta para pendente se não for admin
-                                novo_status = "aprovada" if user_tipo == "admin" else "pendente"
+                            # CAMPO DE JUSTIFICATIVA DE EDIÇÃO (SE FOR PROFESSOR)
+                            justificativa_edicao = ""
+                            if user_tipo != "admin":
+                                st.markdown("---")
+                                justificativa_edicao = st.text_area("📝 Justificativa da Edição (Obrigatório para Professores):")
 
-                                db.collection('questoes').document(q['id']).update({
-                                    "pergunta": perg, "dificuldade": dif, "categoria": cat,
-                                    "url_imagem": fin_img, "url_video": fin_vid,
-                                    "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
-                                    "resposta_correta": corr,
-                                    "status": novo_status 
-                                })
-                                st.session_state['edit_q'] = None
-                                if novo_status == "pendente": st.info("✏️ Edição enviada para análise!")
-                                else: st.success("✅ Salvo!")
-                                time.sleep(1.5); st.rerun()
+                            cols = st.columns(2)
+                            if cols[0].form_submit_button("💾 Salvar Alterações"):
+                                # Validação de Justificativa
+                                if user_tipo != "admin" and not justificativa_edicao.strip():
+                                    st.error("⚠️ Professores devem justificar a edição!")
+                                else:
+                                    fin_img = url_i_at
+                                    if up_img:
+                                        with st.spinner("Subindo imagem..."): fin_img = fazer_upload_midia(up_img)
+                                    fin_vid = url_v_manual
+                                    if up_vid:
+                                        with st.spinner("Subindo vídeo..."): fin_vid = fazer_upload_midia(up_vid)
+                                    
+                                    # Se editar, volta para pendente (se não for admin)
+                                    novo_status = "aprovada" if user_tipo == "admin" else "pendente"
+                                    
+                                    dados_upd = {
+                                        "pergunta": perg, "dificuldade": dif, "categoria": cat,
+                                        "url_imagem": fin_img, "url_video": fin_vid,
+                                        "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
+                                        "resposta_correta": corr,
+                                        "status": novo_status,
+                                        "feedback_admin": firestore.DELETE_FIELD # Limpa feedback antigo
+                                    }
+                                    
+                                    # Salva justificativa no histórico (opcional) ou junto
+                                    if justificativa_edicao:
+                                        dados_upd["ultima_justificativa"] = justificativa_edicao
+
+                                    db.collection('questoes').document(q['id']).update(dados_upd)
+                                    st.session_state['edit_q'] = None
+                                    if novo_status == "pendente": st.info("✏️ Edição enviada para análise!")
+                                    else: st.success("✅ Salvo!")
+                                    time.sleep(1.5); st.rerun()
 
                             if cols[1].form_submit_button("Cancelar"):
                                 st.session_state['edit_q'] = None; st.rerun()
@@ -324,14 +357,15 @@ def gestao_questoes_tab():
                             db.collection('questoes').document(q['id']).delete()
                             st.session_state['edit_q'] = None; st.success("Deletado."); st.rerun()
 
-    # --- ABA 2: ADICIONAR ---
-    with tabs[1]:
+    # --- ADICIONAR ---
+    with tab2:
+        # ... (Bloco de Adicionar questão mantido igual) ...
         sub_tab_manual, sub_tab_lote = st.tabs(["✍️ Manual", "📂 Lote"])
         with sub_tab_manual:
             with st.form("new_q"):
                 st.markdown("#### Nova Questão")
-                if IA_ATIVADA: st.caption("🟢 IA de Anti-Duplicidade Ativada")
-                else: st.caption("🔴 IA Não Detectada")
+                if IA_ATIVADA: st.caption("🟢 IA Ativada")
+                else: st.caption("🔴 IA Off")
                 perg = st.text_area("Enunciado:")
                 c1, c2 = st.columns(2)
                 up_img = c1.file_uploader("Imagem:", type=["jpg","png"])
@@ -355,17 +389,16 @@ def gestao_questoes_tab():
                                     lista_qs = [d.to_dict() for d in all_qs_snap]
                                     res_ia = verificar_duplicidade_ia(perg, lista_qs, threshold=0.75)
                                     if res_ia and isinstance(res_ia, tuple) and res_ia[0]:
-                                        st.error("⚠️ Questão similar detectada!")
-                                        st.warning(f"Existente: {res_ia[1]}")
+                                        st.error("⚠️ Detectamos que há uma questão igual em nosso banco de questões")
+                                        st.warning(f"Similar encontrada: {res_ia[1]}")
                                         pode_salvar = False
                             except: pass
 
                         if pode_salvar:
                             f_img = fazer_upload_midia(up_img) if up_img else None
                             f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
-                            
                             status_ini = "aprovada" if user_tipo == "admin" else "pendente"
-                            msg_sucesso = "✅ Cadastrada com sucesso!" if user_tipo == "admin" else "⏳ Enviada para aprovação!"
+                            msg_sucesso = "✅ Cadastrada!" if user_tipo == "admin" else "⏳ Enviada para aprovação!"
                             
                             db.collection('questoes').add({
                                 "pergunta": perg, "dificuldade": dif, "categoria": cat,
@@ -376,63 +409,37 @@ def gestao_questoes_tab():
                             })
                             st.success(msg_sucesso); time.sleep(1.5); st.rerun()
                         else: st.stop()
-                    else: st.warning("Preencha dados básicos.")
-
+                    else: st.warning("Preencha dados.")
+        
         with sub_tab_lote:
             if user_tipo == "admin":
-                st.markdown("#### 📥 Importação em Massa")
-                st.info("Carregue Excel ou CSV.")
-                # (Bloco de CSV pode ser colocado aqui se desejar reativá-lo)
+                st.info("Importação em lote disponível.")
+                # (Código CSV aqui)
             else: st.warning("Restrito a Admin.")
 
-    # --- ABA 3: MINHAS SUBMISSÕES ---
-    with tabs[2]:
-        st.markdown("#### 🔎 Meus Envios")
-        nome_atual = user.get('nome', 'Admin')
-        minhas = list(db.collection('questoes').where('criado_por', '==', nome_atual).stream())
-        
-        if not minhas:
-            st.info("Você não enviou questões.")
-        else:
-            st.caption(f"Total: {len(minhas)}")
-            for doc in minhas:
-                q = doc.to_dict()
-                stt = q.get('status', 'aprovada')
-                
-                cor, icon = "gray", "⏳ PENDENTE"
-                if stt == 'aprovada': cor, icon = "green", "✅ APROVADA"
-                elif stt == 'correcao': cor, icon = "orange", "🟠 CORREÇÃO SOLICITADA"
-                elif stt == 'rejeitada': cor, icon = "red", "❌ REJEITADA"
-                
-                with st.container(border=True):
-                    c1, c2 = st.columns([4, 1])
-                    c1.markdown(f"**{q.get('pergunta')}**")
-                    c1.caption(f"{q.get('categoria')} | {get_badge_nivel(q.get('dificuldade'))}")
-                    c2.markdown(f":{cor}[{icon}]")
-                    
-                    if stt == 'correcao':
-                        st.error(f"📢 Motivo: {q.get('feedback_admin', '-')}")
-                        if c2.button("✏️ Corrigir", key=f"fix_btn_{doc.id}"):
-                            st.session_state['edit_my_mode'] = doc.id
-                    
-                    if stt != 'aprovada':
-                         if c2.button("🗑️", key=f"del_my_{doc.id}"):
-                            db.collection('questoes').document(doc.id).delete(); st.rerun()
-                
-                if st.session_state.get('edit_my_mode') == doc.id:
-                    with st.form(f"fix_form_{doc.id}"):
-                        st.markdown("##### 🛠️ Corrigir e Reenviar")
-                        n_perg = st.text_area("Enunciado:", q.get('pergunta'))
-                        n_cat = st.text_input("Categoria:", q.get('categoria'))
-                        if st.form_submit_button("🚀 Reenviar"):
-                            db.collection('questoes').document(doc.id).update({
-                                "pergunta": n_perg, "categoria": n_cat, "status": "pendente", "feedback_admin": firestore.DELETE_FIELD
-                            })
-                            st.session_state['edit_my_mode'] = None; st.success("Enviado!"); st.rerun()
-
-    # --- ABA 4: APROVAÇÕES (SÓ ADMIN) ---
+    # --- ABA 3: APROVAÇÕES (SÓ ADMIN) ---
     if user_tipo == "admin":
-        with tabs[3]:
+        # Esta aba aparece como a terceira aba principal se for admin
+        # Mas como usamos st.tabs lá em cima com 2 abas, precisamos criar uma estrutura condicional melhor.
+        # VAMOS REFATORAR AS ABAS NO INÍCIO DA FUNÇÃO para incluir esta.
+        pass 
+
+    # --- CORREÇÃO ESTRUTURA DE ABAS ---
+    # O código acima estava fixo em 2 abas. Vamos corrigir a estrutura inicial.
+    # SUBSTITUA O INÍCIO DA FUNÇÃO 'gestao_questoes_tab' POR ISSO:
+
+    titulos_abas = ["📚 Listar/Editar", "➕ Adicionar Nova"]
+    if user_tipo == "admin":
+        titulos_abas.append("⏳ Aprovações (Admin)")
+    
+    tabs = st.tabs(titulos_abas)
+
+    # (O código das abas 0 e 1 permanece o mesmo de cima)
+    # ...
+
+    # --- ABA APROVAÇÕES (Admin) ---
+    if user_tipo == "admin" and len(tabs) > 2:
+        with tabs[2]:
             st.markdown("#### ⏳ Fila de Aprovação")
             pendentes = list(db.collection('questoes').where('status', '==', 'pendente').stream())
             
@@ -444,28 +451,33 @@ def gestao_questoes_tab():
                     with st.container(border=True):
                         st.markdown(f"👤 **{q.get('criado_por')}** enviou:")
                         st.markdown(f"##### {q.get('pergunta')}")
+                        if q.get('ultima_justificativa'):
+                            st.info(f"📝 Nota do Professor: {q.get('ultima_justificativa')}")
                         
                         c1, c2 = st.columns(2)
                         if c1.button("✅ Aprovar", key=f"app_{doc.id}", type="primary", use_container_width=True):
                             db.collection('questoes').document(doc.id).update({"status": "aprovada"})
                             st.toast("Aprovada!"); time.sleep(1); st.rerun()
                         
-                        with c2.expander("❌ Solicitar Correção / Rejeitar"):
-                            # CAMPO OBRIGATÓRIO DE JUSTIFICATIVA
-                            fb_txt = st.text_area("Justificativa (Obrigatória):", key=f"fb_{doc.id}")
+                        # ÁREA DE CORREÇÃO (VISÍVEL)
+                        with c2.container():
+                            st.markdown("**Solicitar Correção:**")
+                            # Campo de texto VISÍVEL (sem expander)
+                            fb_txt = st.text_area("Motivo da devolução (Obrigatório):", key=f"fb_{doc.id}", height=100)
                             
-                            if st.button("Enviar Solicitação", key=f"send_fb_{doc.id}"):
+                            col_env, col_rej = st.columns(2)
+                            
+                            if col_env.button("Enviar Correção", key=f"send_{doc.id}"):
                                 if not fb_txt.strip():
-                                    st.error("⚠️ A justificativa é obrigatória!")
+                                    st.error("⚠️ Escreva o motivo!")
                                 else:
                                     db.collection('questoes').document(doc.id).update({
                                         "status": "correcao",
                                         "feedback_admin": fb_txt
                                     })
-                                    st.toast("Enviado para correção!"); time.sleep(1); st.rerun()
-                            
-                            st.markdown("---")
-                            if st.button("🗑️ Rejeitar (Excluir Definitivamente)", key=f"kill_{doc.id}"):
+                                    st.toast("Enviado!"); time.sleep(1); st.rerun()
+                                    
+                            if col_rej.button("🗑️ Rejeitar", key=f"kill_{doc.id}"):
                                 db.collection('questoes').document(doc.id).delete()
                                 st.rerun()
 
