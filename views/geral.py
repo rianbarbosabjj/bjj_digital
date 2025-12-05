@@ -82,7 +82,8 @@ def tela_meu_perfil(usuario_logado):
                 try: val_nasc = datetime.fromisoformat(nasc_str).date()
                 except: val_nasc = None
             
-            nova_nasc = c5.date_input("Nascimento:", value=val_nasc, min_value=date(1940,1,1), max_value=date.today())
+            # FORMATO DD/MM/YYYY
+            nova_nasc = c5.date_input("Nascimento:", value=val_nasc, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
             st.markdown("---")
             st.markdown("##### Endereço")
