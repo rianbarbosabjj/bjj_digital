@@ -214,7 +214,7 @@ def gestao_usuarios_tab():
             st.warning("Usuário excluído."); time.sleep(1); st.rerun()
 
 # =========================================
-# GESTÃO DE QUESTÕES (COM CORREÇÃO DE VÍDEO)
+# GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes_tab():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
@@ -251,19 +251,12 @@ def gestao_questoes_tab():
                     
                     if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
                     
-                    # --- CORREÇÃO DO PLAYER DE VÍDEO ---
                     if q.get('url_video'):
                         vid_url = q.get('url_video')
                         link_limpo = normalizar_link_video(vid_url)
-                        
-                        try:
-                            ch.video(link_limpo)
-                        except Exception:
-                            ch.warning("⚠️ Erro ao carregar player.")
-                        
-                        # Link de backup sempre visível
+                        try: ch.video(link_limpo)
+                        except: ch.warning("⚠️ Erro player.")
                         ch.markdown(f"<small>🔗 [Abrir vídeo externamente]({vid_url})</small>", unsafe_allow_html=True)
-                    # -----------------------------------
                     
                     with ch.expander("Alternativas"):
                         alts = q.get('alternativas', {})
@@ -273,7 +266,6 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
-                # --- EDITAR ---
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
@@ -369,9 +361,9 @@ def gestao_questoes_tab():
                 else: st.warning("Preencha dados básicos.")
 
 # =========================================
-# GESTÃO DE EXAME DE FAIXA
+# GESTÃO DE EXAME DE FAIXA (WRAPPER)
 # =========================================
-def gestao_exame_de_faixa_route(): # Função Wrapper chamada pelo app.py
+def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
@@ -421,6 +413,16 @@ def gestao_exame_de_faixa_route(): # Função Wrapper chamada pelo app.py
                         st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
                         st.markdown(f"{d.get('pergunta')}")
                         if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
+                        
+                        # --- VÍDEO CORRIGIDO AQUI TAMBÉM ---
+                        if d.get('url_video'):
+                            vid_url = d.get('url_video')
+                            link_limpo = normalizar_link_video(vid_url)
+                            try: st.video(link_limpo)
+                            except: st.warning("Erro player")
+                            st.markdown(f"<small>🔗 [Ver link]({vid_url})</small>", unsafe_allow_html=True)
+                        # -----------------------------------
+
                         with st.expander("Ver Detalhes"):
                             alts = d.get('alternativas', {})
                             st.markdown(f"**A)** {alts.get('A','')} | **B)** {alts.get('B','')}")
