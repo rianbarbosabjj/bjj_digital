@@ -3,13 +3,13 @@ import os
 import requests 
 import bcrypt
 import time
-from datetime import datetime, date # Importação de data
+from datetime import datetime, date
 from streamlit_oauth import OAuth2Component
 
 # Importações locais
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep, gerar_senha_temporaria, enviar_email_recuperacao
-from database import get_db, OPCOES_SEXO # Importa lista de opções centralizada
+from database import get_db, OPCOES_SEXO
 from firebase_admin import firestore
 
 # Configuração Google
@@ -41,14 +41,12 @@ def tela_login():
     st.session_state.setdefault("modo_login", "login")
     logo = get_logo_path()
 
-    # Se houver pendência de cadastro Google, desvia fluxo
     if "registration_pending" in st.session_state:
         tela_completar_cadastro(st.session_state.registration_pending)
         return
 
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
-        # --- MODO: LOGIN ---
         if st.session_state["modo_login"] == "login":
             if logo:
                 cl, cc, cr = st.columns([1, 2, 1])
@@ -68,7 +66,6 @@ def tela_login():
                     else:
                         with st.spinner("Conectando..."):
                             entrada = user_input.strip()
-                            # Tenta autenticar
                             u = autenticar_local(entrada, pwd.strip()) 
                             
                             if u:
@@ -125,11 +122,9 @@ def tela_login():
                         time.sleep(1)
                         st.rerun()
 
-        # --- MODO: CADASTRO ---
         elif st.session_state["modo_login"] == "cadastro":
             tela_cadastro_interno()
 
-        # --- MODO: RECUPERAR SENHA ---
         elif st.session_state["modo_login"] == "recuperar":
             st.subheader("🔑 Recuperar Senha")
             st.markdown("Informe seu e-mail cadastrado.")
@@ -173,15 +168,11 @@ def tela_login():
             if st.button("Voltar", use_container_width=True):
                 st.session_state["modo_login"] = "login"; st.rerun()
 
-# =========================================
-# TELA CADASTRO INTERNO (ATUALIZADA)
-# =========================================
 def tela_cadastro_interno():
     st.subheader("📋 Cadastro de Novo Usuário")
     db = get_db()
     if not db: st.error("Erro de conexão."); return
     
-    # --- CARREGAR DADOS AUXILIARES ---
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
@@ -213,14 +204,14 @@ def tela_cadastro_interno():
     except Exception as e:
         st.error(f"Erro ao carregar listas: {e}"); return
 
-    # --- FORMULÁRIO ---
     nome = st.text_input("Nome completo:") 
     email = st.text_input("E-mail:")
     
     c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
     cpf_inp = c_cpf.text_input("CPF:") 
     sexo = c_sexo.selectbox("Sexo:", OPCOES_SEXO)
-    data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today())
+    # FORMATO DD/MM/YYYY
+    data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
     c1, c2 = st.columns(2)
     senha = c1.text_input("Senha:", type="password")
@@ -259,7 +250,7 @@ def tela_cadastro_interno():
         
         prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
         
-    else: # Professor
+    else: 
         with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
         st.caption("Professores devem ser Marrom ou Preta.")
         with ce:
@@ -335,7 +326,6 @@ def tela_cadastro_interno():
                 _, doc_ref = db.collection('usuarios').add(novo_user)
                 user_id = doc_ref.id
                 
-                # --- Vínculos ---
                 eq_id = None
                 if tipo_db == "professor":
                     if eq_sel == "🆕 Criar Nova Equipe":
@@ -374,9 +364,6 @@ def tela_cadastro_interno():
     if st.button("Voltar", use_container_width=True):
         st.session_state["modo_login"] = "login"; st.rerun()
 
-# =========================================
-# TELA COMPLETAR CADASTRO (GOOGLE) - ATUALIZADA
-# =========================================
 def tela_completar_cadastro(user_data):
     st.subheader(f"👋 Olá, {user_data.get('nome')}!")
     st.info("Para finalizar seu acesso via Google, precisamos de alguns dados.")
@@ -384,7 +371,6 @@ def tela_completar_cadastro(user_data):
     db = get_db()
     if not db: st.error("Erro banco"); return
 
-    # --- CARREGAR DADOS AUXILIARES (Mesma lógica do cadastro interno) ---
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
@@ -415,11 +401,11 @@ def tela_completar_cadastro(user_data):
                 
     except: pass
 
-    # FORMULÁRIO COMPLETAR
     c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
     cpf_inp = c_cpf.text_input("CPF (Obrigatório):")
     sexo = c_sexo.selectbox("Sexo:", OPCOES_SEXO)
-    data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today())
+    # FORMATO DD/MM/YYYY
+    data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
     tipo = st.selectbox("Sou:", ["Aluno", "Professor"])
     
@@ -450,7 +436,7 @@ def tela_completar_cadastro(user_data):
                         mapa_profs_final[p_nome] = p_uid
         prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
         
-    else: # Professor
+    else: 
         with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
         with ce:
             opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
@@ -487,7 +473,6 @@ def tela_completar_cadastro(user_data):
         cpf_fin = formatar_e_validar_cpf(cpf_inp)
         if not cpf_fin: st.error("CPF Inválido."); return
         
-        # Verifica se CPF já existe em OUTRO usuário
         q_cpf = list(db.collection('usuarios').where('cpf', '==', cpf_fin).stream())
         for d in q_cpf:
             if d.id != user_data['id']:
@@ -498,7 +483,6 @@ def tela_completar_cadastro(user_data):
                 uid = user_data['id']
                 tipo_db = tipo.lower()
                 
-                # Atualiza usuário
                 db.collection('usuarios').document(uid).update({
                     "cpf": cpf_fin, "tipo_usuario": tipo_db, "perfil_completo": True,
                     "cep": formatar_cep(cep), "logradouro": logr.upper(), "numero": num,
@@ -508,7 +492,6 @@ def tela_completar_cadastro(user_data):
                     "data_nascimento": data_nasc.isoformat() if data_nasc else None
                 })
                 
-                # Cria Vínculos
                 if tipo_db == "professor":
                     if eq_sel == "🆕 Criar Nova Equipe":
                         _, ref_team = db.collection('equipes').add({
@@ -534,9 +517,8 @@ def tela_completar_cadastro(user_data):
                         "professor_id": prof_id, "status_vinculo": "pendente"
                     })
                 
-                # Sucesso
                 user_data['perfil_completo'] = True
-                user_data['tipo'] = tipo_db # Atualiza sessão
+                user_data['tipo'] = tipo_db 
                 st.session_state.usuario = user_data
                 del st.session_state.registration_pending
                 st.success("Cadastro Completo!"); time.sleep(1); st.rerun()
