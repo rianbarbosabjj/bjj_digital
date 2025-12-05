@@ -45,7 +45,7 @@ MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS
+# GESTÃO DE USUÁRIOS (TAB INTERNA)
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
@@ -123,13 +123,16 @@ def gestao_usuarios_tab():
         with st.form(f"edt_{sel['id']}"):
             st.markdown("##### 👤 Dados Pessoais")
             c1, c2 = st.columns(2)
-            nm = c1.text_input("Nome Completo:", value=sel.get('nome',''))
-            email = c2.text_input("E-mail:", value=sel.get('email',''))
+            nm = c1.text_input("Nome Completo *", value=sel.get('nome',''))
+            email = c2.text_input("E-mail *", value=sel.get('email',''))
+            
             c3, c4, c5 = st.columns([1.5, 1, 1])
-            cpf = c3.text_input("CPF:", value=sel.get('cpf',''))
+            cpf = c3.text_input("CPF *", value=sel.get('cpf',''))
+            
             idx_s = 0
             if sel.get('sexo') in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sel.get('sexo'))
             sexo_edit = c4.selectbox("Sexo:", OPCOES_SEXO, index=idx_s)
+            
             val_n = None
             if sel.get('data_nascimento'):
                 try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
@@ -231,7 +234,7 @@ def gestao_questoes_tab():
     
     tabs = st.tabs(titulos)
 
-    # --- ABA 1: LISTAR (SOMENTE APROVADAS) ---
+    # --- ABA 1: LISTAR ---
     with tabs[0]:
         q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         c1, c2 = st.columns(2)
@@ -271,7 +274,7 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
-                # EDITAR (INLINE)
+                # --- EDITAR ---
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
@@ -376,7 +379,6 @@ def gestao_questoes_tab():
                         if pode_salvar:
                             f_img = fazer_upload_midia(up_img) if up_img else None
                             f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
-                            
                             status_ini = "aprovada" if user_tipo == "admin" else "pendente"
                             msg_sucesso = "✅ Cadastrada!" if user_tipo == "admin" else "⏳ Enviada para aprovação!"
                             
@@ -422,6 +424,7 @@ def gestao_questoes_tab():
             for doc in minhas:
                 q = doc.to_dict()
                 stt = q.get('status', 'aprovada')
+                
                 cor, icon = "gray", "⏳ PENDENTE"
                 if stt == 'aprovada': cor, icon = "green", "✅ APROVADA"
                 elif stt == 'correcao': cor, icon = "orange", "🟠 CORREÇÃO SOLICITADA"
@@ -501,7 +504,6 @@ def gestao_exame_de_faixa_route():
 
     tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
 
-    # --- ABA 1: MONTAR ---
     with tab1:
         st.subheader("1. Selecione a Faixa")
         faixa_sel = st.selectbox("Prova de Faixa:", FAIXAS_COMPLETAS)
@@ -547,12 +549,13 @@ def gestao_exame_de_faixa_route():
                         st.markdown(f"**{badge}** | {cat} | ✍️ {autor}")
                         st.markdown(f"{d.get('pergunta')}")
                         if d.get('url_imagem'): st.image(d.get('url_imagem'), width=150)
+                        
                         if d.get('url_video'):
                             vid_url = d.get('url_video')
                             link_limpo = normalizar_link_video(vid_url)
                             try: st.video(link_limpo)
-                            except: pass
-                            st.markdown(f"<small>🔗 [Ver vídeo]({vid_url})</small>", unsafe_allow_html=True)
+                            except: st.warning("Erro player")
+                            st.markdown(f"<small>🔗 [Ver link]({vid_url})</small>", unsafe_allow_html=True)
 
                         with st.expander("Ver Detalhes"):
                             alts = d.get('alternativas', {})
@@ -618,11 +621,21 @@ def gestao_exame_de_faixa_route():
                             if conf:
                                 st.markdown(f"**{fx}**")
                                 st.caption(f"✅ {conf.get('qtd_questoes')} questões")
+                                
+                                # --- SIMULAÇÃO ---
                                 if st.toggle("👁️ Simular", key=f"sim_{conf['id']}"):
                                     ids = conf.get('questoes_ids', [])
-                                    for qid in ids[:3]: # Preview max 3
+                                    for q_idx, qid in enumerate(ids): 
                                         qdoc = db.collection('questoes').document(qid).get()
-                                        if qdoc.exists: st.text(f"- {qdoc.to_dict().get('pergunta')}")
+                                        if qdoc.exists:
+                                            qd = qdoc.to_dict()
+                                            st.markdown(f"**{q_idx+1}. {qd.get('pergunta')}**")
+                                            if qd.get('url_imagem'): st.image(qd.get('url_imagem'), use_container_width=True)
+                                            # Rádio falso para visualização
+                                            ops = [f"A) {qd['alternativas']['A']}", f"B) {qd['alternativas']['B']}"] # Simplificado
+                                            st.radio("", ops, key=f"r_{qid}", disabled=True, label_visibility="collapsed")
+                                            st.success(f"Gabarito: {qd.get('resposta_correta')}")
+
                                 if st.button("🗑️", key=f"del_{conf['id']}"):
                                     db.collection('config_exames').document(conf['id']).delete(); st.rerun()
                             else:
@@ -668,13 +681,17 @@ def gestao_exame_de_faixa_route():
                         aluno_id = aluno.get('id', 'unknown')
                         aluno_nome = aluno.get('nome', 'Sem Nome')
                         faixa_exame_atual = aluno.get('faixa_exame', '')
+                        
                         c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
                         c1.write(f"**{aluno_nome}**")
                         c2.write(aluno.get('nome_equipe', 'Sem Equipe'))
+                        
                         idx = FAIXAS_COMPLETAS.index(faixa_exame_atual) if faixa_exame_atual in FAIXAS_COMPLETAS else 0
                         fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_select_{aluno_id}", label_visibility="collapsed")
+                        
                         habilitado = aluno.get('exame_habilitado', False)
                         status = aluno.get('status_exame', 'pendente')
+                        
                         msg_status = "⚪ Não autorizado"
                         if status == 'aprovado': msg_status = "🏆 Aprovado"
                         elif status == 'reprovado': msg_status = "🔴 Reprovado"
@@ -688,7 +705,9 @@ def gestao_exame_de_faixa_route():
                                     msg_status += f" (até {dt_obj.strftime('%d/%m %H:%M')})"
                             except: pass
                             if status == 'em_andamento': msg_status = "🟡 Em Andamento"
+
                         c4.write(msg_status)
+                        
                         if habilitado:
                             if c5.button("⛔", key=f"off_btn_{aluno_id}"):
                                 update_data = {"exame_habilitado": False, "status_exame": "pendente"}
