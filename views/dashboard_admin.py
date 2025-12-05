@@ -91,28 +91,20 @@ def render_dashboard_geral():
     else:
         st.info("Sem dados temporais suficientes para gerar o gráfico de evolução.")
 
-    # 4. Evolução Temporal de RESULTADOS (NOVO)
-    st.markdown("##### 📈 Evolução de Resultados (Aprovação vs Reprovação)")
-    if not df_res.empty and 'data' in df_res.columns:
+    # 4. Resultados Consolidados (ALTERADO PARA PIE CHART)
+    st.markdown("##### 🎯 Resultados Consolidados (Total)")
+    if not df_res.empty:
         try:
-            df_res_ev = df_res.copy()
-            # Garante formato de data
-            df_res_ev['data'] = pd.to_datetime(df_res_ev['data'], errors='coerce', utc=True)
-            df_res_ev = df_res_ev.dropna(subset=['data'])
+            df_status = df_res['aprovado'].value_counts().reset_index()
+            df_status.columns = ['Status', 'Qtd']
+            df_status['Status'] = df_status['Status'].map({True: 'Aprovado', False: 'Reprovado'})
             
-            # Mapeia Status
-            df_res_ev['Status'] = df_res_ev['aprovado'].map({True: 'Aprovado', False: 'Reprovado'})
-            
-            # Agrupa por Mês e Status
-            df_res_ev['mes_dt'] = df_res_ev['data'].dt.to_period('M').dt.to_timestamp()
-            df_counts_res = df_res_ev.groupby(['mes_dt', 'Status']).size().reset_index(name='Qtd')
-            df_counts_res = df_counts_res.sort_values('mes_dt')
-            
-            # Gráfico de Barras Agrupadas
-            fig_res = px.bar(df_counts_res, x='mes_dt', y='Qtd', color='Status', barmode='group',
+            # Gráfico de Pizza (Donut)
+            fig_res = px.pie(df_status, values='Qtd', names='Status', color='Status',
                              color_discrete_map={'Aprovado': '#078B6C', 'Reprovado': '#EF553B'},
-                             labels={'mes_dt': 'Mês', 'Qtd': 'Quantidade', 'Status': 'Resultado'})
+                             hole=0.5)
             
+            fig_res.update_traces(textinfo='percent+value', textfont_size=14)
             st.plotly_chart(estilizar_grafico(fig_res), use_container_width=True)
             
         except Exception as e:
