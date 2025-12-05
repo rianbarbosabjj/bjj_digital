@@ -3,12 +3,13 @@ import os
 import requests 
 import bcrypt
 import time
+from datetime import datetime, date # Importação de data
 from streamlit_oauth import OAuth2Component
 
 # Importações locais
 from auth import autenticar_local, criar_usuario_parcial_google, buscar_usuario_por_email
 from utils import formatar_e_validar_cpf, formatar_cep, buscar_cep, gerar_senha_temporaria, enviar_email_recuperacao
-from database import get_db
+from database import get_db, OPCOES_SEXO # Importa lista de opções centralizada
 from firebase_admin import firestore
 
 # Configuração Google
@@ -39,6 +40,11 @@ def get_logo_path():
 def tela_login():
     st.session_state.setdefault("modo_login", "login")
     logo = get_logo_path()
+
+    # Se houver pendência de cadastro Google, desvia fluxo
+    if "registration_pending" in st.session_state:
+        tela_completar_cadastro(st.session_state.registration_pending)
+        return
 
     c1, c2, c3 = st.columns([1, 1.5, 1])
     with c2:
@@ -168,13 +174,14 @@ def tela_login():
                 st.session_state["modo_login"] = "login"; st.rerun()
 
 # =========================================
-# TELA CADASTRO INTERNO
+# TELA CADASTRO INTERNO (ATUALIZADA)
 # =========================================
 def tela_cadastro_interno():
     st.subheader("📋 Cadastro de Novo Usuário")
     db = get_db()
     if not db: st.error("Erro de conexão."); return
     
+    # --- CARREGAR DADOS AUXILIARES ---
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
@@ -206,9 +213,15 @@ def tela_cadastro_interno():
     except Exception as e:
         st.error(f"Erro ao carregar listas: {e}"); return
 
+    # --- FORMULÁRIO ---
     nome = st.text_input("Nome de Usuário:") 
     email = st.text_input("E-mail:")
-    cpf_inp = st.text_input("CPF:") 
+    
+    c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
+    cpf_inp = c_cpf.text_input("CPF:") 
+    sexo = c_sexo.selectbox("Sexo:", OPCOES_SEXO)
+    data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today())
+
     c1, c2 = st.columns(2)
     senha = c1.text_input("Senha:", type="password")
     conf = c2.text_input("Confirmar senha:", type="password")
@@ -315,11 +328,14 @@ def tela_cadastro_interno():
                     "tipo_usuario": tipo_db, "senha": hashed, "auth_provider": "local", 
                     "perfil_completo": True, "cep": cep_fin, "logradouro": logr.upper(),
                     "numero": num, "complemento": comp.upper(), "bairro": bairro.upper(),
-                    "cidade": cid.upper(), "uf": uf.upper(), "data_criacao": firestore.SERVER_TIMESTAMP
+                    "cidade": cid.upper(), "uf": uf.upper(), "data_criacao": firestore.SERVER_TIMESTAMP,
+                    "sexo": sexo,
+                    "data_nascimento": data_nasc.isoformat() if data_nasc else None
                 }
                 _, doc_ref = db.collection('usuarios').add(novo_user)
                 user_id = doc_ref.id
                 
+                # --- Vínculos ---
                 eq_id = None
                 if tipo_db == "professor":
                     if eq_sel == "🆕 Criar Nova Equipe":
@@ -358,8 +374,176 @@ def tela_cadastro_interno():
     if st.button("Voltar", use_container_width=True):
         st.session_state["modo_login"] = "login"; st.rerun()
 
+# =========================================
+# TELA COMPLETAR CADASTRO (GOOGLE) - ATUALIZADA
+# =========================================
 def tela_completar_cadastro(user_data):
-    st.subheader(f"Completar cadastro: {user_data.get('nome')}")
-    if st.button("Cancelar"):
+    st.subheader(f"👋 Olá, {user_data.get('nome')}!")
+    st.info("Para finalizar seu acesso via Google, precisamos de alguns dados.")
+    
+    db = get_db()
+    if not db: st.error("Erro banco"); return
+
+    # --- CARREGAR DADOS AUXILIARES (Mesma lógica do cadastro interno) ---
+    try:
+        equipes_ref = db.collection('equipes').stream()
+        lista_equipes = ["Nenhuma (Vínculo Pendente)"]
+        mapa_equipes = {} 
+        info_equipes = {} 
+        
+        for doc in equipes_ref:
+            d = doc.to_dict()
+            nm = d.get('nome', 'Sem Nome')
+            lista_equipes.append(nm)
+            mapa_equipes[nm] = doc.id
+            info_equipes[doc.id] = d
+        
+        profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+        mapa_nomes_profs = {} 
+        for doc in profs_users_ref:
+            mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
+
+        vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
+        profs_por_equipe = {} 
+        for doc in vincs_ref:
+            d = doc.to_dict()
+            eid = d.get('equipe_id')
+            uid = d.get('usuario_id')
+            if eid and uid and uid in mapa_nomes_profs:
+                if eid not in profs_por_equipe: profs_por_equipe[eid] = []
+                profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
+                
+    except: pass
+
+    # FORMULÁRIO COMPLETAR
+    c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
+    cpf_inp = c_cpf.text_input("CPF (Obrigatório):")
+    sexo = c_sexo.selectbox("Sexo:", OPCOES_SEXO)
+    data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today())
+
+    tipo = st.selectbox("Sou:", ["Aluno", "Professor"])
+    
+    cf, ce = st.columns(2)
+    nome_nova_equipe = None; desc_nova_equipe = None
+    
+    if tipo == "Aluno":
+        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
+        
+        lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
+        mapa_profs_final = {}
+        eq_id_sel = mapa_equipes.get(eq_sel)
+        prof_resp_id = None
+
+        if eq_id_sel:
+            dados_eq = info_equipes.get(eq_id_sel, {})
+            prof_resp_id = dados_eq.get('professor_responsavel_id')
+            if prof_resp_id and prof_resp_id in mapa_nomes_profs:
+                nome_resp = mapa_nomes_profs[prof_resp_id]
+                label_resp = f"{nome_resp} (Responsável)"
+                lista_profs_filtrada.append(label_resp)
+                mapa_profs_final[label_resp] = prof_resp_id
+            if eq_id_sel in profs_por_equipe:
+                for p_nome, p_uid in profs_por_equipe[eq_id_sel]:
+                    if p_uid != prof_resp_id:
+                        lista_profs_filtrada.append(p_nome)
+                        mapa_profs_final[p_nome] = p_uid
+        prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
+        
+    else: # Professor
+        with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
+        with ce:
+            opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
+            eq_sel = st.selectbox("Equipe:", opcoes_prof_eq)
+        if eq_sel == "🆕 Criar Nova Equipe":
+            nome_nova_equipe = st.text_input("Nome da Nova Equipe:")
+            desc_nova_equipe = st.text_input("Descrição:")
+
+    st.markdown("#### Endereço")
+    if 'google_cep' not in st.session_state: st.session_state.google_cep = ''
+    
+    c_cep, c_btn = st.columns([3, 1])
+    cep = c_cep.text_input("CEP:", key="cep_g", value=st.session_state.google_cep)
+    if c_btn.button("Buscar", key="btn_g"):
+        end = buscar_cep(cep)
+        if end:
+            st.session_state.google_cep = cep
+            st.session_state.google_end = end
+            st.success("OK!")
+        else: st.error("Inválido")
+    
+    ec = st.session_state.get('google_end', {})
+    c1, c2 = st.columns(2)
+    logr = c1.text_input("Logradouro:", value=ec.get('logradouro',''))
+    bairro = c2.text_input("Bairro:", value=ec.get('bairro',''))
+    c3, c4 = st.columns(2)
+    cid = c3.text_input("Cidade:", value=ec.get('cidade',''))
+    uf = c4.text_input("UF:", value=ec.get('uf',''))
+    c5, c6 = st.columns(2)
+    num = c5.text_input("Número:")
+    comp = c6.text_input("Complemento:")
+
+    if st.button("Finalizar Cadastro", type="primary", use_container_width=True):
+        cpf_fin = formatar_e_validar_cpf(cpf_inp)
+        if not cpf_fin: st.error("CPF Inválido."); return
+        
+        # Verifica se CPF já existe em OUTRO usuário
+        q_cpf = list(db.collection('usuarios').where('cpf', '==', cpf_fin).stream())
+        for d in q_cpf:
+            if d.id != user_data['id']:
+                st.error("CPF já cadastrado em outra conta."); return
+        
+        try:
+            with st.spinner("Salvando..."):
+                uid = user_data['id']
+                tipo_db = tipo.lower()
+                
+                # Atualiza usuário
+                db.collection('usuarios').document(uid).update({
+                    "cpf": cpf_fin, "tipo_usuario": tipo_db, "perfil_completo": True,
+                    "cep": formatar_cep(cep), "logradouro": logr.upper(), "numero": num,
+                    "complemento": comp.upper(), "bairro": bairro.upper(), 
+                    "cidade": cid.upper(), "uf": uf.upper(), "faixa_atual": faixa,
+                    "sexo": sexo,
+                    "data_nascimento": data_nasc.isoformat() if data_nasc else None
+                })
+                
+                # Cria Vínculos
+                if tipo_db == "professor":
+                    if eq_sel == "🆕 Criar Nova Equipe":
+                        _, ref_team = db.collection('equipes').add({
+                            "nome": nome_nova_equipe.upper(), "descricao": desc_nova_equipe,
+                            "professor_responsavel_id": uid, "ativo": True
+                        })
+                        eq_id = ref_team.id
+                        db.collection('professores').add({
+                            "usuario_id": uid, "equipe_id": eq_id, "status_vinculo": "ativo", 
+                            "eh_responsavel": True, "pode_aprovar": True
+                        })
+                    else:
+                        eq_id = mapa_equipes.get(eq_sel)
+                        db.collection('professores').add({
+                            "usuario_id": uid, "equipe_id": eq_id, 
+                            "status_vinculo": "pendente", "eh_responsavel": False
+                        })
+                else:
+                    eq_id = mapa_equipes.get(eq_sel)
+                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno" and prof_sel) else None
+                    db.collection('alunos').add({
+                        "usuario_id": uid, "faixa_atual": faixa, "equipe_id": eq_id, 
+                        "professor_id": prof_id, "status_vinculo": "pendente"
+                    })
+                
+                # Sucesso
+                user_data['perfil_completo'] = True
+                user_data['tipo'] = tipo_db # Atualiza sessão
+                st.session_state.usuario = user_data
+                del st.session_state.registration_pending
+                st.success("Cadastro Completo!"); time.sleep(1); st.rerun()
+
+        except Exception as e:
+            st.error(f"Erro ao salvar: {e}")
+
+    if st.button("Cancelar e Sair", use_container_width=True):
         del st.session_state.registration_pending
         st.rerun()
