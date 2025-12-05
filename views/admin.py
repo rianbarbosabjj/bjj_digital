@@ -10,17 +10,18 @@ from firebase_admin import firestore
 # Importa o Dashboard separado
 from views.dashboard_admin import render_dashboard_geral
 
-# Importa utils com a nova função de IA
+# Importa utils
 try:
     from utils import (
         carregar_todas_questoes, 
         salvar_questoes, 
         fazer_upload_midia, 
         normalizar_link_video, 
-        verificar_duplicidade_ia 
+        verificar_duplicidade_ia,
+        IA_ATIVADA 
     )
 except ImportError:
-    # Definição de fallback caso o utils.py esteja com problemas
+    IA_ATIVADA = False
     def carregar_todas_questoes(): return []
     def salvar_questoes(t, q): pass
     def fazer_upload_midia(f): return None
@@ -185,6 +186,14 @@ def gestao_questoes_tab():
         with sub_tab_manual:
             with st.form("new_q"):
                 st.markdown("#### Nova Questão")
+                
+                # --- STATUS DA IA (Indicador) ---
+                if IA_ATIVADA:
+                    st.caption("🟢 IA de Anti-Duplicidade Ativada")
+                else:
+                    st.caption("🔴 IA Não Detectada (Instale sentence-transformers)")
+                # --------------------------------
+
                 perg = st.text_area("Enunciado:")
                 c1, c2 = st.columns(2)
                 up_img = c1.file_uploader("Imagem:", type=["jpg","png"])
@@ -200,20 +209,23 @@ def gestao_questoes_tab():
                 
                 if st.form_submit_button("💾 Cadastrar"):
                     if perg and alt_a and alt_b:
-                        # --- BLOCO DE IA / ANTI-DUPLICIDADE (BLINDADO) ---
-                        try:
-                            with st.spinner("🤖 A IA está verificando duplicidade semântica..."):
-                                all_qs_snap = list(db.collection('questoes').stream())
-                                lista_qs = [d.to_dict() for d in all_qs_snap]
-                                is_dup, dup_msg = verificar_duplicidade_ia(perg, lista_qs, threshold=0.85)
-                                
-                                if is_dup:
-                                    st.error("⚠️ Bloqueado: A IA detectou uma questão semanticamente idêntica!")
-                                    st.warning(f"Similar encontrada: {dup_msg}")
-                                    st.info("Altere a redação se for uma questão realmente nova.")
-                                    st.stop()
-                        except Exception as e:
-                            print(f"Aviso: Verificação IA falhou, prosseguindo. Erro: {e}")
+                        # --- BLOCO DE IA / ANTI-DUPLICIDADE ---
+                        if IA_ATIVADA:
+                            try:
+                                # MENSAGEM ATUALIZADA
+                                with st.spinner("Estamos verificando se há outra questão igual em nosso banco..."):
+                                    all_qs_snap = list(db.collection('questoes').stream())
+                                    lista_qs = [d.to_dict() for d in all_qs_snap]
+                                    is_dup, dup_msg = verificar_duplicidade_ia(perg, lista_qs, threshold=0.75)
+                                    
+                                    if is_dup:
+                                        # MENSAGEM ATUALIZADA
+                                        st.error("⚠️ Detectamos que há uma questão igual em nosso banco de questões")
+                                        st.warning(f"Similar encontrada: {dup_msg}")
+                                        # MENSAGEM REMOVIDA: "Altere a redação se for uma questão realmente nova."
+                                        st.stop()
+                            except Exception as e:
+                                st.warning(f"IA falhou temporariamente, prosseguindo. Erro: {e}")
                         # --------------------------------------
 
                         f_img = fazer_upload_midia(up_img) if up_img else None
@@ -327,6 +339,7 @@ def gestao_exame_de_faixa(): gestao_exames_tab()
 def gestao_usuarios(usuario_logado):
     st.markdown(f"<h1 style='color:#FFD700;'>Gestão e Estatísticas</h1>", unsafe_allow_html=True)
     
+    # Menu simplificado
     menu = st.radio("", ["📊 Dashboard", "👥 Usuários"], 
                     horizontal=True, label_visibility="collapsed")
     st.markdown("---")
