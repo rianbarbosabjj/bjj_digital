@@ -196,7 +196,7 @@ def app_principal():
         
         # 2. Painel do Professor (Movido para cima conforme pedido)
         if tipo_code in ["admin", "professor"]:
-            if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
+            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         
         # 3. Meus Certificados (Movido para baixo)
         if tipo_code != "admin":
