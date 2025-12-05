@@ -194,7 +194,7 @@ def gerar_qrcode(codigo):
 # GERADOR DE PDF (CORRIGIDO)
 # =========================================
 @st.cache_data(show_spinner=False)
-def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor Responsável"):
+def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
     try:
         # 1. Preparação
         # Limpa texto para evitar erros de encode latin-1
@@ -314,7 +314,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         else: pdf.set_font("Helvetica", "I", 24)
             
         pdf.set_text_color(*C_DOURADO)
-        pdf.cell(80, 10, limpa(professor), ln=True, align="C")
+        pdf.cell(80, 10, limpa(professor(a)), ln=True, align="C")
         
         # Linha
         pdf.set_xy(centro_dir - 30, 162)
@@ -326,7 +326,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_xy(centro_dir - 40, 165)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(200, 200, 200)
-        pdf.cell(80, 5, limpa("Professor Responsável"), align="C")
+        pdf.cell(80, 5, limpa("Professor(a) Responsável"), align="C")
 
         # 6. QR Code
         qr_path = gerar_qrcode(codigo)
