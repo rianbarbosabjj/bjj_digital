@@ -197,7 +197,7 @@ def app_principal():
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         
         # Agora verifica usando a variável normalizada 'tipo'
-        if tipo in ["admin", "professor"]:
+        if tipo in ["admin", "professor(a)"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor(a)")
         
         if tipo == "admin":
