@@ -315,7 +315,7 @@ def gestao_exames_tab():
                 st.divider()
 
 # =========================================
-# CONTROLADOR PRINCIPAL (ATUALIZADO)
+# CONTROLADOR PRINCIPAL (ROTEAMENTO)
 # =========================================
 def gestao_questoes(): gestao_questoes_tab()
 def gestao_exame_de_faixa(): gestao_exames_tab()
