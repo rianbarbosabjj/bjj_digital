@@ -54,11 +54,65 @@ def tela_meu_perfil(usuario_logado):
 
     st.markdown("<h1 style='color:#FFD700;'>👤 Meu Perfil</h1>", unsafe_allow_html=True)
     db = get_db()
+    
+    # 1. Carrega Dados do Usuário
     user_ref = db.collection('usuarios').document(usuario_logado['id'])
     ud = user_ref.get().to_dict()
-    if not ud: st.error("Erro dados."); return
+    if not ud: st.error("Erro ao carregar dados."); return
 
-    with st.expander("📝 Dados Pessoais", expanded=True):
+    # 2. Carrega Listas de Equipes e Professores (Para os Selectbox)
+    equipes_ref = list(db.collection('equipes').stream())
+    mapa_equipes = {d.id: d.to_dict().get('nome', 'Sem Nome') for d in equipes_ref} 
+    mapa_equipes_inv = {v: k for k, v in mapa_equipes.items()} 
+    lista_equipes = ["Sem Equipe"] + sorted(list(mapa_equipes.values()))
+
+    # Busca Vínculo Atual
+    tipo_user = ud.get('tipo_usuario', 'aluno')
+    vinculo_equipe_id = None
+    vinculo_prof_id = None
+    doc_vinculo_id = None # ID do documento na coleção alunos ou professores
+
+    if tipo_user == 'aluno':
+        # Carrega Professores
+        profs_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
+        mapa_profs = {u.id: u.to_dict().get('nome', 'Sem Nome') for u in profs_ref}
+        
+        # Mapeia qual equipe cada professor pertence
+        profs_vinc_ref = db.collection('professores').stream()
+        mapa_prof_equipe = {}
+        for pv in profs_vinc_ref:
+            d = pv.to_dict()
+            if d.get('usuario_id') and d.get('equipe_id'):
+                mapa_prof_equipe[d.get('usuario_id')] = mapa_equipes.get(d.get('equipe_id'), "?")
+        
+        # Cria lista formatada "Nome (Equipe)"
+        mapa_profs_display = {} 
+        mapa_profs_id_to_display = {}
+        for pid, pnome in mapa_profs.items():
+            pequipe = mapa_prof_equipe.get(pid, "Sem Equipe")
+            label = f"{pnome} ({pequipe})"
+            mapa_profs_display[label] = pid
+            mapa_profs_id_to_display[pid] = label
+        lista_profs_formatada = ["Sem Professor"] + sorted(list(mapa_profs_display.keys()))
+
+        # Busca dados do aluno atual
+        vincs = list(db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).limit(1).stream())
+        if vincs:
+            doc_vinculo_id = vincs[0].id
+            d_vinc = vincs[0].to_dict()
+            vinculo_equipe_id = d_vinc.get('equipe_id')
+            vinculo_prof_id = d_vinc.get('professor_id')
+
+    elif tipo_user == 'professor':
+        # Busca dados do professor atual
+        vincs = list(db.collection('professores').where('usuario_id', '==', usuario_logado['id']).limit(1).stream())
+        if vincs:
+            doc_vinculo_id = vincs[0].id
+            d_vinc = vincs[0].to_dict()
+            vinculo_equipe_id = d_vinc.get('equipe_id')
+
+    # --- INÍCIO DO FORMULÁRIO ---
+    with st.expander("📝 Editar Meus Dados", expanded=True):
         with st.form("f_p"):
             st.markdown("##### Informações Básicas")
             c1, c2 = st.columns(2)
@@ -82,7 +136,6 @@ def tela_meu_perfil(usuario_logado):
                 try: val_nasc = datetime.fromisoformat(nasc_str).date()
                 except: val_nasc = None
             
-            # FORMATO DD/MM/YYYY
             nova_nasc = c5.date_input("Nascimento:", value=val_nasc, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
             st.markdown("---")
@@ -104,8 +157,30 @@ def tela_meu_perfil(usuario_logado):
             cd = c_cid.text_input("Cidade:", value=e_b.get('cidade',''))
             uf = c_uf.text_input("UF:", value=e_b.get('uf',''))
 
+            st.markdown("---")
+            st.markdown("##### 🥋 Vínculo Acadêmico")
+            
+            v1, v2 = st.columns(2)
+            
+            # Equipe (Todos veem)
+            nome_eq_atual = mapa_equipes.get(vinculo_equipe_id, "Sem Equipe")
+            idx_eq = lista_equipes.index(nome_eq_atual) if nome_eq_atual in lista_equipes else 0
+            nova_equipe_nome = v1.selectbox("Minha Equipe:", lista_equipes, index=idx_eq)
+            
+            # Professor (Apenas Alunos veem)
+            novo_prof_display = "Sem Professor"
+            if tipo_user == 'aluno':
+                nome_prof_atual_display = mapa_profs_id_to_display.get(vinculo_prof_id, "Sem Professor")
+                idx_prof = lista_profs_formatada.index(nome_prof_atual_display) if nome_prof_atual_display in lista_profs_formatada else 0
+                novo_prof_display = v2.selectbox("Meu Professor:", lista_profs_formatada, index=idx_prof)
+            else:
+                v2.info("Professores gerenciam seus próprios alunos.")
+
             st.markdown("<br>", unsafe_allow_html=True)
+            
+            # --- SALVAR ---
             if st.form_submit_button("💾 Salvar Alterações", type="primary", use_container_width=True):
+                # 1. Atualiza Dados Pessoais (Usuario)
                 updates = {
                     "nome": nm.upper(),
                     "sexo": novo_sexo,
@@ -117,5 +192,35 @@ def tela_meu_perfil(usuario_logado):
                     "uf": uf.upper()
                 }
                 user_ref.update(updates)
-                st.session_state.usuario['nome'] = nm.upper()
-                st.success("✅ Perfil atualizado!"); time.sleep(1); st.rerun()
+                
+                # 2. Atualiza Vínculos (Alunos/Professores)
+                try:
+                    novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
+                    
+                    if tipo_user == 'aluno':
+                        novo_p_id = mapa_profs_display.get(novo_prof_display)
+                        dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id}
+                        
+                        if doc_vinculo_id: # Atualiza existente
+                            db.collection('alunos').document(doc_vinculo_id).update(dados_vinc)
+                        else: # Cria novo (caso não tenha por algum erro antigo)
+                            dados_vinc['usuario_id'] = usuario_logado['id']
+                            dados_vinc['status_vinculo'] = 'ativo'
+                            dados_vinc['faixa_atual'] = ud.get('faixa_atual', 'Branca')
+                            db.collection('alunos').add(dados_vinc)
+                            
+                    elif tipo_user == 'professor':
+                        dados_vinc = {"equipe_id": novo_eq_id}
+                        if doc_vinculo_id:
+                            db.collection('professores').document(doc_vinculo_id).update(dados_vinc)
+                        else:
+                            dados_vinc['usuario_id'] = usuario_logado['id']
+                            dados_vinc['status_vinculo'] = 'ativo'
+                            db.collection('professores').add(dados_vinc)
+
+                    # Atualiza sessão local para refletir nome na hora
+                    st.session_state.usuario['nome'] = nm.upper()
+                    st.success("✅ Perfil atualizado com sucesso!"); time.sleep(1.5); st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Erro ao salvar vínculos: {e}")
