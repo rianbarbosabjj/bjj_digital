@@ -171,23 +171,36 @@ def app_principal():
         st.session_state.clear(); st.rerun(); return
 
     usuario = st.session_state.usuario
-    tipo = str(usuario.get("tipo", "aluno(a)")).lower()
+    
+    # --- CORREÇÃO DA LÓGICA DE TIPO ---
+    # Normaliza o tipo para garantir que variações como "professor(a)" funcionem
+    raw_tipo = str(usuario.get("tipo", "aluno")).lower()
+    
+    if "admin" in raw_tipo: tipo = "admin"
+    elif "professor" in raw_tipo: tipo = "professor(a)"
+    else: tipo = "aluno"
+    # ----------------------------------
 
     def nav(pg): st.session_state.menu_selection = pg
 
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{tipo.capitalize()}</p>", unsafe_allow_html=True)
+        
+        # Exibe o tipo de forma bonita (capitalizada)
+        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{raw_tipo.capitalize()}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
+        
         if tipo != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
-        if tipo in ["admin", "professor(a)"]:
+        
+        # Agora verifica usando a variável normalizada 'tipo'
+        if tipo in ["admin", "professor"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor(a)")
+        
         if tipo == "admin":
-            # --- MUDANÇA AQUI: Botão renomeado ---
             if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
             
         st.markdown("<br>", unsafe_allow_html=True)
@@ -198,9 +211,8 @@ def app_principal():
     pg = st.session_state.menu_selection
 
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
-    # --- MUDANÇA AQUI: Rota atualizada ---
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
-    if pg == "Painel do Professor(a)": professor.painel_professor(); return
+    if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
