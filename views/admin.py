@@ -499,7 +499,7 @@ def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
 
-    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
+    tab1, tab2, tab3 = st.tabs(["📝 Criar e Editar Exames", "👁️ Visualizar Exames", "✅ Autorizar Alunos(as)"])
 
     with tab1:
         st.subheader("1. Selecione a Faixa")
