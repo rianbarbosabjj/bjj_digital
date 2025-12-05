@@ -81,17 +81,21 @@ def fazer_upload_midia(arquivo):
 # =========================================
 # IA ANTI-DUPLICIDADE (SAFE MODE)
 # =========================================
-# Tenta importar as bibliotecas de IA. Se falhar, usa função dummy.
+IA_ATIVADA = False 
+
 try:
     from sentence_transformers import SentenceTransformer
     from sklearn.metrics.pairwise import cosine_similarity
     import numpy as np
     
+    IA_ATIVADA = True
+
     @st.cache_resource
     def carregar_modelo_ia():
-        return SentenceTransformer('all-MiniLM-L6-v2')
+        # Modelo multilingue funciona melhor para PT-BR que o padrão
+        return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
-    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.85):
+    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.75): # <--- MUDAMOS PARA 0.75
         if not lista_existentes: return False, None
         try:
             model = carregar_modelo_ia()
@@ -106,6 +110,14 @@ try:
             max_score = np.max(scores)
             idx_max = np.argmax(scores)
             
+            # --- DEBUG NO TERMINAL ---
+            # Isso vai imprimir no console preto onde o Streamlit roda
+            print(f"--- ANALISE IA ---")
+            print(f"Nova: '{nova_pergunta}'")
+            print(f"Mais parecida: '{textos_existentes[idx_max]}'")
+            print(f"Nota de Similaridade: {max_score:.4f} (Corte é {threshold})")
+            print(f"------------------")
+
             if max_score >= threshold:
                 return True, f"{textos_existentes[idx_max]} ({max_score*100:.1f}%)"
             return False, None
@@ -114,9 +126,9 @@ try:
             return False, None
 
 except ImportError:
-    # Fallback caso não tenha as bibliotecas instaladas
-    def verificar_duplicidade_ia(n, l, t=0.85): 
-        return False, None
+    IA_ATIVADA = False
+    def verificar_duplicidade_ia(n, l, t=0.75): 
+        return False, "IA não instalada"
 
 # =========================================
 # DEMAIS FUNÇÕES (LEGACY & TOOLS)
