@@ -4,7 +4,7 @@ from firebase_admin import credentials, firestore
 import json
 
 # --- CONSTANTES GLOBAIS ---
-OPCOES_SEXO = [" ", "Masculino", "Feminino"]
+OPCOES_SEXO = [" ", "Masculino", "Feminino", "Outros"]
 
 def get_db():
     """
