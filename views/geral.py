@@ -66,36 +66,39 @@ def tela_meu_perfil(usuario_logado):
     mapa_equipes_inv = {v: k for k, v in mapa_equipes.items()} 
     lista_equipes = ["Sem Equipe"] + sorted(list(mapa_equipes.values()))
 
-    # Busca Vínculo Atual
+    # --- LÓGICA DE FILTRAGEM (NOVO) ---
+    # Mapear quais professores pertencem a qual equipe
+    # Estrutura: { 'ID_EQUIPE': ['Nome Prof A', 'Nome Prof B'] }
+    profs_users = list(db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream())
+    # Cria mapa ID -> Nome para todos os professores
+    mapa_nomes_profs = {u.id: u.to_dict().get('nome', 'Sem Nome') for u in profs_users}
+    mapa_nomes_profs_inv = {v: k for k, v in mapa_nomes_profs.items()} # Nome -> ID
+
+    # Carrega vínculos
+    vincs_profs = list(db.collection('professores').where('status_vinculo', '==', 'ativo').stream())
+    
+    # Dicionário: Chave = ID da Equipe, Valor = Lista de Nomes de Professores
+    profs_por_equipe = {}
+    
+    for v in vincs_profs:
+        d = v.to_dict()
+        eid = d.get('equipe_id')
+        uid = d.get('usuario_id')
+        
+        if eid and uid and uid in mapa_nomes_profs:
+            if eid not in profs_por_equipe:
+                profs_por_equipe[eid] = []
+            profs_por_equipe[eid].append(mapa_nomes_profs[uid])
+
+    # ----------------------------------
+
+    # Busca Vínculo Atual do Usuário
     tipo_user = ud.get('tipo_usuario', 'aluno')
     vinculo_equipe_id = None
     vinculo_prof_id = None
-    doc_vinculo_id = None # ID do documento na coleção alunos ou professores
+    doc_vinculo_id = None 
 
     if tipo_user == 'aluno':
-        # Carrega Professores
-        profs_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
-        mapa_profs = {u.id: u.to_dict().get('nome', 'Sem Nome') for u in profs_ref}
-        
-        # Mapeia qual equipe cada professor pertence
-        profs_vinc_ref = db.collection('professores').stream()
-        mapa_prof_equipe = {}
-        for pv in profs_vinc_ref:
-            d = pv.to_dict()
-            if d.get('usuario_id') and d.get('equipe_id'):
-                mapa_prof_equipe[d.get('usuario_id')] = mapa_equipes.get(d.get('equipe_id'), "?")
-        
-        # Cria lista formatada "Nome (Equipe)"
-        mapa_profs_display = {} 
-        mapa_profs_id_to_display = {}
-        for pid, pnome in mapa_profs.items():
-            pequipe = mapa_prof_equipe.get(pid, "Sem Equipe")
-            label = f"{pnome} ({pequipe})"
-            mapa_profs_display[label] = pid
-            mapa_profs_id_to_display[pid] = label
-        lista_profs_formatada = ["Sem Professor"] + sorted(list(mapa_profs_display.keys()))
-
-        # Busca dados do aluno atual
         vincs = list(db.collection('alunos').where('usuario_id', '==', usuario_logado['id']).limit(1).stream())
         if vincs:
             doc_vinculo_id = vincs[0].id
@@ -104,7 +107,6 @@ def tela_meu_perfil(usuario_logado):
             vinculo_prof_id = d_vinc.get('professor_id')
 
     elif tipo_user == 'professor':
-        # Busca dados do professor atual
         vincs = list(db.collection('professores').where('usuario_id', '==', usuario_logado['id']).limit(1).stream())
         if vincs:
             doc_vinculo_id = vincs[0].id
@@ -162,17 +164,34 @@ def tela_meu_perfil(usuario_logado):
             
             v1, v2 = st.columns(2)
             
-            # Equipe (Todos veem)
+            # 1. SELEÇÃO DE EQUIPE
             nome_eq_atual = mapa_equipes.get(vinculo_equipe_id, "Sem Equipe")
             idx_eq = lista_equipes.index(nome_eq_atual) if nome_eq_atual in lista_equipes else 0
+            
+            # O selectbox retorna o novo valor selecionado pelo usuário
             nova_equipe_nome = v1.selectbox("Minha Equipe:", lista_equipes, index=idx_eq)
             
-            # Professor (Apenas Alunos veem)
+            # 2. SELEÇÃO DE PROFESSOR (Filtrada pela equipe selecionada acima)
             novo_prof_display = "Sem Professor"
+            
             if tipo_user == 'aluno':
-                nome_prof_atual_display = mapa_profs_id_to_display.get(vinculo_prof_id, "Sem Professor")
-                idx_prof = lista_profs_formatada.index(nome_prof_atual_display) if nome_prof_atual_display in lista_profs_formatada else 0
-                novo_prof_display = v2.selectbox("Meu Professor:", lista_profs_formatada, index=idx_prof)
+                # Pega o ID da equipe que está selecionada no box acima
+                id_equipe_selecionada = mapa_equipes_inv.get(nova_equipe_nome)
+                
+                # Filtra a lista: Traz só professores dessa equipe
+                lista_profs_filtrada = ["Sem Professor"]
+                if id_equipe_selecionada in profs_por_equipe:
+                    lista_profs_filtrada += sorted(profs_por_equipe[id_equipe_selecionada])
+                
+                # Tenta manter o professor atual selecionado, se ele estiver na nova lista
+                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor")
+                idx_prof = 0
+                if nome_prof_atual_display in lista_profs_filtrada:
+                    idx_prof = lista_profs_filtrada.index(nome_prof_atual_display)
+                
+                novo_prof_display = v2.selectbox("Meu Professor:", lista_profs_filtrada, index=idx_prof)
+                if nova_equipe_nome == "Sem Equipe":
+                    v2.caption("Selecione uma equipe para ver os professores.")
             else:
                 v2.info("Professores gerenciam seus próprios alunos.")
 
@@ -198,7 +217,7 @@ def tela_meu_perfil(usuario_logado):
                     novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
                     
                     if tipo_user == 'aluno':
-                        novo_p_id = mapa_profs_display.get(novo_prof_display)
+                        novo_p_id = mapa_nomes_profs_inv.get(novo_prof_display)
                         dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id}
                         
                         if doc_vinculo_id: # Atualiza existente
