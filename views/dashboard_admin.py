@@ -67,47 +67,62 @@ def render_dashboard_geral():
     
     st.markdown("---")
 
-    # 3. Evolução Temporal (NOVO)
+    # 3. Evolução Temporal de CADASTROS
     st.markdown("##### 📅 Evolução de Cadastros (Mensal)")
     if not df_users.empty and 'data_criacao' in df_users.columns:
         try:
-            # Prepara cópia para não alterar o original
             df_ev = df_users.copy()
-            
-            # Converte para datetime (trata erros e converte strings ISO)
             df_ev['data_criacao'] = pd.to_datetime(df_ev['data_criacao'], errors='coerce', utc=True)
             df_ev = df_ev.dropna(subset=['data_criacao'])
-            
-            # Filtra apenas tipos de interesse
             df_ev = df_ev[df_ev['tipo_usuario'].isin(['aluno', 'professor'])]
-            
-            # Formata tipos para o gráfico (Capitalize)
             df_ev['Tipo'] = df_ev['tipo_usuario'].str.capitalize()
-            
-            # Cria coluna Mês-Ano para agrupamento (ordenável)
             df_ev['mes_dt'] = df_ev['data_criacao'].dt.to_period('M').dt.to_timestamp()
             
-            # Agrupa
             df_counts = df_ev.groupby(['mes_dt', 'Tipo']).size().reset_index(name='Qtd')
-            
-            # Ordena cronologicamente
             df_counts = df_counts.sort_values('mes_dt')
             
-            # Cria o gráfico
             fig_line = px.line(df_counts, x='mes_dt', y='Qtd', color='Tipo', markers=True,
                                color_discrete_map={'Aluno': '#078B6C', 'Professor': '#FFD770'},
                                labels={'mes_dt': 'Mês', 'Qtd': 'Novos Usuários'})
             
             st.plotly_chart(estilizar_grafico(fig_line), use_container_width=True)
-            
         except Exception as e:
             st.error(f"Erro ao gerar gráfico de evolução: {e}")
     else:
         st.info("Sem dados temporais suficientes para gerar o gráfico de evolução.")
 
+    # 4. Evolução Temporal de RESULTADOS (NOVO)
+    st.markdown("##### 📈 Evolução de Resultados (Aprovação vs Reprovação)")
+    if not df_res.empty and 'data' in df_res.columns:
+        try:
+            df_res_ev = df_res.copy()
+            # Garante formato de data
+            df_res_ev['data'] = pd.to_datetime(df_res_ev['data'], errors='coerce', utc=True)
+            df_res_ev = df_res_ev.dropna(subset=['data'])
+            
+            # Mapeia Status
+            df_res_ev['Status'] = df_res_ev['aprovado'].map({True: 'Aprovado', False: 'Reprovado'})
+            
+            # Agrupa por Mês e Status
+            df_res_ev['mes_dt'] = df_res_ev['data'].dt.to_period('M').dt.to_timestamp()
+            df_counts_res = df_res_ev.groupby(['mes_dt', 'Status']).size().reset_index(name='Qtd')
+            df_counts_res = df_counts_res.sort_values('mes_dt')
+            
+            # Gráfico de Barras Agrupadas
+            fig_res = px.bar(df_counts_res, x='mes_dt', y='Qtd', color='Status', barmode='group',
+                             color_discrete_map={'Aprovado': '#078B6C', 'Reprovado': '#EF553B'},
+                             labels={'mes_dt': 'Mês', 'Qtd': 'Quantidade', 'Status': 'Resultado'})
+            
+            st.plotly_chart(estilizar_grafico(fig_res), use_container_width=True)
+            
+        except Exception as e:
+            st.error(f"Erro ao gerar gráfico de resultados: {e}")
+    else:
+        st.info("Sem dados de exames realizados para gerar o gráfico.")
+
     st.markdown("---")
 
-    # 4. Gráficos - Linha 1 (Demografia e Equipes)
+    # 5. Demografia e Equipes
     c1, c2 = st.columns(2)
     
     with c1:
@@ -149,7 +164,7 @@ def render_dashboard_geral():
         else:
             st.info("Sem equipes cadastradas.")
 
-    # 5. Gráficos - Linha 2 (Questões e Faixas)
+    # 6. Contribuidores e Faixas
     c3, c4 = st.columns(2)
     
     with c3:
