@@ -187,7 +187,8 @@ def app_principal():
         if tipo in ["admin", "professor"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo == "admin":
-            if st.button("🔑 Gestão Usuários", use_container_width=True): nav("Gestão de Usuários")
+            # --- MUDANÇA AQUI: Botão renomeado ---
+            if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
             
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🚪 Sair", use_container_width=True):
@@ -197,7 +198,8 @@ def app_principal():
     pg = st.session_state.menu_selection
 
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
-    if pg == "Gestão de Usuários": admin.gestao_usuarios(usuario); return
+    # --- MUDANÇA AQUI: Rota atualizada ---
+    if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
@@ -227,9 +229,9 @@ def app_principal():
                 "border-radius": "12px", 
                 "border": "1px solid rgba(255, 215, 112, 0.15)", 
                 "box-shadow": "0 4px 15px rgba(0,0,0,0.3)",
-                "width": "100%",      
+                "width": "100%",       
                 "max-width": "100%",  
-                "display": "flex",    
+                "display": "flex",     
                 "justify-content": "space-between" 
             },
             "icon": {
@@ -245,7 +247,7 @@ def app_principal():
                 "font-weight": "400",
                 "border-radius": "8px",
                 "transition": "0.3s",
-                "width": "100%",      
+                "width": "100%",       
                 "flex-grow": "1",     
                 "display": "flex",
                 "justify-content": "center",
