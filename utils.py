@@ -372,3 +372,47 @@ def registrar_fim_exame(uid, apr):
 def bloquear_por_abandono(uid):
     try: get_db().collection('usuarios').document(uid).update({"status_exame":"bloqueado", "motivo_bloqueio":"Anti-Cola", "data_ultimo_exame":datetime.utcnow().isoformat()})
     except: pass
+
+# =========================================
+# 8. AUDITORIA DE QUESTÕES (GEN AI)
+# =========================================
+try:
+    import google.generativeai as genai
+    
+    def auditoria_ia_questao(pergunta, alternativas, correta):
+        # Tenta pegar a chave dos secrets
+        api_key = st.secrets.get("GEMINI_API_KEY")
+        if not api_key:
+            return "⚠️ Chave de API (GEMINI_API_KEY) não configurada no secrets.toml."
+
+        try:
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel('gemini-pro')
+            
+            prompt = f"""
+            Atue como um Professor Sênior de Jiu-Jitsu e Português. Analise esta questão:
+            
+            Enunciado: {pergunta}
+            Alternativas:
+            A) {alternativas.get('A')}
+            B) {alternativas.get('B')}
+            C) {alternativas.get('C')}
+            D) {alternativas.get('D')}
+            
+            Resposta Correta Indicada: {correta}
+            
+            Verifique:
+            1. Ortografia e Gramática.
+            2. Se a resposta correta faz sentido lógico (sem alucinar regras obscuras).
+            3. Se há alternativas repetidas.
+            
+            Responda de forma curta e direta (máximo 3 linhas). Se estiver tudo bem, diga "✅ Questão parece consistente."
+            """
+            
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            return f"Erro na análise IA: {e}"
+
+except ImportError:
+    def auditoria_ia_questao(p, a, c): return "Biblioteca google-generativeai não instalada."
