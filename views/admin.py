@@ -21,6 +21,7 @@ try:
         fazer_upload_midia, 
         normalizar_link_video, 
         verificar_duplicidade_ia,
+        auditoria_ia_questao, # Função da IA
         IA_ATIVADA 
     )
 except ImportError:
@@ -30,6 +31,7 @@ except ImportError:
     def fazer_upload_midia(f): return None
     def normalizar_link_video(u): return u
     def verificar_duplicidade_ia(n, l, t=0.85): return False, None
+    def auditoria_ia_questao(p, a, c): return "Função indisponível."
 
 # --- CONSTANTES ---
 FAIXAS_COMPLETAS = [
@@ -42,19 +44,10 @@ FAIXAS_COMPLETAS = [
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
 
-# Mapeamento para exibição bonita vs valor no banco
-TIPO_MAP = {
-    "Aluno(a)": "aluno",
-    "Professor(a)": "professor",
-    "Administrador(a)": "admin"
-}
-TIPO_MAP_INV = {v: k for k, v in TIPO_MAP.items()}
-LISTA_TIPOS_DISPLAY = list(TIPO_MAP.keys())
-
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS (TAB INTERNA)
+# GESTÃO DE USUÁRIOS
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
@@ -90,9 +83,9 @@ def gestao_usuarios_tab():
     if filtro_nome:
         termo = filtro_nome.upper()
         df = df[
-            df['nome'].astype(str).str.upper().str.contains(termo) | 
-            df['email'].astype(str).str.upper().str.contains(termo) |
-            df['cpf'].astype(str).str.contains(termo)
+            df['nome'].str.upper().str.contains(termo) | 
+            df['email'].str.upper().str.contains(termo) |
+            df['cpf'].str.contains(termo)
         ]
     if filtro_tipo:
         df = df[df['tipo_usuario'].isin(filtro_tipo)]
@@ -129,20 +122,16 @@ def gestao_usuarios_tab():
                 d_vinc = vincs[0].to_dict()
                 vinculo_equipe_id = d_vinc.get('equipe_id')
 
-        # --- FORMULÁRIO DE EDIÇÃO ---
         with st.form(f"edt_{sel['id']}"):
             st.markdown("##### 👤 Dados Pessoais")
             c1, c2 = st.columns(2)
             nm = c1.text_input("Nome Completo *", value=sel.get('nome',''))
             email = c2.text_input("E-mail *", value=sel.get('email',''))
-            
             c3, c4, c5 = st.columns([1.5, 1, 1])
             cpf = c3.text_input("CPF *", value=sel.get('cpf',''))
-            
             idx_s = 0
             if sel.get('sexo') in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sel.get('sexo'))
             sexo_edit = c4.selectbox("Sexo:", OPCOES_SEXO, index=idx_s)
-            
             val_n = None
             if sel.get('data_nascimento'):
                 try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
@@ -163,21 +152,11 @@ def gestao_usuarios_tab():
 
             st.markdown("##### 🥋 Perfil e Vínculos")
             p1, p2 = st.columns(2)
-            
-            tipo_atual_banco = sel.get('tipo_usuario', 'aluno')
-            tipo_atual_display = TIPO_MAP_INV.get(tipo_atual_banco, "Aluno(a)")
-            idx_tipo = 0
-            if tipo_atual_display in LISTA_TIPOS_DISPLAY:
-                idx_tipo = LISTA_TIPOS_DISPLAY.index(tipo_atual_display)
-            tipo_sel_display = p1.selectbox("Tipo:", LISTA_TIPOS_DISPLAY, index=idx_tipo)
-            tipo_sel_valor = TIPO_MAP[tipo_sel_display]
-            
-            # --- PROTEÇÃO CONTRA ERRO DE ATRIBUTO (AttributeError) ---
+            tipo_sel = p1.selectbox("Tipo:", ["aluno","professor","admin"], index=["aluno","professor","admin"].index(sel.get('tipo_usuario','aluno')))
             idx_fx = 0
-            # Garante que faixa_banco é string e trata nulos ANTES de fazer strip
-            faixa_banco = str(sel.get('faixa_atual', 'Branca') or 'Branca') 
+            faixa_atual = str(sel.get('faixa_atual', 'Branca') or 'Branca')
             for i, f in enumerate(FAIXAS_COMPLETAS):
-                if f.strip().lower() == faixa_banco.strip().lower():
+                if f.strip().lower() == faixa_atual.strip().lower():
                     idx_fx = i
                     break
             fx = p2.selectbox("Faixa:", FAIXAS_COMPLETAS, index=idx_fx)
@@ -187,67 +166,53 @@ def gestao_usuarios_tab():
             idx_eq = lista_equipes.index(nome_eq_atual) if nome_eq_atual in lista_equipes else 0
             nova_equipe_nome = v1.selectbox("Equipe:", lista_equipes, index=idx_eq)
             
-            novo_prof_display = "Sem Professor(a)"
-            lista_profs_inclusiva = ["Sem Professor(a)"]
-            
-            if tipo_sel_valor == 'aluno':
+            novo_prof_display = "Sem Professor"
+            if tipo_sel == 'aluno':
                 id_equipe_selecionada = mapa_equipes_inv.get(nova_equipe_nome)
+                lista_profs_filtrada = ["Sem Professor"]
                 if id_equipe_selecionada in profs_por_equipe:
-                    lista_profs_inclusiva += sorted(profs_por_equipe[id_equipe_selecionada])
-                
-                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor(a)")
-                if nome_prof_atual_display == "Sem Professor": nome_prof_atual_display = "Sem Professor(a)"
-
+                    lista_profs_filtrada += sorted(profs_por_equipe[id_equipe_selecionada])
+                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor")
                 idx_prof = 0
-                if nome_prof_atual_display in lista_profs_inclusiva:
-                    idx_prof = lista_profs_inclusiva.index(nome_prof_atual_display)
-                
-                novo_prof_display = v2.selectbox("Professor(a) Responsável:", lista_profs_inclusiva, index=idx_prof)
+                if nome_prof_atual_display in lista_profs_filtrada:
+                    idx_prof = lista_profs_filtrada.index(nome_prof_atual_display)
+                novo_prof_display = v2.selectbox("Professor Responsável:", lista_profs_filtrada, index=idx_prof)
                 if nova_equipe_nome == "Sem Equipe":
                     v2.caption("Selecione uma equipe para ver os professores.")
 
             st.markdown("##### 🔒 Segurança")
             pwd = st.text_input("Nova Senha (opcional):", type="password")
             
-            # --- CORREÇÃO DO BOTÃO FALTANDO ---
-            # O botão deve estar DENTRO do 'with st.form'
-            submit_btn = st.form_submit_button("💾 Salvar Todas as Alterações", type="primary")
-
-        # Lógica de processamento ao clicar
-        if submit_btn:
-            upd = {
-                "nome": nm.upper(), "email": email.lower().strip(), "cpf": cpf,
-                "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
-                "cep": cep, "logradouro": logr.upper(), "numero": num, "complemento": comp.upper(),
-                "bairro": bairro.upper(), "cidade": cid.upper(), "uf": uf.upper(),
-                "tipo_usuario": tipo_sel_valor, 
-                "faixa_atual": fx
-            }
-            if pwd: 
-                upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
-                upd["precisa_trocar_senha"] = True
-            
-            try:
-                db.collection('usuarios').document(sel['id']).update(upd)
-                novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
+            if st.form_submit_button("💾 Salvar Todas as Alterações"):
+                upd = {
+                    "nome": nm.upper(), "email": email.lower().strip(), "cpf": cpf,
+                    "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
+                    "cep": cep, "logradouro": logr.upper(), "numero": num, "complemento": comp.upper(),
+                    "bairro": bairro.upper(), "cidade": cid.upper(), "uf": uf.upper(),
+                    "tipo_usuario": tipo_sel, "faixa_atual": fx
+                }
+                if pwd: 
+                    upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
+                    upd["precisa_trocar_senha"] = True
                 
-                if tipo_sel_valor == 'aluno':
-                    novo_p_id = mapa_nomes_profs_inv.get(novo_prof_display)
-                    dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id, "faixa_atual": fx}
-                    if doc_vinculo_id: db.collection('alunos').document(doc_vinculo_id).update(dados_vinc)
-                    else:
-                        dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
-                        db.collection('alunos').add(dados_vinc)
-                        
-                elif tipo_sel_valor == 'professor':
-                    dados_vinc = {"equipe_id": novo_eq_id}
-                    if doc_vinculo_id: db.collection('professores').document(doc_vinculo_id).update(dados_vinc)
-                    else:
-                        dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
-                        db.collection('professores').add(dados_vinc)
-
-                st.success("✅ Atualizado com sucesso!"); time.sleep(1.5); st.rerun()
-            except Exception as e: st.error(f"Erro ao salvar: {e}")
+                try:
+                    db.collection('usuarios').document(sel['id']).update(upd)
+                    novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
+                    if tipo_sel == 'aluno':
+                        novo_p_id = mapa_nomes_profs_inv.get(novo_prof_display)
+                        dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id, "faixa_atual": fx}
+                        if doc_vinculo_id: db.collection('alunos').document(doc_vinculo_id).update(dados_vinc)
+                        else:
+                            dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
+                            db.collection('alunos').add(dados_vinc)
+                    elif tipo_sel == 'professor':
+                        dados_vinc = {"equipe_id": novo_eq_id}
+                        if doc_vinculo_id: db.collection('professores').document(doc_vinculo_id).update(dados_vinc)
+                        else:
+                            dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
+                            db.collection('professores').add(dados_vinc)
+                    st.success("✅ Atualizado com sucesso!"); time.sleep(1.5); st.rerun()
+                except Exception as e: st.error(f"Erro ao salvar: {e}")
                 
         if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
             db.collection('usuarios').document(sel['id']).delete()
@@ -311,6 +276,7 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
+                # --- EDITAR ---
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
@@ -497,9 +463,7 @@ def gestao_questoes_tab():
         with tabs[3]:
             st.markdown("#### ⏳ Fila de Aprovação")
             pendentes = list(db.collection('questoes').where('status', '==', 'pendente').stream())
-            
-            if not pendentes:
-                st.success("🎉 Nenhuma pendência!")
+            if not pendentes: st.success("🎉 Nenhuma pendência!")
             else:
                 for doc in pendentes:
                     q = doc.to_dict()
@@ -509,12 +473,28 @@ def gestao_questoes_tab():
                         if q.get('ultima_justificativa'):
                             st.info(f"📝 Nota do Professor: {q.get('ultima_justificativa')}")
                         
+                        # --- AQUI: ALTERNATIVAS RESTAURADAS ---
+                        with st.expander("Ver Detalhes e Alternativas"):
+                            if q.get('url_imagem'): st.image(q.get('url_imagem'), width=150)
+                            alts = q.get('alternativas', {})
+                            st.write(f"A) {alts.get('A','')} | B) {alts.get('B','')}")
+                            st.write(f"C) {alts.get('C','')} | D) {alts.get('D','')}")
+                            st.success(f"Gabarito: {q.get('resposta_correta')}")
+                        # -------------------------------------
+
                         c1, c2 = st.columns(2)
                         if c1.button("✅ Aprovar", key=f"app_{doc.id}", type="primary", use_container_width=True):
                             db.collection('questoes').document(doc.id).update({"status": "aprovada"})
                             st.toast("Aprovada!"); time.sleep(1); st.rerun()
                         
                         with c2.expander("❌ Solicitar Correção / Rejeitar"):
+                            # --- BOTÃO IA RESTAURADO ---
+                            if st.button("🤖 Auditoria IA", key=f"ia_{doc.id}"):
+                                with st.spinner("Analisando..."):
+                                    res = auditoria_ia_questao(q.get('pergunta'), q.get('alternativas',{}), q.get('resposta_correta'))
+                                    st.info(res)
+                            
+                            st.markdown("---")
                             fb_txt = st.text_area("Justificativa *", key=f"fb_{doc.id}", height=100)
                             if st.button("Enviar Solicitação", key=f"send_fb_{doc.id}"):
                                 if not fb_txt.strip():
@@ -657,7 +637,6 @@ def gestao_exame_de_faixa_route():
                                 st.markdown(f"**{fx}**")
                                 st.caption(f"✅ {conf.get('qtd_questoes')} questões")
                                 
-                                # --- SIMULAÇÃO DA PROVA (CORRIGIDA) ---
                                 if st.toggle("👁️ Simular", key=f"sim_{conf['id']}"):
                                     ids = conf.get('questoes_ids', [])
                                     for q_idx, qid in enumerate(ids): 
@@ -666,20 +645,17 @@ def gestao_exame_de_faixa_route():
                                             qd = qdoc.to_dict()
                                             st.markdown(f"**{q_idx+1}. {qd.get('pergunta')}**")
                                             if qd.get('url_imagem'): st.image(qd.get('url_imagem'), use_container_width=True)
-                                            if qd.get('url_video'):
-                                                try: st.video(normalizar_link_video(qd.get('url_video')))
-                                                except: pass
                                             
-                                            alts = qd.get('alternativas', {})
-                                            # Garante que não quebre se faltar alguma alternativa
-                                            ops = [
-                                                f"A) {alts.get('A','')}", 
-                                                f"B) {alts.get('B','')}", 
-                                                f"C) {alts.get('C','')}", 
-                                                f"D) {alts.get('D','')}"
-                                            ]
-                                            # Chave única composta: id_radio + id_questao + id_config_prova
-                                            st.radio("", ops, key=f"radio_{qid}_{conf['id']}", disabled=True, label_visibility="collapsed")
+                                            if qd.get('url_video'):
+                                                vid_url = qd.get('url_video')
+                                                link_limpo = normalizar_link_video(vid_url)
+                                                try: st.video(link_limpo)
+                                                except: pass
+                                                st.markdown(f"[Ver vídeo]({vid_url})")
+
+                                            ops = [f"A) {qd['alternativas'].get('A','')}", f"B) {qd['alternativas'].get('B','')}", 
+                                                   f"C) {qd['alternativas'].get('C','')}", f"D) {qd['alternativas'].get('D','')}"]
+                                            st.radio("", ops, key=f"r_{qid}_{conf['id']}", disabled=True, label_visibility="collapsed")
                                             st.success(f"Gabarito: {qd.get('resposta_correta')}")
 
                                 if st.button("🗑️", key=f"del_{conf['id']}"):
