@@ -572,9 +572,9 @@ def gestao_questoes_tab():
 # GESTÃO DE EXAMES
 # =========================================
 def gestao_exame_de_faixa_route():
-    st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:#FFD700;'>⚙️ Gerenciador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
-    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
+    tab1, tab2, tab3 = st.tabs(["📝 Criar/Editar Exames", "👁️ Visualizar Exames", "✅ Autorizar Exames"])
 
     with tab1:
         st.subheader("1. Selecione a Faixa")
@@ -741,7 +741,7 @@ def gestao_exame_de_faixa_route():
                     if raw_fim:
                         dt_fim = datetime.fromisoformat(str(raw_fim).replace('Z', ''))
                         if datetime.now() > dt_fim: msg_status = "⏰ Expirado"
-                        else: msg_status = f"🟢 Até {dt_fim.strftime('%d/%m %H:%M')}"
+                        else: msg_status = f"🟢 Exame autorizado Até {dt_fim.strftime('%d/%m %H:%M')}"
                     else: msg_status = "🟢 Liberado"
                 except: msg_status = "🟢 Liberado"
             
