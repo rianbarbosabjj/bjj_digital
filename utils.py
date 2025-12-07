@@ -118,89 +118,66 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# AUDITORIA DE QUESTÕES (GEMINI)
+# AUDITORIA DE QUESTÕES (AUTO-DETECT)
 # =========================================
 def auditoria_ia_questao(pergunta, alternativas, correta):
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
-        return "⚠️ Chave de API não configurada no secrets.toml."
+        return "⚠️ Chave GEMINI_API_KEY não configurada."
 
-    prompt_text = f"""
+    prompt = f"""
     Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
     Enunciado: {pergunta}
     Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
     Gabarito: {correta}
     
-    Verifique erros de português, lógica e consistência técnica.
-    Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
+    Verifique consistência técnica e português. Responda curto.
     """
 
+    # Tenta usar a lib oficial
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        modelos_disponiveis = []
+        # Tenta pegar um modelo disponível
         try:
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    modelos_disponiveis.append(m.name)
-        except: pass
-
-        modelo_escolhido = modelos_disponiveis[0] if modelos_disponiveis else 'models/gemini-1.5-flash'
-        for pref in ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro']:
-            if pref in modelos_disponiveis:
-                modelo_escolhido = pref
-                break
+            modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            modelo_escolhido = modelos[0]
+            for m in modelos:
+                if 'flash' in m: modelo_escolhido = m; break
+        except:
+            modelo_escolhido = 'models/gemini-1.5-flash'
 
         model = genai.GenerativeModel(modelo_escolhido)
-        response = model.generate_content(prompt_text)
+        response = model.generate_content(prompt)
         return response.text
-
-    except Exception as e_lib:
+    except:
+        # Fallback REST
         try:
-            # Fallback REST
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
             headers = {'Content-Type': 'application/json'}
             response = requests.post(url, headers=headers, data=json.dumps(payload))
             if response.status_code == 200:
                 return response.json()['candidates'][0]['content']['parts'][0]['text']
-            else:
-                return f"❌ Erro IA: {response.text}"
-        except Exception as e:
-            return f"❌ Erro Crítico IA: {e}"
+            return "Erro na IA (REST)"
+        except: return "Erro na IA."
 
 # =========================================
-# AUDITORIA DE QUESTÕES (OPENAI - GPT) - NOVO!
+# AUDITORIA OPENAI (GPT)
 # =========================================
 def auditoria_ia_openai(pergunta, alternativas, correta):
     api_key = st.secrets.get("OPENAI_API_KEY")
-    if not api_key:
-        return "⚠️ OPENAI_API_KEY não configurada no secrets.toml"
-
+    if not api_key: return "⚠️ Chave OPENAI_API_KEY ausente."
     try:
         from openai import OpenAI
         client = OpenAI(api_key=api_key)
-
-        prompt_text = f"""
-        Você é um auditor de qualidade de provas de Jiu-Jitsu.
-        Questão: {pergunta}
-        Opções: A) {alternativas.get('A')}, B) {alternativas.get('B')}, C) {alternativas.get('C')}, D) {alternativas.get('D')}
-        Correta Indicada: {correta}
-        
-        Analise a qualidade, ortografia e se o gabarito está correto. Seja breve.
-        """
-
-        response = client.chat.completions.create(
-            model="gpt-4o-mini", # Modelo rápido e barato
-            messages=[
-                {"role": "system", "content": "Você é um assistente útil."},
-                {"role": "user", "content": prompt_text}
-            ]
-        )
+        prompt = f"Audite esta questão de BJJ:\n{pergunta}\nOpções: {alternativas}\nCorreta: {correta}"
+        response = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role":"user", "content":prompt}])
         return response.choices[0].message.content
     except Exception as e:
-        return f"❌ Erro OpenAI: {e}"
+        if "quota" in str(e): return "❌ Sem saldo na OpenAI."
+        return f"Erro GPT: {e}"
 
 # =========================================
 # DEMAIS FUNÇÕES GERAIS
@@ -277,7 +254,7 @@ def gerar_qrcode(codigo):
     except: return None
 
 # =========================================
-# GERADOR DE PDF
+# GERADOR DE PDF (LAYOUT MODELO FIEL)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
@@ -287,13 +264,15 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
             try: return txt.encode('latin-1', 'replace').decode('latin-1')
             except: return str(txt)
 
-        pdf = FPDF("L", "mm", "A4")
+        pdf = FPDF("L", "mm", "A4") # A4 Paisagem (297x210)
         pdf.add_page()
         
+        # Cores (Dourado e Branco)
         C_BRANCO = (255, 255, 255)
         C_DOURADO = (218, 165, 32)
         C_FUNDO = (14, 45, 38) 
 
+        # 1. Fundo
         fundo_path = None
         if os.path.exists("assets/fundo_certificado.jpg"): fundo_path = "assets/fundo_certificado.jpg"
         elif os.path.exists("assets/fundo_certificado.png"): fundo_path = "assets/fundo_certificado.png"
@@ -307,6 +286,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
             pdf.set_line_width(2)
             pdf.rect(10,10,277,190)
 
+        # 2. Fonte Assinatura
         font_assinatura = "Helvetica"
         if os.path.exists("assets/Allura-Regular.ttf"):
             try:
@@ -318,78 +298,99 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
                     font_assinatura = 'Allura'
                 except: pass
 
+        # 3. Cabeçalho (Logo e Título)
         pdf.set_y(35)
-        if os.path.exists("assets/logo.png"):
-             pdf.image("assets/logo.png", x=128, y=15, w=40)
+        # Se tiver logo separado, descomente:
+        # if os.path.exists("assets/logo.png"): pdf.image("assets/logo.png", x=128, y=15, w=40)
 
-        pdf.set_y(60)
-        pdf.set_font("Helvetica", "B", 24)
+        pdf.set_y(55)
+        pdf.set_font("Helvetica", "B", 26)
         pdf.set_text_color(*C_DOURADO)
         pdf.cell(0, 10, limpa("CERTIFICADO DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
         
-        pdf.ln(10)
+        # 4. Texto Introdutório
+        pdf.ln(12)
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*C_BRANCO)
         pdf.cell(0, 10, limpa("Certificamos que o aluno(a)"), ln=True, align="C")
 
+        # 5. NOME DO ALUNO (Com Auto-Resize)
         pdf.ln(2)
         nome_final = limpa(usuario_nome.upper().strip())
-        sz = 42
-        pdf.set_font("Helvetica", "B", sz)
-        while pdf.get_string_width(nome_final) > 250 and sz > 12:
-            sz -= 2
-            pdf.set_font("Helvetica", "B", sz)
+        
+        tamanho_fonte = 42 # Tamanho máximo
+        pdf.set_font("Helvetica", "B", tamanho_fonte)
+        
+        # Reduz se for maior que a largura útil (250mm)
+        while pdf.get_string_width(nome_final) > 250 and tamanho_fonte > 12:
+            tamanho_fonte -= 2
+            pdf.set_font("Helvetica", "B", tamanho_fonte)
+            
         pdf.set_text_color(*C_DOURADO)
-        pdf.cell(0, 18, nome_final, ln=True, align="C")
+        pdf.cell(0, 20, nome_final, ln=True, align="C")
 
+        # 6. Texto de Aprovação
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpa("foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"), ln=True, align="C")
+        texto = "foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"
+        pdf.cell(0, 10, limpa(texto), ln=True, align="C")
         
+        # 7. Nome da Faixa
         pdf.ln(2)
         pdf.set_font("Helvetica", "B", 36)
         cor_fx = get_cor_faixa(faixa)
         if sum(cor_fx) < 100: pdf.set_text_color(255, 255, 255)
         else: pdf.set_text_color(*cor_fx)
-        pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
+        
+        pdf.cell(0, 20, limpa(faixa.upper()), ln=True, align="C")
 
+        # 8. Rodapé (Data, Código, Assinatura, QR)
         y_rodape = 160
+        
+        # Esquerda: Data
         pdf.set_xy(30, y_rodape)
         pdf.set_font("Helvetica", "", 12)
         pdf.set_text_color(200, 200, 200)
         dt_txt = datetime.now().strftime('%d/%m/%Y')
         pdf.cell(60, 6, limpa(f"Data de Emissão: {dt_txt}"), ln=True, align="L")
         
-        pdf.set_x(30)
+        # Código
+        pdf.set_xy(30, y_rodape + 6)
         pdf.set_font("Courier", "", 9)
         pdf.cell(60, 5, f"Ref: {codigo}", align="L")
 
+        # Direita: Assinatura
         x_ass = 220 
         pdf.set_xy(x_ass - 40, y_rodape - 10)
         
-        if font_assinatura == 'Allura': pdf.set_font('Allura', "", 30)
-        else: pdf.set_font("Helvetica", "I", 20)
+        if font_assinatura == 'Allura':
+            pdf.set_font('Allura', "", 32)
+        else:
+            pdf.set_font("Helvetica", "I", 24)
             
         pdf.set_text_color(*C_DOURADO)
         pdf.cell(80, 10, limpa(professor), ln=True, align="C")
         
+        # Linha
         pdf.set_xy(x_ass - 35, y_rodape + 2)
         pdf.set_draw_color(255, 255, 255)
         pdf.set_line_width(0.5)
-        pdf.line(x_ass - 35, y_rodape + 2, x_ass + 35, y_rodape + 2)
+        pdf.line(x_ass - 35, y_rodape + 2, x_ass + 45, y_rodape + 2)
         
+        # Cargo
         pdf.set_xy(x_ass - 40, y_rodape + 4)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(200, 200, 200)
         pdf.cell(80, 5, limpa("Professor(a) Responsável"), align="C")
 
+        # Centro: QR Code
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
             pdf.image(qr_path, x=136, y=y_rodape, w=25)
             pdf.set_xy(128, y_rodape + 26)
             pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(100, 100, 100)
+            pdf.set_text_color(150, 150, 150)
             pdf.cell(40, 4, limpa("Autenticidade"), align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
