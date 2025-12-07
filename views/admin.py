@@ -13,7 +13,7 @@ try:
 except ImportError:
     def render_dashboard_geral(): st.warning("Dashboard não encontrado.")
 
-# Importa utils
+# Importa utils com tratamento de erro
 try:
     from utils import (
         carregar_todas_questoes, 
@@ -21,8 +21,8 @@ try:
         fazer_upload_midia, 
         normalizar_link_video, 
         verificar_duplicidade_ia,
-        auditoria_ia_questao,   
-        auditoria_ia_openai,    
+        auditoria_ia_questao,   # Gemini
+        auditoria_ia_openai,    # GPT
         IA_ATIVADA 
     )
 except ImportError:
@@ -46,7 +46,7 @@ FAIXAS_COMPLETAS = [
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
 
-# Mapeamento para exibição
+# Mapeamento para exibição bonita vs valor no banco
 TIPO_MAP = {
     "Aluno(a)": "aluno",
     "Professor(a)": "professor",
@@ -58,7 +58,7 @@ LISTA_TIPOS_DISPLAY = list(TIPO_MAP.keys())
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS
+# GESTÃO DE USUÁRIOS (TAB INTERNA)
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
@@ -114,6 +114,7 @@ def gestao_usuarios_tab():
     sel = st.selectbox("Selecione o usuário:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
     
     if sel:
+        # Busca vínculos atuais
         vinculo_equipe_id = None
         vinculo_prof_id = None
         doc_vinculo_id = None
@@ -133,6 +134,7 @@ def gestao_usuarios_tab():
                 d_vinc = vincs[0].to_dict()
                 vinculo_equipe_id = d_vinc.get('equipe_id')
 
+        # --- FORMULÁRIO ---
         with st.form(f"edt_{sel['id']}"):
             st.markdown("##### 👤 Dados Pessoais")
             c1, c2 = st.columns(2)
@@ -168,14 +170,16 @@ def gestao_usuarios_tab():
             st.markdown("##### 🥋 Perfil e Vínculos")
             p1, p2 = st.columns(2)
             
-            tipo_banco = sel.get('tipo_usuario', 'aluno')
-            tipo_display = TIPO_MAP_INV.get(tipo_banco, "Aluno(a)")
+            # Tipo
+            tipo_atual_banco = sel.get('tipo_usuario', 'aluno')
+            tipo_atual_display = TIPO_MAP_INV.get(tipo_atual_banco, "Aluno(a)")
             idx_tipo = 0
-            if tipo_display in LISTA_TIPOS_DISPLAY:
-                idx_tipo = LISTA_TIPOS_DISPLAY.index(tipo_display)
+            if tipo_atual_display in LISTA_TIPOS_DISPLAY:
+                idx_tipo = LISTA_TIPOS_DISPLAY.index(tipo_atual_display)
             tipo_sel_display = p1.selectbox("Tipo:", LISTA_TIPOS_DISPLAY, index=idx_tipo)
             tipo_sel_valor = TIPO_MAP[tipo_sel_display]
             
+            # Faixa (PROTEÇÃO CONTRA ERRO DE ATRIBUTO)
             idx_fx = 0
             faixa_banco = str(sel.get('faixa_atual', 'Branca') or 'Branca')
             for i, f in enumerate(FAIXAS_COMPLETAS):
@@ -211,15 +215,18 @@ def gestao_usuarios_tab():
             st.markdown("##### 🔒 Segurança")
             pwd = st.text_input("Nova Senha (opcional):", type="password")
             
+            # BOTÃO DE SUBMIT (DENTRO DO FORM - CORREÇÃO CRUCIAL)
             submit_btn = st.form_submit_button("💾 Salvar Todas as Alterações", type="primary")
 
+        # Lógica de processamento
         if submit_btn:
             upd = {
                 "nome": nm.upper(), "email": email.lower().strip(), "cpf": cpf,
                 "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
                 "cep": cep, "logradouro": logr.upper(), "numero": num, "complemento": comp.upper(),
                 "bairro": bairro.upper(), "cidade": cid.upper(), "uf": uf.upper(),
-                "tipo_usuario": tipo_sel_valor, "faixa_atual": fx
+                "tipo_usuario": tipo_sel_valor, 
+                "faixa_atual": fx
             }
             if pwd: 
                 upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
@@ -257,14 +264,16 @@ def gestao_questoes_tab():
     user = st.session_state.usuario
     
     user_tipo = str(user.get("tipo_usuario", user.get("tipo", ""))).lower()
-    if user_tipo not in ["admin", "professor"]: st.error("Acesso negado."); return
+    if user_tipo not in ["admin", "professor"]:
+        st.error("Acesso negado."); return
 
     titulos = ["📚 Listar/Editar", "➕ Adicionar Nova", "🔎 Minhas Submissões"]
-    if user_tipo == "admin": titulos.append("⏳ Aprovações (Admin)")
+    if user_tipo == "admin":
+        titulos.append("⏳ Aprovações (Admin)")
     
     tabs = st.tabs(titulos)
 
-    # --- LISTAR ---
+    # --- ABA 1: LISTAR ---
     with tabs[0]:
         q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         c1, c2 = st.columns(2)
@@ -321,7 +330,6 @@ def gestao_questoes_tab():
                             up_vid = c_vid.file_uploader("Novo Vídeo (MP4):", type=["mp4","mov"], key=f"u_v_{q['id']}")
                             url_v_at = q.get('url_video','')
                             url_v_manual = c_vid.text_input("Ou Link Externo:", value=url_v_at)
-                            
                             c1, c2 = st.columns(2)
                             dif = c1.selectbox("Nível:", NIVEIS_DIFICULDADE, index=NIVEIS_DIFICULDADE.index(q.get('dificuldade',1)))
                             cat = c2.text_input("Categoria:", value=q.get('categoria','Geral'))
@@ -354,9 +362,11 @@ def gestao_questoes_tab():
                                         "pergunta": perg, "dificuldade": dif, "categoria": cat,
                                         "url_imagem": fin_img, "url_video": fin_vid,
                                         "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
-                                        "resposta_correta": corr, "status": novo_status,
+                                        "resposta_correta": corr,
+                                        "status": novo_status,
                                         "feedback_admin": firestore.DELETE_FIELD 
                                     }
+                                    
                                     if justificativa_edicao:
                                         dados_upd["ultima_justificativa"] = justificativa_edicao
 
@@ -430,7 +440,35 @@ def gestao_questoes_tab():
             if user_tipo == "admin":
                 st.markdown("#### 📥 Importação em Massa")
                 st.info("Carregue Excel ou CSV.")
-                # (CSV Omitido para brevidade)
+                col_info, col_btn = st.columns([3, 1])
+                df_modelo = pd.DataFrame({
+                    "pergunta": ["Exemplo 1"], "alt_a": ["A"], "alt_b": ["B"], "alt_c": ["C"], "alt_d": ["D"],
+                    "correta": ["A"], "dificuldade": [1], "categoria": ["Geral"]
+                })
+                csv_buffer = io.StringIO()
+                df_modelo.to_csv(csv_buffer, index=False, sep=';')
+                col_btn.download_button("⬇️ Modelo", data=csv_buffer.getvalue(), file_name="modelo.csv", mime="text/csv")
+                
+                arquivo = st.file_uploader("Arquivo:", type=["csv", "xlsx"])
+                if arquivo and st.button("🚀 Importar"):
+                     # Lógica real de importação
+                     try:
+                         if arquivo.name.endswith('.csv'):
+                             try: df = pd.read_csv(arquivo, sep=';')
+                             except: df = pd.read_csv(arquivo, sep=',')
+                         else: df = pd.read_excel(arquivo)
+                         
+                         prog = st.progress(0)
+                         for i, row in df.iterrows():
+                             db.collection('questoes').add({
+                                 "pergunta": str(row['pergunta']), "status": "aprovada",
+                                 "alternativas": {"A": str(row['alt_a']), "B": str(row['alt_b']), "C": str(row.get('alt_c','')), "D": str(row.get('alt_d',''))},
+                                 "resposta_correta": str(row['correta']), "dificuldade": int(row.get('dificuldade',1)),
+                                 "categoria": str(row.get('categoria','Geral')), "criado_por": f"{user.get('nome')} (Import)"
+                             })
+                             prog.progress((i+1)/len(df))
+                         st.success("Importado!"); time.sleep(2); st.rerun()
+                     except Exception as e: st.error(f"Erro: {e}")
             else: st.warning("Restrito a Admin.")
 
     # --- ABA 3: MINHAS SUBMISSÕES ---
@@ -440,6 +478,7 @@ def gestao_questoes_tab():
         minhas = list(db.collection('questoes').where('criado_por', '==', nome_atual).stream())
         if not minhas: st.info("Você não enviou questões.")
         else:
+            st.caption(f"Total: {len(minhas)}")
             for doc in minhas:
                 q = doc.to_dict()
                 stt = q.get('status', 'aprovada')
@@ -500,7 +539,8 @@ def gestao_questoes_tab():
                             db.collection('questoes').document(doc.id).update({"status": "aprovada"})
                             st.toast("Aprovada!"); time.sleep(1); st.rerun()
                         
-                        with c2.expander("❌ Solicitar Correção / Rejeitar"):
+                        with c2.expander("🤖 Auditoria & Correção"):
+                            # BOTÕES DE IA
                             col_gem, col_gpt = st.columns(2)
                             if col_gem.button("Gemini", key=f"gem_{doc.id}", use_container_width=True):
                                 with st.spinner("Analisando..."):
@@ -513,7 +553,9 @@ def gestao_questoes_tab():
                                     st.info(res)
 
                             st.markdown("---")
+                            # CAMPO DE JUSTIFICATIVA OBRIGATÓRIO (FORA DO EXPANDER PARA VISIBILIDADE)
                             fb_txt = st.text_area("Justificativa (Obrigatória) *", key=f"fb_{doc.id}", height=80)
+                            
                             if st.button("Enviar para Correção", key=f"send_fb_{doc.id}"):
                                 if not fb_txt.strip():
                                     st.error("⚠️ Escreva a justificativa!")
@@ -655,61 +697,69 @@ def gestao_exame_de_faixa_route():
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
         
         st.write(""); st.subheader("Lista de Alunos(as)")
-        try:
-            alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
-            for doc in alunos_ref:
-                d = doc.to_dict(); d['id'] = doc.id
-                c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
-                c1.write(f"**{d.get('nome')}**")
-                c2.write(d.get('faixa_atual'))
-                
-                idx = FAIXAS_COMPLETAS.index(d.get('faixa_exame','')) if d.get('faixa_exame') in FAIXAS_COMPLETAS else 0
-                fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_s_{d['id']}", label_visibility="collapsed")
-                
-                hab = d.get('exame_habilitado', False)
-                status = d.get('status_exame', 'pendente')
-                
-                # --- LÓGICA DE STATUS APRIMORADA ---
-                msg_status = "⚪ Não autorizado"
-                
-                if status == 'aprovado': 
-                    msg_status = "🏆 Aprovado"
-                elif status == 'reprovado': 
-                    msg_status = "🔴 Reprovado"
-                elif status == 'bloqueado': 
-                    msg_status = "⛔ Bloqueado"
-                elif status == 'em_andamento':
-                    msg_status = "🟡 Em Andamento"
-                elif hab:
-                    try:
-                        raw_fim = d.get('exame_fim')
-                        if raw_fim:
-                            dt_fim_obj = datetime.fromisoformat(raw_fim.replace('Z', ''))
-                            if datetime.now() > dt_fim_obj:
-                                msg_status = "⏰ Expirado"
-                            else:
-                                msg_status = f"🟢 Liberado até {dt_fim_obj.strftime('%d/%m %H:%M')}"
-                        else:
-                            msg_status = "🟢 Liberado"
-                    except:
-                        msg_status = "🟢 Liberado"
-
-                c4.write(msg_status)
-                
-                if hab:
-                    if c5.button("⛔", key=f"blk_{d['id']}"):
-                        db.collection('usuarios').document(d['id']).update({"exame_habilitado": False, "status_exame": "pendente"})
-                        st.rerun()
-                else:
-                    if c5.button("✅", key=f"lib_{d['id']}"):
-                        db.collection('usuarios').document(d['id']).update({
-                            "exame_habilitado": True, "faixa_exame": fx_sel,
-                            "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
-                            "status_exame": "pendente", "status_exame_em_andamento": False
-                        })
-                        st.success("Liberado!"); time.sleep(0.5); st.rerun()
-                st.divider()
-        except: st.error("Erro lista alunos.")
+        # REMOVIDO O TRY GERAL
+        alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
+        lista_alunos = []
+        for doc in alunos_ref:
+            d = doc.to_dict(); d['id'] = doc.id
+            
+            # PROTEÇÃO CONTRA CAMPOS VAZIOS
+            nome = d.get('nome', 'Sem Nome')
+            faixa = d.get('faixa_atual', '-')
+            
+            nome_eq = "Sem Equipe"
+            try:
+                # Tenta buscar equipe (opcional)
+                vinculos = list(db.collection('alunos').where('usuario_id', '==', d['id']).limit(1).stream())
+                if vinculos:
+                    eq_id = vinculos[0].to_dict().get('equipe_id')
+                    if eq_id:
+                        eq_doc = db.collection('equipes').document(eq_id).get()
+                        if eq_doc.exists: nome_eq = eq_doc.to_dict().get('nome', 'Sem Nome')
+            except: pass
+            
+            # Renderiza linha
+            c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
+            c1.write(f"**{nome}**")
+            c2.write(nome_eq)
+            
+            fx_banco = d.get('faixa_exame')
+            idx = FAIXAS_COMPLETAS.index(fx_banco) if fx_banco in FAIXAS_COMPLETAS else 0
+            fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_s_{d['id']}", label_visibility="collapsed")
+            
+            hab = d.get('exame_habilitado', False)
+            status = d.get('status_exame', 'pendente')
+            
+            msg_status = "⚪ Não autorizado"
+            if status == 'aprovado': msg_status = "🏆 Aprovado"
+            elif status == 'reprovado': msg_status = "🔴 Reprovado"
+            elif status == 'bloqueado': msg_status = "⛔ Bloqueado"
+            elif status == 'em_andamento': msg_status = "🟡 Em Andamento"
+            elif hab:
+                try:
+                    raw_fim = d.get('exame_fim')
+                    if raw_fim:
+                        dt_fim = datetime.fromisoformat(str(raw_fim).replace('Z', ''))
+                        if datetime.now() > dt_fim: msg_status = "⏰ Expirado"
+                        else: msg_status = f"🟢 Até {dt_fim.strftime('%d/%m %H:%M')}"
+                    else: msg_status = "🟢 Liberado"
+                except: msg_status = "🟢 Liberado"
+            
+            c4.write(msg_status)
+            
+            if hab:
+                if c5.button("⛔", key=f"blk_{d['id']}"):
+                    db.collection('usuarios').document(d['id']).update({"exame_habilitado": False, "status_exame": "pendente"})
+                    st.rerun()
+            else:
+                if c5.button("✅", key=f"lib_{d['id']}"):
+                    db.collection('usuarios').document(d['id']).update({
+                        "exame_habilitado": True, "faixa_exame": fx_sel,
+                        "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
+                        "status_exame": "pendente", "status_exame_em_andamento": False
+                    })
+                    st.success("Liberado!"); time.sleep(0.5); st.rerun()
+            st.divider()
 
 # =========================================
 # CONTROLADOR PRINCIPAL
