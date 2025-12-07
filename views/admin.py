@@ -50,6 +50,10 @@ def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 # GESTÃO DE USUÁRIOS
 # =========================================
 def gestao_usuarios_tab():
+# --- DEBUG TEMPORÁRIO ---
+    st.write("Segredos encontrados:", st.secrets.keys())
+# ------------------------
+  
     db = get_db()
     users_ref = list(db.collection('usuarios').stream())
     users = [d.to_dict() | {"id": d.id} for d in users_ref]
