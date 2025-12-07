@@ -118,15 +118,15 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (GENAI LIBRARY + REST FALLBACK)
+# 8. AUDITORIA DE QUESTÕES (AUTO-DISCOVERY)
 # =========================================
 def auditoria_ia_questao(pergunta, alternativas, correta):
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
         return "⚠️ Chave de API não configurada no secrets.toml."
 
-    # Prompt Otimizado
-    prompt = f"""
+    # PROMPT
+    prompt_text = f"""
     Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
     Enunciado: {pergunta}
     Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
@@ -136,44 +136,56 @@ def auditoria_ia_questao(pergunta, alternativas, correta):
     Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
     """
 
-    log_erros = []
-    # Lista de modelos modernos (V1.5 é o padrão atual)
-    modelos = ['gemini-1.5-flash', 'gemini-1.5-pro']
-
-    # 1. TENTATIVA VIA BIBLIOTECA (PREFERENCIAL)
+    # 1. TENTATIVA VIA BIBLIOTECA (AUTO-DETECTAR MODELO)
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        for nome_modelo in modelos:
+        # Lista modelos disponíveis para a sua chave
+        modelos_disponiveis = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        
+        # Escolhe o melhor disponível
+        modelo_escolhido = None
+        for pref in ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro', 'models/gemini-1.0-pro']:
+            if pref in modelos_disponiveis:
+                modelo_escolhido = pref
+                break
+        
+        # Se não achou nenhum preferido, pega o primeiro da lista
+        if not modelo_escolhido and modelos_disponiveis:
+            modelo_escolhido = modelos_disponiveis[0]
+
+        if modelo_escolhido:
+            model = genai.GenerativeModel(modelo_escolhido)
+            response = model.generate_content(prompt_text)
+            return response.text
+        else:
+            # Se a lista vier vazia, tenta forçar via REST
+            raise Exception("Nenhum modelo disponível encontrado via list_models.")
+
+    except Exception as e_lib:
+        # 2. FALLBACK VIA API REST (V1 - ESTÁVEL)
+        # Se a biblioteca falhar, tenta endpoint direto v1beta e v1
+        print(f"Erro Lib IA: {e_lib}. Tentando REST...")
+        
+        endpoints = [
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
+            "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
+        ]
+
+        for url in endpoints:
             try:
-                model = genai.GenerativeModel(nome_modelo)
-                response = model.generate_content(prompt)
-                return response.text
-            except Exception as e:
-                log_erros.append(f"Lib {nome_modelo}: {str(e)}")
-                continue
-    except ImportError:
-        log_erros.append("Biblioteca google-generativeai não instalada.")
+                full_url = f"{url}?key={api_key}"
+                payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+                headers = {'Content-Type': 'application/json'}
+                response = requests.post(full_url, headers=headers, data=json.dumps(payload))
+                
+                if response.status_code == 200:
+                    return response.json()['candidates'][0]['content']['parts'][0]['text']
+            except: continue
 
-    # 2. TENTATIVA VIA API REST (FALLBACK)
-    for nome_modelo in modelos:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{nome_modelo}:generateContent?key={api_key}"
-            payload = {"contents": [{"parts": [{"text": prompt}]}]}
-            headers = {'Content-Type': 'application/json'}
-            
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
-            
-            if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            else:
-                log_erros.append(f"REST {nome_modelo}: {response.status_code} - {response.text}")
-        except Exception as e:
-            log_erros.append(f"REST Exception {nome_modelo}: {str(e)}")
-
-    # SE TUDO FALHAR
-    return f"❌ Falha Geral na IA.\nDetalhes:\n" + "\n".join(log_erros)
+        return f"❌ IA Indisponível. (Erro: {e_lib})"
 
 # =========================================
 # DEMAIS FUNÇÕES GERAIS
@@ -359,11 +371,11 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
 
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
-            pdf.image(qr_path, x=136, y=160, w=25)
-            pdf.set_xy(128, 186)
+            pdf.image(qr_path, x=136, y=y_rodape, w=25)
+            pdf.set_xy(128, y_rodape + 26)
             pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(150, 150, 150)
-            pdf.cell(40, 4, limpa("Verificar Autenticidade"), align="C")
+            pdf.set_text_color(100, 100, 100)
+            pdf.cell(40, 4, limpa("Autenticidade"), align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
 
