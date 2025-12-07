@@ -9,6 +9,7 @@ import unicodedata
 import random
 import uuid
 import qrcode
+import json
 from urllib.parse import quote
 from datetime import datetime
 from email.mime.text import MIMEText
@@ -117,49 +118,43 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (MULTI-MODELO)
+# 8. AUDITORIA DE QUESTÕES (VIA API REST - SUPER COMPATÍVEL)
 # =========================================
-try:
-    import google.generativeai as genai
-    
-    def auditoria_ia_questao(pergunta, alternativas, correta):
-        api_key = st.secrets.get("GEMINI_API_KEY")
-        if not api_key:
-            return "⚠️ Chave de API não configurada no secrets.toml."
+def auditoria_ia_questao(pergunta, alternativas, correta):
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        return "⚠️ Chave de API não configurada."
 
-        try:
-            genai.configure(api_key=api_key)
-            
-            # Lista de modelos para tentar (do mais novo para o mais antigo)
-            modelos = ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.0-pro']
-            
-            prompt = f"""
-            Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
-            Enunciado: {pergunta}
-            Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
-            Gabarito: {correta}
-            
-            Verifique erros de português, lógica e consistência técnica.
-            Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
-            """
+    try:
+        # Usa a API REST direta para evitar conflitos de versão de biblioteca
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
+        
+        prompt_text = f"""
+        Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
+        Enunciado: {pergunta}
+        Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
+        Gabarito: {correta}
+        
+        Verifique erros de português, lógica e consistência técnica.
+        Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
+        """
 
-            erros = []
-            for nome_modelo in modelos:
-                try:
-                    model = genai.GenerativeModel(nome_modelo)
-                    response = model.generate_content(prompt)
-                    return response.text
-                except Exception as e:
-                    erros.append(f"{nome_modelo}: {str(e)}")
-                    continue
-            
-            return f"❌ Erro em todos os modelos: {'; '.join(erros)}"
+        payload = {
+            "contents": [{
+                "parts": [{"text": prompt_text}]
+            }]
+        }
+        
+        headers = {'Content-Type': 'application/json'}
+        response = requests.post(url, headers=headers, data=json.dumps(payload))
+        
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return f"Erro API Google: {response.status_code} - {response.text}"
 
-        except Exception as e:
-            return f"Erro Crítico IA: {e}"
-
-except ImportError:
-    def auditoria_ia_questao(p, a, c): return "Biblioteca google-generativeai não instalada."
+    except Exception as e:
+        return f"Erro na requisição IA: {e}"
 
 # =========================================
 # DEMAIS FUNÇÕES GERAIS
@@ -269,7 +264,6 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         font_assinatura = "Helvetica"
         if os.path.exists("assets/Allura-Regular.ttf"):
             try:
-                # Remove uni=True para compatibilidade com fpdf
                 pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True)
                 font_assinatura = 'Allura'
             except:
