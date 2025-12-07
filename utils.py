@@ -118,14 +118,13 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (AUTO-DISCOVERY)
+# AUDITORIA DE QUESTÕES (GEMINI)
 # =========================================
 def auditoria_ia_questao(pergunta, alternativas, correta):
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
         return "⚠️ Chave de API não configurada no secrets.toml."
 
-    # PROMPT
     prompt_text = f"""
     Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
     Enunciado: {pergunta}
@@ -136,56 +135,72 @@ def auditoria_ia_questao(pergunta, alternativas, correta):
     Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
     """
 
-    # 1. TENTATIVA VIA BIBLIOTECA (AUTO-DETECTAR MODELO)
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
         
-        # Lista modelos disponíveis para a sua chave
-        modelos_disponiveis = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        
-        # Escolhe o melhor disponível
-        modelo_escolhido = None
-        for pref in ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro', 'models/gemini-1.0-pro']:
+        modelos_disponiveis = []
+        try:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    modelos_disponiveis.append(m.name)
+        except: pass
+
+        modelo_escolhido = modelos_disponiveis[0] if modelos_disponiveis else 'models/gemini-1.5-flash'
+        for pref in ['models/gemini-1.5-flash', 'models/gemini-1.5-pro', 'models/gemini-pro']:
             if pref in modelos_disponiveis:
                 modelo_escolhido = pref
                 break
-        
-        # Se não achou nenhum preferido, pega o primeiro da lista
-        if not modelo_escolhido and modelos_disponiveis:
-            modelo_escolhido = modelos_disponiveis[0]
 
-        if modelo_escolhido:
-            model = genai.GenerativeModel(modelo_escolhido)
-            response = model.generate_content(prompt_text)
-            return response.text
-        else:
-            # Se a lista vier vazia, tenta forçar via REST
-            raise Exception("Nenhum modelo disponível encontrado via list_models.")
+        model = genai.GenerativeModel(modelo_escolhido)
+        response = model.generate_content(prompt_text)
+        return response.text
 
     except Exception as e_lib:
-        # 2. FALLBACK VIA API REST (V1 - ESTÁVEL)
-        # Se a biblioteca falhar, tenta endpoint direto v1beta e v1
-        print(f"Erro Lib IA: {e_lib}. Tentando REST...")
+        try:
+            # Fallback REST
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            if response.status_code == 200:
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            else:
+                return f"❌ Erro IA: {response.text}"
+        except Exception as e:
+            return f"❌ Erro Crítico IA: {e}"
+
+# =========================================
+# AUDITORIA DE QUESTÕES (OPENAI - GPT) - NOVO!
+# =========================================
+def auditoria_ia_openai(pergunta, alternativas, correta):
+    api_key = st.secrets.get("OPENAI_API_KEY")
+    if not api_key:
+        return "⚠️ OPENAI_API_KEY não configurada no secrets.toml"
+
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+
+        prompt_text = f"""
+        Você é um auditor de qualidade de provas de Jiu-Jitsu.
+        Questão: {pergunta}
+        Opções: A) {alternativas.get('A')}, B) {alternativas.get('B')}, C) {alternativas.get('C')}, D) {alternativas.get('D')}
+        Correta Indicada: {correta}
         
-        endpoints = [
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent",
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent",
-            "https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent"
-        ]
+        Analise a qualidade, ortografia e se o gabarito está correto. Seja breve.
+        """
 
-        for url in endpoints:
-            try:
-                full_url = f"{url}?key={api_key}"
-                payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
-                headers = {'Content-Type': 'application/json'}
-                response = requests.post(full_url, headers=headers, data=json.dumps(payload))
-                
-                if response.status_code == 200:
-                    return response.json()['candidates'][0]['content']['parts'][0]['text']
-            except: continue
-
-        return f"❌ IA Indisponível. (Erro: {e_lib})"
+        response = client.chat.completions.create(
+            model="gpt-4o-mini", # Modelo rápido e barato
+            messages=[
+                {"role": "system", "content": "Você é um assistente útil."},
+                {"role": "user", "content": prompt_text}
+            ]
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"❌ Erro OpenAI: {e}"
 
 # =========================================
 # DEMAIS FUNÇÕES GERAIS
