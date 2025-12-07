@@ -741,7 +741,7 @@ def gestao_exame_de_faixa_route():
                     if raw_fim:
                         dt_fim = datetime.fromisoformat(str(raw_fim).replace('Z', ''))
                         if datetime.now() > dt_fim: msg_status = "⏰ Expirado"
-                        else: msg_status = f"🟢 Exame autorizado Até {dt_fim.strftime('%d/%m %H:%M')}"
+                        else: msg_status = f"🟢 Exame autorizado até {dt_fim.strftime('%d/%m %H:%M')}"
                     else: msg_status = "🟢 Liberado"
                 except: msg_status = "🟢 Liberado"
             
