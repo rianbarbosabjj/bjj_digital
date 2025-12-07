@@ -118,57 +118,62 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (VIA API REST - GEMINI 1.5)
+# 8. AUDITORIA DE QUESTÕES (GENAI LIBRARY + REST FALLBACK)
 # =========================================
 def auditoria_ia_questao(pergunta, alternativas, correta):
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
-        return "⚠️ Chave de API não configurada."
+        return "⚠️ Chave de API não configurada no secrets.toml."
 
-    # Lista de modelos para tentar (do mais rápido para o mais potente)
-    # gemini-1.5-flash é o padrão atual gratuito e rápido
-    modelos_para_tentar = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
+    # Prompt Otimizado
+    prompt = f"""
+    Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
+    Enunciado: {pergunta}
+    Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
+    Gabarito: {correta}
+    
+    Verifique erros de português, lógica e consistência técnica.
+    Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
+    """
 
-    last_error = ""
+    log_erros = []
+    # Lista de modelos modernos (V1.5 é o padrão atual)
+    modelos = ['gemini-1.5-flash', 'gemini-1.5-pro']
 
-    for modelo in modelos_para_tentar:
+    # 1. TENTATIVA VIA BIBLIOTECA (PREFERENCIAL)
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        
+        for nome_modelo in modelos:
+            try:
+                model = genai.GenerativeModel(nome_modelo)
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception as e:
+                log_erros.append(f"Lib {nome_modelo}: {str(e)}")
+                continue
+    except ImportError:
+        log_erros.append("Biblioteca google-generativeai não instalada.")
+
+    # 2. TENTATIVA VIA API REST (FALLBACK)
+    for nome_modelo in modelos:
         try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
-            
-            prompt_text = f"""
-            Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
-            Enunciado: {pergunta}
-            Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
-            Gabarito: {correta}
-            
-            Verifique erros de português, lógica e consistência técnica.
-            Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
-            """
-
-            payload = {
-                "contents": [{
-                    "parts": [{"text": prompt_text}]
-                }]
-            }
-            
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{nome_modelo}:generateContent?key={api_key}"
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
             headers = {'Content-Type': 'application/json'}
+            
             response = requests.post(url, headers=headers, data=json.dumps(payload))
             
             if response.status_code == 200:
-                # Sucesso! Retorna a resposta
                 return response.json()['candidates'][0]['content']['parts'][0]['text']
             else:
-                # Erro neste modelo, tenta o próximo
-                erro_json = response.json()
-                last_error = f"Erro {modelo}: {erro_json.get('error', {}).get('message', 'Unknown')}"
-                continue
-
+                log_erros.append(f"REST {nome_modelo}: {response.status_code} - {response.text}")
         except Exception as e:
-            last_error = f"Erro req: {e}"
-            continue
-            
-    # Se saiu do loop, todos falharam
-    return f"❌ Falha na IA: {last_error}"
+            log_erros.append(f"REST Exception {nome_modelo}: {str(e)}")
+
+    # SE TUDO FALHAR
+    return f"❌ Falha Geral na IA.\nDetalhes:\n" + "\n".join(log_erros)
 
 # =========================================
 # DEMAIS FUNÇÕES GERAIS
@@ -354,11 +359,11 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
 
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
-            pdf.image(qr_path, x=136, y=y_rodape, w=25)
-            pdf.set_xy(128, y_rodape + 26)
+            pdf.image(qr_path, x=136, y=160, w=25)
+            pdf.set_xy(128, 186)
             pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(100, 100, 100)
-            pdf.cell(40, 4, limpa("Autenticidade"), align="C")
+            pdf.set_text_color(150, 150, 150)
+            pdf.cell(40, 4, limpa("Verificar Autenticidade"), align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
 
