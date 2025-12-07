@@ -11,5 +11,4 @@ firebase-admin>=6.0.0
 google-cloud-firestore>=2.0.0
 sentence-transformers
 scikit-learn
-google-generativeai
 google-generativeai>=0.7.0
