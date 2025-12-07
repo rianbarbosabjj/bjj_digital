@@ -706,7 +706,7 @@ def gestao_exame_de_faixa_route():
                 
                 hab = d.get('exame_habilitado', False)
                 status = d.get('status_exame', 'pendente')
-                msg = "🟢 Liberado" if hab else "⚪ Não"
+                msg = "🟢 Liberado até {dt_obj.strftime('%d/%m %H:%M')}" if hab else "⚪ Exame nao autorizado"
                 if status == 'aprovado': msg = "🏆 Aprovado"
                 elif status == 'reprovado': msg = "🔴 Reprovado"
                 
