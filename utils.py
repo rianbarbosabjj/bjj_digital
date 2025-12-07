@@ -94,26 +94,22 @@ try:
         return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
 
     def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.75):
-        # Sempre retorna TUPLA (bool, str) para evitar TypeError
         if not lista_existentes: return False, None
         try:
             model = carregar_modelo_ia()
             embedding_novo = model.encode([nova_pergunta])
             textos_existentes = [str(q.get('pergunta', '')) for q in lista_existentes]
-            
             if not textos_existentes: return False, None
-            
             embeddings_existentes = model.encode(textos_existentes)
             scores = cosine_similarity(embedding_novo, embeddings_existentes)[0]
             max_score = np.max(scores)
             idx_max = np.argmax(scores)
-            
             if max_score >= threshold:
                 return True, f"{textos_existentes[idx_max]} ({max_score*100:.1f}%)"
             return False, None
         except Exception as e:
-            print(f"Erro IA Duplicidade: {e}")
-            return False, None # Retorno seguro em caso de erro
+            print(f"Erro IA: {e}")
+            return False, None
 
 except ImportError:
     IA_ATIVADA = False
@@ -121,7 +117,7 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# AUDITORIA DE QUESTÕES (GEN AI - GEMINI)
+# 8. AUDITORIA DE QUESTÕES (GEN AI - GEMINI BLINDADO)
 # =========================================
 try:
     import google.generativeai as genai
@@ -133,24 +129,38 @@ try:
 
         try:
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
             
-            prompt = f"""
-            Atue como um Mestre de Jiu-Jitsu. Analise esta questão:
-            Enunciado: {pergunta}
-            Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
-            Gabarito: {correta}
+            # TENTA MODELOS EM ORDEM (Se o Flash falhar, tenta o Pro)
+            modelos_tentativa = ['gemini-1.5-flash', 'gemini-pro']
             
-            Verifique:
-            1. Erros de português.
-            2. Se o gabarito faz sentido técnico.
-            3. Ambiguidade.
-            Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
-            """
-            response = model.generate_content(prompt)
-            return response.text
+            erro_msg = ""
+            for nome_modelo in modelos_tentativa:
+                try:
+                    model = genai.GenerativeModel(nome_modelo)
+                    prompt = f"""
+                    Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão de prova teórica:
+                    Enunciado: {pergunta}
+                    Alternativas: 
+                    A) {alternativas.get('A')}
+                    B) {alternativas.get('B')}
+                    C) {alternativas.get('C')}
+                    D) {alternativas.get('D')}
+                    Gabarito: {correta}
+                    
+                    Verifique ortografia, lógica e se o gabarito faz sentido técnico.
+                    Responda em 1 parágrafo curto. Inicie com "✅ Aprovada:" se estiver boa.
+                    """
+                    response = model.generate_content(prompt)
+                    return response.text
+                except Exception as e:
+                    erro_msg = str(e)
+                    continue # Tenta o próximo modelo
+            
+            # Se chegou aqui, nenhum funcionou
+            return f"Erro na IA (Todos os modelos falharam): {erro_msg}"
+            
         except Exception as e:
-            return f"Erro na análise IA: {e}"
+            return f"Erro Config IA: {e}"
 
 except ImportError:
     def auditoria_ia_questao(p, a, c): return "Biblioteca google-generativeai não instalada."
@@ -235,7 +245,7 @@ def gerar_qrcode(codigo):
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
     try:
-        def limpa(txt):
+        def limpar_texto(txt):
             if not txt: return ""
             try: return txt.encode('latin-1', 'replace').decode('latin-1')
             except: return str(txt)
@@ -278,15 +288,15 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_y(60)
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_text_color(*C_DOURADO)
-        pdf.cell(0, 10, limpa("CERTIFICADO DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
+        pdf.cell(0, 10, limpar_texto("CERTIFICADO DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
         
         pdf.ln(10)
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpa("Certificamos que o aluno(a)"), ln=True, align="C")
+        pdf.cell(0, 10, limpar_texto("Certificamos que o aluno(a)"), ln=True, align="C")
 
         pdf.ln(2)
-        nome_final = limpa(usuario_nome.upper().strip())
+        nome_final = limpar_texto(usuario_nome.upper().strip())
         sz = 42
         pdf.set_font("Helvetica", "B", sz)
         while pdf.get_string_width(nome_final) > 250 and sz > 12:
@@ -298,21 +308,21 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpa("foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"), ln=True, align="C")
+        pdf.cell(0, 10, limpar_texto("foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"), ln=True, align="C")
         
         pdf.ln(2)
         pdf.set_font("Helvetica", "B", 36)
         cor_fx = get_cor_faixa(faixa)
-        if sum(cor_fx) < 100: pdf.set_text_color(255,255,255)
+        if sum(cor_fx) < 100: pdf.set_text_color(255, 255, 255)
         else: pdf.set_text_color(*cor_fx)
-        pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
+        pdf.cell(0, 18, limpar_texto(faixa.upper()), ln=True, align="C")
 
         y_rodape = 160
         pdf.set_xy(30, y_rodape)
         pdf.set_font("Helvetica", "", 12)
         pdf.set_text_color(200, 200, 200)
         dt_txt = datetime.now().strftime('%d/%m/%Y')
-        pdf.cell(60, 6, limpa(f"Data de Emissão: {dt_txt}"), ln=True, align="L")
+        pdf.cell(60, 6, limpar_texto(f"Data de Emissão: {dt_txt}"), ln=True, align="L")
         
         pdf.set_x(30)
         pdf.set_font("Courier", "", 9)
@@ -325,7 +335,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         else: pdf.set_font("Helvetica", "I", 20)
             
         pdf.set_text_color(*C_DOURADO)
-        pdf.cell(80, 10, limpa(professor), ln=True, align="C")
+        pdf.cell(80, 10, limpar_texto(professor), ln=True, align="C")
         
         pdf.set_xy(x_ass - 35, y_rodape + 2)
         pdf.set_draw_color(255, 255, 255)
@@ -335,7 +345,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_xy(x_ass - 40, y_rodape + 4)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(200, 200, 200)
-        pdf.cell(80, 5, limpa("Professor Responsável"), align="C")
+        pdf.cell(80, 5, limpar_texto("Professor(a) Responsável"), align="C")
 
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
@@ -343,12 +353,12 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
             pdf.set_xy(128, y_rodape + 26)
             pdf.set_font("Helvetica", "", 7)
             pdf.set_text_color(100, 100, 100)
-            pdf.cell(40, 4, limpa("Autenticidade"), align="C")
+            pdf.cell(40, 4, limpar_texto("Autenticidade"), align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
 
     except Exception as e:
-        print(f"❌ ERRO CRÍTICO NO PDF: {e}")
+        st.error(f"❌ ERRO CRÍTICO NO PDF: {e}")
         return None, None
 
 def verificar_elegibilidade_exame(ud):
