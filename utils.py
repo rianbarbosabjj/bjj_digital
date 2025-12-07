@@ -108,7 +108,7 @@ try:
                 return True, f"{textos_existentes[idx_max]} ({max_score*100:.1f}%)"
             return False, None
         except Exception as e:
-            print(f"Erro IA: {e}")
+            print(f"Erro IA Duplicidade: {e}")
             return False, None
 
 except ImportError:
@@ -117,7 +117,7 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (GEN AI - GEMINI BLINDADO)
+# 8. AUDITORIA DE QUESTÕES (GEN AI - GEMINI ROBUSTO)
 # =========================================
 try:
     import google.generativeai as genai
@@ -130,40 +130,49 @@ try:
         try:
             genai.configure(api_key=api_key)
             
-            # TENTA MODELOS EM ORDEM (Se o Flash falhar, tenta o Pro)
-            modelos_tentativa = ['gemini-1.5-flash', 'gemini-pro']
+            # LISTA DE MODELOS PARA TENTAR (Do mais novo para o mais antigo/estável)
+            modelos_tentativa = [
+                'gemini-1.5-flash',
+                'gemini-1.5-pro',
+                'gemini-1.0-pro', 
+                'gemini-pro'
+            ]
             
-            erro_msg = ""
+            log_erros = []
+            
+            prompt = f"""
+            Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão de prova teórica:
+            Enunciado: {pergunta}
+            Alternativas: 
+            A) {alternativas.get('A')}
+            B) {alternativas.get('B')}
+            C) {alternativas.get('C')}
+            D) {alternativas.get('D')}
+            Gabarito: {correta}
+            
+            Verifique ortografia, lógica e se o gabarito faz sentido técnico.
+            Responda em 1 parágrafo curto. Inicie com "✅ Aprovada:" se estiver boa.
+            """
+
             for nome_modelo in modelos_tentativa:
                 try:
+                    # Tenta instanciar e gerar conteúdo com o modelo atual
                     model = genai.GenerativeModel(nome_modelo)
-                    prompt = f"""
-                    Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão de prova teórica:
-                    Enunciado: {pergunta}
-                    Alternativas: 
-                    A) {alternativas.get('A')}
-                    B) {alternativas.get('B')}
-                    C) {alternativas.get('C')}
-                    D) {alternativas.get('D')}
-                    Gabarito: {correta}
-                    
-                    Verifique ortografia, lógica e se o gabarito faz sentido técnico.
-                    Responda em 1 parágrafo curto. Inicie com "✅ Aprovada:" se estiver boa.
-                    """
                     response = model.generate_content(prompt)
-                    return response.text
+                    return response.text # Se der certo, retorna e sai da função
                 except Exception as e:
-                    erro_msg = str(e)
-                    continue # Tenta o próximo modelo
+                    # Se falhar, guarda o erro e tenta o próximo
+                    log_erros.append(f"{nome_modelo}: {str(e)}")
+                    continue
             
-            # Se chegou aqui, nenhum funcionou
-            return f"Erro na IA (Todos os modelos falharam): {erro_msg}"
+            # Se chegou aqui, todos falharam
+            return f"❌ Falha em todos os modelos IA.\nDetalhes: {'; '.join(log_erros)}"
             
         except Exception as e:
-            return f"Erro Config IA: {e}"
+            return f"Erro Configuração IA: {e}"
 
 except ImportError:
-    def auditoria_ia_questao(p, a, c): return "Biblioteca google-generativeai não instalada."
+    def auditoria_ia_questao(p, a, c): return "Biblioteca Google AI não instalada."
 
 # =========================================
 # DEMAIS FUNÇÕES GERAIS
