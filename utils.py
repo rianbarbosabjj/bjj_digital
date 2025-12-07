@@ -118,43 +118,57 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (VIA API REST - SUPER COMPATÍVEL)
+# 8. AUDITORIA DE QUESTÕES (VIA API REST - GEMINI 1.5)
 # =========================================
 def auditoria_ia_questao(pergunta, alternativas, correta):
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key:
         return "⚠️ Chave de API não configurada."
 
-    try:
-        # Usa a API REST direta para evitar conflitos de versão de biblioteca
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}"
-        
-        prompt_text = f"""
-        Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
-        Enunciado: {pergunta}
-        Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
-        Gabarito: {correta}
-        
-        Verifique erros de português, lógica e consistência técnica.
-        Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
-        """
+    # Lista de modelos para tentar (do mais rápido para o mais potente)
+    # gemini-1.5-flash é o padrão atual gratuito e rápido
+    modelos_para_tentar = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"]
 
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt_text}]
-            }]
-        }
-        
-        headers = {'Content-Type': 'application/json'}
-        response = requests.post(url, headers=headers, data=json.dumps(payload))
-        
-        if response.status_code == 200:
-            return response.json()['candidates'][0]['content']['parts'][0]['text']
-        else:
-            return f"Erro API Google: {response.status_code} - {response.text}"
+    last_error = ""
 
-    except Exception as e:
-        return f"Erro na requisição IA: {e}"
+    for modelo in modelos_para_tentar:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{modelo}:generateContent?key={api_key}"
+            
+            prompt_text = f"""
+            Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
+            Enunciado: {pergunta}
+            Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
+            Gabarito: {correta}
+            
+            Verifique erros de português, lógica e consistência técnica.
+            Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
+            """
+
+            payload = {
+                "contents": [{
+                    "parts": [{"text": prompt_text}]
+                }]
+            }
+            
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            
+            if response.status_code == 200:
+                # Sucesso! Retorna a resposta
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            else:
+                # Erro neste modelo, tenta o próximo
+                erro_json = response.json()
+                last_error = f"Erro {modelo}: {erro_json.get('error', {}).get('message', 'Unknown')}"
+                continue
+
+        except Exception as e:
+            last_error = f"Erro req: {e}"
+            continue
+            
+    # Se saiu do loop, todos falharam
+    return f"❌ Falha na IA: {last_error}"
 
 # =========================================
 # DEMAIS FUNÇÕES GERAIS
