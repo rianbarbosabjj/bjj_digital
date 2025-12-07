@@ -117,7 +117,7 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (GEN AI - GEMINI ROBUSTO)
+# 8. AUDITORIA DE QUESTÕES (MULTI-MODELO)
 # =========================================
 try:
     import google.generativeai as genai
@@ -125,54 +125,41 @@ try:
     def auditoria_ia_questao(pergunta, alternativas, correta):
         api_key = st.secrets.get("GEMINI_API_KEY")
         if not api_key:
-            return "⚠️ Chave de API não configurada."
+            return "⚠️ Chave de API não configurada no secrets.toml."
 
         try:
             genai.configure(api_key=api_key)
             
-            # LISTA DE MODELOS PARA TENTAR (Do mais novo para o mais antigo/estável)
-            modelos_tentativa = [
-                'gemini-1.5-flash',
-                'gemini-1.5-pro',
-                'gemini-1.0-pro', 
-                'gemini-pro'
-            ]
-            
-            log_erros = []
+            # Lista de modelos para tentar (do mais novo para o mais antigo)
+            modelos = ['gemini-1.5-flash', 'gemini-pro', 'gemini-1.0-pro']
             
             prompt = f"""
-            Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão de prova teórica:
+            Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
             Enunciado: {pergunta}
-            Alternativas: 
-            A) {alternativas.get('A')}
-            B) {alternativas.get('B')}
-            C) {alternativas.get('C')}
-            D) {alternativas.get('D')}
+            Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
             Gabarito: {correta}
             
-            Verifique ortografia, lógica e se o gabarito faz sentido técnico.
-            Responda em 1 parágrafo curto. Inicie com "✅ Aprovada:" se estiver boa.
+            Verifique erros de português, lógica e consistência técnica.
+            Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
             """
 
-            for nome_modelo in modelos_tentativa:
+            erros = []
+            for nome_modelo in modelos:
                 try:
-                    # Tenta instanciar e gerar conteúdo com o modelo atual
                     model = genai.GenerativeModel(nome_modelo)
                     response = model.generate_content(prompt)
-                    return response.text # Se der certo, retorna e sai da função
+                    return response.text
                 except Exception as e:
-                    # Se falhar, guarda o erro e tenta o próximo
-                    log_erros.append(f"{nome_modelo}: {str(e)}")
+                    erros.append(f"{nome_modelo}: {str(e)}")
                     continue
             
-            # Se chegou aqui, todos falharam
-            return f"❌ Falha em todos os modelos IA.\nDetalhes: {'; '.join(log_erros)}"
-            
+            return f"❌ Erro em todos os modelos: {'; '.join(erros)}"
+
         except Exception as e:
-            return f"Erro Configuração IA: {e}"
+            return f"Erro Crítico IA: {e}"
 
 except ImportError:
-    def auditoria_ia_questao(p, a, c): return "Biblioteca Google AI não instalada."
+    def auditoria_ia_questao(p, a, c): return "Biblioteca google-generativeai não instalada."
 
 # =========================================
 # DEMAIS FUNÇÕES GERAIS
@@ -254,7 +241,7 @@ def gerar_qrcode(codigo):
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
     try:
-        def limpar_texto(txt):
+        def limpa(txt):
             if not txt: return ""
             try: return txt.encode('latin-1', 'replace').decode('latin-1')
             except: return str(txt)
@@ -282,6 +269,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         font_assinatura = "Helvetica"
         if os.path.exists("assets/Allura-Regular.ttf"):
             try:
+                # Remove uni=True para compatibilidade com fpdf
                 pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True)
                 font_assinatura = 'Allura'
             except:
@@ -297,15 +285,15 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_y(60)
         pdf.set_font("Helvetica", "B", 24)
         pdf.set_text_color(*C_DOURADO)
-        pdf.cell(0, 10, limpar_texto("CERTIFICADO DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
+        pdf.cell(0, 10, limpa("CERTIFICADO DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
         
         pdf.ln(10)
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpar_texto("Certificamos que o aluno(a)"), ln=True, align="C")
+        pdf.cell(0, 10, limpa("Certificamos que o aluno(a)"), ln=True, align="C")
 
         pdf.ln(2)
-        nome_final = limpar_texto(usuario_nome.upper().strip())
+        nome_final = limpa(usuario_nome.upper().strip())
         sz = 42
         pdf.set_font("Helvetica", "B", sz)
         while pdf.get_string_width(nome_final) > 250 and sz > 12:
@@ -317,21 +305,21 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.ln(2)
         pdf.set_font("Helvetica", "", 14)
         pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpar_texto("foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"), ln=True, align="C")
+        pdf.cell(0, 10, limpa("foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"), ln=True, align="C")
         
         pdf.ln(2)
         pdf.set_font("Helvetica", "B", 36)
         cor_fx = get_cor_faixa(faixa)
         if sum(cor_fx) < 100: pdf.set_text_color(255, 255, 255)
         else: pdf.set_text_color(*cor_fx)
-        pdf.cell(0, 18, limpar_texto(faixa.upper()), ln=True, align="C")
+        pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
 
         y_rodape = 160
         pdf.set_xy(30, y_rodape)
         pdf.set_font("Helvetica", "", 12)
         pdf.set_text_color(200, 200, 200)
         dt_txt = datetime.now().strftime('%d/%m/%Y')
-        pdf.cell(60, 6, limpar_texto(f"Data de Emissão: {dt_txt}"), ln=True, align="L")
+        pdf.cell(60, 6, limpa(f"Data de Emissão: {dt_txt}"), ln=True, align="L")
         
         pdf.set_x(30)
         pdf.set_font("Courier", "", 9)
@@ -344,7 +332,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         else: pdf.set_font("Helvetica", "I", 20)
             
         pdf.set_text_color(*C_DOURADO)
-        pdf.cell(80, 10, limpar_texto(professor), ln=True, align="C")
+        pdf.cell(80, 10, limpa(professor), ln=True, align="C")
         
         pdf.set_xy(x_ass - 35, y_rodape + 2)
         pdf.set_draw_color(255, 255, 255)
@@ -354,7 +342,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_xy(x_ass - 40, y_rodape + 4)
         pdf.set_font("Helvetica", "", 10)
         pdf.set_text_color(200, 200, 200)
-        pdf.cell(80, 5, limpar_texto("Professor(a) Responsável"), align="C")
+        pdf.cell(80, 5, limpa("Professor(a) Responsável"), align="C")
 
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
@@ -362,7 +350,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
             pdf.set_xy(128, y_rodape + 26)
             pdf.set_font("Helvetica", "", 7)
             pdf.set_text_color(100, 100, 100)
-            pdf.cell(40, 4, limpar_texto("Autenticidade"), align="C")
+            pdf.cell(40, 4, limpa("Autenticidade"), align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
 
