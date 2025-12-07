@@ -81,12 +81,20 @@ def tela_login():
                 if col_b.button("🔑 Recuperar Senha", use_container_width=True):
                     st.session_state["modo_login"] = "recuperar"; st.rerun()
 
-                st.markdown("<div style='text-align:center; margin: 10px 0;'>— OU —</div>", unsafe_allow_html=True)
+                st.markdown("""
+                    <div style='display: flex; align-items: center; justify-content: center; margin: 20px 0;'>
+                        <div style='flex: 1; height: 1px; background-color: #555;'></div>
+                        <span style='padding: 0 10px; color: #888; font-size: 0.8em;'>OU ENTRE COM</span>
+                        <div style='flex: 1; height: 1px; background-color: #555;'></div>
+                    </div>
+                """, unsafe_allow_html=True)
                 
                 if oauth_google:
                     try:
+                        # Botão Google Estilizado
                         res = oauth_google.authorize_button(
-                            "Continuar com Google", 
+                            name="Continuar com Google",
+                            icon="https://www.google.com/favicon.ico",
                             redirect_uri=REDIRECT_URI, 
                             scope="email profile", 
                             key="google_auth", 
@@ -210,7 +218,6 @@ def tela_cadastro_interno():
     c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
     cpf_inp = c_cpf.text_input("CPF:") 
     sexo = c_sexo.selectbox("Sexo:", OPCOES_SEXO)
-    # Formato DD/MM/YYYY
     data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
     c1, c2 = st.columns(2)
@@ -223,7 +230,8 @@ def tela_cadastro_interno():
     cf, ce = st.columns(2)
     nome_nova_equipe = None; desc_nova_equipe = None
     
-    if tipo == "Aluno(a)":
+    # Lógica de seleção (Inclusiva)
+    if "Aluno" in tipo:
         with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
@@ -262,7 +270,7 @@ def tela_cadastro_interno():
             nome_nova_equipe = st.text_input("Nome da Nova Equipe:")
             desc_nova_equipe = st.text_input("Descrição (Opcional):")
         else:
-            st.info("ℹ️ Solicitação para **Professor(a) Adjunto**.")
+            st.info("ℹ️ Solicitação para **Professor(a) Adjunto(a)**.")
             st.checkbox("Confirmar: Sou Professor(a) Adjunto", value=True)
 
     st.markdown("#### Endereço")
@@ -300,7 +308,7 @@ def tela_cadastro_interno():
         if senha != conf: st.error("Senhas não conferem."); return
         if not cpf_fin: st.error("CPF inválido."); return
         
-        if tipo == "Professor" and eq_sel == "🆕 Criar Nova Equipe" and not nome_nova_equipe:
+        if "Professor" in tipo and eq_sel == "🆕 Criar Nova Equipe" and not nome_nova_equipe:
             st.warning("Informe o nome da equipe."); return
 
         users_ref = db.collection('usuarios')
@@ -312,7 +320,8 @@ def tela_cadastro_interno():
         try:
             with st.spinner("Criando..."):
                 hashed = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
-                tipo_db = tipo.lower()
+                # Normaliza para banco (remove o (a))
+                tipo_db = "professor" if "Professor" in tipo else "aluno"
                 
                 novo_user = {
                     "nome": nome_fin, "email": email_fin, "cpf": cpf_fin, 
@@ -371,40 +380,32 @@ def tela_completar_cadastro(user_data):
     db = get_db()
     if not db: st.error("Erro banco"); return
 
+    # ... (Carga de listas igual ao cadastro interno) ...
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
         mapa_equipes = {} 
         info_equipes = {} 
-        
         for doc in equipes_ref:
-            d = doc.to_dict()
-            nm = d.get('nome', 'Sem Nome')
-            lista_equipes.append(nm)
-            mapa_equipes[nm] = doc.id
-            info_equipes[doc.id] = d
+            d = doc.to_dict(); nm = d.get('nome', 'Sem Nome')
+            lista_equipes.append(nm); mapa_equipes[nm] = doc.id; info_equipes[doc.id] = d
         
         profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
         mapa_nomes_profs = {} 
-        for doc in profs_users_ref:
-            mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
+        for doc in profs_users_ref: mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
 
         vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
         profs_por_equipe = {} 
         for doc in vincs_ref:
-            d = doc.to_dict()
-            eid = d.get('equipe_id')
-            uid = d.get('usuario_id')
+            d = doc.to_dict(); eid = d.get('equipe_id'); uid = d.get('usuario_id')
             if eid and uid and uid in mapa_nomes_profs:
                 if eid not in profs_por_equipe: profs_por_equipe[eid] = []
                 profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
-                
     except: pass
 
     c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
     cpf_inp = c_cpf.text_input("CPF (Obrigatório):")
     sexo = c_sexo.selectbox("Sexo:", OPCOES_SEXO)
-    # Formato DD/MM/YYYY
     data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
 
     tipo = st.selectbox("Sou:", ["Aluno(a)", "Professor(a)"])
@@ -412,15 +413,8 @@ def tela_completar_cadastro(user_data):
     cf, ce = st.columns(2)
     nome_nova_equipe = None; desc_nova_equipe = None
     
-    if tipo == "Aluno":
-        with cf: faixa = st.selectbox("Faixa:", [
-    " ", "Cinza e Branca", "Cinza", "Cinza e Preta",
-    "Amarela e Branca", "Amarela", "Amarela e Preta",
-    "Laranja e Branca", "Laranja", "Laranja e Preta",
-    "Verde e Branca", "Verde", "Verde e Preta",
-    "Azul", "Roxa", "Marrom", "Preta"
-]
-    )
+    if "Aluno" in tipo: # Correção Lógica
+        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
@@ -488,7 +482,7 @@ def tela_completar_cadastro(user_data):
         try:
             with st.spinner("Salvando..."):
                 uid = user_data['id']
-                tipo_db = tipo.lower()
+                tipo_db = "professor" if "Professor" in tipo else "aluno"
                 
                 db.collection('usuarios').document(uid).update({
                     "cpf": cpf_fin, "tipo_usuario": tipo_db, "perfil_completo": True,
