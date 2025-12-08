@@ -7,7 +7,7 @@ from firebase_admin import firestore
 from views import dashboard 
 
 # =========================================
-# FUNÇÃO: GESTÃO DE EQUIPES (NOVO FLUXO HIERÁRQUICO)
+# FUNÇÃO: GESTÃO DE EQUIPES (FLUXO COMPLETO)
 # =========================================
 def gestao_equipes():
     db = get_db()
@@ -126,8 +126,8 @@ def gestao_equipes():
             else:
                 st.info("Nenhum professor aguardando aprovação.")
 
-    # === ABA 2: MEMBROS ATIVOS ===
-with tabs[1]:
+    # === ABA 2: MEMBROS ATIVOS (SEPARADOS) ===
+    with tabs[1]:
         # --- 1. LISTA DE PROFESSORES ---
         st.markdown("#### 🥋 Quadro de Professores")
         profs_ativos = list(db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
@@ -151,7 +151,7 @@ with tabs[1]:
         else:
             st.info("Nenhum professor encontrado.")
 
-        st.divider() # Linha divisória visual
+        st.divider()
 
         # --- 2. LISTA DE ALUNOS ---
         st.markdown("#### 🥋 Quadro de Alunos")
@@ -168,7 +168,6 @@ with tabs[1]:
                 })
                 
         if lista_alunos:
-            # Opção de filtro rápido para alunos (já que a lista pode ser grande)
             filtro = st.text_input("🔍 Buscar aluno:", key="filtro_aluno_ativo")
             df_alunos = pd.DataFrame(lista_alunos)
             
@@ -187,6 +186,7 @@ with tabs[1]:
             st.info("Delegados podem ajudar a aprovar novos alunos e professores auxiliares. Limite: 2 Delegados.")
             
             # Conta delegados atuais (excluindo o líder)
+            profs_ativos = list(db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
             delegados_existentes = [p for p in profs_ativos if p.to_dict().get('pode_aprovar') and not p.to_dict().get('eh_responsavel')]
             qtd_delegados = len(delegados_existentes)
             
@@ -213,17 +213,17 @@ with tabs[1]:
                 if is_delegado:
                     if c2.button("⬇️ Revogar Poder", key=f"rv_{doc.id}"):
                         db.collection('professores').document(doc.id).update({'pode_aprovar': False})
-                        st.rerun()
+                        st.toast("Poder revogado."); time.sleep(1); st.rerun()
                 else:
                     # Só permite promover se houver vaga
                     btn_disabled = (qtd_delegados >= 2)
                     if c2.button("⬆️ Promover a Delegado", key=f"pm_{doc.id}", disabled=btn_disabled):
                         db.collection('professores').document(doc.id).update({'pode_aprovar': True})
-                        st.rerun()
+                        st.toast("Promovido a Delegado!"); time.sleep(1); st.rerun()
                 st.divider()
 
 # =========================================
-# FUNÇÃO PRINCIPAL: PAINEL DO PROFESSOR (COM ABAS)
+# FUNÇÃO PRINCIPAL: PAINEL DO PROFESSOR
 # =========================================
 def painel_professor():
     st.markdown("<h1 style='color:#FFD770;'>👨‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
