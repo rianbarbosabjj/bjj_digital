@@ -30,7 +30,7 @@ def tela_inicio():
     
     # Funções Admin/Prof
     def ir_questoes(): st.session_state.menu_selection = "Gestão de Questões"; st.rerun()
-    def ir_gestao_equipes((): st.session_state.menu_selection = "Gestão de Equipe"; st.rerun()
+    def ir_equipes((): st.session_state.menu_selection = "Gestão de Equipe"; st.rerun()
     def ir_montar_exame(): st.session_state.menu_selection = "Gestão de Exame"; st.rerun()
 
     # --- CARDS ALUNO (TODOS VEEM) ---
