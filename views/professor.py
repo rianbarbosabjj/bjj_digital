@@ -127,18 +127,12 @@ def gestao_equipes():
                 st.info("Nenhum professor aguardando aprovação.")
 
     # === ABA 2: MEMBROS ATIVOS ===
-    with tabs[1]:
-        st.markdown("#### Quadro da Equipe")
-        
-        # Busca Professores Ativos
+with tabs[1]:
+        # --- 1. LISTA DE PROFESSORES ---
+        st.markdown("#### 🥋 Quadro de Professores")
         profs_ativos = list(db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
         
-        # Busca Alunos Ativos
-        alunos_ativos = list(db.collection('alunos').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
-        
-        lista_membros = []
-        
-        # Processa Professores
+        lista_profs = []
         for p in profs_ativos:
             pdados = p.to_dict()
             u = db.collection('usuarios').document(pdados['usuario_id']).get()
@@ -146,20 +140,45 @@ def gestao_equipes():
                 cargo = "Auxiliar"
                 if pdados.get('eh_responsavel'): cargo = "Líder"
                 elif pdados.get('pode_aprovar'): cargo = "Delegado"
-                lista_membros.append({"Nome": u.to_dict()['nome'], "Tipo": "Professor", "Detalhe": cargo})
                 
-        # Processa Alunos
+                lista_profs.append({
+                    "Nome": u.to_dict()['nome'],
+                    "Função": cargo
+                })
+        
+        if lista_profs:
+            st.dataframe(pd.DataFrame(lista_profs), use_container_width=True, hide_index=True)
+        else:
+            st.info("Nenhum professor encontrado.")
+
+        st.divider() # Linha divisória visual
+
+        # --- 2. LISTA DE ALUNOS ---
+        st.markdown("#### 🥋 Quadro de Alunos")
+        alunos_ativos = list(db.collection('alunos').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
+        
+        lista_alunos = []
         for a in alunos_ativos:
             adados = a.to_dict()
             u = db.collection('usuarios').document(adados['usuario_id']).get()
             if u.exists:
-                lista_membros.append({"Nome": u.to_dict()['nome'], "Tipo": "Aluno", "Detalhe": adados.get('faixa_atual', '-')})
+                lista_alunos.append({
+                    "Nome": u.to_dict()['nome'],
+                    "Faixa": adados.get('faixa_atual', '-')
+                })
                 
-        if lista_membros:
-            df = pd.DataFrame(lista_membros)
-            st.dataframe(df, use_container_width=True, hide_index=True)
+        if lista_alunos:
+            # Opção de filtro rápido para alunos (já que a lista pode ser grande)
+            filtro = st.text_input("🔍 Buscar aluno:", key="filtro_aluno_ativo")
+            df_alunos = pd.DataFrame(lista_alunos)
+            
+            if filtro:
+                df_alunos = df_alunos[df_alunos['Nome'].str.upper().str.contains(filtro.upper())]
+                
+            st.dataframe(df_alunos, use_container_width=True, hide_index=True)
+            st.caption(f"Total: {len(df_alunos)} alunos.")
         else:
-            st.warning("Ainda não há membros ativos.")
+            st.warning("Ainda não há alunos ativos nesta equipe.")
 
     # === ABA 3: DELEGAR PODER (SOMENTE LÍDER) ===
     if nivel_poder == 3:
