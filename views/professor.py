@@ -7,6 +7,43 @@ from firebase_admin import firestore
 from views import dashboard 
 
 # =========================================
+# HELPER: DECORAR FAIXAS E CARGOS
+# =========================================
+# =========================================
+# HELPER: DECORAR FAIXAS E CARGOS
+# =========================================
+def get_faixa_decorada(faixa):
+    """Adiciona emojis combinados para representar faixas mistas e sólidas"""
+    f = str(faixa).lower().strip()
+    
+    # 1. Faixas Mistas (Infantil/Juvenil) - Verificamos estas PRIMEIRO
+    if "cinza" in f and "branca" in f: return f"🔘⚪ {faixa}"
+    if "cinza" in f and "preta" in f:  return f"🔘⚫ {faixa}"
+    
+    if "amarela" in f and "branca" in f: return f"🟡⚪ {faixa}"
+    if "amarela" in f and "preta" in f:  return f"🟡⚫ {faixa}"
+    
+    if "laranja" in f and "branca" in f: return f"🟠⚪ {faixa}"
+    if "laranja" in f and "preta" in f:  return f"🟠⚫ {faixa}"
+    
+    if "verde" in f and "branca" in f: return f"🟢⚪ {faixa}"
+    if "verde" in f and "preta" in f:  return f"🟢⚫ {faixa}"
+
+    # 2. Faixas Sólidas
+    if "branca" in f: return f"⚪ {faixa}"
+    if "cinza" in f:  return f"🔘 {faixa}"
+    if "amarela" in f: return f"🟡 {faixa}"
+    if "laranja" in f: return f"🟠 {faixa}"
+    if "verde" in f:  return f"🟢 {faixa}"
+    if "azul" in f:   return f"🔵 {faixa}"
+    if "roxa" in f:   return f"🟣 {faixa}"
+    if "marrom" in f: return f"🟤 {faixa}"
+    if "preta" in f:  return f"⚫ {faixa}"
+
+    # Fallback
+    return f"🥋 {faixa}"
+
+# =========================================
 # FUNÇÃO: GESTÃO DE EQUIPES (FLUXO COMPLETO)
 # =========================================
 def gestao_equipes():
@@ -15,18 +52,16 @@ def gestao_equipes():
     user_id = user['id']
 
     # --- 1. IDENTIFICAR O CONTEXTO DO PROFESSOR ---
-    # Busca o vínculo do professor logado para saber quem ele é na hierarquia
     vinc = list(db.collection('professores').where('usuario_id', '==', user_id).where('status_vinculo', '==', 'ativo').limit(1).stream())
     
     if not vinc:
         st.error("⛔ Você não possui vínculo ativo com nenhuma equipe.")
-        st.info("Solicite ao responsável da sua academia que aprove seu cadastro.")
         return
 
     dados_prof = vinc[0].to_dict()
     meu_equipe_id = dados_prof.get('equipe_id')
     sou_responsavel = dados_prof.get('eh_responsavel', False)
-    sou_delegado = dados_prof.get('pode_aprovar', False) # Flag que permite auxiliar aprovar
+    sou_delegado = dados_prof.get('pode_aprovar', False) 
 
     # Busca nome da equipe
     nome_equipe = "Minha Equipe"
@@ -36,21 +71,20 @@ def gestao_equipes():
             nome_equipe = eq_doc.to_dict().get('nome', 'Minha Equipe')
 
     # --- 2. DEFINIR NÍVEL DE PODER ---
-    # Nível 3: Líder (Responsável) -> Pode tudo + Delegar
-    # Nível 2: Delegado -> Pode aprovar Alunos e Professores
-    # Nível 1: Auxiliar -> Pode aprovar SÓ seus alunos diretos
     nivel_poder = 1
     if sou_delegado: nivel_poder = 2
     if sou_responsavel: nivel_poder = 3
 
-    # Cabeçalho Informativo
+    # Cabeçalho Informativo Estilizado
     st.markdown(f"### 🏛️ {nome_equipe}")
     
-    badge = "⭐ Auxiliar"
-    if nivel_poder == 2: badge = "⭐⭐ Professor Delegado"
-    if nivel_poder == 3: badge = "⭐⭐⭐ Professor Responsável"
+    col_info1, col_info2 = st.columns([3, 1])
+    col_info1.caption("Painel de Gestão de Membros e Aprovações")
     
-    st.caption(f"Seu Cargo: **{badge}**")
+    badge = "⭐ Auxiliar"
+    if nivel_poder == 2: badge = "⭐⭐ Delegado"
+    if nivel_poder == 3: badge = "⭐⭐⭐ Responsável"
+    col_info2.markdown(f"**Cargo:** {badge}")
 
     # --- 3. ABAS DE GESTÃO ---
     abas = ["⏳ Aprovações", "👥 Membros Ativos"]
@@ -65,44 +99,37 @@ def gestao_equipes():
         
         # --- A. ALUNOS PENDENTES ---
         q_alunos = db.collection('alunos').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'pendente')
-        
-        # Filtro de Visibilidade (Tenancy)
         if nivel_poder == 1:
-            # Auxiliar vê apenas alunos que o escolheram como professor direto
             q_alunos = q_alunos.where('professor_id', '==', user_id)
-            msg_filtro = "Exibindo apenas alunos que selecionaram você."
+            msg_filtro = "Seus alunos diretos"
         else:
-            msg_filtro = "Exibindo todos os alunos pendentes da equipe."
+            msg_filtro = "Todos da equipe"
             
         alunos_pend = list(q_alunos.stream())
 
         if alunos_pend:
-            st.info(f"Alunos: {len(alunos_pend)} pendentes. ({msg_filtro})")
+            st.info(f"Alunos Pendentes: {len(alunos_pend)} ({msg_filtro})")
             for doc in alunos_pend:
                 d = doc.to_dict()
-                # Busca nome do usuario
                 udoc = db.collection('usuarios').document(d['usuario_id']).get()
                 nome_aluno = udoc.to_dict()['nome'] if udoc.exists else "Desconhecido"
                 
                 with st.container(border=True):
                     c1, c2, c3 = st.columns([0.6, 0.2, 0.2])
-                    c1.markdown(f"**{nome_aluno}** (Faixa: {d.get('faixa_atual')})")
-                    
+                    c1.markdown(f"**{nome_aluno}**\n\n{get_faixa_decorada(d.get('faixa_atual'))}")
                     if c2.button("✅ Aceitar", key=f"ok_al_{doc.id}"):
                         db.collection('alunos').document(doc.id).update({'status_vinculo': 'ativo'})
                         st.toast(f"{nome_aluno} aprovado!"); time.sleep(1); st.rerun()
-                    
                     if c3.button("❌ Recusar", key=f"no_al_{doc.id}"):
                         db.collection('alunos').document(doc.id).delete()
                         st.toast("Recusado."); time.sleep(1); st.rerun()
         else:
-            st.success("Nenhum aluno pendente.")
-            if nivel_poder == 1: st.caption(msg_filtro)
+            st.success("Nenhuma pendência de aluno.")
 
-        # --- B. PROFESSORES PENDENTES (Só Nível 2 e 3) ---
+        # --- B. PROFESSORES PENDENTES ---
         if nivel_poder >= 2:
             st.divider()
-            st.markdown("#### Professores Auxiliares Pendentes")
+            st.markdown("#### Professores Pendentes")
             q_profs = db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'pendente')
             profs_pend = list(q_profs.stream())
             
@@ -115,20 +142,16 @@ def gestao_equipes():
                     with st.container(border=True):
                         c1, c2, c3 = st.columns([0.6, 0.2, 0.2])
                         c1.markdown(f"**PROFESSOR: {nome_prof}**")
-                        
                         if c2.button("✅ Aceitar", key=f"ok_pr_{doc.id}"):
                             db.collection('professores').document(doc.id).update({'status_vinculo': 'ativo'})
-                            st.toast(f"{nome_prof} aceito na equipe!"); time.sleep(1); st.rerun()
-                        
+                            st.toast("Aceito!"); time.sleep(1); st.rerun()
                         if c3.button("❌ Recusar", key=f"no_pr_{doc.id}"):
                             db.collection('professores').document(doc.id).delete()
                             st.toast("Recusado."); time.sleep(1); st.rerun()
-            else:
-                st.info("Nenhum professor aguardando aprovação.")
 
-    # === ABA 2: MEMBROS ATIVOS (SEPARADOS) ===
+    # === ABA 2: MEMBROS ATIVOS (MELHORADA) ===
     with tabs[1]:
-        # --- 1. LISTA DE PROFESSORES ---
+        # --- 1. TABELA DE PROFESSORES ---
         st.markdown("#### 🥋 Quadro de Professores")
         profs_ativos = list(db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
         
@@ -137,24 +160,35 @@ def gestao_equipes():
             pdados = p.to_dict()
             u = db.collection('usuarios').document(pdados['usuario_id']).get()
             if u.exists:
-                cargo = "Auxiliar"
-                if pdados.get('eh_responsavel'): cargo = "Líder"
-                elif pdados.get('pode_aprovar'): cargo = "Delegado"
+                cargo_raw = "Auxiliar"
+                if pdados.get('eh_responsavel'): cargo_raw = "Líder"
+                elif pdados.get('pode_aprovar'): cargo_raw = "Delegado"
                 
                 lista_profs.append({
                     "Nome": u.to_dict()['nome'],
-                    "Função": cargo
+                    "Cargo": get_cargo_decorado(cargo_raw) # Aplica decoração
                 })
         
         if lista_profs:
-            st.dataframe(pd.DataFrame(lista_profs), use_container_width=True, hide_index=True)
+            st.dataframe(
+                pd.DataFrame(lista_profs),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Nome": st.column_config.TextColumn("Professor", width="large"),
+                    "Cargo": st.column_config.TextColumn("Função / Nível", width="medium"),
+                }
+            )
         else:
             st.info("Nenhum professor encontrado.")
 
-        st.divider()
+        st.markdown("---") # Divisória
 
-        # --- 2. LISTA DE ALUNOS ---
-        st.markdown("#### 🥋 Quadro de Alunos")
+        # --- 2. TABELA DE ALUNOS ---
+        c_titulo, c_busca = st.columns([1, 1])
+        c_titulo.markdown("#### 🥋 Quadro de Alunos")
+        filtro = c_busca.text_input("🔍 Buscar aluno:", placeholder="Digite o nome...", label_visibility="collapsed")
+        
         alunos_ativos = list(db.collection('alunos').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
         
         lista_alunos = []
@@ -162,44 +196,55 @@ def gestao_equipes():
             adados = a.to_dict()
             u = db.collection('usuarios').document(adados['usuario_id']).get()
             if u.exists:
+                # Normaliza o nome para busca
+                nome_real = u.to_dict()['nome']
+                # Aplica o filtro antes de processar para ganhar performance visual
+                if filtro and filtro.upper() not in nome_real.upper():
+                    continue
+
                 lista_alunos.append({
-                    "Nome": u.to_dict()['nome'],
-                    "Faixa": adados.get('faixa_atual', '-')
+                    "Nome": nome_real,
+                    "Faixa": get_faixa_decorada(adados.get('faixa_atual', '-')) # Aplica cor
                 })
                 
         if lista_alunos:
-            filtro = st.text_input("🔍 Buscar aluno:", key="filtro_aluno_ativo")
             df_alunos = pd.DataFrame(lista_alunos)
+            # Ordenar por nome
+            df_alunos = df_alunos.sort_values(by="Nome")
             
-            if filtro:
-                df_alunos = df_alunos[df_alunos['Nome'].str.upper().str.contains(filtro.upper())]
-                
-            st.dataframe(df_alunos, use_container_width=True, hide_index=True)
-            st.caption(f"Total: {len(df_alunos)} alunos.")
+            st.dataframe(
+                df_alunos,
+                use_container_width=True,
+                hide_index=True,
+                height=400, # Altura fixa para scrollar se tiver muitos alunos
+                column_config={
+                    "Nome": st.column_config.TextColumn("Aluno", width="large"),
+                    "Faixa": st.column_config.TextColumn("Graduação Atual", width="medium"),
+                }
+            )
+            st.caption(f"Total listado: {len(df_alunos)} alunos.")
         else:
-            st.warning("Ainda não há alunos ativos nesta equipe.")
+            if filtro:
+                st.warning("Nenhum aluno encontrado com esse nome.")
+            else:
+                st.warning("Ainda não há alunos ativos nesta equipe.")
 
-    # === ABA 3: DELEGAR PODER (SOMENTE LÍDER) ===
+    # === ABA 3: DELEGAR PODER ===
     if nivel_poder == 3:
         with tabs[2]:
             st.markdown("#### Gestão de Delegados")
-            st.info("Delegados podem ajudar a aprovar novos alunos e professores auxiliares. Limite: 2 Delegados.")
+            st.info("Limite: 2 Delegados.")
             
-            # Conta delegados atuais (excluindo o líder)
             profs_ativos = list(db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
             delegados_existentes = [p for p in profs_ativos if p.to_dict().get('pode_aprovar') and not p.to_dict().get('eh_responsavel')]
-            qtd_delegados = len(delegados_existentes)
             
-            st.metric("Vagas de Delegado Ocupadas", f"{qtd_delegados} / 2")
-            
+            st.metric("Vagas Utilizadas", f"{len(delegados_existentes)} / 2")
             st.divider()
-            st.subheader("Professores Auxiliares")
             
-            # Lista apenas quem não é o líder para promover/rebaixar
             auxiliares = [p for p in profs_ativos if not p.to_dict().get('eh_responsavel')]
             
             if not auxiliares:
-                st.warning("Não há professores auxiliares para gerenciar.")
+                st.warning("Sem auxiliares disponíveis.")
             
             for doc in auxiliares:
                 d = doc.to_dict()
@@ -211,15 +256,14 @@ def gestao_equipes():
                 c1.write(f"🥋 {nome}")
                 
                 if is_delegado:
-                    if c2.button("⬇️ Revogar Poder", key=f"rv_{doc.id}"):
+                    if c2.button("⬇️ Revogar", key=f"rv_{doc.id}"):
                         db.collection('professores').document(doc.id).update({'pode_aprovar': False})
-                        st.toast("Poder revogado."); time.sleep(1); st.rerun()
+                        st.rerun()
                 else:
-                    # Só permite promover se houver vaga
-                    btn_disabled = (qtd_delegados >= 2)
-                    if c2.button("⬆️ Promover a Delegado", key=f"pm_{doc.id}", disabled=btn_disabled):
+                    btn_disabled = (len(delegados_existentes) >= 2)
+                    if c2.button("⬆️ Promover", key=f"pm_{doc.id}", disabled=btn_disabled):
                         db.collection('professores').document(doc.id).update({'pode_aprovar': True})
-                        st.toast("Promovido a Delegado!"); time.sleep(1); st.rerun()
+                        st.rerun()
                 st.divider()
 
 # =========================================
@@ -237,5 +281,4 @@ def painel_professor():
         gestao_equipes()
         
     with tab2:
-        # Chamamos o dashboard aqui dentro
         dashboard.dashboard_professor()
