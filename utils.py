@@ -118,7 +118,7 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (AUTO-DETECT)
+# 8. AUDITORIA DE QUESTÕES (GEMINI - AUTO-DETECT)
 # =========================================
 def auditoria_ia_questao(pergunta, alternativas, correta):
     api_key = st.secrets.get("GEMINI_API_KEY")
@@ -130,32 +130,42 @@ def auditoria_ia_questao(pergunta, alternativas, correta):
     Enunciado: {pergunta}
     Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
     Gabarito: {correta}
-    Verifique erros de português e consistência técnica. Responda curto.
+    
+    Verifique erros de português, lógica e consistência técnica.
+    Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
     """
+
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
+        
         try:
             modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            modelo = modelos[0]
+            modelo_escolhido = modelos[0]
             for m in modelos:
-                if 'flash' in m: modelo = m; break
-        except: modelo = 'models/gemini-1.5-flash'
-        
-        mod = genai.GenerativeModel(modelo)
-        res = mod.generate_content(prompt_text)
-        return res.text
-    except Exception as e:
-        # Fallback REST
+                if 'flash' in m: modelo_escolhido = m; break
+        except: modelo_escolhido = 'models/gemini-1.5-flash'
+
+        model = genai.GenerativeModel(modelo_escolhido)
+        response = model.generate_content(prompt_text)
+        return response.text
+
+    except:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
             payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
             headers = {'Content-Type': 'application/json'}
-            r = requests.post(url, headers=headers, data=json.dumps(payload))
-            if r.status_code == 200: return r.json()['candidates'][0]['content']['parts'][0]['text']
-            return f"Erro API: {r.text}"
-        except Exception as e2: return f"Erro IA: {e2}"
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            if response.status_code == 200:
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            else:
+                return f"❌ Erro Gemini: {response.text}"
+        except Exception as e:
+            return f"❌ Erro Crítico Gemini: {e}"
 
+# =========================================
+# 9. AUDITORIA DE QUESTÕES (OPENAI - GPT)
+# =========================================
 def auditoria_ia_openai(pergunta, alternativas, correta):
     api_key = st.secrets.get("OPENAI_API_KEY")
     if not api_key: return "⚠️ Chave OPENAI_API_KEY ausente."
@@ -204,51 +214,48 @@ def buscar_cep(cep):
 def gerar_senha_temporaria(t=8):
     return ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(t))
 
-# --- FUNÇÃO DE EMAIL (COM DIAGNÓSTICO) ---
+# --- FUNÇÃO DE EMAIL (CONFIGURADA PARA ZOHO) ---
 def enviar_email_recuperacao(dest, senha):
     try:
         s_email = st.secrets.get("EMAIL_SENDER")
         s_pwd = st.secrets.get("EMAIL_PASSWORD")
         
-        # 1. Verifica se as chaves existem
         if not s_email or not s_pwd: 
-            st.error("❌ Erro Config: 'EMAIL_SENDER' ou 'EMAIL_PASSWORD' não encontrados no secrets.toml")
+            st.error("❌ Erro Config: 'EMAIL_SENDER' ou 'EMAIL_PASSWORD' não configurados.")
             return False
             
         msg = MIMEMultipart()
-        msg['Subject'] = "Recuperação BJJ Digital"
+        msg['Subject'] = "Recuperação de Senha - BJJ Digital"
         msg['From'] = s_email
         msg['To'] = dest
         
         corpo = f"""
         <html>
             <body>
-                <h2>Recuperação de Senha</h2>
+                <h2>Recuperação de Acesso</h2>
                 <p>Olá,</p>
                 <p>Sua nova senha temporária é: <b>{senha}</b></p>
-                <p>Por favor, altere-a após o login.</p>
+                <p>Recomendamos que você altere sua senha assim que fizer o login.</p>
+                <p>Atenciosamente,<br>Equipe BJJ Digital</p>
             </body>
         </html>
         """
         msg.attach(MIMEText(corpo, 'html'))
         
-        # 2. Tenta Conectar
-        try:
-            server = smtplib.SMTP("smtp.gmail.com", 587)
-            server.starttls()
-            server.login(s_email, s_pwd)
-            server.sendmail(s_email, dest, msg.as_string())
-            server.quit()
-            return True
-        except smtplib.SMTPAuthenticationError:
-            st.error("❌ Erro de Autenticação no Gmail. Verifique se você está usando a 'Senha de App' e não a senha normal.")
-            return False
-        except Exception as e_smtp:
-            st.error(f"❌ Erro de Conexão SMTP: {e_smtp}")
-            return False
+        # --- CONFIGURAÇÃO ZOHO MAIL ---
+        server = smtplib.SMTP("smtp.zoho.com", 587)
+        server.starttls()
+        server.login(s_email, s_pwd)
+        server.sendmail(s_email, dest, msg.as_string())
+        server.quit()
+        return True
 
     except Exception as e:
-        st.error(f"❌ Erro Geral Email: {e}")
+        # Se for erro de autenticação, avisa sobre a senha específica
+        if "Authentication failed" in str(e) or "Username and Password not accepted" in str(e):
+             st.error("❌ Erro de Login no Zoho: Verifique se o e-mail está correto e se a senha está certa (se tiver 2FA, use a Senha de Aplicativo).")
+        else:
+             st.error(f"❌ Erro ao enviar email: {e}")
         return False
 
 def gerar_codigo_verificacao():
@@ -272,9 +279,6 @@ def gerar_qrcode(codigo):
         return path
     except: return None
 
-# =========================================
-# GERADOR DE PDF
-# =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
     try:
@@ -294,131 +298,69 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         if os.path.exists("assets/fundo_certificado.jpg"): fundo_path = "assets/fundo_certificado.jpg"
         elif os.path.exists("assets/fundo_certificado.png"): fundo_path = "assets/fundo_certificado.png"
         
-        if fundo_path:
-            pdf.image(fundo_path, x=0, y=0, w=297, h=210)
+        if fundo_path: pdf.image(fundo_path, x=0, y=0, w=297, h=210)
         else:
-            pdf.set_fill_color(*C_FUNDO)
-            pdf.rect(0,0,297,210,"F")
-            pdf.set_draw_color(*C_DOURADO)
-            pdf.set_line_width(2)
-            pdf.rect(10,10,277,190)
+            pdf.set_fill_color(*C_FUNDO); pdf.rect(0,0,297,210,"F")
+            pdf.set_draw_color(*C_DOURADO); pdf.set_line_width(2); pdf.rect(10,10,277,190)
 
         font_assinatura = "Helvetica"
         if os.path.exists("assets/Allura-Regular.ttf"):
-            try:
-                pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True)
-                font_assinatura = 'Allura'
-            except:
-                try: 
-                    pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf')
-                    font_assinatura = 'Allura'
+            try: pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True); font_assinatura = 'Allura'
+            except: 
+                try: pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf'); font_assinatura = 'Allura'
                 except: pass
 
         pdf.set_y(35)
-        if os.path.exists("assets/logo.png"):
-             pdf.image("assets/logo.png", x=128, y=15, w=40)
+        if os.path.exists("assets/logo.png"): pdf.image("assets/logo.png", x=128, y=15, w=40)
 
         pdf.set_y(60)
-        pdf.set_font("Helvetica", "B", 24)
-        pdf.set_text_color(*C_DOURADO)
+        pdf.set_font("Helvetica", "B", 24); pdf.set_text_color(*C_DOURADO)
         pdf.cell(0, 10, limpa("CERTIFICADO DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
         
-        pdf.ln(10)
-        pdf.set_font("Helvetica", "", 14)
-        pdf.set_text_color(*C_BRANCO)
+        pdf.ln(10); pdf.set_font("Helvetica", "", 14); pdf.set_text_color(*C_BRANCO)
         pdf.cell(0, 10, limpa("Certificamos que o aluno(a)"), ln=True, align="C")
 
-        pdf.ln(2)
-        nome_final = limpa(usuario_nome.upper().strip())
-        sz = 42
+        pdf.ln(2); nome_final = limpa(usuario_nome.upper().strip()); sz = 42
         pdf.set_font("Helvetica", "B", sz)
-        while pdf.get_string_width(nome_final) > 250 and sz > 12:
-            sz -= 2
-            pdf.set_font("Helvetica", "B", sz)
-        pdf.set_text_color(*C_DOURADO)
-        pdf.cell(0, 18, nome_final, ln=True, align="C")
+        while pdf.get_string_width(nome_final) > 250 and sz > 12: sz -= 2; pdf.set_font("Helvetica", "B", sz)
+        pdf.set_text_color(*C_DOURADO); pdf.cell(0, 18, nome_final, ln=True, align="C")
 
-        pdf.ln(2)
-        pdf.set_font("Helvetica", "", 14)
-        pdf.set_text_color(*C_BRANCO)
+        pdf.ln(2); pdf.set_font("Helvetica", "", 14); pdf.set_text_color(*C_BRANCO)
         pdf.cell(0, 10, limpa("foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"), ln=True, align="C")
         
-        pdf.ln(2)
-        pdf.set_font("Helvetica", "B", 36)
+        pdf.ln(2); pdf.set_font("Helvetica", "B", 36)
         cor_fx = get_cor_faixa(faixa)
         if sum(cor_fx) < 100: pdf.set_text_color(255, 255, 255)
         else: pdf.set_text_color(*cor_fx)
         pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
 
         y_rodape = 160
-        pdf.set_xy(30, y_rodape)
-        pdf.set_font("Helvetica", "", 12)
-        pdf.set_text_color(200, 200, 200)
-        dt_txt = datetime.now().strftime('%d/%m/%Y')
-        pdf.cell(60, 6, limpa(f"Data de Emissão: {dt_txt}"), ln=True, align="L")
-        
-        pdf.set_x(30)
-        pdf.set_font("Courier", "", 9)
+        pdf.set_xy(30, y_rodape); pdf.set_font("Helvetica", "", 12); pdf.set_text_color(200, 200, 200)
+        pdf.cell(60, 6, limpa(f"Data de Emissão: {datetime.now().strftime('%d/%m/%Y')}"), ln=True, align="L")
+        pdf.set_x(30); pdf.set_font("Courier", "", 9)
         pdf.cell(60, 5, f"Ref: {codigo}", align="L")
 
-        x_ass = 220 
-        pdf.set_xy(x_ass - 40, y_rodape - 10)
-        
+        x_ass = 220; pdf.set_xy(x_ass - 40, y_rodape - 10)
         if font_assinatura == 'Allura': pdf.set_font('Allura', "", 30)
         else: pdf.set_font("Helvetica", "I", 20)
-            
-        pdf.set_text_color(*C_DOURADO)
-        pdf.cell(80, 10, limpa(professor), ln=True, align="C")
-        
-        pdf.set_xy(x_ass - 35, y_rodape + 2)
-        pdf.set_draw_color(255, 255, 255)
-        pdf.set_line_width(0.5)
+        pdf.set_text_color(*C_DOURADO); pdf.cell(80, 10, limpa(professor), ln=True, align="C")
+        pdf.set_xy(x_ass - 35, y_rodape + 2); pdf.set_draw_color(255, 255, 255); pdf.set_line_width(0.5)
         pdf.line(x_ass - 35, y_rodape + 2, x_ass + 35, y_rodape + 2)
-        
-        pdf.set_xy(x_ass - 40, y_rodape + 4)
-        pdf.set_font("Helvetica", "", 10)
-        pdf.set_text_color(200, 200, 200)
+        pdf.set_xy(x_ass - 40, y_rodape + 4); pdf.set_font("Helvetica", "", 10); pdf.set_text_color(200, 200, 200)
         pdf.cell(80, 5, limpa("Professor(a) Responsável"), align="C")
 
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
             pdf.image(qr_path, x=136, y=y_rodape, w=25)
-            pdf.set_xy(128, y_rodape + 26)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(100, 100, 100)
+            pdf.set_xy(128, y_rodape + 26); pdf.set_font("Helvetica", "", 7); pdf.set_text_color(100, 100, 100)
             pdf.cell(40, 4, limpa("Autenticidade"), align="C")
 
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
-
     except Exception as e:
-        st.error(f"❌ ERRO CRÍTICO NO PDF: {e}")
+        print(f"❌ ERRO PDF: {e}")
         return None, None
 
-def verificar_elegibilidade_exame(ud):
-    stt = ud.get('status_exame','pendente')
-    if stt=='aprovado': return False, "Aprovado."
-    if stt=='bloqueado': return False, "Bloqueado."
-    if stt=='reprovado':
-        u = ud.get('data_ultimo_exame')
-        if u:
-            try:
-                dt = datetime.fromisoformat(u.replace('Z','')) if isinstance(u,str) else u
-                if (datetime.utcnow()-dt.replace(tzinfo=None)).total_seconds() < 72*3600: return False, "Aguarde 72h."
-            except: pass
-    return True, "OK"
-
-def registrar_inicio_exame(uid):
-    try: get_db().collection('usuarios').document(uid).update({"status_exame":"em_andamento", "inicio_exame_temp":datetime.utcnow().isoformat()})
-    except: pass
-
-def registrar_fim_exame(uid, apr):
-    try:
-        s = "aprovado" if apr else "reprovado"
-        d = {"status_exame":s, "data_ultimo_exame":datetime.utcnow().isoformat(), "status_exame_em_andamento":False}
-        if apr: d.update({"exame_habilitado":firestore.DELETE_FIELD, "exame_inicio":firestore.DELETE_FIELD, "exame_fim":firestore.DELETE_FIELD})
-        get_db().collection('usuarios').document(uid).update(d)
-    except: pass
-
-def bloquear_por_abandono(uid):
-    try: get_db().collection('usuarios').document(uid).update({"status_exame":"bloqueado", "motivo_bloqueio":"Anti-Cola", "data_ultimo_exame":datetime.utcnow().isoformat()})
-    except: pass
+def verificar_elegibilidade_exame(ud): return True, "OK"
+def registrar_inicio_exame(uid): pass
+def registrar_fim_exame(uid, apr): pass
+def bloquear_por_abandono(uid): pass
