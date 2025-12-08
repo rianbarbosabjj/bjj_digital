@@ -34,17 +34,14 @@ except ImportError:
 FAIXAS_COMPLETAS = [" ", "Cinza e Branca", "Cinza", "Cinza e Preta", "Amarela e Branca", "Amarela", "Amarela e Preta", "Laranja e Branca", "Laranja", "Laranja e Preta", "Verde e Branca", "Verde", "Verde e Preta", "Azul", "Roxa", "Marrom", "Preta"]
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
-TIPO_MAP = {"Aluno(a)": "aluno", "Professor(a)": "professor", "Administrador(a)": "admin"}
-TIPO_MAP_INV = {v: k for k, v in TIPO_MAP.items()}
-LISTA_TIPOS_DISPLAY = list(TIPO_MAP.keys())
 
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # ==============================================================================
-# 1. GESTÃO GERAL DE USUÁRIOS (VISÃO DO ADMIN GLOBAL)
+# 1. GESTÃO GERAL DE USUÁRIOS (VISÃO DO ADMIN GLOBAL DO SISTEMA)
 # ==============================================================================
 def gestao_usuarios_geral():
-    st.subheader("🌍 Visão Global de Usuários (Admin)")
+    st.subheader("🌍 Visão Global de Usuários (Super Admin)")
     db = get_db()
     
     users_ref = list(db.collection('usuarios').stream())
@@ -87,23 +84,23 @@ def gestao_usuarios_geral():
             st.warning("Deletado."); st.rerun()
 
 # ==============================================================================
-# 2. GESTÃO DE EQUIPE (HIERARQUIA: LÍDER > DELEGADO > AUXILIAR)
+# 2. GESTÃO DE EQUIPES (NOVO FLUXO)
 # ==============================================================================
 def gestao_equipes_tab():
     st.markdown("<h2 style='color:#FFD700;'>🏛️ Gestão de Equipe</h2>", unsafe_allow_html=True)
     db = get_db()
     user = st.session_state.usuario
     user_id = user['id']
-    user_tipo = str(user.get("tipo_usuario", user.get("tipo", "aluno"))).lower()
     
-    eh_admin = (user_tipo == "admin")
+    # Verifica se é Admin Global (Sistema)
+    eh_admin_sistema = (str(user.get("tipo_usuario", "")).lower() == "admin")
     
-    # --- 1. IDENTIFICAR O CONTEXTO DO USUÁRIO ---
+    # --- 1. IDENTIFICAR O VÍNCULO DO USUÁRIO COM A EQUIPE ---
     meu_equipe_id = None
     sou_responsavel = False
-    sou_delegado = False # Pode aprovar professores
+    sou_delegado = False 
     
-    if not eh_admin:
+    if not eh_admin_sistema:
         # Busca vínculo ativo de professor
         vinc = list(db.collection('professores').where('usuario_id', '==', user_id).where('status_vinculo', '==', 'ativo').limit(1).stream())
         if vinc:
@@ -112,187 +109,226 @@ def gestao_equipes_tab():
             sou_responsavel = dados_v.get('eh_responsavel', False)
             sou_delegado = dados_v.get('pode_aprovar', False)
         else:
-            st.error("⛔ Acesso Negado: Você não possui vínculo ativo como professor em nenhuma equipe.")
+            st.error("⛔ Você não está vinculado a nenhuma equipe como Professor Ativo.")
             return
-    
-    # Nome da Equipe
-    nome_equipe = "Todas (Modo Admin)"
-    if meu_equipe_id:
-        doc_eq = db.collection('equipes').document(meu_equipe_id).get()
-        if doc_eq.exists: nome_equipe = doc_eq.to_dict().get('nome', 'Minha Equipe')
+    else:
+        # Se for Admin Global, permite selecionar uma equipe para gerenciar (debug/suporte)
+        equipes_all = list(db.collection('equipes').stream())
+        opcoes_eq = {e.id: e.to_dict().get('nome') for e in equipes_all}
+        meu_equipe_id = st.selectbox("Selecione a Equipe (Admin Mode):", list(opcoes_eq.keys()), format_func=lambda x: opcoes_eq[x])
+        sou_responsavel = True # Admin tem poder total
 
-    # --- 2. DEFINIR NÍVEL DE PODER ---
-    # Nível 3: Líder ou Admin (Pode tudo + Delegar)
-    # Nível 2: Delegado (Pode aprovar Profs + Alunos de todos)
-    # Nível 1: Auxiliar Comum (Pode aprovar SÓ seus alunos)
+    # Busca nome da equipe
+    nome_equipe = "Desconhecida"
+    if meu_equipe_id:
+        eq_doc = db.collection('equipes').document(meu_equipe_id).get()
+        if eq_doc.exists: nome_equipe = eq_doc.to_dict().get('nome')
+
+    # --- 2. DEFINIR NÍVEL DE PERMISSÃO ---
+    # Nível 3: Professor Responsável (Líder) -> Vê tudo, aprova tudo, delega poder.
+    # Nível 2: Professor Auxiliar Delegado -> Vê tudo, aprova alunos e outros professores.
+    # Nível 1: Professor Auxiliar Comum -> Vê alunos da sua turma, aprova seus alunos.
     
     nivel_poder = 1
     if sou_delegado: nivel_poder = 2
-    if sou_responsavel or eh_admin: nivel_poder = 3
+    if sou_responsavel or eh_admin_sistema: nivel_poder = 3
 
-    if not eh_admin:
-        cargo_txt = "⭐⭐⭐ Líder" if nivel_poder==3 else ("⭐⭐ Delegado" if nivel_poder==2 else "⭐ Auxiliar")
-        st.info(f"Equipe: **{nome_equipe}** | Cargo: **{cargo_txt}**")
-
-    # --- 3. ABAS ---
-    abas = ["👥 Membros", "⏳ Aprovações"]
-    if nivel_poder == 3: abas.append("🎖️ Delegar Poder")
-    if eh_admin: abas.append("⚙️ Criar Equipes")
+    # Exibe Banner Informativo
+    cols_info = st.columns([3, 1])
+    cols_info[0].info(f"Equipe: **{nome_equipe}**")
     
-    tabs = st.tabs(abas)
+    badge = "⭐ Auxiliar"
+    if nivel_poder == 2: badge = "⭐⭐ Delegado"
+    if nivel_poder == 3: badge = "⭐⭐⭐ Responsável"
+    cols_info[1].success(f"Cargo: {badge}")
 
-    # === ABA 1: MEMBROS (VISUALIZAR TODOS DA EQUIPE) ===
+    # --- 3. ABAS DE GESTÃO ---
+    abas_titulos = ["⏳ Solicitações Pendentes", "👥 Membros Ativos"]
+    if nivel_poder == 3: abas_titulos.append("🎖️ Gestão de Poder")
+    if eh_admin_sistema: abas_titulos.append("⚙️ Admin Equipes")
+    
+    tabs = st.tabs(abas_titulos)
+
+    # === ABA 1: SOLICITAÇÕES PENDENTES ===
     with tabs[0]:
-        st.caption("Membros ativos da equipe")
-        lista_membros = []
+        st.markdown("### 🔔 Aprovações Pendentes")
         
-        # Alunos
-        q_alunos = db.collection('alunos').where('status_vinculo', '==', 'ativo')
-        if not eh_admin: q_alunos = q_alunos.where('equipe_id', '==', meu_equipe_id)
+        # --- A. PENDÊNCIA DE ALUNOS ---
+        st.markdown("#### 🥋 Alunos Aguardando")
+        q_alunos = db.collection('alunos').where('status_vinculo', '==', 'pendente').where('equipe_id', '==', meu_equipe_id)
         
-        for doc in q_alunos.stream():
-            d = doc.to_dict(); uid = d.get('usuario_id')
-            udoc = db.collection('usuarios').document(uid).get()
-            if udoc.exists:
-                lista_membros.append({"Nome": udoc.to_dict()['nome'], "Faixa": d.get('faixa_atual'), "Tipo": "Aluno"})
+        # Se for Auxiliar Comum (Nível 1), SÓ vê alunos que escolheram ele especificamente
+        if nivel_poder == 1:
+            q_alunos = q_alunos.where('professor_id', '==', user_id)
+            st.caption("Vendo apenas alunos que solicitaram entrada na **sua** turma.")
+        else:
+            st.caption("Vendo solicitações de alunos para **toda** a equipe.")
 
-        # Professores
-        q_profs = db.collection('professores').where('status_vinculo', '==', 'ativo')
-        if not eh_admin: q_profs = q_profs.where('equipe_id', '==', meu_equipe_id)
+        alunos_pend = list(q_alunos.stream())
         
-        for doc in q_profs.stream():
-            d = doc.to_dict(); uid = d.get('usuario_id')
-            udoc = db.collection('usuarios').document(uid).get()
-            if udoc.exists:
-                carg = "Professor"
-                if d.get('eh_responsavel'): carg += " (Líder)"
-                elif d.get('pode_aprovar'): carg += " (Delegado)"
-                lista_membros.append({"Nome": udoc.to_dict()['nome'], "Faixa": udoc.to_dict().get('faixa_atual','-'), "Tipo": carg})
-        
-        if lista_membros:
-            df = pd.DataFrame(lista_membros)
-            # Filtro simples
-            t = st.text_input("Buscar membro:", key="search_memb")
-            if t: df = df[df['Nome'].astype(str).str.upper().str.contains(t.upper())]
-            st.dataframe(df, use_container_width=True, hide_index=True)
-        else: st.info("Nenhum membro ativo.")
+        if not alunos_pend:
+            st.info("Nenhuma solicitação de aluno pendente.")
+        else:
+            for doc in alunos_pend:
+                d = doc.to_dict()
+                u_doc = db.collection('usuarios').document(d['usuario_id']).get()
+                nome_aluno = u_doc.to_dict()['nome'] if u_doc.exists else "Usuário Desconhecido"
+                
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([0.6, 0.2, 0.2])
+                    c1.markdown(f"**{nome_aluno}**\n\nFaixa: {d.get('faixa_atual')}")
+                    if c2.button("✅ Aprovar", key=f"ap_al_{doc.id}"):
+                        db.collection('alunos').document(doc.id).update({'status_vinculo': 'ativo'})
+                        st.toast(f"{nome_aluno} aprovado!"); time.sleep(1); st.rerun()
+                    if c3.button("❌ Recusar", key=f"rc_al_{doc.id}"):
+                        db.collection('alunos').document(doc.id).delete()
+                        st.toast(f"{nome_aluno} recusado."); time.sleep(1); st.rerun()
 
-    # === ABA 2: APROVAÇÕES (LÓGICA HIERÁRQUICA) ===
+        # --- B. PENDÊNCIA DE PROFESSORES (Só Nível 2 e 3 vê) ---
+        if nivel_poder >= 2:
+            st.divider()
+            st.markdown("#### 🥋 Professores Auxiliares Aguardando")
+            q_profs = db.collection('professores').where('status_vinculo', '==', 'pendente').where('equipe_id', '==', meu_equipe_id)
+            profs_pend = list(q_profs.stream())
+            
+            if not profs_pend:
+                st.info("Nenhuma solicitação de professor pendente.")
+            else:
+                for doc in profs_pend:
+                    d = doc.to_dict()
+                    u_doc = db.collection('usuarios').document(d['usuario_id']).get()
+                    nome_prof = u_doc.to_dict()['nome'] if u_doc.exists else "Usuário Desconhecido"
+                    
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([0.6, 0.2, 0.2])
+                        c1.markdown(f"**PROFESSOR: {nome_prof}**\n\nSolicita entrada como Auxiliar.")
+                        if c2.button("✅ Autorizar", key=f"ap_pr_{doc.id}"):
+                            db.collection('professores').document(doc.id).update({'status_vinculo': 'ativo'})
+                            st.toast(f"Professor {nome_prof} autorizado!"); time.sleep(1); st.rerun()
+                        if c3.button("❌ Recusar", key=f"rc_pr_{doc.id}"):
+                            db.collection('professores').document(doc.id).delete()
+                            st.toast("Solicitação recusada."); time.sleep(1); st.rerun()
+        elif nivel_poder == 1:
+            st.divider()
+            st.info("Você não tem permissão para aprovar novos professores auxiliares.")
+
+    # === ABA 2: MEMBROS ATIVOS ===
     with tabs[1]:
-        st.subheader("Solicitações Pendentes")
-        pendencias = []
-
-        # A. ALUNOS
-        # Regra: Nível 2/3 vê TODOS. Nível 1 vê só SEUS.
-        q_alunos = db.collection('alunos').where('status_vinculo', '==', 'pendente')
-        if not eh_admin: 
-            q_alunos = q_alunos.where('equipe_id', '==', meu_equipe_id)
-            if nivel_poder == 1:
-                # O Auxiliar Comum só vê alunos que o escolheram
-                q_alunos = q_alunos.where('professor_id', '==', user_id)
+        st.markdown("### 📜 Quadro de Membros")
+        col_filtro, _ = st.columns([1,1])
+        filtro_nome = col_filtro.text_input("Buscar membro por nome:")
         
-        for doc in q_alunos.stream():
-            d = doc.to_dict()
-            udoc = db.collection('usuarios').document(d['usuario_id']).get()
+        lista_final = []
+        
+        # 1. Busca Professores da Equipe
+        profs_ref = db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream()
+        for p in profs_ref:
+            pdados = p.to_dict()
+            udoc = db.collection('usuarios').document(pdados['usuario_id']).get()
             if udoc.exists:
-                nome = udoc.to_dict().get('nome')
-                pendencias.append({
-                    'id': doc.id, 'col': 'alunos', 
-                    'desc': f"Aluno: {nome} ({d.get('faixa_atual')})",
-                    'msg': "Selecionou você." if nivel_poder == 1 else ""
+                role = "Auxiliar"
+                if pdados.get('eh_responsavel'): role = "Líder (Resp.)"
+                elif pdados.get('pode_aprovar'): role = "Delegado"
+                
+                lista_final.append({
+                    "Nome": udoc.to_dict()['nome'],
+                    "Tipo": "Professor",
+                    "Status/Faixa": role,
+                    "ID": p.id
                 })
 
-        # B. PROFESSORES
-        # Regra: Só Nível 2 ou 3 (Delegado ou Líder) pode aprovar professores
-        if nivel_poder >= 2:
-            q_profs = db.collection('professores').where('status_vinculo', '==', 'pendente')
-            if not eh_admin: q_profs = q_profs.where('equipe_id', '==', meu_equipe_id)
+        # 2. Busca Alunos da Equipe
+        alunos_ref = db.collection('alunos').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream()
+        for a in alunos_ref:
+            adados = a.to_dict()
+            udoc = db.collection('usuarios').document(adados['usuario_id']).get()
+            if udoc.exists:
+                lista_final.append({
+                    "Nome": udoc.to_dict()['nome'],
+                    "Tipo": "Aluno",
+                    "Status/Faixa": adados.get('faixa_atual', '-'),
+                    "ID": a.id
+                })
+        
+        # Exibe Tabela
+        if lista_final:
+            df_membros = pd.DataFrame(lista_final)
+            if filtro_nome:
+                df_membros = df_membros[df_membros['Nome'].str.upper().str.contains(filtro_nome.upper())]
             
-            for doc in q_profs.stream():
-                d = doc.to_dict()
-                udoc = db.collection('usuarios').document(d['usuario_id']).get()
-                if udoc.exists:
-                    nome = udoc.to_dict().get('nome')
-                    pendencias.append({
-                        'id': doc.id, 'col': 'professores', 
-                        'desc': f"PROFESSOR: {nome}",
-                        'msg': "Solicita entrada na equipe."
-                    })
-
-        if not pendencias:
-            st.success("Nada pendente.")
-            if nivel_poder == 1: st.caption("Como Auxiliar, você vê apenas alunos que te indicaram diretamente.")
+            st.dataframe(
+                df_membros[['Nome', 'Tipo', 'Status/Faixa']], 
+                use_container_width=True, 
+                hide_index=True
+            )
         else:
-            for p in pendencias:
-                with st.container(border=True):
-                    c1, c2, c3 = st.columns([4, 1, 1])
-                    c1.markdown(f"**{p['desc']}**")
-                    if p['msg']: c1.caption(p['msg'])
-                    
-                    if c2.button("✅", key=f"ok_{p['id']}"):
-                        db.collection(p['col']).document(p['id']).update({'status_vinculo': 'ativo'})
-                        st.toast("Aprovado!"); time.sleep(1); st.rerun()
-                    if c3.button("❌", key=f"no_{p['id']}"):
-                        db.collection(p['col']).document(p['id']).delete()
-                        st.toast("Rejeitado."); time.sleep(1); st.rerun()
+            st.warning("Ainda não há membros ativos nesta equipe.")
 
-    # === ABA 3: DELEGAR PODER (SÓ LÍDER/ADMIN) ===
-    if nivel_poder == 3 and "🎖️ Delegar Poder" in abas:
+    # === ABA 3: GESTÃO DE PODER (SÓ LÍDER) ===
+    if nivel_poder == 3 and "🎖️ Gestão de Poder" in abas_titulos:
         with tabs[2]:
-            st.subheader("Nomear Delegados")
-            st.info("Delegados podem aprovar a entrada de outros professores auxiliares.")
+            st.markdown("### 🎖️ Delegar Autoridade")
+            st.info("""
+            **Regra:** Você pode delegar até **2 Professores Auxiliares** para ajudarem na aprovação de solicitações.
+            Delegados podem aprovar alunos e outros professores auxiliares.
+            """)
             
-            # Conta quantos delegados existem (excluindo o próprio líder)
-            q_del = db.collection('professores').where('pode_aprovar', '==', True).where('status_vinculo', '==', 'ativo')
-            if not eh_admin: q_del = q_del.where('equipe_id', '==', meu_equipe_id)
+            # 1. Contar quantos delegados já existem (excluindo o líder)
+            q_delegados = db.collection('professores')\
+                .where('equipe_id', '==', meu_equipe_id)\
+                .where('pode_aprovar', '==', True)\
+                .where('status_vinculo', '==', 'ativo')\
+                .stream()
             
-            delegados_atuais = [d for d in q_del.stream() if not d.to_dict().get('eh_responsavel')]
-            qtd = len(delegados_atuais)
+            delegados_ids = [d.id for d in q_delegados if not d.to_dict().get('eh_responsavel')]
+            qtd_delegados = len(delegados_ids)
             
-            st.markdown(f"**Vagas ocupadas:** {qtd} / 2")
+            st.metric("Vagas de Delegado Utilizadas", f"{qtd_delegados} / 2")
 
-            # Lista Professores Auxiliares da equipe
-            q_aux = db.collection('professores').where('status_vinculo', '==', 'ativo')
-            if not eh_admin: q_aux = q_aux.where('equipe_id', '==', meu_equipe_id)
+            st.divider()
+            st.markdown("#### Professores Auxiliares Disponíveis")
             
-            for doc in q_aux.stream():
+            # Lista auxiliares para promover/rebaixar
+            q_aux = db.collection('professores')\
+                .where('equipe_id', '==', meu_equipe_id)\
+                .where('status_vinculo', '==', 'ativo')\
+                .stream()
+            
+            encontrou_auxiliar = False
+            for doc in q_aux:
                 d = doc.to_dict()
-                if d.get('eh_responsavel'): continue # Pula o líder
+                if d.get('eh_responsavel'): continue # Pula o próprio líder
                 
+                encontrou_auxiliar = True
                 uid = d.get('usuario_id')
                 udoc = db.collection('usuarios').document(uid).get()
-                if udoc.exists:
-                    nome = udoc.to_dict().get('nome')
-                    is_del = d.get('pode_aprovar', False)
-                    
-                    c1, c2 = st.columns([4, 2])
-                    c1.write(f"🥋 {nome}")
-                    
-                    if is_del:
-                        if c2.button("Revogar Poder", key=f"rv_{doc.id}"):
-                            db.collection('professores').document(doc.id).update({'pode_aprovar': False})
-                            st.rerun()
-                    else:
-                        btn_disab = (qtd >= 2)
-                        if c2.button("Promover", key=f"pm_{doc.id}", disabled=btn_disab):
-                            db.collection('professores').document(doc.id).update({'pode_aprovar': True})
-                            st.rerun()
-                    st.divider()
+                nome = udoc.to_dict()['nome'] if udoc.exists else "Sem Nome"
+                eh_del = d.get('pode_aprovar', False)
+                
+                c1, c2 = st.columns([3, 2])
+                c1.write(f"🥋 **{nome}**")
+                
+                if eh_del:
+                    if c2.button("⬇️ Revogar Poder", key=f"rv_{doc.id}"):
+                        db.collection('professores').document(doc.id).update({'pode_aprovar': False})
+                        st.toast(f"Poder de {nome} revogado."); time.sleep(1); st.rerun()
+                else:
+                    # Só habilita botão de promover se tiver vaga (< 2)
+                    pode_promover = (qtd_delegados < 2)
+                    if c2.button("⬆️ Promover a Delegado", key=f"pm_{doc.id}", disabled=not pode_promover):
+                        db.collection('professores').document(doc.id).update({'pode_aprovar': True})
+                        st.toast(f"{nome} agora é Delegado!"); time.sleep(1); st.rerun()
+                st.divider()
+            
+            if not encontrou_auxiliar:
+                st.warning("Não há professores auxiliares cadastrados na equipe para delegar.")
 
-    # === ABA 4: CRIAR EQUIPES (SÓ ADMIN) ===
-    if eh_admin and "⚙️ Criar Equipes" in abas:
+    # === ABA 4: ADMIN EQUIPES (SÓ SUPER ADMIN) ===
+    if eh_admin_sistema and "⚙️ Admin Equipes" in abas_titulos:
         with tabs[3]:
-            st.subheader("Gerenciar Equipes")
-            equipes = list(db.collection('equipes').stream())
-            for eq in equipes:
-                d = eq.to_dict()
-                with st.expander(f"🏢 {d.get('nome', 'Sem Nome')}"):
-                    st.write(f"Descrição: {d.get('descricao')}")
-                    if st.button("🗑️ Excluir", key=f"del_eq_{eq.id}"):
-                        db.collection('equipes').document(eq.id).delete(); st.rerun()
-            st.markdown("---")
-            with st.form("nova_eq"):
-                nm = st.text_input("Nome da Equipe")
+            st.subheader("Criar/Excluir Equipes (Sistema)")
+            with st.form("add_eq"):
+                nm = st.text_input("Nome da Nova Equipe")
                 desc = st.text_input("Descrição")
                 if st.form_submit_button("Criar Equipe"):
                     db.collection('equipes').add({"nome": nm.upper(), "descricao": desc, "ativo": True})
@@ -369,11 +405,9 @@ def gestao_questoes_tab():
                     st.success("Cadastrada!"); time.sleep(1); st.rerun()
                 else: st.warning("Preencha obrigatórios.")
     
-    # ... (Abas 2 e 3 simplificadas para caber, mas mantêm a lógica do arquivo original)
-    if user_tipo == "admin":
-        with tabs[3]:
-            st.info("Painel de Aprovação de Questões (Admin)")
-            # (Lógica de aprovação mantida do original)
+    if user_tipo == "admin" and len(tabs) > 3:
+         with tabs[3]:
+            st.info("Painel de Aprovação (Admin)")
 
 # ==============================================================================
 # 4. GESTÃO DE EXAMES (MANTIDO)
@@ -418,7 +452,6 @@ def gestao_exame_de_faixa_route():
 
     with tab3:
         st.subheader("Autorizar Alunos")
-        # Mantendo simples para não dar erro
         st.info("Utilize a aba 'Gestão de Equipe' para aprovar a entrada. Aqui você libera o exame.")
 
 # =========================================
