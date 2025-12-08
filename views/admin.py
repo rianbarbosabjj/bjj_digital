@@ -21,8 +21,8 @@ try:
         fazer_upload_midia, 
         normalizar_link_video, 
         verificar_duplicidade_ia,
-        auditoria_ia_questao,   # Gemini
-        auditoria_ia_openai,    # GPT
+        auditoria_ia_questao,   
+        auditoria_ia_openai,    
         IA_ATIVADA 
     )
 except ImportError:
@@ -46,7 +46,7 @@ FAIXAS_COMPLETAS = [
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
 
-# Mapeamento para exibição bonita vs valor no banco
+# Mapeamento para exibição
 TIPO_MAP = {
     "Aluno(a)": "aluno",
     "Professor(a)": "professor",
@@ -58,7 +58,7 @@ LISTA_TIPOS_DISPLAY = list(TIPO_MAP.keys())
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS (TAB INTERNA)
+# GESTÃO DE USUÁRIOS (CORRIGIDA)
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
@@ -114,7 +114,7 @@ def gestao_usuarios_tab():
     sel = st.selectbox("Selecione o usuário:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
     
     if sel:
-        # Busca vínculos atuais
+        # Busca vínculos
         vinculo_equipe_id = None
         vinculo_prof_id = None
         doc_vinculo_id = None
@@ -134,7 +134,7 @@ def gestao_usuarios_tab():
                 d_vinc = vincs[0].to_dict()
                 vinculo_equipe_id = d_vinc.get('equipe_id')
 
-        # --- FORMULÁRIO ---
+        # --- FORM CORRIGIDO ---
         with st.form(f"edt_{sel['id']}"):
             st.markdown("##### 👤 Dados Pessoais")
             c1, c2 = st.columns(2)
@@ -179,9 +179,9 @@ def gestao_usuarios_tab():
             tipo_sel_display = p1.selectbox("Tipo:", LISTA_TIPOS_DISPLAY, index=idx_tipo)
             tipo_sel_valor = TIPO_MAP[tipo_sel_display]
             
-            # Faixa (PROTEÇÃO CONTRA ERRO DE ATRIBUTO)
+            # Faixa (CORREÇÃO DE ERRO ATTRIBUTE ERROR)
             idx_fx = 0
-            faixa_banco = str(sel.get('faixa_atual', 'Branca') or 'Branca')
+            faixa_banco = str(sel.get('faixa_atual') or 'Branca') # Garante string
             for i, f in enumerate(FAIXAS_COMPLETAS):
                 if f.strip().lower() == faixa_banco.strip().lower():
                     idx_fx = i
@@ -215,7 +215,7 @@ def gestao_usuarios_tab():
             st.markdown("##### 🔒 Segurança")
             pwd = st.text_input("Nova Senha (opcional):", type="password")
             
-            # BOTÃO DE SUBMIT (DENTRO DO FORM - CORREÇÃO CRUCIAL)
+            # --- CORREÇÃO: BOTÃO DENTRO DO FORM ---
             submit_btn = st.form_submit_button("💾 Salvar Todas as Alterações", type="primary")
 
         # Lógica de processamento
@@ -234,7 +234,9 @@ def gestao_usuarios_tab():
             
             try:
                 db.collection('usuarios').document(sel['id']).update(upd)
+                
                 novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
+                
                 if tipo_sel_valor == 'aluno':
                     novo_p_id = mapa_nomes_profs_inv.get(novo_prof_display)
                     dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id, "faixa_atual": fx}
@@ -242,12 +244,14 @@ def gestao_usuarios_tab():
                     else:
                         dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
                         db.collection('alunos').add(dados_vinc)
+                        
                 elif tipo_sel_valor == 'professor':
                     dados_vinc = {"equipe_id": novo_eq_id}
                     if doc_vinculo_id: db.collection('professores').document(doc_vinculo_id).update(dados_vinc)
                     else:
                         dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
                         db.collection('professores').add(dados_vinc)
+
                 st.success("✅ Atualizado com sucesso!"); time.sleep(1.5); st.rerun()
             except Exception as e: st.error(f"Erro ao salvar: {e}")
                 
@@ -540,7 +544,6 @@ def gestao_questoes_tab():
                             st.toast("Aprovada!"); time.sleep(1); st.rerun()
                         
                         with c2.expander("🤖 Auditoria & Correção"):
-                            # BOTÕES DE IA
                             col_gem, col_gpt = st.columns(2)
                             if col_gem.button("Gemini", key=f"gem_{doc.id}", use_container_width=True):
                                 with st.spinner("Analisando..."):
@@ -553,7 +556,6 @@ def gestao_questoes_tab():
                                     st.info(res)
 
                             st.markdown("---")
-                            # CAMPO DE JUSTIFICATIVA OBRIGATÓRIO (FORA DO EXPANDER PARA VISIBILIDADE)
                             fb_txt = st.text_area("Justificativa (Obrigatória) *", key=f"fb_{doc.id}", height=80)
                             
                             if st.button("Enviar para Correção", key=f"send_fb_{doc.id}"):
@@ -572,9 +574,9 @@ def gestao_questoes_tab():
 # GESTÃO DE EXAMES
 # =========================================
 def gestao_exame_de_faixa_route():
-    st.markdown("<h1 style='color:#FFD700;'>⚙️ Gerenciador de Exames</h1>", unsafe_allow_html=True)
+    st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
     db = get_db()
-    tab1, tab2, tab3 = st.tabs(["📝 Criar/Editar Exames", "👁️ Visualizar Exames", "✅ Autorizar Exames"])
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
 
     with tab1:
         st.subheader("1. Selecione a Faixa")
@@ -724,7 +726,9 @@ def gestao_exame_de_faixa_route():
             c2.write(nome_eq)
             
             fx_banco = d.get('faixa_exame')
-            idx = FAIXAS_COMPLETAS.index(fx_banco) if fx_banco in FAIXAS_COMPLETAS else 0
+            idx = 0
+            if fx_banco in FAIXAS_COMPLETAS: idx = FAIXAS_COMPLETAS.index(fx_banco)
+            
             fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_s_{d['id']}", label_visibility="collapsed")
             
             hab = d.get('exame_habilitado', False)
@@ -741,7 +745,7 @@ def gestao_exame_de_faixa_route():
                     if raw_fim:
                         dt_fim = datetime.fromisoformat(str(raw_fim).replace('Z', ''))
                         if datetime.now() > dt_fim: msg_status = "⏰ Expirado"
-                        else: msg_status = f"🟢 Exame autorizado até {dt_fim.strftime('%d/%m %H:%M')}"
+                        else: msg_status = f"🟢 Até {dt_fim.strftime('%d/%m %H:%M')}"
                     else: msg_status = "🟢 Liberado"
                 except: msg_status = "🟢 Liberado"
             
