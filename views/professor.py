@@ -46,7 +46,7 @@ def get_cargo_decorado(cargo):
     return "🥋 Professor Adjunto"
 
 # =========================================
-# FUNÇÃO: GESTÃO DE EQUIPES (FLUXO COMPLETO)
+# FUNÇÃO: GESTÃO DE EQUIPES (COM TOTAIS)
 # =========================================
 def gestao_equipes():
     db = get_db()
@@ -77,9 +77,8 @@ def gestao_equipes():
     if sou_delegado: nivel_poder = 2
     if sou_responsavel: nivel_poder = 3
 
-    # Cabeçalho Informativo Estilizado
+    # Cabeçalho
     st.markdown(f"### 🏛️ {nome_equipe}")
-    
     col_info1, col_info2 = st.columns([3, 1])
     col_info1.caption("Painel de Gestão de Membros e Aprovações")
     
@@ -99,7 +98,7 @@ def gestao_equipes():
     with tabs[0]:
         st.markdown("#### Solicitações de Entrada")
         
-        # --- A. ALUNOS PENDENTES ---
+        # A. ALUNOS
         q_alunos = db.collection('alunos').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'pendente')
         if nivel_poder == 1:
             q_alunos = q_alunos.where('professor_id', '==', user_id)
@@ -128,7 +127,7 @@ def gestao_equipes():
         else:
             st.success("Nenhuma pendência de aluno.")
 
-        # --- B. PROFESSORES PENDENTES ---
+        # B. PROFESSORES
         if nivel_poder >= 2:
             st.divider()
             st.markdown("#### Professores Pendentes")
@@ -151,11 +150,22 @@ def gestao_equipes():
                             db.collection('professores').document(doc.id).delete()
                             st.toast("Recusado."); time.sleep(1); st.rerun()
 
-    # === ABA 2: MEMBROS ATIVOS (MELHORADA) ===
+    # === ABA 2: MEMBROS ATIVOS (COM TOTAIS) ===
     with tabs[1]:
-        # --- 1. TABELA DE PROFESSORES ---
-        st.markdown("#### 🥋 Quadro de Professores")
+        # 1. BUSCAR DADOS (Queries)
+        # Fazemos a busca antes para poder contar e exibir os totais no topo
         profs_ativos = list(db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
+        alunos_ativos = list(db.collection('alunos').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
+
+        # 2. EXIBIR TOTAIS (Métricas)
+        c_tot1, c_tot2 = st.columns(2)
+        c_tot1.metric("👨‍🏫 Total Professores", len(profs_ativos))
+        c_tot2.metric("🥋 Total Alunos", len(alunos_ativos))
+        
+        st.divider()
+
+        # 3. TABELA DE PROFESSORES
+        st.markdown("#### 🥋 Quadro de Professores")
         
         lista_profs = []
         for p in profs_ativos:
@@ -168,7 +178,7 @@ def gestao_equipes():
                 
                 lista_profs.append({
                     "Nome": u.to_dict()['nome'],
-                    "Cargo": get_cargo_decorado(cargo_raw) # Aplica decoração
+                    "Cargo": get_cargo_decorado(cargo_raw)
                 })
         
         if lista_profs:
@@ -184,52 +194,45 @@ def gestao_equipes():
         else:
             st.info("Nenhum professor encontrado.")
 
-        st.markdown("---") # Divisória
+        st.markdown("---")
 
-        # --- 2. TABELA DE ALUNOS ---
+        # 4. TABELA DE ALUNOS
         c_titulo, c_busca = st.columns([1, 1])
         c_titulo.markdown("#### 🥋 Quadro de Alunos")
         filtro = c_busca.text_input("🔍 Buscar aluno:", placeholder="Digite o nome...", label_visibility="collapsed")
-        
-        alunos_ativos = list(db.collection('alunos').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
         
         lista_alunos = []
         for a in alunos_ativos:
             adados = a.to_dict()
             u = db.collection('usuarios').document(adados['usuario_id']).get()
             if u.exists:
-                # Normaliza o nome para busca
                 nome_real = u.to_dict()['nome']
-                # Aplica o filtro antes de processar para ganhar performance visual
+                # Filtro visual
                 if filtro and filtro.upper() not in nome_real.upper():
                     continue
 
                 lista_alunos.append({
                     "Nome": nome_real,
-                    "Faixa": get_faixa_decorada(adados.get('faixa_atual', '-')) # Aplica cor
+                    "Faixa": get_faixa_decorada(adados.get('faixa_atual', '-'))
                 })
                 
         if lista_alunos:
-            df_alunos = pd.DataFrame(lista_alunos)
-            # Ordenar por nome
-            df_alunos = df_alunos.sort_values(by="Nome")
-            
+            df_alunos = pd.DataFrame(lista_alunos).sort_values(by="Nome")
             st.dataframe(
                 df_alunos,
                 use_container_width=True,
                 hide_index=True,
-                height=400, # Altura fixa para scrollar se tiver muitos alunos
+                height=400,
                 column_config={
                     "Nome": st.column_config.TextColumn("Aluno", width="large"),
                     "Faixa": st.column_config.TextColumn("Graduação Atual", width="medium"),
                 }
             )
-            st.caption(f"Total listado: {len(df_alunos)} alunos.")
-        else:
             if filtro:
-                st.warning("Nenhum aluno encontrado com esse nome.")
-            else:
-                st.warning("Ainda não há alunos ativos nesta equipe.")
+                st.caption(f"Exibindo {len(df_alunos)} alunos filtrados.")
+        else:
+            if filtro: st.warning("Nenhum aluno encontrado.")
+            else: st.warning("Ainda não há alunos ativos.")
 
     # === ABA 3: DELEGAR PODER ===
     if nivel_poder == 3:
@@ -237,13 +240,13 @@ def gestao_equipes():
             st.markdown("#### Gestão de Delegados")
             st.info("Limite: 2 Delegados.")
             
-            profs_ativos = list(db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
-            delegados_existentes = [p for p in profs_ativos if p.to_dict().get('pode_aprovar') and not p.to_dict().get('eh_responsavel')]
+            profs_ativos_del = list(db.collection('professores').where('equipe_id', '==', meu_equipe_id).where('status_vinculo', '==', 'ativo').stream())
+            delegados_existentes = [p for p in profs_ativos_del if p.to_dict().get('pode_aprovar') and not p.to_dict().get('eh_responsavel')]
             
             st.metric("Vagas Utilizadas", f"{len(delegados_existentes)} / 2")
             st.divider()
             
-            auxiliares = [p for p in profs_ativos if not p.to_dict().get('eh_responsavel')]
+            auxiliares = [p for p in profs_ativos_del if not p.to_dict().get('eh_responsavel')]
             
             if not auxiliares:
                 st.warning("Sem auxiliares disponíveis.")
