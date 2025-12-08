@@ -157,21 +157,34 @@ def tela_troca_senha_obrigatoria():
                 if st.form_submit_button("Atualizar", use_container_width=True):
                     if ns and ns == cs:
                         try:
+                            # 1. Recupera ID de forma segura
                             user_sessao = st.session_state.get('usuario')
                             if not user_sessao or 'id' not in user_sessao:
                                 st.error("Erro de Sessão: Usuário não identificado.")
                                 return
+
                             uid = user_sessao['id']
+                            
+                            # 2. Gera Hash
                             hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
+                            
+                            # 3. Conecta ao Banco
                             db = get_db()
-                            if not db: st.error("Erro de conexão com o banco."); return
+                            if not db:
+                                st.error("Erro de conexão com o banco.")
+                                return
+
+                            # 4. Atualiza
                             db.collection('usuarios').document(uid).update({
-                                "senha": hashed, "precisa_trocar_senha": False
+                                "senha": hashed, 
+                                "precisa_trocar_senha": False
                             })
+                            
                             st.success("Sucesso! Entrando...")
                             st.session_state.usuario['precisa_trocar_senha'] = False
                             time.sleep(1)
                             st.rerun()
+                            
                         except Exception as e: 
                             st.error(f"Erro ao salvar: {e}") 
                     else: st.error("Senhas não conferem.")
@@ -181,8 +194,7 @@ def app_principal():
         st.session_state.clear(); st.rerun(); return
 
     usuario = st.session_state.usuario
-    # Garante compatibilidade entre 'tipo' e 'tipo_usuario'
-    raw_tipo = str(usuario.get("tipo_usuario", usuario.get("tipo", "aluno"))).lower()
+    raw_tipo = str(usuario.get("tipo", "aluno")).lower()
     
     if "admin" in raw_tipo: tipo_code = "admin"
     elif "professor" in raw_tipo: tipo_code = "professor"
@@ -198,14 +210,18 @@ def app_principal():
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
+        
         st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{label_tipo}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
+        
         if tipo_code in ["admin", "professor"]:
             if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
+        
         if tipo_code != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
+        
         if tipo_code == "admin":
             if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
             
@@ -216,30 +232,22 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Rotas que não estão no Menu Principal
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
-    if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return # Painel do Admin
+    if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
     if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # --- MENU PRINCIPAL (NAVBAR) ---
     ops, icns = [], []
-    
-    if tipo_code == "admin":
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipe", "Gestão de Exame"]
-        icns = ["house", "people", "journal", "trophy", "list-task", "people-fill", "file-earmark"]
-    
-    elif tipo_code == "professor":
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipe", "Gestão de Exame"]
-        icns = ["house", "people", "journal", "trophy", "list-task", "people-fill", "file-earmark"]
-    
-    else: # Aluno
+    if tipo_code in ["admin", "professor"]:
+        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+        icns = ["house", "people", "journal", "trophy", "list-task", "building", "file-earmark"]
+    else:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
         icns = ["house", "people", "journal", "trophy"]
 
     try: idx = ops.index(pg)
-    except: idx = 0 # Se a página não estiver na lista, vai para Início
+    except: idx = 0
     
     menu = option_menu(
         menu_title=None, 
@@ -249,36 +257,56 @@ def app_principal():
         orientation="horizontal",
         styles={
             "container": {
-                "padding": "5px 10px", "background-color": COR_FUNDO, "margin": "0px auto",
-                "border-radius": "12px", "border": "1px solid rgba(255, 215, 112, 0.15)", 
-                "box-shadow": "0 4px 15px rgba(0,0,0,0.3)", "width": "100%"
+                "padding": "5px 10px", 
+                "background-color": COR_FUNDO, 
+                "margin": "0px auto",
+                "border-radius": "12px", 
+                "border": "1px solid rgba(255, 215, 112, 0.15)", 
+                "box-shadow": "0 4px 15px rgba(0,0,0,0.3)",
+                "width": "100%",       
+                "max-width": "100%",  
+                "display": "flex",     
+                "justify-content": "space-between" 
             },
-            "icon": {"color": COR_DESTAQUE, "font-size": "16px", "font-weight": "bold"}, 
+            "icon": {
+                "color": COR_DESTAQUE, 
+                "font-size": "16px",
+                "font-weight": "bold"
+            }, 
             "nav-link": {
-                "font-size": "13px", "text-align": "center", "margin": "0px 2px",  
-                "color": "rgba(255, 255, 255, 0.8)", "font-weight": "400",
-                "border-radius": "8px", "transition": "0.3s", "width": "100%"
+                "font-size": "14px", 
+                "text-align": "center", 
+                "margin": "0px 2px",  
+                "color": "rgba(255, 255, 255, 0.8)",
+                "font-weight": "400",
+                "border-radius": "8px",
+                "transition": "0.3s",
+                "width": "100%",       
+                "flex-grow": "1",     
+                "display": "flex",
+                "justify-content": "center",
+                "align-items": "center"
             },
             "nav-link-selected": {
-                "background-color": COR_DESTAQUE, "color": "#0e2d26", "font-weight": "700",
+                "background-color": COR_DESTAQUE, 
+                "color": "#0e2d26", 
+                "font-weight": "700",
                 "box-shadow": "0px 2px 8px rgba(0,0,0,0.2)",
             },
         }
     )
 
-    # Lógica de Redirecionamento do Menu
     if menu != pg:
-        st.session_state.menu_selection = menu
-        st.rerun()
+        if pg == "Meus Certificados" and menu == "Início": pass 
+        else:
+            st.session_state.menu_selection = menu
+            st.rerun()
 
-    # --- ROTEAMENTO DAS PÁGINAS ---
     if pg == "Modo Rola": aluno.modo_rola(usuario)
     elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
     elif pg == "Ranking": aluno.ranking()
-    
-    # Rotas de Gestão (Admin / Prof)
+    elif pg == "Gestão de Equipes": professor.gestao_equipes()
     elif pg == "Gestão de Questões": admin.gestao_questoes()
-    elif pg == "Gestão de Equipe": admin.gestao_equipes_tab() # AGORA SIM!
     elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
 
 if __name__ == "__main__":
