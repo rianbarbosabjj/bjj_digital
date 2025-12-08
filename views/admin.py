@@ -58,206 +58,250 @@ LISTA_TIPOS_DISPLAY = list(TIPO_MAP.keys())
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS (CORRIGIDA)
+# GESTÃO DE EQUIPE E USUÁRIOS (FLUXO HIERÁRQUICO)
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
-    users_ref = list(db.collection('usuarios').stream())
-    users = [d.to_dict() | {"id": d.id} for d in users_ref]
+    user = st.session_state.usuario
+    user_id = user['id']
+    user_tipo = str(user.get("tipo_usuario", user.get("tipo", "aluno"))).lower()
     
-    equipes_ref = list(db.collection('equipes').stream())
-    mapa_equipes = {d.id: d.to_dict().get('nome', 'Sem Nome') for d in equipes_ref} 
-    mapa_equipes_inv = {v: k for k, v in mapa_equipes.items()} 
-    lista_equipes = ["Sem Equipe"] + sorted(list(mapa_equipes.values()))
-
-    profs_users = list(db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream())
-    mapa_nomes_profs = {u.id: u.to_dict().get('nome', 'Sem Nome') for u in profs_users}
-    mapa_nomes_profs_inv = {v: k for k, v in mapa_nomes_profs.items()}
-
-    vincs_profs = list(db.collection('professores').where('status_vinculo', '==', 'ativo').stream())
-    profs_por_equipe = {}
-    for v in vincs_profs:
-        d = v.to_dict()
-        eid = d.get('equipe_id')
-        uid = d.get('usuario_id')
-        if eid and uid and uid in mapa_nomes_profs:
-            if eid not in profs_por_equipe: profs_por_equipe[eid] = []
-            profs_por_equipe[eid].append(mapa_nomes_profs[uid])
-
-    if not users: st.warning("Vazio."); return
+    # 1. IDENTIFICAR O PAPEL E A EQUIPE DO USUÁRIO LOGADO
+    eh_admin = (user_tipo == "admin")
+    meu_equipe_id = None
+    sou_responsavel = False
+    tenho_poder_aprovacao_prof = False
     
-    df = pd.DataFrame(users)
-    c1, c2 = st.columns(2)
-    filtro_nome = c1.text_input("🔍 Buscar Nome/Email/CPF:")
-    filtro_tipo = c2.multiselect("Filtrar Tipo:", df['tipo_usuario'].unique() if 'tipo_usuario' in df.columns else [])
-
-    if filtro_nome:
-        termo = filtro_nome.upper()
-        df = df[
-            df['nome'].astype(str).str.upper().str.contains(termo) | 
-            df['email'].astype(str).str.upper().str.contains(termo) |
-            df['cpf'].astype(str).str.contains(termo)
-        ]
-    if filtro_tipo:
-        df = df[df['tipo_usuario'].isin(filtro_tipo)]
-
-    cols_show = ['nome', 'email', 'tipo_usuario', 'faixa_atual', 'sexo']
-    for c in cols_show: 
-        if c not in df.columns: df[c] = "-"
+    if not eh_admin:
+        # Busca vínculo de professor para saber a equipe e permissões
+        vinc = list(db.collection('professores').where('usuario_id', '==', user_id).where('status_vinculo', '==', 'ativo').limit(1).stream())
+        if vinc:
+            dados_v = vinc[0].to_dict()
+            meu_equipe_id = dados_v.get('equipe_id')
+            sou_responsavel = dados_v.get('eh_responsavel', False)
+            # Regra: Responsável SEMPRE pode, Adjunto só se tiver a flag 'pode_aprovar'
+            tenho_poder_aprovacao_prof = sou_responsavel or dados_v.get('pode_aprovar', False)
+        else:
+            st.error("Acesso restrito: Você não possui vínculo ativo com nenhuma equipe.")
+            return
     
-    st.dataframe(df[cols_show], use_container_width=True, hide_index=True)
+    # 2. CARREGAR DADOS DA EQUIPE
+    ids_membros_equipe = []
+    nome_minha_equipe = "Todas as Equipes (Modo Admin)"
     
-    st.markdown("---")
-    st.subheader("🛠️ Editar Cadastro Completo")
-    
-    opcoes = df.to_dict('records')
-    sel = st.selectbox("Selecione o usuário:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
-    
-    if sel:
-        # Busca vínculos
-        vinculo_equipe_id = None
-        vinculo_prof_id = None
-        doc_vinculo_id = None
+    if not eh_admin and meu_equipe_id:
+        # Busca nome da equipe
+        eq_doc = db.collection('equipes').document(meu_equipe_id).get()
+        if eq_doc.exists: nome_minha_equipe = eq_doc.to_dict().get('nome', 'Minha Equipe')
         
-        if sel.get('tipo_usuario') == 'aluno':
-            vincs = list(db.collection('alunos').where('usuario_id', '==', sel['id']).limit(1).stream())
-            if vincs:
-                doc_vinculo_id = vincs[0].id
-                d_vinc = vincs[0].to_dict()
-                vinculo_equipe_id = d_vinc.get('equipe_id')
-                vinculo_prof_id = d_vinc.get('professor_id')
+        # Busca IDs de alunos da equipe
+        alunos_ref = db.collection('alunos').where('equipe_id', '==', meu_equipe_id).stream()
+        ids_membros_equipe.extend([d.to_dict().get('usuario_id') for d in alunos_ref])
         
-        elif sel.get('tipo_usuario') == 'professor':
-            vincs = list(db.collection('professores').where('usuario_id', '==', sel['id']).limit(1).stream())
-            if vincs:
-                doc_vinculo_id = vincs[0].id
-                d_vinc = vincs[0].to_dict()
-                vinculo_equipe_id = d_vinc.get('equipe_id')
+        # Busca IDs de professores da equipe
+        profs_ref = db.collection('professores').where('equipe_id', '==', meu_equipe_id).stream()
+        ids_membros_equipe.extend([d.to_dict().get('usuario_id') for d in profs_ref])
+        
+        ids_membros_equipe = list(set([i for i in ids_membros_equipe if i]))
 
-        # --- FORM CORRIGIDO ---
-        with st.form(f"edt_{sel['id']}"):
-            st.markdown("##### 👤 Dados Pessoais")
-            c1, c2 = st.columns(2)
-            nm = c1.text_input("Nome Completo *", value=sel.get('nome',''))
-            email = c2.text_input("E-mail *", value=sel.get('email',''))
-            
-            c3, c4, c5 = st.columns([1.5, 1, 1])
-            cpf = c3.text_input("CPF *", value=sel.get('cpf',''))
-            
-            idx_s = 0
-            sexo_val = sel.get('sexo')
-            if sexo_val in OPCOES_SEXO: idx_s = OPCOES_SEXO.index(sexo_val)
-            sexo_edit = c4.selectbox("Sexo:", OPCOES_SEXO, index=idx_s)
-            
-            val_n = None
-            if sel.get('data_nascimento'):
-                try: val_n = datetime.fromisoformat(sel.get('data_nascimento')).date()
-                except: pass
-            nasc_edit = c5.date_input("Nascimento:", value=val_n, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
+    # Carrega Usuários para Exibição
+    # (Para bases muito grandes, o ideal seria filtrar no backend, mas o Firestore limita o 'IN' a 10 itens.
+    #  Aqui carregamos e filtramos no Python pela segurança da hierarquia).
+    users_stream = list(db.collection('usuarios').stream())
+    users_filtrados = []
+    
+    for d in users_stream:
+        uid = d.id
+        u_data = d.to_dict()
+        u_data['id'] = uid
+        # Filtro de Visibilidade: Admin vê tudo, Professor vê só sua equipe e ele mesmo
+        if eh_admin or (uid in ids_membros_equipe) or (uid == user_id):
+             users_filtrados.append(u_data)
 
-            st.markdown("##### 📍 Endereço")
-            e1, e2 = st.columns([1, 3])
-            cep = e1.text_input("CEP:", value=sel.get('cep',''))
-            logr = e2.text_input("Logradouro:", value=sel.get('logradouro',''))
-            e3, e4, e5 = st.columns([1, 2, 2])
-            num = e3.text_input("Número:", value=sel.get('numero',''))
-            comp = e4.text_input("Complemento:", value=sel.get('complemento',''))
-            bairro = e5.text_input("Bairro:", value=sel.get('bairro',''))
-            e6, e7 = st.columns(2)
-            cid = e6.text_input("Cidade:", value=sel.get('cidade',''))
-            uf = e7.text_input("UF:", value=sel.get('uf',''))
+    if not users_filtrados: 
+        st.warning(f"Nenhum membro encontrado na equipe.")
+        return
 
-            st.markdown("##### 🥋 Perfil e Vínculos")
-            p1, p2 = st.columns(2)
-            
-            # Tipo
-            tipo_atual_banco = sel.get('tipo_usuario', 'aluno')
-            tipo_atual_display = TIPO_MAP_INV.get(tipo_atual_banco, "Aluno(a)")
-            idx_tipo = 0
-            if tipo_atual_display in LISTA_TIPOS_DISPLAY:
-                idx_tipo = LISTA_TIPOS_DISPLAY.index(tipo_atual_display)
-            tipo_sel_display = p1.selectbox("Tipo:", LISTA_TIPOS_DISPLAY, index=idx_tipo)
-            tipo_sel_valor = TIPO_MAP[tipo_sel_display]
-            
-            # Faixa (CORREÇÃO DE ERRO ATTRIBUTE ERROR)
-            idx_fx = 0
-            faixa_banco = str(sel.get('faixa_atual') or 'Branca') # Garante string
-            for i, f in enumerate(FAIXAS_COMPLETAS):
-                if f.strip().lower() == faixa_banco.strip().lower():
-                    idx_fx = i
-                    break
-            fx = p2.selectbox("Faixa:", FAIXAS_COMPLETAS, index=idx_fx)
+    # --- ABAS DE GESTÃO ---
+    abas = ["👥 Membros Ativos", "⏳ Aprovações Pendentes"]
+    if sou_responsavel or eh_admin:
+        abas.append("⭐ Delegar Poderes")
+        
+    tabs = st.tabs(abas)
 
-            v1, v2 = st.columns(2)
-            nome_eq_atual = mapa_equipes.get(vinculo_equipe_id, "Sem Equipe")
-            idx_eq = lista_equipes.index(nome_eq_atual) if nome_eq_atual in lista_equipes else 0
-            nova_equipe_nome = v1.selectbox("Equipe:", lista_equipes, index=idx_eq)
-            
-            novo_prof_display = "Sem Professor(a)"
-            lista_profs_inclusiva = ["Sem Professor(a)"]
-            
-            if tipo_sel_valor == 'aluno':
-                id_equipe_selecionada = mapa_equipes_inv.get(nova_equipe_nome)
-                if id_equipe_selecionada in profs_por_equipe:
-                    lista_profs_inclusiva += sorted(profs_por_equipe[id_equipe_selecionada])
+    # === ABA 1: MEMBROS ATIVOS ===
+    with tabs[0]:
+        st.caption(f"Visualizando: **{nome_minha_equipe}**")
+        df = pd.DataFrame(users_filtrados)
+        
+        c1, c2 = st.columns(2)
+        filtro_nome = c1.text_input("🔍 Buscar Membro:")
+        if filtro_nome:
+            termo = filtro_nome.upper()
+            df = df[df['nome'].astype(str).str.upper().str.contains(termo) | df['email'].astype(str).str.upper().str.contains(termo)]
+        
+        # Mostra tabela simples
+        cols_view = ['nome', 'email', 'tipo_usuario', 'faixa_atual']
+        for c in cols_view: 
+            if c not in df.columns: df[c] = "-"
+        st.dataframe(df[cols_view], use_container_width=True, hide_index=True)
+        
+        st.markdown("---")
+        st.subheader("🛠️ Editar Membro")
+        opcoes = df.to_dict('records')
+        sel = st.selectbox("Selecione para editar:", opcoes, format_func=lambda x: f"{x.get('nome')} ({x.get('tipo_usuario')})")
+        
+        if sel:
+            # Formulário de Edição Simplificado para o contexto de equipe
+            with st.form(f"edt_membro_{sel['id']}"):
+                c1, c2 = st.columns(2)
+                nm = c1.text_input("Nome", value=sel.get('nome',''))
+                email = c2.text_input("Email", value=sel.get('email',''))
                 
-                nome_prof_atual_display = mapa_nomes_profs.get(vinculo_prof_id, "Sem Professor(a)")
-                if nome_prof_atual_display == "Sem Professor": nome_prof_atual_display = "Sem Professor(a)"
-
-                idx_prof = 0
-                if nome_prof_atual_display in lista_profs_inclusiva:
-                    idx_prof = lista_profs_inclusiva.index(nome_prof_atual_display)
+                c3, c4 = st.columns(2)
+                idx_fx = 0
+                fx_banco = str(sel.get('faixa_atual') or 'Branca')
+                if fx_banco in FAIXAS_COMPLETAS: idx_fx = FAIXAS_COMPLETAS.index(fx_banco)
+                fx = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx_fx)
                 
-                novo_prof_display = v2.selectbox("Professor(a) Responsável:", lista_profs_inclusiva, index=idx_prof)
-                if nova_equipe_nome == "Sem Equipe":
-                    v2.caption("Selecione uma equipe para ver os professores.")
+                # Apenas Admin pode mudar CPF/Tipo livremente para evitar erros de integridade
+                if eh_admin:
+                    cpf = c4.text_input("CPF", value=sel.get('cpf',''))
+                else:
+                    c4.text_input("CPF (Somente leitura)", value=sel.get('cpf',''), disabled=True)
+                    cpf = sel.get('cpf','')
 
-            st.markdown("##### 🔒 Segurança")
-            pwd = st.text_input("Nova Senha (opcional):", type="password")
-            
-            # --- CORREÇÃO: BOTÃO DENTRO DO FORM ---
-            submit_btn = st.form_submit_button("💾 Salvar Todas as Alterações", type="primary")
-
-        # Lógica de processamento
-        if submit_btn:
-            upd = {
-                "nome": nm.upper(), "email": email.lower().strip(), "cpf": cpf,
-                "sexo": sexo_edit, "data_nascimento": nasc_edit.isoformat() if nasc_edit else None,
-                "cep": cep, "logradouro": logr.upper(), "numero": num, "complemento": comp.upper(),
-                "bairro": bairro.upper(), "cidade": cid.upper(), "uf": uf.upper(),
-                "tipo_usuario": tipo_sel_valor, 
-                "faixa_atual": fx
-            }
-            if pwd: 
-                upd["senha"] = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt()).decode()
-                upd["precisa_trocar_senha"] = True
-            
-            try:
-                db.collection('usuarios').document(sel['id']).update(upd)
-                
-                novo_eq_id = mapa_equipes_inv.get(nova_equipe_nome)
-                
-                if tipo_sel_valor == 'aluno':
-                    novo_p_id = mapa_nomes_profs_inv.get(novo_prof_display)
-                    dados_vinc = {"equipe_id": novo_eq_id, "professor_id": novo_p_id, "faixa_atual": fx}
-                    if doc_vinculo_id: db.collection('alunos').document(doc_vinculo_id).update(dados_vinc)
-                    else:
-                        dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
-                        db.collection('alunos').add(dados_vinc)
+                if st.form_submit_button("💾 Salvar Alterações"):
+                    try:
+                        db.collection('usuarios').document(sel['id']).update({
+                            "nome": nm.upper(), "email": email.lower(), 
+                            "faixa_atual": fx, "cpf": cpf
+                        })
                         
-                elif tipo_sel_valor == 'professor':
-                    dados_vinc = {"equipe_id": novo_eq_id}
-                    if doc_vinculo_id: db.collection('professores').document(doc_vinculo_id).update(dados_vinc)
-                    else:
-                        dados_vinc['usuario_id'] = sel['id']; dados_vinc['status_vinculo'] = 'ativo'
-                        db.collection('professores').add(dados_vinc)
+                        # Atualiza vínculo também se for aluno
+                        if sel.get('tipo_usuario') == 'aluno':
+                            q_vinc = db.collection('alunos').where('usuario_id', '==', sel['id']).limit(1).stream()
+                            for v in q_vinc:
+                                db.collection('alunos').document(v.id).update({"faixa_atual": fx})
+                                
+                        st.success("Atualizado!"); time.sleep(1); st.rerun()
+                    except Exception as e: st.error(f"Erro: {e}")
 
-                st.success("✅ Atualizado com sucesso!"); time.sleep(1.5); st.rerun()
-            except Exception as e: st.error(f"Erro ao salvar: {e}")
+            if st.button("🗑️ Remover da Equipe", key=f"rm_{sel['id']}"):
+                # Remove apenas o vínculo, mantém o usuário
+                try:
+                    coll = 'alunos' if sel.get('tipo_usuario') == 'aluno' else 'professores'
+                    q_del = db.collection(coll).where('usuario_id', '==', sel['id']).where('equipe_id', '==', meu_equipe_id).stream()
+                    for doc in q_del:
+                        db.collection(coll).document(doc.id).delete()
+                    st.success("Removido da equipe!"); time.sleep(1); st.rerun()
+                except Exception as e: st.error(f"Erro: {e}")
+
+    # === ABA 2: APROVAÇÕES PENDENTES ===
+    with tabs[1]:
+        st.subheader("Solicitações de Ingresso")
+        pendencias = []
+        
+        # 1. Alunos Pendentes (Todos os profs da equipe veem)
+        q_alunos = db.collection('alunos').where('status_vinculo', '==', 'pendente')
+        if not eh_admin and meu_equipe_id: q_alunos = q_alunos.where('equipe_id', '==', meu_equipe_id)
+        
+        for doc in q_alunos.stream():
+            d = doc.to_dict()
+            u_doc = db.collection('usuarios').document(d['usuario_id']).get()
+            if u_doc.exists:
+                u_data = u_doc.to_dict()
+                pendencias.append({
+                    'id_vinc': doc.id, 'tipo_vinc': 'alunos', 
+                    'nome': u_data.get('nome'), 'faixa': d.get('faixa_atual'), 'tipo': 'Aluno(a)'
+                })
+
+        # 2. Professores Pendentes (Só Admin, Responsável ou Delegado veem)
+        if eh_admin or tenho_poder_aprovacao_prof:
+            q_profs = db.collection('professores').where('status_vinculo', '==', 'pendente')
+            if not eh_admin and meu_equipe_id: q_profs = q_profs.where('equipe_id', '==', meu_equipe_id)
+            
+            for doc in q_profs.stream():
+                d = doc.to_dict()
+                u_doc = db.collection('usuarios').document(d['usuario_id']).get()
+                if u_doc.exists:
+                    u_data = u_doc.to_dict()
+                    pendencias.append({
+                        'id_vinc': doc.id, 'tipo_vinc': 'professores', 
+                        'nome': u_data.get('nome'), 'faixa': u_data.get('faixa_atual'), 'tipo': 'Professor(a)'
+                    })
+        
+        if not pendencias:
+            st.success("🎉 Nenhuma solicitação pendente.")
+        else:
+            for p in pendencias:
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([3, 1, 1])
+                    c1.markdown(f"**{p['nome']}**")
+                    c1.caption(f"{p['tipo']} - {p['faixa']}")
+                    
+                    if c2.button("✅ Aprovar", key=f"ap_{p['id_vinc']}", type="primary"):
+                        db.collection(p['tipo_vinc']).document(p['id_vinc']).update({'status_vinculo': 'ativo'})
+                        st.toast(f"{p['nome']} aprovado!"); time.sleep(1); st.rerun()
+                        
+                    if c3.button("❌ Rejeitar", key=f"rj_{p['id_vinc']}"):
+                        db.collection(p['tipo_vinc']).document(p['id_vinc']).delete()
+                        st.toast("Solicitação removida."); time.sleep(1); st.rerun()
+
+    # === ABA 3: DELEGAR PODERES (Só Responsável/Admin) ===
+    if sou_responsavel or eh_admin:
+        with tabs[2]:
+            st.subheader("⭐ Delegar Poder de Aprovação")
+            st.info("Você pode escolher até 2 Professores Auxiliares para ajudar na aprovação de outros professores.")
+            
+            if not meu_equipe_id and not eh_admin:
+                st.warning("Equipe não identificada."); st.stop()
+
+            # Busca professores ATIVOS da equipe
+            q_profs_ativos = db.collection('professores').where('status_vinculo', '==', 'ativo')
+            if not eh_admin: q_profs_ativos = q_profs_ativos.where('equipe_id', '==', meu_equipe_id)
+            
+            profs_ativos_lista = []
+            contagem_delegados = 0
+            
+            for doc in q_profs_ativos.stream():
+                d = doc.to_dict()
+                uid = d.get('usuario_id')
+                if uid == user_id and not eh_admin: continue # Não listar a si mesmo se não for admin
                 
-        if st.button("🗑️ Excluir Usuário", key=f"del_{sel['id']}"):
-            db.collection('usuarios').document(sel['id']).delete()
-            st.warning("Usuário excluído."); time.sleep(1); st.rerun()
+                u_doc = db.collection('usuarios').document(uid).get()
+                if u_doc.exists:
+                    nm = u_doc.to_dict().get('nome')
+                    pode = d.get('pode_aprovar', False)
+                    eh_resp = d.get('eh_responsavel', False)
+                    
+                    if not eh_resp: # Só lista quem é auxiliar
+                        if pode: contagem_delegados += 1
+                        profs_ativos_lista.append({'id_vinc': doc.id, 'nome': nm, 'pode_aprovar': pode})
+
+            st.markdown(f"**Delegados Atuais:** {contagem_delegados} / 2")
+
+            if not profs_ativos_lista:
+                st.warning("Nenhum professor auxiliar disponível para delegação.")
+            else:
+                for prof in profs_ativos_lista:
+                    c1, c2 = st.columns([4, 1])
+                    c1.write(f"🥋 **{prof['nome']}**")
+                    
+                    label_btn = "Revogar Poder" if prof['pode_aprovar'] else "Conceder Poder"
+                    tipo_btn = "primary" if not prof['pode_aprovar'] else "secondary"
+                    
+                    if c2.button(label_btn, key=f"delg_{prof['id_vinc']}", type=tipo_btn):
+                        if not prof['pode_aprovar']:
+                            if contagem_delegados >= 2:
+                                st.error("⚠️ Limite de 2 delegados atingido! Revogue um antes de adicionar outro.")
+                            else:
+                                db.collection('professores').document(prof['id_vinc']).update({'pode_aprovar': True})
+                                st.rerun()
+                        else:
+                            db.collection('professores').document(prof['id_vinc']).update({'pode_aprovar': False})
+                            st.rerun()
+                    st.divider()
 
 # =========================================
 # GESTÃO DE QUESTÕES
@@ -266,14 +310,12 @@ def gestao_questoes_tab():
     st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
     db = get_db()
     user = st.session_state.usuario
-    
     user_tipo = str(user.get("tipo_usuario", user.get("tipo", ""))).lower()
-    if user_tipo not in ["admin", "professor"]:
-        st.error("Acesso negado."); return
+    
+    if user_tipo not in ["admin", "professor"]: st.error("Acesso negado."); return
 
     titulos = ["📚 Listar/Editar", "➕ Adicionar Nova", "🔎 Minhas Submissões"]
-    if user_tipo == "admin":
-        titulos.append("⏳ Aprovações (Admin)")
+    if user_tipo == "admin": titulos.append("⏳ Aprovações (Admin)")
     
     tabs = st.tabs(titulos)
 
@@ -320,7 +362,6 @@ def gestao_questoes_tab():
                     
                     if cb.button("✏️", key=f"ed_{q['id']}"): st.session_state['edit_q'] = q['id']
                 
-                # --- EDITAR ---
                 if st.session_state.get('edit_q') == q['id']:
                     with st.container(border=True):
                         st.markdown("#### ✏️ Editando")
@@ -361,18 +402,14 @@ def gestao_questoes_tab():
                                         with st.spinner("Subindo vídeo..."): fin_vid = fazer_upload_midia(up_vid)
                                     
                                     novo_status = "aprovada" if user_tipo == "admin" else "pendente"
-                                    
                                     dados_upd = {
                                         "pergunta": perg, "dificuldade": dif, "categoria": cat,
                                         "url_imagem": fin_img, "url_video": fin_vid,
                                         "alternativas": {"A":rA, "B":rB, "C":rC, "D":rD},
-                                        "resposta_correta": corr,
-                                        "status": novo_status,
+                                        "resposta_correta": corr, "status": novo_status,
                                         "feedback_admin": firestore.DELETE_FIELD 
                                     }
-                                    
-                                    if justificativa_edicao:
-                                        dados_upd["ultima_justificativa"] = justificativa_edicao
+                                    if justificativa_edicao: dados_upd["ultima_justificativa"] = justificativa_edicao
 
                                     db.collection('questoes').document(q['id']).update(dados_upd)
                                     st.session_state['edit_q'] = None
@@ -425,10 +462,8 @@ def gestao_questoes_tab():
                         if pode_salvar:
                             f_img = fazer_upload_midia(up_img) if up_img else None
                             f_vid = fazer_upload_midia(up_vid) if up_vid else link_vid
-                            
                             status_ini = "aprovada" if user_tipo == "admin" else "pendente"
                             msg_sucesso = "✅ Cadastrada!" if user_tipo == "admin" else "⏳ Enviada para aprovação!"
-                            
                             db.collection('questoes').add({
                                 "pergunta": perg, "dificuldade": dif, "categoria": cat,
                                 "url_imagem": f_img, "url_video": f_vid,
@@ -452,16 +487,13 @@ def gestao_questoes_tab():
                 csv_buffer = io.StringIO()
                 df_modelo.to_csv(csv_buffer, index=False, sep=';')
                 col_btn.download_button("⬇️ Modelo", data=csv_buffer.getvalue(), file_name="modelo.csv", mime="text/csv")
-                
                 arquivo = st.file_uploader("Arquivo:", type=["csv", "xlsx"])
                 if arquivo and st.button("🚀 Importar"):
-                     # Lógica real de importação
                      try:
                          if arquivo.name.endswith('.csv'):
                              try: df = pd.read_csv(arquivo, sep=';')
                              except: df = pd.read_csv(arquivo, sep=',')
                          else: df = pd.read_excel(arquivo)
-                         
                          prog = st.progress(0)
                          for i, row in df.iterrows():
                              db.collection('questoes').add({
@@ -530,7 +562,6 @@ def gestao_questoes_tab():
                         if q.get('ultima_justificativa'):
                             st.info(f"📝 Nota do Professor: {q.get('ultima_justificativa')}")
                         
-                        # --- ALTERNATIVAS VISÍVEIS ---
                         with st.expander("Ver Detalhes e Alternativas"):
                             if q.get('url_imagem'): st.image(q.get('url_imagem'), width=150)
                             alts = q.get('alternativas', {})
@@ -680,10 +711,11 @@ def gestao_exame_de_faixa_route():
                                                 except: pass
                                             
                                             alts = qd.get('alternativas', {})
-                                            ops = [f"A) {alts.get('A','')}", f"B) {alts.get('B','')}", f"C) {alts.get('C','')}", f"D) {alts.get('D','')}"]
-                                            # CORREÇÃO DUPLICATE KEY
+                                            ops = [f"A) {alts.get('A','')}", f"B) {alts.get('B','')}", 
+                                                   f"C) {alts.get('C','')}", f"D) {alts.get('D','')}"]
                                             st.radio("", ops, key=f"r_{qid}_{conf['id']}", disabled=True, label_visibility="collapsed")
                                             st.success(f"Gabarito: {qd.get('resposta_correta')}")
+
                                 if st.button("🗑️", key=f"del_{conf['id']}"):
                                     db.collection('config_exames').document(conf['id']).delete(); st.rerun()
                             else:
@@ -699,71 +731,70 @@ def gestao_exame_de_faixa_route():
             dt_ini = datetime.combine(d_ini, h_ini); dt_fim = datetime.combine(d_fim, h_fim)
         
         st.write(""); st.subheader("Lista de Alunos(as)")
-        # REMOVIDO O TRY GERAL
-        alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
-        lista_alunos = []
-        for doc in alunos_ref:
-            d = doc.to_dict(); d['id'] = doc.id
-            
-            # PROTEÇÃO CONTRA CAMPOS VAZIOS
-            nome = d.get('nome', 'Sem Nome')
-            faixa = d.get('faixa_atual', '-')
-            
-            nome_eq = "Sem Equipe"
-            try:
-                # Tenta buscar equipe (opcional)
-                vinculos = list(db.collection('alunos').where('usuario_id', '==', d['id']).limit(1).stream())
-                if vinculos:
-                    eq_id = vinculos[0].to_dict().get('equipe_id')
-                    if eq_id:
-                        eq_doc = db.collection('equipes').document(eq_id).get()
-                        if eq_doc.exists: nome_eq = eq_doc.to_dict().get('nome', 'Sem Nome')
-            except: pass
-            
-            # Renderiza linha
-            c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
-            c1.write(f"**{nome}**")
-            c2.write(nome_eq)
-            
-            fx_banco = d.get('faixa_exame')
-            idx = 0
-            if fx_banco in FAIXAS_COMPLETAS: idx = FAIXAS_COMPLETAS.index(fx_banco)
-            
-            fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_s_{d['id']}", label_visibility="collapsed")
-            
-            hab = d.get('exame_habilitado', False)
-            status = d.get('status_exame', 'pendente')
-            
-            msg_status = "⚪ Não autorizado"
-            if status == 'aprovado': msg_status = "🏆 Aprovado"
-            elif status == 'reprovado': msg_status = "🔴 Reprovado"
-            elif status == 'bloqueado': msg_status = "⛔ Bloqueado"
-            elif status == 'em_andamento': msg_status = "🟡 Em Andamento"
-            elif hab:
+        try:
+            alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
+            lista_alunos = []
+            for doc in alunos_ref:
+                d = doc.to_dict(); d['id'] = doc.id
+                
+                # PROTEÇÃO CONTRA CAMPOS VAZIOS
+                nome = d.get('nome', 'Sem Nome')
+                faixa = d.get('faixa_atual', '-')
+                
+                nome_eq = "Sem Equipe"
                 try:
-                    raw_fim = d.get('exame_fim')
-                    if raw_fim:
-                        dt_fim = datetime.fromisoformat(str(raw_fim).replace('Z', ''))
-                        if datetime.now() > dt_fim: msg_status = "⏰ Expirado"
-                        else: msg_status = f"🟢 Até {dt_fim.strftime('%d/%m %H:%M')}"
-                    else: msg_status = "🟢 Liberado"
-                except: msg_status = "🟢 Liberado"
-            
-            c4.write(msg_status)
-            
-            if hab:
-                if c5.button("⛔", key=f"blk_{d['id']}"):
-                    db.collection('usuarios').document(d['id']).update({"exame_habilitado": False, "status_exame": "pendente"})
-                    st.rerun()
-            else:
-                if c5.button("✅", key=f"lib_{d['id']}"):
-                    db.collection('usuarios').document(d['id']).update({
-                        "exame_habilitado": True, "faixa_exame": fx_sel,
-                        "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
-                        "status_exame": "pendente", "status_exame_em_andamento": False
-                    })
-                    st.success("Liberado!"); time.sleep(0.5); st.rerun()
-            st.divider()
+                    vinculos = list(db.collection('alunos').where('usuario_id', '==', d['id']).limit(1).stream())
+                    if vinculos:
+                        eq_id = vinculos[0].to_dict().get('equipe_id')
+                        if eq_id:
+                            eq_doc = db.collection('equipes').document(eq_id).get()
+                            if eq_doc.exists: nome_eq = eq_doc.to_dict().get('nome', 'Sem Nome')
+                except: pass
+                
+                c1, c2, c3, c4, c5 = st.columns([3, 2, 2, 3, 1])
+                c1.write(f"**{nome}**")
+                c2.write(nome_eq)
+                
+                fx_banco = d.get('faixa_exame')
+                idx = 0
+                if fx_banco in FAIXAS_COMPLETAS: idx = FAIXAS_COMPLETAS.index(fx_banco)
+                
+                fx_sel = c3.selectbox("Faixa", FAIXAS_COMPLETAS, index=idx, key=f"fx_s_{d['id']}", label_visibility="collapsed")
+                
+                hab = d.get('exame_habilitado', False)
+                status = d.get('status_exame', 'pendente')
+                
+                msg_status = "⚪ Não autorizado"
+                if status == 'aprovado': msg_status = "🏆 Aprovado"
+                elif status == 'reprovado': msg_status = "🔴 Reprovado"
+                elif status == 'bloqueado': msg_status = "⛔ Bloqueado"
+                elif status == 'em_andamento': msg_status = "🟡 Em Andamento"
+                elif hab:
+                    try:
+                        raw_fim = d.get('exame_fim')
+                        if raw_fim:
+                            dt_fim = datetime.fromisoformat(str(raw_fim).replace('Z', ''))
+                            if datetime.now() > dt_fim: msg_status = "⏰ Expirado"
+                            else: msg_status = f"🟢 Até {dt_fim.strftime('%d/%m %H:%M')}"
+                        else: msg_status = "🟢 Liberado"
+                    except: msg_status = "🟢 Liberado"
+                
+                c4.write(msg_status)
+                
+                if hab:
+                    if c5.button("⛔", key=f"blk_{d['id']}"):
+                        db.collection('usuarios').document(d['id']).update({"exame_habilitado": False, "status_exame": "pendente"})
+                        st.rerun()
+                else:
+                    if c5.button("✅", key=f"lib_{d['id']}"):
+                        db.collection('usuarios').document(d['id']).update({
+                            "exame_habilitado": True, "faixa_exame": fx_sel,
+                            "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
+                            "status_exame": "pendente", "status_exame_em_andamento": False
+                        })
+                        st.success("Liberado!"); time.sleep(0.5); st.rerun()
+                st.divider()
+        except: st.error("Erro lista alunos.")
 
 # =========================================
 # CONTROLADOR PRINCIPAL
@@ -775,7 +806,7 @@ def gestao_usuarios(usuario_logado):
     st.markdown(f"<h1 style='color:#FFD700;'>Gestão e Estatísticas</h1>", unsafe_allow_html=True)
     if st.button("🏠 Voltar ao Início", key="btn_back_admin_main"):
         st.session_state.menu_selection = "Início"; st.rerun()
-    menu = st.radio("", ["👥 Gestão de Usuários", "📊 Dashboard"], horizontal=True, label_visibility="collapsed")
+    menu = st.radio("", ["👥 Gestão de Equipe", "📊 Dashboard"], horizontal=True, label_visibility="collapsed")
     st.markdown("---")
     if menu == "📊 Dashboard": render_dashboard_geral()
-    elif menu == "👥 Gestão de Usuários": gestao_usuarios_tab()
+    elif menu == "👥 Gestão de Equipe": gestao_usuarios_tab()
