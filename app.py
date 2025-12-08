@@ -217,7 +217,7 @@ def app_principal():
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
         
         if tipo_code in ["admin", "professor"]:
-            if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
+            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel de Professores")
         
         if tipo_code != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
@@ -234,7 +234,7 @@ def app_principal():
 
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
-    if pg == "Painel do Professor": professor.painel_professor(); return
+    if pg == "Painel de Professores": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
