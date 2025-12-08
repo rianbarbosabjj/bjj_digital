@@ -44,37 +44,89 @@ st.markdown(f"""
         background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
     }}
     
+    hr {{
+        margin: 2em 0 !important;
+        border: 0 !important;
+        height: 1px !important;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
+    }}
+
     div.stRadio > div[role="radiogroup"] > label > div:first-child {{
         border-color: {COR_DESTAQUE} !important;
+        background-color: transparent !important;
     }}
     div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
         background-color: {COR_DESTAQUE} !important;
     }}
 
+    h1, h2, h3, h4, h5, h6 {{ 
+        color: {COR_DESTAQUE} !important; 
+        text-align: center !important; 
+        font-weight: 700 !important; 
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }}
+
     section[data-testid="stSidebar"] {{
         background-color: #091f1a !important; 
         border-right: 1px solid rgba(255, 215, 112, 0.15);
+        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+    }}
+    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
+        fill: {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
     }}
 
-    div.stButton > button {{ 
+    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
+    div[data-testid="stForm"] {{
+        background-color: rgba(0, 0, 0, 0.3) !important; 
+        border: 1px solid rgba(255, 215, 112, 0.2) !important; 
+        border-radius: 12px; 
+        padding: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
+        margin-bottom: 20px;
+    }}
+    
+    .streamlit-expanderHeader {{
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        color: {COR_DESTAQUE} !important;
+        border: 1px solid {COR_DESTAQUE} !important;
+        border-radius: 8px;
+    }}
+    .streamlit-expanderHeader svg {{
+        fill: {COR_TEXTO} !important; 
+        color: {COR_TEXTO} !important;
+    }}
+
+    div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
         border: 1px solid rgba(255,255,255,0.1) !important; 
+        padding: 0.6em 1.5em !important; 
+        font-weight: 600 !important;
+        border-radius: 8px !important; 
+        transition: all 0.3s ease !important;
     }}
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
         color: #0e2d26 !important; 
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
     input, textarea, select, div[data-baseweb="select"] > div {{
         background-color: rgba(255, 255, 255, 0.05) !important;
         color: white !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important; 
+        border-radius: 8px !important;
     }}
+    .stTextInput input, .stTextArea textarea {{ color: white !important; }}
     
     #MainMenu {{visibility: hidden;}}
     footer {{visibility: hidden;}}
-    header[data-testid="stHeader"] {{ background-color: transparent !important; }}
+    [data-testid="stDecoration"] {{display: none;}}
+    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -92,23 +144,36 @@ except ImportError as e:
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
+        if logo_file:
+            cl, cc, cr = st.columns([1, 1, 1])
+            with cc: st.image(logo_file, use_container_width=True)
+        st.write("") 
         with st.container(border=True):
             st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
+            st.warning("Por segurança, redefina sua senha.")
             with st.form("frm_troca"):
                 ns = st.text_input("Nova Senha:", type="password")
                 cs = st.text_input("Confirmar:", type="password")
                 if st.form_submit_button("Atualizar", use_container_width=True):
                     if ns and ns == cs:
                         try:
-                            uid = st.session_state.usuario['id']
+                            user_sessao = st.session_state.get('usuario')
+                            if not user_sessao or 'id' not in user_sessao:
+                                st.error("Erro de Sessão: Usuário não identificado.")
+                                return
+                            uid = user_sessao['id']
                             hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
                             db = get_db()
-                            db.collection('usuarios').document(uid).update({"senha": hashed, "precisa_trocar_senha": False})
+                            if not db: st.error("Erro de conexão com o banco."); return
+                            db.collection('usuarios').document(uid).update({
+                                "senha": hashed, "precisa_trocar_senha": False
+                            })
                             st.success("Sucesso! Entrando...")
                             st.session_state.usuario['precisa_trocar_senha'] = False
                             time.sleep(1)
                             st.rerun()
-                        except Exception as e: st.error(f"Erro: {e}")
+                        except Exception as e: 
+                            st.error(f"Erro ao salvar: {e}") 
                     else: st.error("Senhas não conferem.")
 
 def app_principal():
@@ -122,16 +187,24 @@ def app_principal():
     elif "professor" in raw_tipo: tipo_code = "professor"
     else: tipo_code = "aluno"
 
+    label_tipo = raw_tipo.capitalize()
+    if tipo_code == "admin": label_tipo = "Administrador(a)"
+    elif tipo_code == "professor": label_tipo = "Professor(a)"
+    elif tipo_code == "aluno": label_tipo = "Aluno(a)"
+
     def nav(pg): st.session_state.menu_selection = pg
 
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{label_tipo}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
-        if tipo_code != "admin" and tipo_code != "professor":
-             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
+        if tipo_code in ["admin", "professor"]:
+            if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
+        if tipo_code != "admin":
+            if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         if tipo_code == "admin":
             if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
             
@@ -143,23 +216,16 @@ def app_principal():
     pg = st.session_state.menu_selection
 
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
-    if pg == "Gestão e Estatísticas": admin.gestao_usuarios_geral(usuario); return # Só Admin
+    if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
+    if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # --- MENU PRINCIPAL ---
     ops, icns = [], []
-    
-    # ADICIONEI "Gestão de Equipe" AQUI PARA ADMIN E PROFESSOR
-    if tipo_code == "admin":
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipe", "Gestão de Exame"]
+    if tipo_code in ["admin", "professor"]:
+        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "journal", "trophy", "list-task", "people-fill", "file-earmark"]
-    
-    elif tipo_code == "professor":
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipe", "Gestão de Exame"]
-        icns = ["house", "people", "journal", "trophy", "list-task", "people-fill", "file-earmark"]
-    
-    else: # Aluno
+    else:
         ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
         icns = ["house", "people", "journal", "trophy"]
 
@@ -173,26 +239,60 @@ def app_principal():
         default_index=idx, 
         orientation="horizontal",
         styles={
-            "container": {"padding": "5px", "background-color": COR_FUNDO},
-            "icon": {"color": COR_DESTAQUE, "font-size": "14px"}, 
-            "nav-link": {"font-size": "13px", "text-align": "center", "margin": "0px", "color": "white"},
-            "nav-link-selected": {"background-color": COR_DESTAQUE, "color": "#0e2d26"},
+            "container": {
+                "padding": "5px 10px", 
+                "background-color": COR_FUNDO, 
+                "margin": "0px auto",
+                "border-radius": "12px", 
+                "border": "1px solid rgba(255, 215, 112, 0.15)", 
+                "box-shadow": "0 4px 15px rgba(0,0,0,0.3)",
+                "width": "100%",       
+                "max-width": "100%",  
+                "display": "flex",     
+                "justify-content": "space-between" 
+            },
+            "icon": {
+                "color": COR_DESTAQUE, 
+                "font-size": "16px",
+                "font-weight": "bold"
+            }, 
+            "nav-link": {
+                "font-size": "14px", 
+                "text-align": "center", 
+                "margin": "0px 2px",  
+                "color": "rgba(255, 255, 255, 0.8)",
+                "font-weight": "400",
+                "border-radius": "8px",
+                "transition": "0.3s",
+                "width": "100%",       
+                "flex-grow": "1",     
+                "display": "flex",
+                "justify-content": "center",
+                "align-items": "center"
+            },
+            "nav-link-selected": {
+                "background-color": COR_DESTAQUE, 
+                "color": "#0e2d26", 
+                "font-weight": "700",
+                "box-shadow": "0px 2px 8px rgba(0,0,0,0.2)",
+            },
         }
     )
 
     if menu != pg:
-        st.session_state.menu_selection = menu
-        st.rerun()
+        if pg == "Meus Certificados" and menu == "Início": pass 
+        else:
+            st.session_state.menu_selection = menu
+            st.rerun()
 
-    # --- ROTEAMENTO ---
+    # --- ROTEAMENTO CENTRALIZADO E CORRIGIDO ---
     if pg == "Modo Rola": aluno.modo_rola(usuario)
     elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
     elif pg == "Ranking": aluno.ranking()
     
-    # Rotas Admin/Prof
     elif pg == "Gestão de Questões": admin.gestao_questoes()
-    elif pg == "Gestão de Equipe": admin.gestao_equipes_tab() # <--- ESSA LINHA FAZ O BOTÃO FUNCIONAR
     elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
+    elif pg == "Gestão de Equipes": admin.gestao_equipes_tab() # Aponta para ADMIN agora
 
 if __name__ == "__main__":
     if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
