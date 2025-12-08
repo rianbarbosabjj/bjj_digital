@@ -50,7 +50,6 @@ st.markdown(f"""
         background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
     }}
 
-    /* --- ESTILO DO RADIO BUTTON (Dourado) --- */
     div.stRadio > div[role="radiogroup"] > label > div:first-child {{
         border-color: {COR_DESTAQUE} !important;
         background-color: transparent !important;
@@ -58,7 +57,6 @@ st.markdown(f"""
     div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
         background-color: {COR_DESTAQUE} !important;
     }}
-    /* --------------------------------------- */
 
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
@@ -162,8 +160,12 @@ def tela_troca_senha_obrigatoria():
                             hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
                             db = get_db()
                             db.collection('usuarios').document(uid).update({"senha": hashed, "precisa_trocar_senha": False})
-                            st.success("Sucesso! Entrando..."); st.session_state.usuario['precisa_trocar_senha'] = False; st.rerun()
-                        except: st.error("Erro ao salvar.")
+                            st.success("Sucesso! Entrando...")
+                            st.session_state.usuario['precisa_trocar_senha'] = False
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e: 
+                            st.error(f"Erro ao salvar: {e}") # Mostra o erro real
                     else: st.error("Senhas não conferem.")
 
 def app_principal():
@@ -187,22 +189,14 @@ def app_principal():
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
-        
         st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{label_tipo}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
-        # 1. Meu Perfil (Sempre primeiro)
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
-        
-        # 2. Painel do Professor (Movido para cima conforme pedido)
         if tipo_code in ["admin", "professor"]:
-            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel do Professor(a)")
-        
-        # 3. Meus Certificados (Movido para baixo)
+            if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
         if tipo_code != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
-        
-        # 4. Gestão Admin (Sempre por último)
         if tipo_code == "admin":
             if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
             
@@ -215,7 +209,7 @@ def app_principal():
 
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
-    if pg == "Painel do Professor(a)": professor.painel_professor(); return
+    if pg == "Painel do Professor": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
