@@ -16,14 +16,9 @@ except ImportError:
 # Importa utils
 try:
     from utils import (
-        carregar_todas_questoes, 
-        salvar_questoes, 
-        fazer_upload_midia, 
-        normalizar_link_video, 
-        verificar_duplicidade_ia,
-        auditoria_ia_questao,   
-        auditoria_ia_openai,    
-        IA_ATIVADA 
+        carregar_todas_questoes, salvar_questoes, fazer_upload_midia, 
+        normalizar_link_video, verificar_duplicidade_ia,
+        auditoria_ia_questao, auditoria_ia_openai, IA_ATIVADA 
     )
 except ImportError:
     IA_ATIVADA = False
@@ -50,6 +45,7 @@ def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
+    
     users_ref = list(db.collection('usuarios').stream())
     users = [d.to_dict() | {"id": d.id} for d in users_ref]
     
@@ -197,6 +193,7 @@ def gestao_equipes_tab():
     db = get_db()
     user = st.session_state.usuario
     user_id = user['id']
+    # Correção de tipo seguro
     user_tipo = str(user.get("tipo_usuario", user.get("tipo", "aluno"))).lower()
     
     eh_admin = (user_tipo == "admin")
@@ -226,6 +223,7 @@ def gestao_equipes_tab():
         
         profs_ref = db.collection('professores').where('equipe_id', '==', meu_equipe_id).stream()
         ids_membros_equipe.extend([d.to_dict().get('usuario_id') for d in profs_ref])
+        
         ids_membros_equipe = list(set([i for i in ids_membros_equipe if i]))
 
     users_stream = list(db.collection('usuarios').stream())
@@ -253,7 +251,10 @@ def gestao_equipes_tab():
             df = df[df['nome'].astype(str).str.upper().str.contains(termo) | df['email'].astype(str).str.upper().str.contains(termo)]
         
         if not df.empty:
-            st.dataframe(df[['nome', 'email', 'tipo_usuario', 'faixa_atual']], use_container_width=True, hide_index=True)
+            cols_show = ['nome', 'email', 'tipo_usuario', 'faixa_atual']
+            for c in cols_show: 
+                if c not in df.columns: df[c] = "-"
+            st.dataframe(df[cols_show], use_container_width=True, hide_index=True)
         else: st.info("Nenhum membro.")
         
         st.markdown("---")
@@ -394,26 +395,30 @@ def gestao_questoes_tab():
     
     tabs = st.tabs(titulos)
     
-    # LISTAR
     with tabs[0]:
         q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         c1, c2 = st.columns(2)
         termo = c1.text_input("🔍 Buscar (Aprovadas):")
         filt_n = c2.multiselect("Nível:", NIVEIS_DIFICULDADE)
+        
         q_filtro = []
         for doc in q_ref:
             d = doc.to_dict(); d['id'] = doc.id
             if termo and termo.lower() not in d.get('pergunta','').lower(): continue
             if filt_n and d.get('dificuldade',1) not in filt_n: continue
             q_filtro.append(d)
-        if not q_filtro: st.info("Nenhuma questão.")
+            
+        if not q_filtro: st.info("Nenhuma questão aprovada encontrada.")
         else:
             st.caption(f"{len(q_filtro)} questões ativas")
             for q in q_filtro:
+                stt = q.get('status', 'aprovada')
+                cor_st = "green" if stt=='aprovada' else "orange" if stt=='correcao' else "gray"
+                
                 with st.container(border=True):
                     ch, cb = st.columns([5, 1])
                     bdg = get_badge_nivel(q.get('dificuldade',1))
-                    ch.markdown(f"**{bdg}** | {q.get('categoria','Geral')} | ✍️ {q.get('criado_por','?')}")
+                    ch.markdown(f"**{bdg}** | :{cor_st}[{stt.upper()}] | ✍️ {q.get('criado_por','?')}")
                     ch.markdown(f"##### {q.get('pergunta')}")
                     if q.get('url_imagem'): ch.image(q.get('url_imagem'), width=150)
                     if q.get('url_video'):
@@ -468,7 +473,6 @@ def gestao_questoes_tab():
                         if st.button("🗑️ Deletar", key=f"del_q_{q['id']}", type="primary"):
                             db.collection('questoes').document(q['id']).delete(); st.session_state['edit_q'] = None; st.rerun()
 
-    # ADICIONAR
     with tabs[1]:
         sub_tab_manual, sub_tab_lote = st.tabs(["✍️ Manual", "📂 Lote"])
         with sub_tab_manual:
@@ -523,7 +527,6 @@ def gestao_questoes_tab():
                      except Exception as e: st.error(f"Erro: {e}")
             else: st.warning("Restrito a Admin.")
 
-    # MINHAS SUBMISSOES
     with tabs[2]:
         nome_atual = user.get('nome', 'Admin')
         minhas = list(db.collection('questoes').where('criado_por', '==', nome_atual).stream())
@@ -545,7 +548,6 @@ def gestao_questoes_tab():
                             db.collection('questoes').document(doc.id).update({"pergunta": n_perg, "status": "pendente", "feedback_admin": firestore.DELETE_FIELD})
                             st.session_state['edit_my_mode'] = None; st.success("Enviado!"); st.rerun()
 
-    # APROVAÇÕES
     if user_tipo == "admin":
         with tabs[3]:
             st.markdown("#### ⏳ Fila de Aprovação")
@@ -654,7 +656,6 @@ def gestao_exame_de_faixa_route():
                         st.success("Salvo!"); time.sleep(1.5); st.rerun()
                     except Exception as e: st.error(f"Erro ao salvar: {e}")
 
-    # VISUALIZAR
     with tab2:
         st.subheader("Status das Provas")
         configs_stream = db.collection('config_exames').stream()
@@ -690,7 +691,6 @@ def gestao_exame_de_faixa_route():
                                     db.collection('config_exames').document(conf['id']).delete(); st.rerun()
                             else: st.markdown(f"**{fx}**"); st.caption("❌ Pendente")
 
-    # AUTORIZAR
     with tab3:
         with st.container(border=True):
             st.subheader("🗓️ Configurar Período")
@@ -758,31 +758,44 @@ def gestao_exame_de_faixa_route():
 # =========================================
 def gestao_questoes(): gestao_questoes_tab()
 def gestao_exame_de_faixa(): gestao_exame_de_faixa_route()
-def gestao_equipes_tab(): gestao_equipes_tab() # Alias para manter compatibilidade externa se necessário
+def gestao_equipes_tab(): gestao_equipes_tab() 
 
 def gestao_usuarios(usuario_logado):
     st.markdown(f"<h1 style='color:#FFD700;'>Gestão e Estatísticas</h1>", unsafe_allow_html=True)
     if st.button("🏠 Voltar ao Início", key="btn_back_admin_main"):
         st.session_state.menu_selection = "Início"; st.rerun()
     
-    # Lógica de Menu Dinâmico
-    tipo = usuario_logado.get('tipo_usuario', 'aluno')
+    # ---------------- LÓGICA CORRIGIDA E ROBUSTA ----------------
+    # 1. Recupera o tipo de forma segura (minúsculo)
+    tipo = str(usuario_logado.get("tipo_usuario", usuario_logado.get("tipo", "aluno"))).lower()
     
+    # 2. Define o Menu baseado no tipo
     opcoes_menu = []
+    
     if tipo == 'admin':
+        # Admin vê tudo
         opcoes_menu = ["👥 Gestão de Usuários", "👥 Gestão de Equipe", "📊 Dashboard"]
     elif tipo == 'professor':
+        # Professor vê só Equipe
         opcoes_menu = ["👥 Gestão de Equipe"]
     else:
-        st.error("Acesso restrito."); return
+        # Aluno não deveria estar aqui, mas por segurança:
+        st.error("Acesso restrito a administradores e professores.")
+        return
 
+    # 3. Renderiza o Menu
     if len(opcoes_menu) > 1:
         menu = st.radio("", opcoes_menu, horizontal=True, label_visibility="collapsed")
     else:
+        # Se só tem uma opção (Professor), seleciona ela direto sem mostrar rádio
         menu = opcoes_menu[0]
 
     st.markdown("---")
     
-    if menu == "📊 Dashboard": render_dashboard_geral()
-    elif menu == "👥 Gestão de Usuários": gestao_usuarios_tab()
-    elif menu == "👥 Gestão de Equipe": gestao_equipes_tab()
+    # 4. Direciona para a Função
+    if menu == "📊 Dashboard": 
+        render_dashboard_geral()
+    elif menu == "👥 Gestão de Usuários": 
+        gestao_usuarios_tab()
+    elif menu == "👥 Gestão de Equipe": 
+        gestao_equipes_tab()
