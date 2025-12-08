@@ -10,23 +10,40 @@ from views import dashboard
 # HELPER: DECORAR FAIXAS E CARGOS
 # =========================================
 def get_faixa_decorada(faixa):
-    """Adiciona um emoji colorido baseado na faixa"""
-    f = str(faixa).lower()
+    """Adiciona emojis combinados para representar faixas mistas e sólidas"""
+    f = str(faixa).lower().strip()
+    
+    # 1. Faixas Mistas (Infantil/Juvenil) - Verificamos estas PRIMEIRO
+    if "cinza" in f and "branca" in f: return f"🔘⚪ {faixa}"
+    if "cinza" in f and "preta" in f:  return f"🔘⚫ {faixa}"
+    
+    if "amarela" in f and "branca" in f: return f"🟡⚪ {faixa}"
+    if "amarela" in f and "preta" in f:  return f"🟡⚫ {faixa}"
+    
+    if "laranja" in f and "branca" in f: return f"🟠⚪ {faixa}"
+    if "laranja" in f and "preta" in f:  return f"🟠⚫ {faixa}"
+    
+    if "verde" in f and "branca" in f: return f"🟢⚪ {faixa}"
+    if "verde" in f and "preta" in f:  return f"🟢⚫ {faixa}"
+
+    # 2. Faixas Sólidas
     if "branca" in f: return f"⚪ {faixa}"
-    if "cinza" in f: return f"🔘 {faixa}"
+    if "cinza" in f:  return f"🔘 {faixa}"
     if "amarela" in f: return f"🟡 {faixa}"
     if "laranja" in f: return f"🟠 {faixa}"
-    if "verde" in f: return f"🟢 {faixa}"
-    if "azul" in f: return f"🔵 {faixa}"
-    if "roxa" in f: return f"🟣 {faixa}"
+    if "verde" in f:  return f"🟢 {faixa}"
+    if "azul" in f:   return f"🔵 {faixa}"
+    if "roxa" in f:   return f"🟣 {faixa}"
     if "marrom" in f: return f"🟤 {faixa}"
-    if "preta" in f: return f"⚫ {faixa}"
+    if "preta" in f:  return f"⚫ {faixa}"
+
+    # Fallback
     return f"🥋 {faixa}"
 
 def get_cargo_decorado(cargo):
-    if cargo == "Líder": return "👑 Líder (Responsável)"
-    if cargo == "Delegado": return "🛡️ Delegado"
-    return "🥋 Auxiliar"
+    if cargo == "Líder": return "👑 Professor Responsável"
+    if cargo == "Delegado": return "🛡️ Professor Delegado"
+    return "🥋 Professor Adjunto"
 
 # =========================================
 # FUNÇÃO: GESTÃO DE EQUIPES (FLUXO COMPLETO)
