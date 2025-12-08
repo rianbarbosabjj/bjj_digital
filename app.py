@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import sys
 import bcrypt 
+import time
 from database import get_db
 
 def get_logo_path():
@@ -156,16 +157,36 @@ def tela_troca_senha_obrigatoria():
                 if st.form_submit_button("Atualizar", use_container_width=True):
                     if ns and ns == cs:
                         try:
-                            uid = st.session_state.usuario['id']
+                            # 1. Recupera ID de forma segura
+                            user_sessao = st.session_state.get('usuario')
+                            if not user_sessao or 'id' not in user_sessao:
+                                st.error("Erro de Sessão: Usuário não identificado.")
+                                return
+
+                            uid = user_sessao['id']
+                            
+                            # 2. Gera Hash
                             hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
+                            
+                            # 3. Conecta ao Banco
                             db = get_db()
-                            db.collection('usuarios').document(uid).update({"senha": hashed, "precisa_trocar_senha": False})
+                            if not db:
+                                st.error("Erro de conexão com o banco.")
+                                return
+
+                            # 4. Atualiza
+                            db.collection('usuarios').document(uid).update({
+                                "senha": hashed, 
+                                "precisa_trocar_senha": False
+                            })
+                            
                             st.success("Sucesso! Entrando...")
                             st.session_state.usuario['precisa_trocar_senha'] = False
                             time.sleep(1)
                             st.rerun()
+                            
                         except Exception as e: 
-                            st.error(f"Erro ao salvar: {e}") # Mostra o erro real
+                            st.error(f"Erro ao salvar: {e}") 
                     else: st.error("Senhas não conferem.")
 
 def app_principal():
@@ -189,14 +210,18 @@ def app_principal():
     with st.sidebar:
         if logo_file: st.image(logo_file, use_container_width=True)
         st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
+        
         st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{label_tipo}</p>", unsafe_allow_html=True)
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
+        
         if tipo_code in ["admin", "professor"]:
             if st.button("🥋 Painel do(a) Prof.", use_container_width=True): nav("Painel do Professor")
+        
         if tipo_code != "admin":
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
+        
         if tipo_code == "admin":
             if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
             
