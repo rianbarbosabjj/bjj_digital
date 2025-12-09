@@ -259,7 +259,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     # ==============================
     # POSICIONAMENTO AUTOMÁTICO DO TEXTO INTRODUTÓRIO
     # ==============================
-    y_atual = 50  # posição final aproximada da logo
+    y_atual = 50 + 20  # posição final aproximada da logo
     offset = 26        # ajuste proporcional refinado
     pdf.set_y(y_atual + offset)
 
