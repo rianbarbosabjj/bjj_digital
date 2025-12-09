@@ -33,7 +33,7 @@ def get_cor_faixa(nome_faixa):
     for chave, cor in CORES_FAIXAS.items():
         if chave in str(nome_faixa).upper():
             return cor
-    return (0, 0, 0) # Preto padrão
+    return (0, 0, 0) 
 
 # =========================================
 # FUNÇÕES DE MÍDIA E UPLOAD
@@ -92,8 +92,8 @@ try:
     def carregar_modelo_ia():
         return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
     def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.75):
-        if not lista_existentes: return False, None
         try:
+            if not lista_existentes: return False, None
             model = carregar_modelo_ia()
             embedding_novo = model.encode([nova_pergunta])
             textos_existentes = [str(q.get('pergunta', '')) for q in lista_existentes]
@@ -111,19 +111,13 @@ except ImportError:
     def verificar_duplicidade_ia(n, l, t=0.75): return False, "IA não instalada"
 
 # =========================================
-# AUDITORIA IA
-# =========================================
-def auditoria_ia_questao(pergunta, alternativas, correta):
-    return "Indisponível no momento" 
-
-def auditoria_ia_openai(pergunta, alternativas, correta):
-    return "Indisponível no momento"
-
-# =========================================
-# FUNÇÕES GERAIS
+# FUNÇÕES GERAIS E DB
 # =========================================
 def carregar_todas_questoes(): return []
 def salvar_questoes(t, q): pass
+
+def auditoria_ia_questao(p, a, c): return "Indisponível"
+def auditoria_ia_openai(p, a, c): return "Indisponível"
 
 def normalizar_nome(nome):
     if not nome: return "sem_nome"
@@ -196,7 +190,7 @@ def gerar_qrcode(codigo):
     except: return None
 
 # =========================================
-# GERAÇÃO DE PDF (ESTILO PREMIUM + SAÍDA SEGURA)
+# GERAÇÃO DE PDF (CORRIGIDO PARA NÃO SAIR VAZIO)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
@@ -311,8 +305,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
             try:
                 pdf.add_font("Allura", "", "assets/Allura-Regular.ttf", uni=True)
                 font_ass = "Allura"
-            except:
-                pass
+            except: pass
 
         pdf.ln(10)
         pdf.set_font(font_ass, "", 28 if font_ass == "Allura" else 18)
@@ -340,21 +333,34 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
                 pdf.cell(35, 4, "Autenticidade Digital", align="C")
             except: pass
 
-        # SAÍDA (ADAPTADA PARA EVITAR ERRO DE ARQUIVO VAZIO)
-        # O código abaixo garante compatibilidade com FPDF antigo e novo
+        # === SAÍDA BLINDADA CONTRA ARQUIVO VAZIO ===
+        # Tenta forçar o modo string (dest='S') que é o mais compatível com bibliotecas antigas/web
         try:
-            buffer = pdf.output()
-            if isinstance(buffer, (bytes, bytearray)):
-                return bytes(buffer), f"Certificado_{nome.split()[0]}.pdf"
+            # Tenta gerar como string (padrão antigo que funciona bem em web)
+            buffer = pdf.output(dest="S")
+            
+            # Se for string, codifica
             if isinstance(buffer, str):
-                return buffer.encode('latin-1'), f"Certificado_{nome.split()[0]}.pdf"
-            # Fallback para o modo 'S' solicitado se o output padrão falhar
-            return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
-        except:
-             return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
+                if len(buffer) > 0:
+                    return buffer.encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
+            
+            # Se não, tenta gerar como bytes (padrão novo)
+            buffer_bytes = pdf.output()
+            if isinstance(buffer_bytes, (bytes, bytearray)):
+                if len(buffer_bytes) > 0:
+                    return bytes(buffer_bytes), f"Certificado_{nome.split()[0]}.pdf"
+
+            return None, "Erro: O arquivo PDF foi gerado vazio."
+
+        except Exception as e_out:
+            # Última tentativa forçada
+            try:
+                return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
+            except:
+                return None, f"Erro na renderização final: {e_out}"
 
     except Exception as e:
-        return None, f"Erro PDF: {e}"
+        return None, f"Erro interno PDF: {e}"
 
 # =========================================
 # LÓGICA DE EXAME E DB
