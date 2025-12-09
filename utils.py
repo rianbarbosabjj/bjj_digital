@@ -31,9 +31,9 @@ CORES_FAIXAS = {
 
 def get_cor_faixa(nome_faixa):
     for chave, cor in CORES_FAIXAS.items():
-        if chave in nome_faixa.upper():
+        if chave in str(nome_faixa).upper():
             return cor
-    return (255, 255, 255) 
+    return (20, 20, 20) # Preto padrão se não achar
 
 # =========================================
 # FUNÇÕES DE MÍDIA E UPLOAD
@@ -118,7 +118,7 @@ except ImportError:
         return False, "IA não instalada"
 
 # =========================================
-# 8. AUDITORIA DE QUESTÕES (GEMINI - AUTO-DETECT)
+# AUDITORIA DE QUESTÕES (GEMINI - AUTO-DETECT)
 # =========================================
 def auditoria_ia_questao(pergunta, alternativas, correta):
     api_key = st.secrets.get("GEMINI_API_KEY")
@@ -164,7 +164,7 @@ def auditoria_ia_questao(pergunta, alternativas, correta):
             return f"❌ Erro Crítico Gemini: {e}"
 
 # =========================================
-# 9. AUDITORIA DE QUESTÕES (OPENAI - GPT)
+# AUDITORIA DE QUESTÕES (OPENAI - GPT)
 # =========================================
 def auditoria_ia_openai(pergunta, alternativas, correta):
     api_key = st.secrets.get("OPENAI_API_KEY")
@@ -251,7 +251,6 @@ def enviar_email_recuperacao(dest, senha):
         return True
 
     except Exception as e:
-        # Se for erro de autenticação, avisa sobre a senha específica
         if "Authentication failed" in str(e) or "Username and Password not accepted" in str(e):
              st.error("❌ Erro de Login no Zoho: Verifique se o e-mail está correto e se a senha está certa (se tiver 2FA, use a Senha de Aplicativo).")
         else:
@@ -279,13 +278,14 @@ def gerar_qrcode(codigo):
         return path
     except: return None
 
+# =========================================
+# GERAÇÃO DE PDF (VERSÃO BLINDADA)
+# =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
     try:
-        # Função interna de limpeza de caracteres
         def limpa(txt):
             if not txt: return ""
-            # Normaliza para garantir que caracteres acentuados não quebrem o latin-1
             return unicodedata.normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('ASCII')
 
         # Dimensões A4 paisagem
@@ -310,7 +310,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_line_width(0.8)
         pdf.rect(14, 14, L-28, H-28)
 
-        # LOGO (com verificação de segurança)
+        # LOGO
         if os.path.exists("assets/logo.png"):
             try: pdf.image("assets/logo.png", x=(L/2)-20, y=18, w=40)
             except: pass
@@ -331,7 +331,6 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         nome = limpa(usuario_nome.upper().strip())
         tam_nome = 42
         pdf.set_font("Helvetica", "B", tam_nome)
-        # Ajuste dinâmico de tamanho de fonte para nomes grandes
         while pdf.get_string_width(nome) > 240 and tam_nome > 14:
             tam_nome -= 2
             pdf.set_font("Helvetica", "B", tam_nome)
@@ -418,23 +417,90 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
                 pdf.image(qr_path, x=qr_x, y=qr_y, w=qr_w)
             except: pass
 
-        # === SAÍDA DO ARQUIVO (CORREÇÃO CRÍTICA) ===
-        # Tenta retornar bytes diretamente (FPDF2) ou string codificada (FPDF antigo)
+        # === SAÍDA COMPATÍVEL ===
         try:
             pdf_bytes = pdf.output()
-            # Se já for bytes (FPDF 2.x), retorna direto
             if isinstance(pdf_bytes, (bytes, bytearray)):
                  return bytes(pdf_bytes), f"Certificado_{usuario_nome.split()[0]}.pdf"
-            # Se for string (FPDF antigo), codifica
             return pdf_bytes.encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
         except TypeError:
-             # Fallback explícito para versões antigas que exigem dest='S'
              return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
 
     except Exception as e:
         print(f"❌ ERRO CRÍTICO AO GERAR PDF: {e}")
         return None, None
-def verificar_elegibilidade_exame(ud): return True, "OK"
-def registrar_inicio_exame(uid): pass
-def registrar_fim_exame(uid, apr): pass
-def bloquear_por_abandono(uid): pass
+
+# =========================================
+# FUNÇÕES DE LÓGICA DE EXAME E BANCO DE DADOS
+# =========================================
+def verificar_elegibilidade_exame(dados_usuario):
+    """
+    Verifica se o aluno pode fazer a prova.
+    """
+    status = dados_usuario.get('status_exame', 'pendente')
+    
+    # 1. Bloqueio por Abandono ou Professor
+    if status == 'bloqueado':
+        return False, "Seu exame está bloqueado. Contate o professor."
+
+    # 2. Regra de 3 dias para Reprovados
+    if status == 'reprovado':
+        try:
+            ultimo_exame = dados_usuario.get('data_ultimo_exame')
+            if ultimo_exame:
+                if hasattr(ultimo_exame, 'date'): 
+                    dt_last = ultimo_exame.replace(tzinfo=None)
+                else: 
+                    dt_last = datetime.fromisoformat(str(ultimo_exame).replace('Z',''))
+                
+                diferenca = datetime.now() - dt_last
+                if diferenca.days < 3:
+                    return False, f"Você precisa aguardar {3 - diferenca.days} dias para tentar novamente."
+        except:
+            pass 
+
+    return True, "Autorizado"
+
+def registrar_inicio_exame(uid):
+    """Marca no banco que o aluno começou a prova."""
+    try:
+        db = get_db()
+        db.collection('usuarios').document(uid).update({
+            "status_exame": "em_andamento",
+            "inicio_exame_temp": datetime.now().isoformat(),
+            "status_exame_em_andamento": True
+        })
+    except Exception as e:
+        print(f"Erro ao iniciar exame: {e}")
+
+def registrar_fim_exame(uid, aprovado):
+    """
+    ATUALIZA O STATUS FINAL DO ALUNO.
+    """
+    try:
+        db = get_db()
+        novo_status = "aprovado" if aprovado else "reprovado"
+        
+        # Atualiza o documento do USUÁRIO (Onde o Admin/Professor lê o status)
+        db.collection('usuarios').document(uid).update({
+            "status_exame": novo_status,
+            "exame_habilitado": False,
+            "data_ultimo_exame": firestore.SERVER_TIMESTAMP,
+            "status_exame_em_andamento": False
+        })
+        return True
+    except Exception as e:
+        print(f"Erro ao finalizar exame: {e}")
+        return False
+
+def bloquear_por_abandono(uid):
+    """Bloqueia o aluno se ele tentar atualizar a página ou sair."""
+    try:
+        db = get_db()
+        db.collection('usuarios').document(uid).update({
+            "status_exame": "bloqueado",
+            "exame_habilitado": False,
+            "status_exame_em_andamento": False
+        })
+    except Exception as e:
+        print(f"Erro ao bloquear aluno: {e}")
