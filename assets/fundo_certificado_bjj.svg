@@ -1,23 +1,15 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="3508" height="2480" viewBox="0 0 3508 2480" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- Gradiente principal champagne metálico (horizontal) -->
     <linearGradient id="champagneMetal" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#9b8260"/>
-      <stop offset="20%" stop-color="#d8c39b"/>
-      <stop offset="50%" stop-color="#f4e5c2"/>
-      <stop offset="80%" stop-color="#d0b88f"/>
-      <stop offset="100%" stop-color="#8a704f"/>
-    </linearGradient>
+      <stop offset="0%" stop-color="#cbbba5"/>   <stop offset="20%" stop-color="#eaddc5"/>  <stop offset="50%" stop-color="#fffcf5"/>  <stop offset="80%" stop-color="#e6d6b8"/>  <stop offset="100%" stop-color="#baa891"/> </linearGradient>
 
-    <!-- Linhas horizontais escovadas -->
     <linearGradient id="brushLine" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
       <stop offset="50%" stop-color="rgba(255,255,255,0)"/>
       <stop offset="100%" stop-color="rgba(255,255,255,0.20)"/>
     </linearGradient>
 
-    <!-- Brilho diagonal suave -->
     <linearGradient id="diagonalGlow" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="rgba(255,255,255,0.0)"/>
       <stop offset="35%" stop-color="rgba(255,255,255,0.22)"/>
@@ -25,7 +17,6 @@
       <stop offset="100%" stop-color="rgba(255,255,255,0.12)"/>
     </linearGradient>
 
-    <!-- Gradiente da borda dourada -->
     <linearGradient id="goldBorder" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#8b6c21"/>
       <stop offset="25%" stop-color="#d4af37"/>
@@ -34,12 +25,9 @@
     </linearGradient>
   </defs>
 
-  <!-- Fundo champagne metálico -->
   <rect x="0" y="0" width="3508" height="2480" fill="url(#champagneMetal)" />
 
-  <!-- Textura escovada horizontal -->
   <g opacity="0.5">
-    <!-- espaçadas a cada ~60px -->
     <rect x="0" y="120"  width="3508" height="5" fill="url(#brushLine)" />
     <rect x="0" y="180"  width="3508" height="5" fill="url(#brushLine)" />
     <rect x="0" y="240"  width="3508" height="5" fill="url(#brushLine)" />
@@ -78,14 +66,11 @@
     <rect x="0" y="2220" width="3508" height="5" fill="url(#brushLine)" />
   </g>
 
-  <!-- Brilho diagonal sobre tudo -->
   <rect x="-400" y="-300" width="4300" height="3100" fill="url(#diagonalGlow)" opacity="0.9"/>
 
-  <!-- Borda externa dourada grossa com cantos arredondados -->
   <rect x="140" y="140" width="3228" height="2200" rx="70" ry="70"
         fill="none" stroke="url(#goldBorder)" stroke-width="24"/>
 
-  <!-- Borda interna dourada fina com cantos arredondados -->
   <rect x="200" y="200" width="3108" height="2080" rx="50" ry="50"
         fill="none" stroke="url(#goldBorder)" stroke-width="8" opacity="0.9"/>
 </svg>
