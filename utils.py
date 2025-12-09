@@ -279,18 +279,17 @@ def gerar_qrcode(codigo):
     except: return None
 
 # =========================================
-# GERAÇÃO DE PDF (VERSÃO DEBUG/ROBUSTA)
-# Substitua a função gerar_pdf no seu utils.py por esta
+# GERAÇÃO DE PDF (CORREÇÃO DE ARQUIVO VAZIO)
+# Substitua a função gerar_pdf no utils.py por esta
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
     try:
         def limpa(txt):
             if not txt: return ""
-            # Normaliza e remove caracteres que quebram o PDF (emojis, acentos complexos)
             return unicodedata.normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('ASCII')
 
-        # Criação do PDF
+        # Setup do PDF
         pdf = FPDF("L", "mm", "A4")
         pdf.add_page()
         
@@ -299,23 +298,21 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         C_DOURADO = (218, 165, 32)
         C_PRETO = (0, 0, 0)
         
-        # Fundo simples (evita erros de transição de cor)
+        # Fundo e Borda
         pdf.set_fill_color(*C_BRANCO)
         pdf.rect(0, 0, 297, 210, "F")
-        
-        # Moldura
         pdf.set_draw_color(*C_DOURADO)
         pdf.set_line_width(2)
         pdf.rect(10, 10, 277, 190)
 
-        # Tenta carregar Logo (com proteção)
+        # Logo
         if os.path.exists("assets/logo.png"):
             try: pdf.image("assets/logo.png", x=128, y=20, w=40)
             except: pass
 
-        # Textos
+        # Textos Principais (Usando Arial para evitar erros de fonte)
         pdf.set_y(60)
-        pdf.set_font("Arial", "B", 24) # Usando Arial que é padrão, evita erro de Helvetica
+        pdf.set_font("Arial", "B", 24)
         pdf.set_text_color(*C_DOURADO)
         pdf.cell(0, 10, "CERTIFICADO DE APROVACAO", ln=True, align="C")
         
@@ -324,7 +321,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_text_color(*C_PRETO)
         pdf.cell(0, 10, "Certificamos que:", ln=True, align="C")
         
-        # Nome do Aluno
+        # Nome
         nome = limpa(usuario_nome.upper())
         pdf.ln(5)
         pdf.set_font("Arial", "B", 30)
@@ -341,42 +338,53 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_text_color(*cor_fx)
         pdf.cell(0, 20, limpa(faixa.upper()), ln=True, align="C")
         
-        # Dados finais
+        # Rodapé
         pdf.set_y(160)
         pdf.set_font("Courier", "", 10)
         pdf.set_text_color(100, 100, 100)
-        pdf.cell(0, 5, f"Codigo de Autenticidade: {codigo}", ln=True, align="C")
+        pdf.cell(0, 5, f"Codigo: {codigo}", ln=True, align="C")
         pdf.cell(0, 5, f"Data: {datetime.now().strftime('%d/%m/%Y')} | Nota: {pontuacao:.1f}%", ln=True, align="C")
 
-        # QR Code (Opcional)
+        # QR Code
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
             try: pdf.image(qr_path, x=250, y=160, w=30)
             except: pass
 
-        # === SAÍDA DO ARQUIVO (CORREÇÃO DE COMPATIBILIDADE) ===
+        # === SAÍDA SEGURA DO ARQUIVO ===
         try:
-            # Tenta o método padrão (funciona na maioria das versões novas)
-            pdf_bytes = pdf.output()
+            # 1. Tenta gerar a saída
+            buffer = pdf.output() 
             
-            # Se retornou bytes (fpdf2), ótimo
-            if isinstance(pdf_bytes, (bytes, bytearray)):
-                 return bytes(pdf_bytes), f"Certificado_{nome.split()[0]}.pdf"
+            # 2. Se saiu vazio (None ou string vazia), força o modo string (dest='S')
+            # Isso é comum em versões antigas do FPDF
+            if not buffer:
+                buffer = pdf.output(dest='S')
+
+            # 3. Verificação Final: Se ainda estiver vazio, é erro real
+            if not buffer:
+                return None, "Erro: O PDF foi gerado com 0 bytes."
+
+            # 4. Tratamento de Tipos (Bytes vs String)
+            nome_arq = f"Certificado_{nome.split()[0]}.pdf"
             
-            # Se retornou string (fpdf 1.7 antigo), codifica para latin-1
-            if isinstance(pdf_bytes, str):
-                 return pdf_bytes.encode('latin-1'), f"Certificado_{nome.split()[0]}.pdf"
-            
-            # Se retornou None ou algo estranho, força o método antigo dest='S'
-            return pdf.output(dest='S').encode('latin-1'), f"Certificado_{nome.split()[0]}.pdf"
+            if isinstance(buffer, (bytes, bytearray)):
+                return bytes(buffer), nome_arq
+                
+            if isinstance(buffer, str):
+                return buffer.encode('latin-1'), nome_arq
+                
+            return None, "Erro: Tipo de retorno do PDF desconhecido."
 
         except Exception as e_out:
-             # Última tentativa forçada
-             return pdf.output(dest='S').encode('latin-1'), f"Certificado_{nome.split()[0]}.pdf"
+             # Fallback final se o output der erro de assinatura
+             try:
+                 return pdf.output(dest='S').encode('latin-1'), f"Certificado_{nome.split()[0]}.pdf"
+             except Exception as e_final:
+                 return None, f"Falha fatal na renderização: {str(e_final)}"
 
     except Exception as e:
-        # Retorna o erro na variável de nome para podermos ler na tela
-        return None, f"Erro Interno PDF: {str(e)}"
+        return None, f"Erro interno: {str(e)}"
 # =========================================
 # FUNÇÕES DE LÓGICA DE EXAME E BANCO DE DADOS
 # =========================================
