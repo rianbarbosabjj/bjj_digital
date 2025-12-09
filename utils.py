@@ -238,26 +238,30 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.set_auto_page_break(False)
     pdf.add_page()
 
-    L, H = 297, 210 # Dimensões A4 Paisagem
+    L, H = 297, 210  # Dimensões A4 Paisagem
 
-    # Cores
-    C_BRANCO_GELO = (252, 252, 252) # Levemente mais claro
+    # Cores (ainda usadas em textos, não no fundo)
+    C_BRANCO_GELO = (252, 252, 252)  # fallback se não achar o PNG
     C_DOURADO = (218, 165, 32)
     C_CINZA = (100, 100, 100)
     C_TEXTO = (50, 50, 50)
 
-    # Fundo
-    pdf.set_fill_color(*C_BRANCO_GELO)
-    pdf.rect(0, 0, L, H, "F")
+    # ===== FUNDO COM Borda + Metálico (PNG gerado do SVG) =====
+    bg_path = None
+    if os.path.exists("assets/fundo_certificado_bjj.png"):
+        bg_path = "assets/fundo_certificado_bjj.png"
+    elif os.path.exists("assets/fundo_certificado_bjj.jpg"):
+        bg_path = "assets/fundo_certificado_bjj.jpg"
 
-    # Borda Externa Dourada
-    pdf.set_draw_color(*C_DOURADO)
-    pdf.set_line_width(3)
-    pdf.rect(10, 10, L-20, H-20)
+    if bg_path:
+        # imagem ocupa toda a página A4 paisagem
+        pdf.image(bg_path, x=0, y=0, w=L, h=H)
+    else:
+        # fallback: fundo liso se a imagem não for encontrada
+        pdf.set_fill_color(*C_BRANCO_GELO)
+        pdf.rect(0, 0, L, H, "F")
 
-    # Borda Interna Fina
-    pdf.set_line_width(0.8)
-    pdf.rect(14, 14, L-28, H-28)
+    # (Não desenhamos mais bordas aqui – já estão no fundo)
 
     # ===== TÍTULO (Com efeito de sombra) =====
     titulo = "CERTIFICADO DE EXAME TEORICO"
@@ -265,7 +269,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     # Sombra do título
     pdf.set_y(28)
     pdf.set_font("Helvetica", "B", 32)
-    pdf.set_text_color(200, 180, 100) # Sombra clara
+    pdf.set_text_color(200, 180, 100)  # Sombra clara
     pdf.cell(0, 16, titulo, ln=False, align="C")
 
     # Título principal
@@ -273,7 +277,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.set_text_color(*C_DOURADO)
     pdf.cell(0, 16, titulo, ln=True, align="C")
 
-    # ===== LOGO (Placeholder se não existir) =====
+    # ===== LOGO =====
     if os.path.exists("assets/logo.png"):
         pdf.image("assets/logo.png", x=(L/2)-18, y=52, w=36)
     
@@ -327,7 +331,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     
     # Tenta carregar fonte manuscrita, senão usa itálico padrão
     font_ass = "Helvetica"
-    style_ass = "I" # Italic
+    style_ass = "I"  # Italic
     
     if os.path.exists("assets/Allura-Regular.ttf"):
         try:
@@ -358,7 +362,6 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     qr_path = gerar_qrcode(codigo)
     if qr_path and os.path.exists(qr_path):
         pdf.image(qr_path, x=L-56, y=y_base, w=32)
-        # Limpeza do arquivo temporário pode ser feita depois se necessário
         
     pdf.set_xy(L-64, y_base + 32)
     pdf.set_font("Courier", "", 8)
@@ -368,8 +371,6 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.set_xy(L-64, y_base + 36)
     pdf.cell(45, 4, f"{datetime.now().strftime('%d/%m/%Y')}", align="C")
 
-    # Output para bytes (compatível com Streamlit download_button)
-    # encode('latin-1') é necessário para versões antigas do FPDF retornarem string binary
     return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
 
 # =========================================
