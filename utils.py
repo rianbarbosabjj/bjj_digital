@@ -183,7 +183,7 @@ def gerar_qrcode(codigo):
         os.makedirs("temp", exist_ok=True)
         path = f"temp/qr_{codigo}.png"
         qr = qrcode.QRCode(box_size=10, border=1)
-        qr.add_data(f"https://bjjdigital.streamlit.app/?validar={codigo}")
+        qr.add_data(f"https://bjjdigital.com.br/?validar.html={codigo}")
         qr.make(fit=True)
         qr.make_image(fill_color="black", back_color="white").save(path)
         return path
