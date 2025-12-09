@@ -280,7 +280,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.ln(2)
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*C_TEXTO)
-    pdf.cell(0, 8, "foi aprovado(a), estando apto(a) a promocao para a faixa:", ln=True, align="C")
+    pdf.cell(0, 8, "foi aprovado(a) no exame teórico para a faixa:", ln=True, align="C")
 
     # ===== NOME DA FAIXA =====
     pdf.ln(4)
