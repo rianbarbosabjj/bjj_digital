@@ -326,7 +326,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_text_color(*C_CINZA)
         pdf.cell(45, 4, f"Ref: {codigo}", align="C")
 
-        pdf.set_xy(L-64, y_base + 34)
+        pdf.set_xy(L-64, y_base + 36)
         pdf.cell(45, 4, f"{datetime.now().strftime('%d/%m/%Y')}", align="C")
 
     # =====================================================
