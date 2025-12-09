@@ -33,7 +33,7 @@ def get_cor_faixa(nome_faixa):
     for chave, cor in CORES_FAIXAS.items():
         if chave in str(nome_faixa).upper():
             return cor
-    return (20, 20, 20) # Preto padrão se não achar
+    return (0, 0, 0) # Preto padrão
 
 # =========================================
 # FUNÇÕES DE MÍDIA E UPLOAD
@@ -80,20 +80,17 @@ def fazer_upload_midia(arquivo):
         return None
 
 # =========================================
-# IA ANTI-DUPLICIDADE (SAFE MODE)
+# IA ANTI-DUPLICIDADE
 # =========================================
 IA_ATIVADA = False 
 try:
     from sentence_transformers import SentenceTransformer
     from sklearn.metrics.pairwise import cosine_similarity
     import numpy as np
-    
     IA_ATIVADA = True
-
     @st.cache_resource
     def carregar_modelo_ia():
         return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-
     def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.75):
         if not lista_existentes: return False, None
         try:
@@ -108,79 +105,22 @@ try:
             if max_score >= threshold:
                 return True, f"{textos_existentes[idx_max]} ({max_score*100:.1f}%)"
             return False, None
-        except Exception as e:
-            print(f"Erro IA Duplicidade: {e}")
-            return False, None
-
+        except: return False, None
 except ImportError:
     IA_ATIVADA = False
-    def verificar_duplicidade_ia(n, l, t=0.75): 
-        return False, "IA não instalada"
+    def verificar_duplicidade_ia(n, l, t=0.75): return False, "IA não instalada"
 
 # =========================================
-# AUDITORIA DE QUESTÕES (GEMINI - AUTO-DETECT)
+# AUDITORIA IA
 # =========================================
 def auditoria_ia_questao(pergunta, alternativas, correta):
-    api_key = st.secrets.get("GEMINI_API_KEY")
-    if not api_key:
-        return "⚠️ Chave GEMINI_API_KEY não configurada."
+    return "Indisponível no momento" 
 
-    prompt_text = f"""
-    Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
-    Enunciado: {pergunta}
-    Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
-    Gabarito: {correta}
-    
-    Verifique erros de português, lógica e consistência técnica.
-    Responda em 1 parágrafo curto. Inicie com '✅ Aprovada:' se estiver boa.
-    """
-
-    try:
-        import google.generativeai as genai
-        genai.configure(api_key=api_key)
-        
-        try:
-            modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-            modelo_escolhido = modelos[0]
-            for m in modelos:
-                if 'flash' in m: modelo_escolhido = m; break
-        except: modelo_escolhido = 'models/gemini-1.5-flash'
-
-        model = genai.GenerativeModel(modelo_escolhido)
-        response = model.generate_content(prompt_text)
-        return response.text
-
-    except:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
-            payload = {"contents": [{"parts": [{"text": prompt_text}]}]}
-            headers = {'Content-Type': 'application/json'}
-            response = requests.post(url, headers=headers, data=json.dumps(payload))
-            if response.status_code == 200:
-                return response.json()['candidates'][0]['content']['parts'][0]['text']
-            else:
-                return f"❌ Erro Gemini: {response.text}"
-        except Exception as e:
-            return f"❌ Erro Crítico Gemini: {e}"
-
-# =========================================
-# AUDITORIA DE QUESTÕES (OPENAI - GPT)
-# =========================================
 def auditoria_ia_openai(pergunta, alternativas, correta):
-    api_key = st.secrets.get("OPENAI_API_KEY")
-    if not api_key: return "⚠️ Chave OPENAI_API_KEY ausente."
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-        prompt = f"Audite: {pergunta}\nOpções: {alternativas}\nCorreta: {correta}"
-        response = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role":"user", "content":prompt}])
-        return response.choices[0].message.content
-    except Exception as e:
-        if "quota" in str(e): return "❌ Sem saldo na OpenAI."
-        return f"Erro GPT: {e}"
+    return "Indisponível no momento"
 
 # =========================================
-# DEMAIS FUNÇÕES GERAIS
+# FUNÇÕES GERAIS
 # =========================================
 def carregar_todas_questoes(): return []
 def salvar_questoes(t, q): pass
@@ -205,57 +145,34 @@ def buscar_cep(cep):
     if not c: return None
     try:
         r = requests.get(f"https://viacep.com.br/ws/{c}/json/", timeout=3)
-        if r.status_code == 200 and "erro" not in r.json():
+        if r.status_code == 200:
             d = r.json()
-            return {"logradouro": d.get("logradouro","").upper(), "bairro": d.get("bairro","").upper(), "cidade": d.get("localidade","").upper(), "uf": d.get("uf","").upper()}
+            if "erro" not in d:
+                return {"logradouro": d.get("logradouro","").upper(), "bairro": d.get("bairro","").upper(), "cidade": d.get("localidade","").upper(), "uf": d.get("uf","").upper()}
     except: pass
     return None
 
 def gerar_senha_temporaria(t=8):
     return ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(t))
 
-# --- FUNÇÃO DE EMAIL (CONFIGURADA PARA ZOHO) ---
 def enviar_email_recuperacao(dest, senha):
     try:
         s_email = st.secrets.get("EMAIL_SENDER")
         s_pwd = st.secrets.get("EMAIL_PASSWORD")
-        
-        if not s_email or not s_pwd: 
-            st.error("❌ Erro Config: 'EMAIL_SENDER' ou 'EMAIL_PASSWORD' não configurados.")
-            return False
-            
+        if not s_email or not s_pwd: return False
         msg = MIMEMultipart()
         msg['Subject'] = "Recuperação de Senha - BJJ Digital"
         msg['From'] = s_email
         msg['To'] = dest
-        
-        corpo = f"""
-        <html>
-            <body>
-                <h2>Recuperação de Acesso</h2>
-                <p>Olá,</p>
-                <p>Sua nova senha temporária é: <b>{senha}</b></p>
-                <p>Recomendamos que você altere sua senha assim que fizer o login.</p>
-                <p>Atenciosamente,<br>Equipe BJJ Digital</p>
-            </body>
-        </html>
-        """
+        corpo = f"<html><body><h2>Recuperação</h2><p>Senha: <b>{senha}</b></p></body></html>"
         msg.attach(MIMEText(corpo, 'html'))
-        
-        # --- CONFIGURAÇÃO ZOHO MAIL ---
         server = smtplib.SMTP("smtp.zoho.com", 587)
         server.starttls()
         server.login(s_email, s_pwd)
         server.sendmail(s_email, dest, msg.as_string())
         server.quit()
         return True
-
-    except Exception as e:
-        if "Authentication failed" in str(e) or "Username and Password not accepted" in str(e):
-             st.error("❌ Erro de Login no Zoho: Verifique se o e-mail está correto e se a senha está certa (se tiver 2FA, use a Senha de Aplicativo).")
-        else:
-             st.error(f"❌ Erro ao enviar email: {e}")
-        return False
+    except: return False
 
 def gerar_codigo_verificacao():
     try:
@@ -279,8 +196,7 @@ def gerar_qrcode(codigo):
     except: return None
 
 # =========================================
-# GERAÇÃO DE PDF (CORREÇÃO DE ARQUIVO VAZIO)
-# Substitua a função gerar_pdf no utils.py por esta
+# GERAÇÃO DE PDF (ESTILO PREMIUM + SAÍDA SEGURA)
 # =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsável"):
@@ -314,7 +230,8 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
 
         # ===== LOGO SUPERIOR =====
         if os.path.exists("assets/logo.png"):
-            pdf.image("assets/logo.png", x=(L/2)-20, y=18, w=40)
+            try: pdf.image("assets/logo.png", x=(L/2)-20, y=18, w=40)
+            except: pass
 
         # ===== TÍTULO =====
         pdf.set_y(58)
@@ -369,16 +286,18 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         # SEL0 DOURADO (ESQUERDA)
         selo = "assets/selo_dourado.png"
         if os.path.exists(selo):
-            pdf.image(selo, x=25, y=y_base-3, w=32)
-            pdf.set_xy(20, y_base + 32)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(C_CINZA)
-            pdf.cell(42, 4, "Certificacao Oficial", align="C")
+            try:
+                pdf.image(selo, x=25, y=y_base-3, w=32)
+                pdf.set_xy(20, y_base + 32)
+                pdf.set_font("Helvetica", "", 7)
+                pdf.set_text_color(*C_CINZA)
+                pdf.cell(42, 4, "Certificacao Oficial", align="C")
+            except: pass
 
         # DATA
         pdf.set_xy(0, y_base)
         pdf.set_font("Helvetica", "", 11)
-        pdf.set_text_color(C_CINZA)
+        pdf.set_text_color(*C_CINZA)
         pdf.cell(0, 5, f"Data de Emissao: {datetime.now().strftime('%d/%m/%Y')}", align="C")
 
         # CÓDIGO
@@ -407,96 +326,62 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
 
         pdf.ln(4)
         pdf.set_font("Helvetica", "", 9)
-        pdf.set_text_color(C_CINZA)
+        pdf.set_text_color(*C_CINZA)
         pdf.cell(0, 5, "Professor(a) Responsavel", align="C")
 
         # QR-CODE (DIREITA)
         qr = gerar_qrcode(codigo)
         if qr and os.path.exists(qr):
-            pdf.image(qr, x=L-56, y=y_base-3, w=28)
-            pdf.set_xy(L-60, y_base+30)
-            pdf.set_font("Helvetica", "", 7)
-            pdf.set_text_color(C_CINZA)
-            pdf.cell(35, 4, "Autenticidade Digital", align="C")
+            try:
+                pdf.image(qr, x=L-56, y=y_base-3, w=28)
+                pdf.set_xy(L-60, y_base+30)
+                pdf.set_font("Helvetica", "", 7)
+                pdf.set_text_color(*C_CINZA)
+                pdf.cell(35, 4, "Autenticidade Digital", align="C")
+            except: pass
 
-        # SAÍDA
-        buffer = pdf.output(dest="S").encode("latin-1")
-        return buffer, f"Certificado_{nome.split()[0]}.pdf"
+        # SAÍDA (ADAPTADA PARA EVITAR ERRO DE ARQUIVO VAZIO)
+        # O código abaixo garante compatibilidade com FPDF antigo e novo
+        try:
+            buffer = pdf.output()
+            if isinstance(buffer, (bytes, bytearray)):
+                return bytes(buffer), f"Certificado_{nome.split()[0]}.pdf"
+            if isinstance(buffer, str):
+                return buffer.encode('latin-1'), f"Certificado_{nome.split()[0]}.pdf"
+            # Fallback para o modo 'S' solicitado se o output padrão falhar
+            return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
+        except:
+             return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
 
     except Exception as e:
         return None, f"Erro PDF: {e}"
 
 # =========================================
-# FUNÇÕES DE LÓGICA DE EXAME E BANCO DE DADOS
+# LÓGICA DE EXAME E DB
 # =========================================
 def verificar_elegibilidade_exame(dados_usuario):
-    """
-    Verifica se o aluno pode fazer a prova.
-    """
     status = dados_usuario.get('status_exame', 'pendente')
-    
-    # 1. Bloqueio por Abandono ou Professor
-    if status == 'bloqueado':
-        return False, "Seu exame está bloqueado. Contate o professor."
-
-    # 2. Regra de 3 dias para Reprovados
+    if status == 'bloqueado': return False, "Exame bloqueado. Contate o professor."
     if status == 'reprovado':
         try:
-            ultimo_exame = dados_usuario.get('data_ultimo_exame')
-            if ultimo_exame:
-                if hasattr(ultimo_exame, 'date'): 
-                    dt_last = ultimo_exame.replace(tzinfo=None)
-                else: 
-                    dt_last = datetime.fromisoformat(str(ultimo_exame).replace('Z',''))
-                
-                diferenca = datetime.now() - dt_last
-                if diferenca.days < 3:
-                    return False, f"Você precisa aguardar {3 - diferenca.days} dias para tentar novamente."
-        except:
-            pass 
-
+            last = dados_usuario.get('data_ultimo_exame')
+            if last:
+                dt_last = last.replace(tzinfo=None) if hasattr(last, 'date') else datetime.fromisoformat(str(last).replace('Z',''))
+                if (datetime.now() - dt_last).days < 3: return False, "Aguarde 3 dias para tentar novamente."
+        except: pass
     return True, "Autorizado"
 
 def registrar_inicio_exame(uid):
-    """Marca no banco que o aluno começou a prova."""
-    try:
-        db = get_db()
-        db.collection('usuarios').document(uid).update({
-            "status_exame": "em_andamento",
-            "inicio_exame_temp": datetime.now().isoformat(),
-            "status_exame_em_andamento": True
-        })
-    except Exception as e:
-        print(f"Erro ao iniciar exame: {e}")
+    try: get_db().collection('usuarios').document(uid).update({"status_exame": "em_andamento", "inicio_exame_temp": datetime.now().isoformat(), "status_exame_em_andamento": True})
+    except: pass
 
 def registrar_fim_exame(uid, aprovado):
-    """
-    ATUALIZA O STATUS FINAL DO ALUNO.
-    """
     try:
-        db = get_db()
-        novo_status = "aprovado" if aprovado else "reprovado"
-        
-        # Atualiza o documento do USUÁRIO (Onde o Admin/Professor lê o status)
-        db.collection('usuarios').document(uid).update({
-            "status_exame": novo_status,
-            "exame_habilitado": False,
-            "data_ultimo_exame": firestore.SERVER_TIMESTAMP,
-            "status_exame_em_andamento": False
-        })
+        stt = "aprovado" if aprovado else "reprovado"
+        get_db().collection('usuarios').document(uid).update({"status_exame": stt, "exame_habilitado": False, "data_ultimo_exame": firestore.SERVER_TIMESTAMP, "status_exame_em_andamento": False})
         return True
-    except Exception as e:
-        print(f"Erro ao finalizar exame: {e}")
-        return False
+    except: return False
 
 def bloquear_por_abandono(uid):
-    """Bloqueia o aluno se ele tentar atualizar a página ou sair."""
-    try:
-        db = get_db()
-        db.collection('usuarios').document(uid).update({
-            "status_exame": "bloqueado",
-            "exame_habilitado": False,
-            "status_exame_em_andamento": False
-        })
-    except Exception as e:
-        print(f"Erro ao bloquear aluno: {e}")
+    try: get_db().collection('usuarios').document(uid).update({"status_exame": "bloqueado", "exame_habilitado": False, "status_exame_em_andamento": False})
+    except: pass
