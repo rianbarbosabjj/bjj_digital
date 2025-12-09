@@ -256,43 +256,51 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         except:
             pass
 
-    # ==============================
-    # TEXTO INTRODUTÓRIO
-    # ==============================
-    pdf.set_font("Helvetica", "", 14)
-    pdf.set_text_color(*C_PRETO)
-    pdf.ln(22)
-    pdf.cell(0, 8, "Certificamos que o aluno(a):", ln=True, align="C")
+# ===== POSICIONAMENTO AUTOMÁTICO DO TEXTO INTRODUTÓRIO =====
+# Calcula posição ideal com base na altura do título e logo
+y_atual = pdf.get_y()          # onde terminou a logo
+offset = 20                    # ajuste visual (mm) -> pode ser 18 a 24
 
-    # ==============================
-    # NOME DO ALUNO
-    # ==============================
-    nome = limpa(usuario_nome.upper().strip())
-    size = 42
+pdf.set_y(y_atual + offset)    # posicionamento dinâmico
+pdf.set_font("Helvetica", "", 14)
+pdf.set_text_color(*C_PRETO)
+pdf.cell(0, 8, "Certificamos que o aluno(a):", ln=True, align="C")
+# ==============================================
+# BLOC0 CENTRAL AUTOMÁTICO (NOME + TEXTO + FAIXA)
+# ==============================================
+y_inicio_texto = pdf.get_y()  # onde terminou "Certificamos que..."
+y_rodape = 151               # mesmo valor usado no rodape
+
+altura_blococentral = 46     # altura ocupada pelo bloco completo
+y_centro = y_inicio_texto + ((y_rodape - y_inicio_texto) / 2) - (altura_blococentral / 2)
+
+# ==== NOME DO ALUNO ====
+pdf.set_y(y_centro)
+nome = limpa(usuario_nome.upper().strip())
+size = 42
+pdf.set_font("Helvetica", "B", size)
+
+while pdf.get_string_width(nome) > 240 and size > 16:
+    size -= 2
     pdf.set_font("Helvetica", "B", size)
 
-    while pdf.get_string_width(nome) > 240 and size > 16:
-        size -= 2
-        pdf.set_font("Helvetica", "B", size)
+pdf.set_text_color(218, 165, 32)  # dourado
+pdf.cell(0, 18, nome, ln=True, align="C")
 
-    pdf.set_text_color(*C_DOURADO)
-    pdf.cell(0, 18, nome, ln=True, align="C")
+# ==== TEXTO SOBRE FAIXA ====
+pdf.ln(2)
+pdf.set_font("Helvetica", "", 14)
+pdf.set_text_color(0, 0, 0)
+pdf.cell(0, 8, "foi aprovado(a), estando apto(a) a promocao para a faixa:", ln=True, align="C")
 
-    # ==============================
-    # TEXTO DA FAIXA
-    # ==============================
-    pdf.ln(6)
-    pdf.set_font("Helvetica", "", 14)
-    pdf.set_text_color(*C_PRETO)
-    pdf.cell(0, 8, "foi aprovado(a), estando apto(a) a promocao para a faixa:", ln=True, align="C")
+# ==== NOME DA FAIXA ====
+pdf.ln(2)
+try: cor_fx = get_cor_faixa(faixa)
+except: cor_fx = (0,0,0)
 
-    pdf.ln(4)
-    try: cor_fx = get_cor_faixa(faixa)
-    except: cor_fx = (0,0,0)
-
-    pdf.set_font("Helvetica", "B", 38)
-    pdf.set_text_color(*cor_fx)
-    pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
+pdf.set_font("Helvetica", "B", 38)
+pdf.set_text_color(*cor_fx)
+pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
 
     # ==============================
     # RODAPÉ COM SELO / ASSINATURA / QR
