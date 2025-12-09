@@ -183,7 +183,7 @@ def gerar_qrcode(codigo):
         os.makedirs("temp", exist_ok=True)
         path = f"temp/qr_{codigo}.png"
         qr = qrcode.QRCode(box_size=10, border=1)
-        qr.add_data(f"https://bjjdigital.com.br/?validar.html={codigo}")
+        qr.add_data(f"https://bjjdigital.com.br/validar.html={codigo}")
         qr.make(fit=True)
         qr.make_image(fill_color="black", back_color="white").save(path)
         return path
@@ -288,7 +288,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     if os.path.exists(selo):
         try:
             pdf.image(selo, x=32, y=y_base, w=32)
-            pdf.set_xy(25, y_base + 34)
+            pdf.set_xy(25, y_base + 30)
             pdf.set_font("Helvetica", "", 8)
             pdf.set_text_color(*C_CINZA)
             pdf.cell(45, 4, "Certificacao Oficial", align="C")
@@ -326,7 +326,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         pdf.set_text_color(*C_CINZA)
         pdf.cell(45, 4, f"Ref: {codigo}", align="C")
 
-        pdf.set_xy(L-64, y_base + 48)
+        pdf.set_xy(L-64, y_base + 38)
         pdf.cell(45, 4, f"{datetime.now().strftime('%d/%m/%Y')}", align="C")
 
     # =====================================================
