@@ -177,7 +177,9 @@ def gerar_codigo_verificacao():
         return f"BJJDIGITAL-{datetime.now().year}-{total+1:04d}"
     except:
         return f"BJJDIGITAL-{datetime.now().year}-{random.randint(1000,9999)}"
-
+# =================================
+# GERA O CERTIFICADO
+# =================================
 def gerar_qrcode(codigo):
     import qrcode
     import os
@@ -197,32 +199,6 @@ def gerar_qrcode(codigo):
 
     return caminho
 
-@st.cache_data(show_spinner=False)
-def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsavel"):
-    from fpdf import FPDF
-    import unicodedata
-    import os
-    from datetime import datetime
-
-    def limpa(txt):
-        if not txt: return ""
-        return unicodedata.normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('ASCII')
-
-    def gerar_qrcode(codigo):
-        import qrcode
-        pasta = "qrcodes"
-        os.makedirs(pasta, exist_ok=True)
-        caminho = f"{pasta}/{codigo}.png"
-
-        if not os.path.exists(caminho):
-            url = f"https://bjjdigital.com.br/verificar.html?codigo={codigo}"
-            img = qrcode.make(url)
-            img.save(caminho)
-
-        return caminho
-# =========================================
-# GERAÇÃO DE PDF (CORRIGIDO PARA NÃO SAIR VAZIO)
-# =========================================
 @st.cache_data(show_spinner=False)
 def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsavel"):
     
@@ -372,6 +348,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.cell(45, 4, f"{datetime.now().strftime('%d/%m/%Y')}", align="C")
 
     return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
+
 
 # =========================================
 # LÓGICA DE EXAME E DB
