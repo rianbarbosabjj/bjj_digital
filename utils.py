@@ -290,13 +290,13 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.cell(0, 18, nome, ln=True, align="C")
 
     # ===== TEXTO DE FAIXA =====
-    pdf.ln(2)
+    pdf.ln(1)
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*C_PRETO)
     pdf.cell(0, 8, "foi aprovado(a), estando apto(a) a promocao para a faixa:", ln=True, align="C")
 
     # ===== FAIXA =====
-    pdf.ln(2)
+    pdf.ln(1)
     try: cor_fx = get_cor_faixa(faixa)
     except: cor_fx = (0,0,0)
 
