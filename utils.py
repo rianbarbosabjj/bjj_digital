@@ -247,15 +247,17 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.cell(0, 16, titulo, ln=True, align="C")
 
 # ===== LOGO ABAIXO DO TÍTULO =====
-    if os.path.exists("assets/logo.png"):
-        try:
-    pdf.image("assets/logo.png", x=(L/2)-20, y=50, w=40)
+if os.path.exists("assets/logo.png"):
+    try:
+        pdf.image("assets/logo.png", x=(L/2)-20, y=50, w=40)
     except:
         pass
-    pdf.set_font("Helvetica", "", 14)
-    pdf.set_text_color(*C_PRETO)
-    pdf.ln(4)
-    pdf.cell(0, 8, "Certificamos que o aluno(a):", ln=True, align="C")
+
+# ===== TEXTO APÓS O LOGO =====
+pdf.set_font("Helvetica", "", 14)
+pdf.set_text_color(*C_PRETO)
+pdf.ln(4)
+pdf.cell(0, 8, "Certificamos que o aluno(a):", ln=True, align="C")
 
     # ===== NOME =====
     nome = limpa(usuario_nome.upper().strip())
