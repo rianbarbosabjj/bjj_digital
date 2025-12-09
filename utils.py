@@ -220,7 +220,24 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
             img.save(caminho)
 
         return caminho
+# =========================================
+# GERAÇÃO DE PDF (CORRIGIDO PARA NÃO SAIR VAZIO)
+# =========================================
+@st.cache_data(show_spinner=False)
+def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsavel"):
 
+    from fpdf import FPDF
+    import unicodedata
+    import os
+    from datetime import datetime
+
+    def limpa(txt):
+        if not txt: return ""
+        return unicodedata.normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('ASCII')
+
+    # ==========================
+    # CONFIGURAÇÃO DO PDF
+    # ==========================
     pdf = FPDF("L", "mm", "A4")
     pdf.set_auto_page_break(False)
     pdf.add_page()
