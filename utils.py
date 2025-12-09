@@ -272,7 +272,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     # ==============================
     y_inicio_texto = pdf.get_y()
     y_rodape = 151
-    altura_blococentral = 32
+    altura_blococentral = 30
 
     y_centro = y_inicio_texto + ((y_rodape - y_inicio_texto) / 2) - (altura_blococentral / 2)
 
