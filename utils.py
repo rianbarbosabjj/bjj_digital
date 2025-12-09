@@ -287,77 +287,148 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
             try: return txt.encode('latin-1', 'replace').decode('latin-1')
             except: return str(txt)
 
+        # Dimensões A4 horizontal
+        L, H = 297, 210
+
         pdf = FPDF("L", "mm", "A4")
         pdf.add_page()
-        
+
+        # Paleta
         C_BRANCO = (255, 255, 255)
         C_DOURADO = (218, 165, 32)
-        C_FUNDO = (14, 45, 38) 
+        C_FUNDO = (14, 45, 38)
+        C_CINZA = (200, 200, 200)
 
+        # Fundo
         fundo_path = None
-        if os.path.exists("assets/fundo_certificado.jpg"): fundo_path = "assets/fundo_certificado.jpg"
-        elif os.path.exists("assets/fundo_certificado.png"): fundo_path = "assets/fundo_certificado.png"
-        
-        if fundo_path: pdf.image(fundo_path, x=0, y=0, w=297, h=210)
+        for img in ["assets/fundo_certificado.jpg", "assets/fundo_certificado.png"]:
+            if os.path.exists(img): fundo_path = img; break
+
+        if fundo_path:
+            pdf.image(fundo_path, x=0, y=0, w=L, h=H)
         else:
-            pdf.set_fill_color(*C_FUNDO); pdf.rect(0,0,297,210,"F")
-            pdf.set_draw_color(*C_DOURADO); pdf.set_line_width(2); pdf.rect(10,10,277,190)
+            pdf.set_fill_color(*C_FUNDO)
+            pdf.rect(0, 0, L, H, "F")
+            pdf.set_draw_color(*C_DOURADO)
+            pdf.set_line_width(3)
+            pdf.rect(10, 10, L-20, H-20)
 
-        font_assinatura = "Helvetica"
-        if os.path.exists("assets/Allura-Regular.ttf"):
-            try: pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True); font_assinatura = 'Allura'
-            except: 
-                try: pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf'); font_assinatura = 'Allura'
-                except: pass
+        # LOGO CENTRAL SUPERIOR
+        if os.path.exists("assets/logo.png"):
+            pdf.image("assets/logo.png", x=(L/2)-20, y=18, w=40)
 
-        pdf.set_y(35)
-        if os.path.exists("assets/logo.png"): pdf.image("assets/logo.png", x=128, y=15, w=40)
+        # TÍTULO REDUZIDO
+        pdf.set_y(58)
+        pdf.set_font("Helvetica", "B", 18)
+        pdf.set_text_color(*C_DOURADO)
+        pdf.cell(0, 10, "CERTIFICADO DE EXAME TEÓRICO", ln=True, align="C")
 
-        pdf.set_y(60)
-        pdf.set_font("Helvetica", "B", 24); pdf.set_text_color(*C_DOURADO)
-        pdf.cell(0, 10, limpa("CERTIFICADO DE EXAME TEÓRICO DE FAIXA"), ln=True, align="C")
-        
-        pdf.ln(10); pdf.set_font("Helvetica", "", 14); pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpa("Certificamos que o aluno(a)"), ln=True, align="C")
+        # SUBTÍTULO
+        pdf.set_font("Helvetica", "", 14)
+        pdf.set_text_color(*C_BRANCO)
+        pdf.ln(5)
+        pdf.cell(0, 8, "Certificamos que o aluno(a):", ln=True, align="C")
 
-        pdf.ln(2); nome_final = limpa(usuario_nome.upper().strip()); sz = 42
-        pdf.set_font("Helvetica", "B", sz)
-        while pdf.get_string_width(nome_final) > 250 and sz > 12: sz -= 2; pdf.set_font("Helvetica", "B", sz)
-        pdf.set_text_color(*C_DOURADO); pdf.cell(0, 18, nome_final, ln=True, align="C")
+        # NOME EM DESTAQUE
+        nome = limpa(usuario_nome.upper().strip())
+        tam_nome = 42
+        pdf.set_font("Helvetica", "B", tam_nome)
+        while pdf.get_string_width(nome) > 240 and tam_nome > 14:
+            tam_nome -= 2
+            pdf.set_font("Helvetica", "B", tam_nome)
 
-        pdf.ln(2); pdf.set_font("Helvetica", "", 14); pdf.set_text_color(*C_BRANCO)
-        pdf.cell(0, 10, limpa("foi APROVADO(A) no Exame Teórico, estando apto(a) a ser promovido(a) à faixa:"), ln=True, align="C")
-        
-        pdf.ln(2); pdf.set_font("Helvetica", "B", 36)
-        cor_fx = get_cor_faixa(faixa)
-        if sum(cor_fx) < 100: pdf.set_text_color(255, 255, 255)
+        pdf.ln(4)
+        pdf.set_text_color(*C_DOURADO)
+        pdf.cell(0, 16, nome, ln=True, align="C")
+
+        # TEXTO DA APROVAÇÃO
+        pdf.ln(6)
+        pdf.set_font("Helvetica", "", 14)
+        pdf.set_text_color(*C_BRANCO)
+        pdf.cell(0, 8, "foi aprovado(a) no Exame Teórico, estando apto(a) à promoção para a faixa:", ln=True, align="C")
+
+        # FAIXA
+        try:
+            cor_fx = get_cor_faixa(faixa)
+        except:
+            cor_fx = (255, 255, 255)
+
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "B", 38)
+        if sum(cor_fx) < 120: pdf.set_text_color(255,255,255)
         else: pdf.set_text_color(*cor_fx)
         pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
 
-        y_rodape = 160
-        pdf.set_xy(30, y_rodape); pdf.set_font("Helvetica", "", 12); pdf.set_text_color(200, 200, 200)
-        pdf.cell(60, 6, limpa(f"Data de Emissão: {datetime.now().strftime('%d/%m/%Y')}"), ln=True, align="L")
-        pdf.set_x(30); pdf.set_font("Courier", "", 9)
-        pdf.cell(60, 5, f"Ref: {codigo}", align="L")
+        # BASE DO RODAPÉ
+        y_base = 165
 
-        x_ass = 220; pdf.set_xy(x_ass - 40, y_rodape - 10)
-        if font_assinatura == 'Allura': pdf.set_font('Allura', "", 30)
-        else: pdf.set_font("Helvetica", "I", 20)
-        pdf.set_text_color(*C_DOURADO); pdf.cell(80, 10, limpa(professor), ln=True, align="C")
-        pdf.set_xy(x_ass - 35, y_rodape + 2); pdf.set_draw_color(255, 255, 255); pdf.set_line_width(0.5)
-        pdf.line(x_ass - 35, y_rodape + 2, x_ass + 35, y_rodape + 2)
-        pdf.set_xy(x_ass - 40, y_rodape + 4); pdf.set_font("Helvetica", "", 10); pdf.set_text_color(200, 200, 200)
-        pdf.cell(80, 5, limpa("Professor(a) Responsável"), align="C")
+        # SELO DOURADO À ESQUERDA
+        selo_path = "assets/selo_dourado.png"
+        if os.path.exists(selo_path):
+            selo_w = 32
+            selo_x = 25
+            selo_y = y_base - 3
+            pdf.image(selo_path, x=selo_x, y=selo_y, w=selo_w)
 
+            pdf.set_xy(selo_x - 5, selo_y + selo_w + 1)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.set_text_color(150,150,150)
+            pdf.cell(selo_w + 10, 4, "Certificação Oficial", align="C")
+
+        # DATA CENTRAL
+        pdf.set_xy(0, y_base)
+        pdf.set_font("Helvetica", "", 11)
+        pdf.set_text_color(*C_CINZA)
+        pdf.cell(0, 5, f"Data de Emissão: {datetime.now().strftime('%d/%m/%Y')}", align="C")
+
+        # REFERÊNCIA DO CERTIFICADO
+        pdf.ln(5)
+        pdf.set_font("Courier", "", 9)
+        pdf.cell(0, 5, f"Ref: {codigo}", align="C")
+
+        # ASSINATURA CENTRAL
+        font_ass = "Helvetica"
+        if os.path.exists("assets/Allura-Regular.ttf"):
+            try:
+                pdf.add_font('Allura', '', 'assets/Allura-Regular.ttf', uni=True)
+                font_ass = "Allura"
+            except:
+                pass
+
+        pdf.ln(10)
+        pdf.set_font(font_ass, "", 28 if font_ass=="Allura" else 18)
+        pdf.set_text_color(*C_DOURADO)
+        pdf.cell(0, 10, limpa(professor), ln=True, align="C")
+
+        pdf.set_draw_color(*C_BRANCO)
+        pdf.set_line_width(0.5)
+        x1 = (L/2) - 40
+        x2 = (L/2) + 40
+        pdf.line(x1, pdf.get_y()+2, x2, pdf.get_y()+2)
+
+        pdf.ln(4)
+        pdf.set_font("Helvetica", "", 9)
+        pdf.set_text_color(*C_CINZA)
+        pdf.cell(0, 5, "Professor(a) Responsável", align="C")
+
+        # QR-CODE À DIREITA
         qr_path = gerar_qrcode(codigo)
         if qr_path and os.path.exists(qr_path):
-            pdf.image(qr_path, x=136, y=y_rodape, w=25)
-            pdf.set_xy(128, y_rodape + 26); pdf.set_font("Helvetica", "", 7); pdf.set_text_color(100, 100, 100)
-            pdf.cell(40, 4, limpa("Autenticidade"), align="C")
+            qr_w = 28
+            qr_x = L - qr_w - 28
+            qr_y = y_base - 3
+            pdf.image(qr_path, x=qr_x, y=qr_y, w=qr_w)
 
+            pdf.set_xy(qr_x - 4, qr_y + qr_w + 1)
+            pdf.set_font("Helvetica", "", 7)
+            pdf.set_text_color(150,150,150)
+            pdf.cell(qr_w + 8, 4, "Autenticidade Digital", align="C")
+
+        # RETORNO
         return pdf.output(dest='S').encode('latin-1'), f"Certificado_{usuario_nome.split()[0]}.pdf"
+
     except Exception as e:
-        print(f"❌ ERRO PDF: {e}")
+        print("❌ ERRO PDF:", e)
         return None, None
 
 def verificar_elegibilidade_exame(ud): return True, "OK"
