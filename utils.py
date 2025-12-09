@@ -299,11 +299,6 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         C_FUNDO = (14, 45, 38)
         C_CINZA = (200, 200, 200)
 
-        # Fundo
-        fundo_path = None
-        for img in ["assets/fundo_certificado.jpg", "assets/fundo_certificado.png"]:
-            if os.path.exists(img): fundo_path = img; break
-
         if fundo_path:
             pdf.image(fundo_path, x=0, y=0, w=L, h=H)
         else:
