@@ -231,25 +231,27 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.set_line_width(0.8)
     pdf.rect(14, 14, L-28, H-28)
 
-    # ===== LOGO =====
-    if os.path.exists("assets/logo.png"):
-        try: pdf.image("assets/logo.png", x=(L/2)-20, y=18, w=40)
-        except: pass
+# ===== TÍTULO PRIMEIRO =====
+titulo = "CERTIFICADO DE EXAME TEORICO"
 
-    # ===== TÍTULO =====
-    titulo = "CERTIFICADO DE EXAME TEORICO"
+pdf.set_y(28)                         # sobe o título
+pdf.set_font("Helvetica", "B", 32)
 
-    # Camada de sombra / relevo
-    pdf.set_y(52)                     # altura do título
-    pdf.set_font("Helvetica", "B", 32)
-    pdf.set_text_color(90, 75, 20)     # sombra dourada escura
-    pdf.cell(0, 16, titulo, ln=False, align="C")
+# sombra
+pdf.set_text_color(90, 75, 20)
+pdf.cell(0, 16, titulo, ln=False, align="C")
 
-    # Camada principal dourada
-    pdf.set_y(50.8)                   # deslocamento mínimo para o relevo
-    pdf.set_text_color(*C_DOURADO)
-    pdf.cell(0, 16, titulo, ln=True, align="C")
+# camada principal
+pdf.set_y(26.8)
+pdf.set_text_color(*C_DOURADO)
+pdf.cell(0, 16, titulo, ln=True, align="C")
 
+# ===== LOGO ABAIXO DO TÍTULO =====
+if os.path.exists("assets/logo.png"):
+    try:
+        pdf.image("assets/logo.png", x=(L/2)-20, y=50, w=40)
+    except:
+        pass
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*C_PRETO)
     pdf.ln(4)
