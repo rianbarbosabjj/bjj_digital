@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="3508" height="2480" viewBox="0 0 3508 2480" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <!-- gradiente principal champagne -->
+    <!-- Gradiente principal champagne metálico (horizontal) -->
     <linearGradient id="champagneMetal" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="#9b8260"/>
       <stop offset="20%" stop-color="#d8c39b"/>
@@ -10,66 +10,82 @@
       <stop offset="100%" stop-color="#8a704f"/>
     </linearGradient>
 
-    <!-- faixas horizontais para efeito escovado -->
+    <!-- Linhas horizontais escovadas -->
     <linearGradient id="brushLine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
+      <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
       <stop offset="50%" stop-color="rgba(255,255,255,0)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.20)"/>
     </linearGradient>
 
-    <!-- brilho diagonal suave -->
+    <!-- Brilho diagonal suave -->
     <linearGradient id="diagonalGlow" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="rgba(255,255,255,0.0)"/>
-      <stop offset="35%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="35%" stop-color="rgba(255,255,255,0.22)"/>
       <stop offset="65%" stop-color="rgba(255,255,255,0.0)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.10)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.12)"/>
+    </linearGradient>
+
+    <!-- Gradiente da borda dourada -->
+    <linearGradient id="goldBorder" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8b6c21"/>
+      <stop offset="25%" stop-color="#d4af37"/>
+      <stop offset="60%" stop-color="#ffe07a"/>
+      <stop offset="100%" stop-color="#8b6c21"/>
     </linearGradient>
   </defs>
 
-  <!-- fundo metal champagne ocupando tudo -->
+  <!-- Fundo champagne metálico -->
   <rect x="0" y="0" width="3508" height="2480" fill="url(#champagneMetal)" />
 
-  <!-- linhas horizontais escovadas (efeito brush) -->
-  <g opacity="0.45">
-    <!-- várias tiras finas espaçadas -->
-    <rect x="0" y="120" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="180" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="240" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="300" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="360" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="420" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="480" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="540" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="600" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="660" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="720" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="780" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="840" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="900" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="960" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1020" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1080" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1140" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1200" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1260" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1320" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1380" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1440" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1500" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1560" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1620" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1680" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1740" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1800" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1860" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1920" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="1980" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="2040" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="2100" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="2160" width="3508" height="6" fill="url(#brushLine)" />
-    <rect x="0" y="2220" width="3508" height="6" fill="url(#brushLine)" />
+  <!-- Textura escovada horizontal -->
+  <g opacity="0.5">
+    <!-- espaçadas a cada ~60px -->
+    <rect x="0" y="120"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="180"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="240"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="300"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="360"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="420"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="480"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="540"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="600"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="660"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="720"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="780"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="840"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="900"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="960"  width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1020" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1080" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1140" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1200" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1260" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1320" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1380" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1440" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1500" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1560" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1620" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1680" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1740" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1800" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1860" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1920" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="1980" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="2040" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="2100" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="2160" width="3508" height="5" fill="url(#brushLine)" />
+    <rect x="0" y="2220" width="3508" height="5" fill="url(#brushLine)" />
   </g>
 
-  <!-- brilho diagonal suave ocupando tudo -->
-  <rect x="-400" y="-300" width="4300" height="3100" fill="url(#diagonalGlow)" />
+  <!-- Brilho diagonal sobre tudo -->
+  <rect x="-400" y="-300" width="4300" height="3100" fill="url(#diagonalGlow)" opacity="0.9"/>
+
+  <!-- Borda externa dourada grossa com cantos arredondados -->
+  <rect x="140" y="140" width="3228" height="2200" rx="70" ry="70"
+        fill="none" stroke="url(#goldBorder)" stroke-width="24"/>
+
+  <!-- Borda interna dourada fina com cantos arredondados -->
+  <rect x="200" y="200" width="3108" height="2080" rx="50" ry="50"
+        fill="none" stroke="url(#goldBorder)" stroke-width="8" opacity="0.9"/>
 </svg>
