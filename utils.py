@@ -183,7 +183,7 @@ def gerar_qrcode(codigo):
         os.makedirs("temp", exist_ok=True)
         path = f"temp/qr_{codigo}.png"
         qr = qrcode.QRCode(box_size=10, border=1)
-        qr.add_data(f"https://bjjdigital.com.br/validar.html={codigo}")
+        qr.add_data(f"https://bjjdigital.com.br/verificar.html={codigo}")
         qr.make(fit=True)
         qr.make_image(fill_color="black", back_color="white").save(path)
         return path
@@ -237,10 +237,18 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
         except: pass
 
     # ===== TÍTULO =====
-    pdf.set_y(58)
-    pdf.set_font("Helvetica", "B", 24)
+    titulo = "CERTIFICADO DE EXAME TEORICO"
+
+    # Camada de sombra / relevo
+    pdf.set_y(52)                     # altura do título
+    pdf.set_font("Helvetica", "B", 32)
+    pdf.set_text_color(90, 75, 20)     # sombra dourada escura
+    pdf.cell(0, 16, titulo, ln=False, align="C")
+
+    # Camada principal dourada
+    pdf.set_y(50.8)                   # deslocamento mínimo para o relevo
     pdf.set_text_color(*C_DOURADO)
-    pdf.cell(0, 10, "CERTIFICADO DE EXAME TEORICO", ln=True, align="C")
+    pdf.cell(0, 16, titulo, ln=True, align="C")
 
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*C_PRETO)
@@ -255,10 +263,6 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     while pdf.get_string_width(nome) > 240 and size > 16:
         size -= 2
         pdf.set_font("Helvetica", "B", size)
-
-    pdf.set_text_color(180, 140, 20)  # sombra
-    pdf.ln(6)
-    pdf.cell(0, 18, nome, align="C")
 
     pdf.set_y(pdf.get_y() - 1.2)
     pdf.set_text_color(*C_DOURADO)
