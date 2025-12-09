@@ -321,12 +321,12 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     if qr and os.path.exists(qr):
         pdf.image(qr, x=L-56, y=y_base, w=32)
 
-        pdf.set_xy(L-64, y_base + 36)
+        pdf.set_xy(L-64, y_base + 32)
         pdf.set_font("Courier", "", 8)
         pdf.set_text_color(*C_CINZA)
-        pdf.cell(50, 4, f"Ref: {codigo}", align="C")
+        pdf.cell(45, 4, f"Ref: {codigo}", align="C")
 
-        pdf.set_xy(L-64, y_base + 45)
+        pdf.set_xy(L-64, y_base + 48)
         pdf.cell(45, 4, f"{datetime.now().strftime('%d/%m/%Y')}", align="C")
 
     # =====================================================
