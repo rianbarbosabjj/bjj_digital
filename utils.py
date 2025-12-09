@@ -259,7 +259,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     # ==============================
     # POSICIONAMENTO AUTOMÁTICO DO TEXTO INTRODUTÓRIO
     # ==============================
-    y_atual = 50 + 20  # posição final aproximada da logo
+    y_atual = 50 + 25  # posição final aproximada da logo
     offset = 26        # ajuste proporcional refinado
     pdf.set_y(y_atual + offset)
 
@@ -290,13 +290,13 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.cell(0, 18, nome, ln=True, align="C")
 
     # ===== TEXTO DE FAIXA =====
-    pdf.ln(1)
+    pdf.ln(0.5)
     pdf.set_font("Helvetica", "", 14)
     pdf.set_text_color(*C_PRETO)
     pdf.cell(0, 8, "foi aprovado(a), estando apto(a) a promocao para a faixa:", ln=True, align="C")
 
     # ===== FAIXA =====
-    pdf.ln(1)
+    pdf.ln(0.5)
     try: cor_fx = get_cor_faixa(faixa)
     except: cor_fx = (0,0,0)
 
