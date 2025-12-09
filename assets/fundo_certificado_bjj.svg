@@ -2,19 +2,18 @@
 <svg width="3508" height="2480" viewBox="0 0 3508 2480" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="champagneMetal" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#cbbba5"/>   <stop offset="20%" stop-color="#eaddc5"/>  <stop offset="50%" stop-color="#fffcf5"/>  <stop offset="80%" stop-color="#e6d6b8"/>  <stop offset="100%" stop-color="#baa891"/> </linearGradient>
+      <stop offset="0%" stop-color="#f4f1e8"/>   <stop offset="20%" stop-color="#fffaf0"/>  <stop offset="50%" stop-color="#ffffff"/>  <stop offset="80%" stop-color="#fffaf0"/>  <stop offset="100%" stop-color="#f4f1e8"/> </linearGradient>
 
     <linearGradient id="brushLine" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="rgba(255,255,255,0.18)"/>
+      <stop offset="0%" stop-color="rgba(255,255,255,0.25)"/>
       <stop offset="50%" stop-color="rgba(255,255,255,0)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.20)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.30)"/>
     </linearGradient>
 
     <linearGradient id="diagonalGlow" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="rgba(255,255,255,0.0)"/>
-      <stop offset="35%" stop-color="rgba(255,255,255,0.22)"/>
-      <stop offset="65%" stop-color="rgba(255,255,255,0.0)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.12)"/>
+      <stop offset="35%" stop-color="rgba(255,255,255,0.35)"/> <stop offset="65%" stop-color="rgba(255,255,255,0.0)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.20)"/>
     </linearGradient>
 
     <linearGradient id="goldBorder" x1="0" y1="0" x2="1" y2="1">
