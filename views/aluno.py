@@ -10,7 +10,7 @@ from database import get_db
 from firebase_admin import firestore
 
 # --- IMPORTAÇÃO DIRETA (PARA MOSTRAR ERRO SE FALHAR) ---
-# Se der erro aqui, significa que falta instalar 'fpdf' ou 'qrcode'
+# Se der erro aqui, o Streamlit vai avisar qual biblioteca falta.
 from utils import (
     registrar_inicio_exame, 
     registrar_fim_exame, 
@@ -48,7 +48,7 @@ def carregar_exame_especifico(faixa_alvo):
                     q_snap = db.collection('questoes').document(q_id).get()
                     if q_snap.exists:
                         d = q_snap.to_dict()
-                        # Compatibilidade
+                        # Compatibilidade de campos
                         if 'alternativas' not in d and 'opcoes' in d:
                             ops = d['opcoes']
                             d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
@@ -59,7 +59,7 @@ def carregar_exame_especifico(faixa_alvo):
             qtd_alvo = int(config_doc.get('qtd_questoes', 10))
     except: pass
 
-    # FALLBACK
+    # FALLBACK (SE NÃO TIVER CONFIGURAÇÃO ESPECÍFICA)
     if not questoes_finais:
         try:
             q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
@@ -105,7 +105,8 @@ def meus_certificados(usuario):
             with st.container(border=True):
                 c1, c2 = st.columns([3, 1])
                 c1.markdown(f"**Faixa {cert.get('faixa')}**")
-                # Tratamento de data seguro
+                
+                # Tratamento seguro da data
                 data_raw = cert.get('data')
                 d_str = "-"
                 if data_raw:
@@ -114,7 +115,8 @@ def meus_certificados(usuario):
                 
                 c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao', 0):.1f}% | Ref: {cert.get('codigo_verificacao')}")
                 
-                # Gera PDF na hora
+                # GERAÇÃO DO PDF NA HORA
+                # O utils.py atualizado retorna (bytes, nome) OU (None, mensagem_erro)
                 pdf_bytes, pdf_name = gerar_pdf(
                     usuario['nome'], cert.get('faixa'), 
                     cert.get('pontuacao', 0), cert.get('total', 10), 
@@ -124,9 +126,11 @@ def meus_certificados(usuario):
                 if pdf_bytes:
                     c2.download_button("📄 Baixar PDF", pdf_bytes, pdf_name, "application/pdf", key=f"d_{i}")
                 else:
-                    c2.error("Erro ao gerar")
+                    # Se falhar, pdf_name contém a mensagem de erro
+                    c2.error(f"Erro: {pdf_name}")
+
     except Exception as e: 
-        st.error(f"Erro ao carregar certificados: {e}")
+        st.error(f"Erro ao carregar lista: {e}")
 
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
@@ -154,19 +158,32 @@ def exame_de_faixa(usuario):
             st.markdown(f"<h2 style='text-align:center; color:green'>APROVADO! 🥋</h2>", unsafe_allow_html=True)
             st.markdown(f"<h3 style='text-align:center'>Nota Final: {res['nota']:.1f}%</h3>", unsafe_allow_html=True)
             st.divider()
-            st.info("O seu certificado já foi gerado. Clique abaixo para baixar.")
             
-            # GERAÇÃO DO CERTIFICADO
+            st.info("O seu certificado foi gerado. Clique abaixo para baixar.")
+            
+            # GERAÇÃO DO CERTIFICADO COM DIAGNÓSTICO DE ERRO
             try:
-                with st.spinner("Gerando certificado oficial..."):
+                with st.spinner("Preparando documento..."):
+                    # p_b = arquivo, p_n = nome do arquivo (ou mensagem de erro se p_b for None)
                     p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
                 
                 if p_b: 
-                    st.download_button("🏆 BAIXAR CERTIFICADO OFICIAL", p_b, p_n, "application/pdf", key="dl_res_main", type="primary", use_container_width=True)
+                    st.download_button(
+                        label="🏆 BAIXAR CERTIFICADO OFICIAL", 
+                        data=p_b, 
+                        file_name=p_n, 
+                        mime="application/pdf", 
+                        key="dl_res_main", 
+                        type="primary", 
+                        use_container_width=True
+                    )
                 else:
-                    st.error("Erro na geração do arquivo PDF. Tente novamente na aba 'Meus Certificados'.")
+                    # Se falhar, mostramos o erro exato retornado pelo utils.py
+                    st.error(f"⚠️ {p_n}")
+                    st.caption("Verifique com o suporte ou tente novamente na aba 'Meus Certificados'.")
+                    
             except Exception as e: 
-                st.error(f"Erro técnico ao criar PDF: {e}")
+                st.error(f"Erro inesperado na interface: {e}")
             
         if st.button("Voltar ao Início"):
             st.session_state.resultado_prova = None
@@ -175,11 +192,10 @@ def exame_de_faixa(usuario):
 
     # CHECAGEM DE ABANDONO / TIMEOUT
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
-        # Lógica de timeout omitida para brevidade, mantendo bloqueio padrão
-        # Se quiser liberar sempre para teste, comente a linha abaixo
+        # Se quiser testar sem bloquear, comente a linha abaixo:
         bloquear_por_abandono(usuario['id'])
-        st.error("🚨 O exame foi interrompido ou a página foi recarregada.")
-        st.caption("Por segurança, o exame foi bloqueado. Contate seu professor.")
+        st.error("🚨 O exame foi interrompido (página recarregada ou saída).")
+        st.caption("Por segurança, o exame foi bloqueado. Contate seu professor para liberar novamente.")
         return
 
     if not dados.get('exame_habilitado'):
@@ -206,7 +222,7 @@ def exame_de_faixa(usuario):
         
         with st.container(border=True):
             st.markdown("#### 📜 Instruções")
-            st.warning("⚠️ Não recarregue a página (F5) durante a prova, ou você será bloqueado.")
+            st.warning("⚠️ Não recarregue a página (F5) durante a prova.")
             st.markdown("---")
             c1, c2, c3 = st.columns(3)
             c1.metric("Questões", qtd)
@@ -221,7 +237,7 @@ def exame_de_faixa(usuario):
                 st.session_state.questoes_prova = qs
                 st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
                 st.rerun()
-        else: st.warning("Erro: Nenhuma questão encontrada para esta faixa.")
+        else: st.warning("Erro: Nenhuma questão configurada para esta faixa.")
 
     # === TELA DA PROVA ===
     else:
@@ -234,7 +250,7 @@ def exame_de_faixa(usuario):
             st.session_state.exame_iniciado = False
             time.sleep(2); st.rerun()
 
-        # Timer
+        # Timer Visual
         cor = "#FFD770" if restante > 300 else "#FF4B4B"
         components.html(f"""
         <div style="padding:10px;text-align:center;color:{cor};font-family:sans-serif;font-weight:bold;font-size:24px;">
@@ -286,7 +302,7 @@ def exame_de_faixa(usuario):
                 cod = None
                 if aprovado:
                     cod = gerar_codigo_verificacao()
-                    # Salva histórico
+                    # Salva no histórico
                     try:
                         db.collection('resultados').add({
                             "usuario": usuario['nome'], "faixa": dados.get('faixa_exame'),
