@@ -600,148 +600,140 @@ Vá até o final do seu arquivo professor.py e cole este bloco de código inteir
 Python
 
 # ==============================================================================
-# NOVA FUNÇÃO: GESTÃO DE PROVAS (CURSOS)
-# Cole isso no final do seu arquivo professor.py
+# COLE ISSO NO FINAL DO ARQUIVO PROFESSOR.PY
+# Esta é a lógica das provas, transformada em um componente.
 # ==============================================================================
-def gestao_prova_curso_route():
-    st.markdown("<h1 style='color:#00BFFF;'>🎓 Montador de Provas (Cursos)</h1>", unsafe_allow_html=True)
+def componente_gestao_provas():
+    db = get_db()
     
-    db = get_db() 
-    
-    # --- BUSCA DINÂMICA DE CURSOS ---
+    # Busca cursos
     try:
         cursos_ref = db.collection('cursos').stream()
-        # Cria lista ordenada pegando o título ou nome do curso
         LISTA_CURSOS = sorted([d.to_dict().get('titulo', d.to_dict().get('nome', d.id)) for d in cursos_ref])
-    except Exception as e:
-        LISTA_CURSOS = []
-        st.error(f"Erro ao carregar cursos: {e}")
-
+    except: LISTA_CURSOS = []
+    
     if not LISTA_CURSOS:
-        st.warning("⚠️ Nenhum curso encontrado. Cadastre um curso primeiro.")
-        LISTA_CURSOS = ["Curso Genérico"]
+        st.warning("Cadastre um curso na aba ao lado primeiro.")
+        return
 
-    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
+    # Sub-abas internas da gestão de provas
+    t1, t2, t3 = st.tabs(["📝 Montar Prova", "👁️ Ver Provas", "✅ Autorizar Alunos"])
 
-    # --- TAB 1: MONTAR ---
-    with tab1:
-        st.subheader("1. Selecione o Curso")
-        curso_sel = st.selectbox("Prova para qual Curso?", LISTA_CURSOS)
+    # --- ABA 1: MONTAR ---
+    with t1:
+        c_sel = st.selectbox("Selecione o Curso:", LISTA_CURSOS, key="prov_curso_sel")
         
-        if 'last_curso_sel' not in st.session_state or st.session_state.last_curso_sel != curso_sel:
-            configs = list(db.collection('config_provas_cursos').where('curso_alvo', '==', curso_sel).limit(1).stream())
-            conf_atual = configs[0].to_dict() if configs else {}
-            st.session_state.conf_atual_curso = conf_atual
-            st.session_state.doc_id_curso = configs[0].id if configs else None
-            st.session_state.selected_ids_curso = set(conf_atual.get('questoes_ids', []))
-            st.session_state.last_curso_sel = curso_sel
+        # Carrega dados
+        if 'last_c_sel' not in st.session_state or st.session_state.last_c_sel != c_sel:
+            cfgs = list(db.collection('config_provas_cursos').where('curso_alvo', '==', c_sel).limit(1).stream())
+            st.session_state.cfg_atual = cfgs[0].to_dict() if cfgs else {}
+            st.session_state.cfg_id = cfgs[0].id if cfgs else None
+            st.session_state.sel_ids = set(st.session_state.cfg_atual.get('questoes_ids', []))
+            st.session_state.last_c_sel = c_sel
+            
+        # Busca Questões
+        q_all = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
         
-        conf_atual = st.session_state.conf_atual_curso
-        todas_questoes = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
+        # Filtros
+        col_a, col_b = st.columns(2)
+        # Tenta usar niveis globais ou padrao
+        try: l_niv = NIVEIS_DIFICULDADE; m_niv = MAPA_NIVEIS
+        except: l_niv = [1,2,3,4]; m_niv = {1:'Fácil', 2:'Médio', 3:'Difícil', 4:'Mestre'}
         
-        st.markdown("### 2. Selecione as Questões")
-        c_f1, c_f2 = st.columns(2)
-        # Assumindo que NIVEIS_DIFICULDADE e MAPA_NIVEIS existem no seu código
-        filtro_nivel = c_f1.multiselect("Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4], format_func=lambda x: MAPA_NIVEIS.get(x, str(x)), key="f_niv_c")
-        cats = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
-        filtro_tema = c_f2.multiselect("Tema:", cats, default=cats, key="f_tema_c")
+        f_niv = col_a.multiselect("Nível:", l_niv, default=l_niv, format_func=lambda x: m_niv.get(x, str(x)), key="f_niv_p")
+        cats = sorted(list(set([d.to_dict().get('categoria','Geral') for d in q_all])))
+        f_tem = col_b.multiselect("Tema:", cats, default=cats, key="f_tem_p")
         
-        with st.container(height=500, border=True):
-            count_visible = 0
-            for doc in todas_questoes:
-                d = doc.to_dict(); niv = d.get('dificuldade', 1); cat = d.get('categoria', 'Geral')
-                if niv in filtro_nivel and cat in filtro_tema:
-                    count_visible += 1
-                    c_chk, c_content = st.columns([1, 15])
-                    is_checked = doc.id in st.session_state.selected_ids_curso
-                    def update_selection_curso(qid=doc.id):
-                        if st.session_state[f"chk_c_{qid}"]: st.session_state.selected_ids_curso.add(qid)
-                        else: st.session_state.selected_ids_curso.discard(qid)
-                    c_chk.checkbox("", value=is_checked, key=f"chk_c_{doc.id}", on_change=update_selection_curso)
-                    with c_content:
-                        st.markdown(f"**{get_badge_nivel(niv)}** | {cat}")
-                        st.markdown(f"{d.get('pergunta')}")
-                        if d.get('url_imagem'): st.image(d.get('url_imagem'), width=100)
+        # Lista
+        with st.container(height=400, border=True):
+            vis = 0
+            for doc in q_all:
+                d = doc.to_dict(); nid = d.get('dificuldade',1); cat = d.get('categoria','Geral')
+                if nid in f_niv and cat in f_tem:
+                    vis+=1
+                    cc, cd = st.columns([1,15])
+                    chk = cc.checkbox("", doc.id in st.session_state.sel_ids, key=f"chk_p_{doc.id}")
+                    if chk: st.session_state.sel_ids.add(doc.id)
+                    else: st.session_state.sel_ids.discard(doc.id)
+                    
+                    with cd:
+                        st.markdown(f"**{cat}** | {d.get('pergunta')}")
+                        if d.get('url_imagem'): st.image(d.get('url_imagem'), width=80)
                     st.divider()
-            if count_visible == 0: st.warning("Nada encontrado.")
+            if vis==0: st.caption("Nada encontrado.")
+            
+        qt = len(st.session_state.sel_ids)
+        st.info(f"{qt} questões selecionadas.")
         
-        total_sel = len(st.session_state.selected_ids_curso)
-        st.success(f"**{total_sel}** questões selecionadas.")
-        
-        st.markdown("### 3. Regras")
-        with st.form("save_conf_curso"):
+        with st.form("save_prova"):
             c1, c2 = st.columns(2)
-            tempo = c1.number_input("Tempo (min):", 10, 180, int(conf_atual.get('tempo_limite', 60)))
-            nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
+            tmp = c1.number_input("Tempo (min)", 10, 180, int(st.session_state.cfg_atual.get('tempo_limite',60)))
+            nota = c2.number_input("Min. Aprovação (%)", 10, 100, int(st.session_state.cfg_atual.get('aprovacao_minima',70)))
             if st.form_submit_button("💾 Salvar Prova"):
-                if total_sel > 0:
-                    dados = {"curso_alvo": curso_sel, "questoes_ids": list(st.session_state.selected_ids_curso), "qtd_questoes": total_sel, "tempo_limite": tempo, "aprovacao_minima": nota, "tipo_prova": "curso", "atualizado_em": firestore.SERVER_TIMESTAMP}
-                    if st.session_state.doc_id_curso: db.collection('config_provas_cursos').document(st.session_state.doc_id_curso).update(dados)
-                    else: db.collection('config_provas_cursos').add(dados)
-                    st.success("Salvo!"); time.sleep(1); st.rerun()
-                else: st.error("Selecione questões.")
+                dados = {"curso_alvo": c_sel, "questoes_ids": list(st.session_state.sel_ids), "qtd_questoes": qt, "tempo_limite": tmp, "aprovacao_minima": nota, "tipo_prova": "curso", "atualizado_em": firestore.SERVER_TIMESTAMP}
+                if st.session_state.cfg_id: db.collection('config_provas_cursos').document(st.session_state.cfg_id).update(dados)
+                else: db.collection('config_provas_cursos').add(dados)
+                st.success("Salvo!"); time.sleep(1); st.rerun()
 
-    # --- TAB 2: VISUALIZAR ---
-    with tab2:
-        st.subheader("Provas Criadas")
-        configs = list(db.collection('config_provas_cursos').stream())
-        if not configs: st.info("Nenhuma prova criada.")
+    # --- ABA 2: VISUALIZAR ---
+    with t2:
+        st.caption("Provas Configuradas")
+        all_c = list(db.collection('config_provas_cursos').stream())
+        if not all_c: st.info("Nenhuma prova ainda.")
         cols = st.columns(3)
-        for i, doc in enumerate(configs):
-            conf = doc.to_dict(); conf['id'] = doc.id
+        for i, dc in enumerate(all_c):
+            dd = dc.to_dict()
             with cols[i%3]:
                 with st.container(border=True):
-                    st.markdown(f"### 📘 {conf.get('curso_alvo')}")
-                    st.caption(f"Questões: {conf.get('qtd_questoes')} | Nota Min: {conf.get('aprovacao_minima')}%")
-                    if st.button("🗑️ Excluir", key=f"del_c_{conf['id']}"):
-                        db.collection('config_provas_cursos').document(conf['id']).delete(); st.rerun()
+                    st.markdown(f"**{dd.get('curso_alvo')}**")
+                    st.caption(f"{dd.get('qtd_questoes')} questões | {dd.get('tempo_limite')}min")
+                    if st.button("🗑️", key=f"del_p_{dc.id}"):
+                        db.collection('config_provas_cursos').document(dc.id).delete(); st.rerun()
 
-    # --- TAB 3: AUTORIZAR ---
-    with tab3:
-        st.subheader("Autorizar Alunos")
+    # --- ABA 3: AUTORIZAR ---
+    with t3:
+        st.caption("Liberar Alunos")
         c1, c2 = st.columns(2)
-        d_ini = c1.date_input("Início:", datetime.now(), key="d_ini_c", format="DD/MM/YYYY")
-        d_fim = c2.date_input("Fim:", datetime.now(), key="d_fim_c", format="DD/MM/YYYY")
-        dt_ini = datetime.combine(d_ini, dtime(0,0)); dt_fim = datetime.combine(d_fim, dtime(23,59))
+        ini = datetime.combine(c1.date_input("Início", key="di_p"), dtime(0,0))
+        fim = datetime.combine(c2.date_input("Fim", key="df_p"), dtime(23,59))
         
-        search = st.text_input("Buscar Aluno:", placeholder="Nome...")
-        alunos = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
+        busca = st.text_input("Buscar aluno:", key="bus_al")
+        als = db.collection('usuarios').where('tipo_usuario','==','aluno').stream()
         
-        st.markdown("---")
-        for doc in alunos:
-            d = doc.to_dict(); d['id'] = doc.id
-            if search and search.lower() not in d.get('nome', '').lower(): continue
+        for a in als:
+            ad = a.to_dict(); aid = a.id
+            if busca and busca.lower() not in ad.get('nome','').lower(): continue
             
-            c1, c2, c3, c4 = st.columns([3, 3, 2, 1])
-            c1.write(f"**{d.get('nome')}**")
+            # Linha Aluno
+            ca, cb, cc, cd = st.columns([3, 3, 2, 1])
+            ca.write(f"**{ad.get('nome')}**")
             
-            cur_ativo = d.get('curso_prova_alvo', '')
-            idx = LISTA_CURSOS.index(cur_ativo) if cur_ativo in LISTA_CURSOS else 0
-            sel_curso = c2.selectbox("Curso", LISTA_CURSOS, index=idx, key=f"sc_{d['id']}", label_visibility="collapsed")
+            # Select Curso
+            curs_atv = ad.get('curso_prova_alvo','')
+            try: idx = LISTA_CURSOS.index(curs_atv)
+            except: idx = 0
+            sel_c = cb.selectbox("Curso", LISTA_CURSOS, index=idx, key=f"s_c_{aid}", label_visibility="collapsed")
             
-            status = "⚪ Off"
-            if d.get('exame_habilitado') and d.get('tipo_exame') == 'curso':
-                stt = d.get('status_exame', 'pendente')
-                if stt == 'aprovado': status = "🏆 Aprovado"
-                elif stt == 'reprovado': status = "🔴 Reprovado"
-                else: status = "🟢 Liberado"
-            elif d.get('exame_habilitado') and d.get('tipo_exame') != 'curso':
-                status = "⚠️ Outra Prova"
+            # Status
+            stt = "⚪"
+            if ad.get('exame_habilitado') and ad.get('tipo_exame') == 'curso':
+                s = ad.get('status_exame','pendente')
+                if s=='aprovado': stt="🏆 OK"
+                elif s=='reprovado': stt="🔴 Ruim"
+                else: stt="🟢 On"
+            cc.write(stt)
             
-            c3.write(status)
-            
-            if d.get('exame_habilitado') and d.get('tipo_exame') == 'curso':
-                if c4.button("⛔", key=f"bk_{d['id']}"):
-                    db.collection('usuarios').document(d['id']).update({"exame_habilitado": False})
-                    st.rerun()
+            # Ação
+            if ad.get('exame_habilitado') and ad.get('tipo_exame') == 'curso':
+                if cd.button("⛔", key=f"b_p_{aid}"):
+                    db.collection('usuarios').document(aid).update({"exame_habilitado":False}); st.rerun()
             else:
-                if c4.button("✅", key=f"lb_{d['id']}"):
-                    db.collection('usuarios').document(d['id']).update({
-                        "exame_habilitado": True, "tipo_exame": "curso", "curso_prova_alvo": sel_curso,
-                        "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(), 
-                        "status_exame": "pendente", "status_exame_em_andamento": False
-                    })
-                    st.rerun()
+                if cd.button("✅", key=f"l_p_{aid}"):
+                    db.collection('usuarios').document(aid).update({
+                        "exame_habilitado":True, "tipo_exame":"curso", "curso_prova_alvo": sel_c,
+                        "exame_inicio": ini.isoformat(), "exame_fim": fim.isoformat(),
+                        "status_exame":"pendente", "status_exame_em_andamento": False
+                    }); st.rerun()
             st.divider()
             
 # =========================================
