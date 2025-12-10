@@ -15,11 +15,13 @@ from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from fpdf import FPDF
-from database import get_db
+# Se você tiver um arquivo database.py, mantenha essa linha. 
+# Caso contrário, certifique-se de que get_db está definido neste arquivo.
+from database import get_db 
 from firebase_admin import firestore, storage 
 
 # =========================================
-# CONFIGURAÇÃO DE CORES DAS FAIXAS (RGB)
+# CONFIGURAÇÃO DE CORES E FAIXAS
 # =========================================
 CORES_FAIXAS = {
     "CINZA E BRANCA": (150, 150, 150), "CINZA": (128, 128, 128), "CINZA E PRETA": (100, 100, 100), 
@@ -29,11 +31,37 @@ CORES_FAIXAS = {
     "AZUL": (0, 0, 205), "ROXA": (128, 0, 128), "MARROM": (139, 69, 19), "PRETA": (0, 0, 0)
 }
 
+# --- ADIÇÕES NECESSÁRIAS PARA O PROFESSOR.PY ---
+# Lista completa para os selects
+FAIXAS_COMPLETAS = [
+    "Branca", 
+    "Cinza e Branca", "Cinza", "Cinza e Preta",
+    "Amarela e Branca", "Amarela", "Amarela e Preta",
+    "Laranja e Branca", "Laranja", "Laranja e Preta",
+    "Verde e Branca", "Verde", "Verde e Preta",
+    "Azul", "Roxa", "Marrom", "Preta"
+]
+
+NIVEIS_DIFICULDADE = [1, 2, 3, 4]
+
+MAPA_NIVEIS = {
+    1: "Fácil", 
+    2: "Médio", 
+    3: "Difícil", 
+    4: "Mestre"
+}
+# -----------------------------------------------
+
 def get_cor_faixa(nome_faixa):
     for chave, cor in CORES_FAIXAS.items():
         if chave in str(nome_faixa).upper():
             return cor
     return (0, 0, 0) 
+
+def get_badge_nivel(nivel):
+    """Retorna um ícone visual para o nível da questão"""
+    badges = {1: "🟢", 2: "🟡", 3: "🔴", 4: "💀"}
+    return badges.get(nivel, "⚪")
 
 # =========================================
 # FUNÇÕES DE MÍDIA E UPLOAD
@@ -177,6 +205,7 @@ def gerar_codigo_verificacao():
         return f"BJJDIGITAL-{datetime.now().year}-{total+1:04d}"
     except:
         return f"BJJDIGITAL-{datetime.now().year}-{random.randint(1000,9999)}"
+
 # =================================
 # GERA O CERTIFICADO
 # =================================
