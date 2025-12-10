@@ -40,6 +40,7 @@ def carregar_exame_especifico(faixa_alvo):
             tempo = int(config_doc.get('tempo_limite', 45))
             nota = int(config_doc.get('aprovacao_minima', 70))
             
+            # MODO MANUAL
             if config_doc.get('questoes_ids'):
                 ids = config_doc['questoes_ids']
                 for q_id in ids:
@@ -56,6 +57,7 @@ def carregar_exame_especifico(faixa_alvo):
             qtd_alvo = int(config_doc.get('qtd_questoes', 10))
     except: pass
 
+    # FALLBACK
     if not questoes_finais:
         try:
             q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
@@ -94,23 +96,17 @@ def meus_certificados(usuario):
         
         lista_certificados = []
         
-        # --- CORREÇÃO INFALÍVEL DO ERRO: Obtendo o Tipo Timestamp da Instância ---
-        # 1. Tenta obter a classe Timestamp do objeto do cliente.
-        # Se db é um Client (que é o que get_db() retorna), o Timestamp é um atributo dele.
-        try:
-            Timestamp_Class = db.Timestamp 
-        except:
-            # Fallback para a importação direta
-            Timestamp_Class = firestore.Timestamp
-        # Fim da injeção de segurança
-
+        # --- CORREÇÃO FINAL: Usando o objeto de classe Timestamp diretamente ---
+        # Acessa o objeto de classe do Timestamp para o 'isinstance'
+        Timestamp_Class = firestore.Timestamp
+        
         for doc in docs:
             cert = doc.to_dict()
             
             data_raw = cert.get('data')
             data_obj = datetime.min 
 
-            # Usa a classe Timestamp obtida acima
+            # Verifica se é um objeto Timestamp e converte
             if isinstance(data_raw, Timestamp_Class):
                 data_obj = data_raw.to_datetime()
             elif isinstance(data_raw, str):
@@ -162,7 +158,6 @@ def meus_certificados(usuario):
 
     except Exception as e: 
         st.error(f"Erro ao carregar lista de certificados: {e}")
-        
 
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
@@ -232,7 +227,7 @@ def exame_de_faixa(usuario):
 
         if is_timeout:
             registrar_fim_exame(usuario['id'], False)
-            st.error("⌛ TEMPO ESGOTADO!")
+            st.error("⌛ Tempo ESGOTADO!")
             return
         else:
             bloquear_por_abandono(usuario['id'])
