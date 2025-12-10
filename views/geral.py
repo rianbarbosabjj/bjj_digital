@@ -37,16 +37,19 @@ def tela_inicio():
     
     col1, col2, col3 = st.columns(3)
     with col1: render_card("🤼 Modo Rola", "Treino livre.", "Acessar", "n1", "Modo Rola")
-    with col2: render_card("🥋 Exame de Faixa", "Avaliação teórica.", "Acessar", "n2", "Exame de Faixa")
+    with col2: render_card("🥋 Exame de Faixa", "Avaliação teórica.", "Acessar", "n2", "Cursos") # <--- AQUI CHAMA 'Cursos' (menu principal)
     with col3: render_card("🏆 Ranking", "Posição no ranking.", "Acessar", "n3", "Ranking")
 
     tipo = str(st.session_state.usuario.get("tipo", "aluno")).lower()
     if tipo in ["admin", "professor"]:
         st.markdown("---"); st.markdown(f"<h2 style='color:{COR_DESTAQUE};text-align:center;'>Gestão</h2>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns(3)
-        with c1: render_card("🧠 Questões", "Editar banco.", "Gerenciar", "g1", "Gestão de Questões")
+        # O BLOCO ABAIXO DEVE SER ATUALIZADO PARA INCLUIR O NOVO CARD
+        c1, c2, c3, c4 = st.columns(4) # 4 COLUNAS
+       
         with c2: render_card("🏛️ Equipes", "Gerenciar equipes.", "Gerenciar", "g2", "Gestão de Equipes")
+        with c1: render_card("🧠 Questões", "Editar banco.", "Gerenciar", "g1", "Gestão de Questões")
         with c3: render_card("📜 Exames", "Montar provas.", "Gerenciar", "g3", "Gestão de Exame")
+        with c4: render_card("📚 Cursos", "Criar/Editar Cursos.", "Gerenciar", "g4", "Gestão de Cursos") # <--- NOVO CARD AQUI
 
 def tela_meu_perfil(usuario_logado):
     if st.button("🏠 Voltar ao Início", key="btn_voltar_perfil"):
