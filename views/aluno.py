@@ -96,10 +96,8 @@ def meus_certificados(usuario):
         
         lista_certificados = []
         
-        # --- INÍCIO DA CORREÇÃO ---
-        # Removemos a linha problemática: Timestamp_Class = firestore.Timestamp
-        
-           for doc in docs:
+        # --- INÍCIO DA CORREÇÃO DE DATAS E ALINHAMENTO ---
+        for doc in docs:
             cert = doc.to_dict()
             
             data_raw = cert.get('data')
@@ -109,7 +107,7 @@ def meus_certificados(usuario):
             if hasattr(data_raw, 'to_datetime'):
                 data_obj = data_raw.to_datetime()
             
-            # 2. Se JÁ for um datetime do Python (o caso que estava falhando)
+            # 2. Se JÁ for um datetime do Python
             elif isinstance(data_raw, datetime):
                 data_obj = data_raw
             
@@ -119,7 +117,6 @@ def meus_certificados(usuario):
                 except: pass
             
             # IMPORTANTE: Remove fuso horário para garantir que a ordenação funcione
-            # (evita erro de comparar data com fuso vs data sem fuso)
             if data_obj.tzinfo is not None:
                 data_obj = data_obj.replace(tzinfo=None)
             
