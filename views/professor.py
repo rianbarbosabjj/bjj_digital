@@ -4,19 +4,37 @@ from datetime import datetime, time as dtime
 import time
 from firebase_admin import firestore
 
-# Tenta importar utilitários. Se der erro, verifique seu arquivo utils.py
+# ==============================================================================
+# 0. CONFIGURAÇÕES LOCAIS (Para evitar erros de importação do utils.py)
+# ==============================================================================
+FAIXAS_COMPLETAS = [
+    "Branca", 
+    "Cinza e Branca", "Cinza", "Cinza e Preta",
+    "Amarela e Branca", "Amarela", "Amarela e Preta",
+    "Laranja e Branca", "Laranja", "Laranja e Preta",
+    "Verde e Branca", "Verde", "Verde e Preta",
+    "Azul", "Roxa", "Marrom", "Preta"
+]
+
+NIVEIS_DIFICULDADE = [1, 2, 3, 4]
+
+MAPA_NIVEIS = {
+    1: "Fácil", 
+    2: "Médio", 
+    3: "Difícil", 
+    4: "Mestre"
+}
+
+def get_badge_nivel(nivel):
+    """Retorna um ícone visual para o nível da questão"""
+    badges = {1: "🟢", 2: "🟡", 3: "🔴", 4: "💀"}
+    return badges.get(nivel, "⚪")
+
+# Tenta importar APENAS as funções de banco e upload do utils
 try:
-    from utils import (
-        get_db, 
-        fazer_upload_midia, 
-        normalizar_link_video, 
-        get_badge_nivel, 
-        FAIXAS_COMPLETAS, 
-        NIVEIS_DIFICULDADE, 
-        MAPA_NIVEIS
-    )
-except ImportError:
-    st.error("Erro: Arquivo 'utils.py' não encontrado ou faltando funções.")
+    from utils import get_db, fazer_upload_midia, normalizar_link_video
+except ImportError as e:
+    st.error(f"Erro Crítico: Não foi possível importar 'get_db' do arquivo utils.py. Detalhes: {e}")
     st.stop()
 
 # ==============================================================================
