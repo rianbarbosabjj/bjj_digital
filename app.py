@@ -243,26 +243,36 @@ def app_principal():
         ops = [
             "Início", 
             "Modo Rola", 
-            "Exame de Faixa", 
+            "Cursos",               # <--- RENOMEADO: De 'Exame de Faixa' para 'Cursos'
             "Ranking", 
             "Gestão de Questões", 
             "Gestão de Equipes", 
             "Gestão de Exame", 
-            "Gestão de Cursos" # <-- NOVO ITEM
+            "Gestão de Cursos"
         ]
         icns = [
             "house", 
             "people", 
-            "journal", 
+            "journal",              # <--- ÍCONE DE 'Cursos'
             "trophy", 
             "list-task", 
             "building", 
             "file-earmark", 
-            "book" # <-- NOVO ÍCONE
+            "book"
         ]
     else:
-        ops = ["Início", "Modo Rola", "Exame de Faixa", "Ranking"]
-        icns = ["house", "people", "journal", "trophy"]
+        ops = [
+            "Início", 
+            "Modo Rola", 
+            "Cursos",               # <--- RENOMEADO: De 'Exame de Faixa' para 'Cursos'
+            "Ranking"
+        ]
+        icns = [
+            "house", 
+            "people", 
+            "journal",              # <--- ÍCONE DE 'Cursos'
+            "trophy"
+        ]
 
     try: idx = ops.index(pg)
     except: idx = 0
@@ -321,12 +331,12 @@ def app_principal():
             st.rerun()
 
     if pg == "Modo Rola": aluno.modo_rola(usuario)
-    elif pg == "Exame de Faixa": aluno.exame_de_faixa(usuario)
+    elif pg == "Cursos": aluno.cursos_e_exames_menu(usuario) # <--- NOVA FUNÇÃO CONTROLADORA
     elif pg == "Ranking": aluno.ranking()
     elif pg == "Gestão de Equipes": professor.gestao_equipes()
     elif pg == "Gestão de Questões": admin.gestao_questoes()
     elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
-    elif pg == "Gestão de Cursos": professor.gestao_cursos_tab() # <-- NOVA ROTA
+    elif pg == "Gestão de Cursos": professor.gestao_cursos_tab()
 
 if __name__ == "__main__":
     if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
