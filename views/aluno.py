@@ -1,4 +1,3 @@
-
 import streamlit as st
 import time
 import random
@@ -10,8 +9,8 @@ import streamlit.components.v1 as components
 from database import get_db
 from firebase_admin import firestore
 
-# --- IMPORTAÇÃO DIRETA (PARA MOSTRAR ERRO SE FALHAR) ---
-# Se der erro aqui, o Streamlit vai avisar qual biblioteca falta.
+# --- IMPORTAÇÃO DIRETA (PARA DIAGONÓSTICO DE ERROS) ---
+# Removemos o try/except para que, se faltar biblioteca, o erro apareça na tela
 from utils import (
     registrar_inicio_exame, 
     registrar_fim_exame, 
@@ -49,7 +48,7 @@ def carregar_exame_especifico(faixa_alvo):
                     q_snap = db.collection('questoes').document(q_id).get()
                     if q_snap.exists:
                         d = q_snap.to_dict()
-                        # Compatibilidade de campos
+                        # Compatibilidade
                         if 'alternativas' not in d and 'opcoes' in d:
                             ops = d['opcoes']
                             d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
@@ -60,7 +59,7 @@ def carregar_exame_especifico(faixa_alvo):
             qtd_alvo = int(config_doc.get('qtd_questoes', 10))
     except: pass
 
-    # FALLBACK (SE NÃO TIVER CONFIGURAÇÃO ESPECÍFICA)
+    # FALLBACK
     if not questoes_finais:
         try:
             q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
@@ -107,17 +106,16 @@ def meus_certificados(usuario):
                 c1, c2 = st.columns([3, 1])
                 c1.markdown(f"**Faixa {cert.get('faixa')}**")
                 
-                # Tratamento seguro da data
-                data_raw = cert.get('data')
+                # Tratamento de data seguro
                 d_str = "-"
-                if data_raw:
-                    try: d_str = data_raw.strftime('%d/%m/%Y')
-                    except: d_str = str(data_raw)[:10]
+                if cert.get('data'):
+                    try: d_str = cert.get('data').strftime('%d/%m/%Y')
+                    except: d_str = str(cert.get('data'))[:10]
                 
-                c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao', 0):.1f}% | Ref: {cert.get('codigo_verificacao')}")
+                c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao')}% | Código: {cert.get('codigo_verificacao')}")
                 
-                # GERAÇÃO DO PDF NA HORA
-                # O utils.py atualizado retorna (bytes, nome) OU (None, mensagem_erro)
+                # GERAÇÃO DO PDF (Com tratamento de erro)
+                # O utils.py retorna (bytes, nome) se der certo, ou (None, mensagem_erro) se falhar
                 pdf_bytes, pdf_name = gerar_pdf(
                     usuario['nome'], cert.get('faixa'), 
                     cert.get('pontuacao', 0), cert.get('total', 10), 
@@ -131,7 +129,7 @@ def meus_certificados(usuario):
                     c2.error(f"Erro: {pdf_name}")
 
     except Exception as e: 
-        st.error(f"Erro ao carregar lista: {e}")
+        st.error(f"Erro ao carregar certificados: {e}")
 
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
@@ -150,7 +148,7 @@ def exame_de_faixa(usuario):
     if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
-    # === TELA DE RESULTADO (APÓS FINALIZAR) ===
+    # === TELA DE RESULTADO (APÓS APROVAÇÃO) ===
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons()
@@ -160,70 +158,99 @@ def exame_de_faixa(usuario):
             st.markdown(f"<h3 style='text-align:center'>Nota Final: {res['nota']:.1f}%</h3>", unsafe_allow_html=True)
             st.divider()
             
-            st.info("O seu certificado foi gerado. Clique abaixo para baixar.")
+            st.info("O seu certificado já foi gerado. Clique abaixo para baixar.")
             
-            # GERAÇÃO DO CERTIFICADO COM DIAGNÓSTICO DE ERRO
+            # GERAÇÃO COM DIAGNÓSTICO E SPINNER
             try:
-                with st.spinner("Preparando documento..."):
-                    # p_b = arquivo, p_n = nome do arquivo (ou mensagem de erro se p_b for None)
+                with st.spinner("Preparando seu certificado oficial..."):
                     p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
                 
                 if p_b: 
                     st.download_button(
-                        label="🏆 BAIXAR CERTIFICADO OFICIAL", 
+                        label="📥 Baixar Certificado", 
                         data=p_b, 
                         file_name=p_n, 
                         mime="application/pdf", 
-                        key="dl_res_main", 
+                        key="dl_res", 
                         type="primary", 
                         use_container_width=True
                     )
                 else:
-                    # Se falhar, mostramos o erro exato retornado pelo utils.py
+                    # Exibe o erro específico retornado pelo utils.py
                     st.error(f"⚠️ {p_n}")
-                    st.caption("Verifique com o suporte ou tente novamente na aba 'Meus Certificados'.")
-                    
+                    st.caption("Tente novamente na aba 'Meus Certificados'.")
             except Exception as e: 
-                st.error(f"Erro inesperado na interface: {e}")
+                st.error(f"Erro inesperado: {e}")
             
         if st.button("Voltar ao Início"):
             st.session_state.resultado_prova = None
             st.rerun()
         return
 
-    # CHECAGEM DE ABANDONO / TIMEOUT
+    # CHECAGEM DE ABANDONO
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
-        # Se quiser testar sem bloquear, comente a linha abaixo:
-        bloquear_por_abandono(usuario['id'])
-        st.error("🚨 O exame foi interrompido (página recarregada ou saída).")
-        st.caption("Por segurança, o exame foi bloqueado. Contate seu professor para liberar novamente.")
-        return
+        is_timeout = False
+        try:
+            start_str = dados.get("inicio_exame_temp")
+            if start_str:
+                if isinstance(start_str, str):
+                    start_dt = datetime.fromisoformat(start_str.replace('Z', ''))
+                else:
+                    start_dt = start_str
+                
+                _, t_lim, _ = carregar_exame_especifico(dados.get('faixa_exame'))
+                limit_dt = start_dt + timedelta(minutes=t_lim)
+                if datetime.utcnow() > limit_dt.replace(tzinfo=None): is_timeout = True
+        except: pass
+
+        if is_timeout:
+            registrar_fim_exame(usuario['id'], False)
+            st.error("⌛ TEMPO ESGOTADO!")
+            return
+        else:
+            bloquear_por_abandono(usuario['id'])
+            st.error("🚨 BLOQUEADO! Página recarregada ou saída detectada.")
+            st.caption("Por segurança, o exame foi bloqueado. Contate seu professor.")
+            return
 
     if not dados.get('exame_habilitado'):
         status_atual = dados.get('status_exame', 'pendente')
         if status_atual == 'aprovado':
              st.success("✅ Você já foi aprovado neste exame!")
-             st.info("Acesse a aba 'Meus Certificados' no menu lateral para baixar seu diploma.")
+             st.info("Baixe seu certificado na aba 'Meus Certificados'.")
         elif status_atual == 'bloqueado':
              st.error("🔒 Exame Bloqueado.")
         else:
-             st.warning("🔒 Exame não autorizado. Solicite ao seu professor.")
+             st.warning("🔒 Exame não autorizado.")
         return
 
     elegivel, motivo = verificar_elegibilidade_exame(dados)
     if not elegivel: st.error(f"🚫 {motivo}"); return
 
-    # CARREGAMENTO DAS QUESTÕES
+    # CARREGAMENTO
     qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
     qtd = len(qs)
 
-    # === TELA DE INÍCIO ===
+    # TELA INICIAL (COM SEUS TEXTOS PREFERIDOS)
     if not st.session_state.exame_iniciado:
         st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
         
         with st.container(border=True):
-            st.markdown("#### 📜 Instruções")
-            st.warning("⚠️ Não recarregue a página (F5) durante a prova.")
+            st.markdown("#### 📜 Instruções para a realização do Exame")
+            st.markdown("""
+* Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
+* Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
+* **Não é permitido** consultar materiais externos de qualquer tipo.
+* Em caso de **reprovação**, você poderá realizar o exame novamente somente após **3 dias**.
+* Realize o exame em um local confortável e silencioso para garantir sua concentração.
+* **Não atualize a página (F5)**, não feche o navegador e não troque de dispositivo durante a prova. Isso **bloqueia** o exame automaticamente.
+* Utilize um dispositivo com bateria suficiente ou mantido na energia.
+* O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
+* Leia cada questão com atenção antes de responder.
+* Se aprovado, você poderá baixar seu certificado na aba *Meus Certificados*.
+
+**Boa prova!** 🥋
+            """)
             st.markdown("---")
             c1, c2, c3 = st.columns(3)
             c1.metric("Questões", qtd)
@@ -231,16 +258,16 @@ def exame_de_faixa(usuario):
             c3.metric("Mínimo", f"{min_aprovacao}%")
         
         if qtd > 0:
-            if st.button("✅ INICIAR AGORA", type="primary", use_container_width=True):
+            if st.button("✅ (estou ciente) INICIAR EXAME", type="primary", use_container_width=True):
                 registrar_inicio_exame(usuario['id'])
                 st.session_state.exame_iniciado = True
                 st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
                 st.session_state.questoes_prova = qs
                 st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
                 st.rerun()
-        else: st.warning("Erro: Nenhuma questão configurada para esta faixa.")
+        else: st.warning("Sem questões disponíveis.")
 
-    # === TELA DA PROVA ===
+    # PROVA
     else:
         qs = st.session_state.get('questoes_prova', [])
         restante = int(st.session_state.fim_prova_ts - time.time())
@@ -249,13 +276,15 @@ def exame_de_faixa(usuario):
             st.error("⌛ Tempo Esgotado!")
             registrar_fim_exame(usuario['id'], False)
             st.session_state.exame_iniciado = False
-            time.sleep(2); st.rerun()
+            time.sleep(2)
+            st.rerun()
 
-        # Timer Visual
+        # Timer JS (Seu visual preferido)
         cor = "#FFD770" if restante > 300 else "#FF4B4B"
         components.html(f"""
-        <div style="padding:10px;text-align:center;color:{cor};font-family:sans-serif;font-weight:bold;font-size:24px;">
-            ⏱️ <span id="t">--:--</span>
+        <div style="border:2px solid {cor};border-radius:10px;padding:10px;text-align:center;background:rgba(0,0,0,0.3);font-family:sans-serif;color:white;">
+            TEMPO RESTANTE<br>
+            <span id="t" style="color:{cor};font-size:30px;font-weight:bold;">--:--</span>
         </div>
         <script>
             var t={restante};
@@ -265,57 +294,72 @@ def exame_de_faixa(usuario):
                 if(t--<=0)window.parent.location.reload();
             }},1000);
         </script>
-        """, height=60)
+        """, height=100)
 
         with st.form("prova"):
             resps = {}
             for i, q in enumerate(qs):
                 st.markdown(f"**{i+1}. {q.get('pergunta')}**")
                 
-                if q.get('url_imagem'): st.image(q.get('url_imagem'), use_container_width=True)
+                # Mídia
+                if q.get('url_imagem'):
+                    st.image(q.get('url_imagem'), use_container_width=True)
+                
                 if q.get('url_video'):
                     vid = normalizar_link_video(q.get('url_video'))
-                    st.video(vid)
+                    try: st.video(vid)
+                    except: st.markdown(f"[Ver Vídeo]({vid})")
 
                 opts = []
                 if 'alternativas' in q:
                     opts = [q['alternativas'].get(k) for k in ["A","B","C","D"]]
+                elif 'opcoes' in q:
+                    opts = q['opcoes']
                 
+                # Index=None para vir vazio
                 resps[i] = st.radio("R:", opts, key=f"q{i}", index=None, label_visibility="collapsed")
-                st.divider()
+                st.markdown("---")
                 
-            if st.form_submit_button("Finalizar Exame", type="primary"):
+            if st.form_submit_button("Finalizar Exame"):
                 acertos = 0
                 for i, q in enumerate(qs):
                     resp = str(resps.get(i) or "").strip().lower()
                     certa = q.get('resposta_correta', 'A')
                     txt_certo = q.get('alternativas', {}).get(certa, "").strip().lower()
-                    if resp == txt_certo: acertos += 1
+                    
+                    if resp == txt_certo:
+                        acertos += 1
 
                 nota = (acertos/len(qs))*100
                 aprovado = nota >= st.session_state.params_prova['min']
                 
-                # GRAVA NO BANCO
+                # Grava no banco e define status
                 registrar_fim_exame(usuario['id'], aprovado)
                 st.session_state.exame_iniciado = False
                 
-                # PREPARA TELA DE RESULTADO
                 cod = None
                 if aprovado:
                     cod = gerar_codigo_verificacao()
-                    # Salva no histórico
-                    try:
-                        db.collection('resultados').add({
-                            "usuario": usuario['nome'], "faixa": dados.get('faixa_exame'),
-                            "pontuacao": nota, "acertos": acertos, "total": len(qs),
-                            "aprovado": aprovado, "codigo_verificacao": cod, "data": firestore.SERVER_TIMESTAMP
-                        })
-                    except: pass
-                    
                     st.session_state.resultado_prova = {
-                        "nota": nota, "aprovado": True, "faixa": dados.get('faixa_exame'), 
+                        "nota": nota, "aprovado": True, 
+                        "faixa": dados.get('faixa_exame'), "acertos": acertos, 
                         "total": len(qs), "codigo": cod
                     }
+                    
+                    # Salva histórico
+                    try:
+                        db.collection('resultados').add({
+                            "usuario": usuario['nome'],
+                            "faixa": dados.get('faixa_exame'),
+                            "pontuacao": nota,
+                            "acertos": acertos,
+                            "total": len(qs),
+                            "aprovado": aprovado,
+                            "codigo_verificacao": cod,
+                            "data": firestore.SERVER_TIMESTAMP
+                        })
+                    except: pass
+                
                 else:
                     st.error(f"Reprovado. Nota: {nota:.1f}%")
                     time.sleep(3)
