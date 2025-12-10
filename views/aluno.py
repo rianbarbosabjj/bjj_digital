@@ -21,6 +21,127 @@ from utils import (
     normalizar_link_video 
 )
 
+# ==============================================================================
+# 1. ÁREA DE CURSOS (NOVA FUNCIONALIDADE INSERIDA)
+# ==============================================================================
+def area_cursos_aluno():
+    st.markdown("<h1 style='color:#32CD32;'>🎓 Meus Cursos e Treinamentos</h1>", unsafe_allow_html=True)
+    
+    db = get_db()
+    user = st.session_state.usuario
+    user_id = user['id']
+    user_equipe = user.get('equipe_id') # ID da equipe do aluno
+
+    tab_meus, tab_catalogo = st.tabs(["📚 Meus Cursos (Inscrito)", "🔍 Catálogo de Cursos"])
+
+    # --- ABA 1: MEUS CURSOS ---
+    with tab_meus:
+        # Busca matrículas do aluno
+        matriculas_ref = db.collection('usuarios').document(user_id).collection('matriculas').stream()
+        matriculas = [m.to_dict() | {'id': m.id} for m in matriculas_ref]
+
+        if not matriculas:
+            st.info("Você ainda não está matriculado em nenhum curso. Vá na aba 'Catálogo' para se inscrever.")
+        else:
+            for mat in matriculas:
+                # Busca dados atualizados do curso
+                curso_doc = db.collection('cursos').document(mat['curso_id']).get()
+                if not curso_doc.exists:
+                    st.warning(f"O curso ID {mat['curso_id']} não existe mais.")
+                    continue
+                
+                curso = curso_doc.to_dict()
+                
+                with st.container(border=True):
+                    c1, c2 = st.columns([1, 4])
+                    if curso.get('url_capa'):
+                        c1.image(curso.get('url_capa'), use_container_width=True)
+                    else:
+                        c1.markdown("🖼️")
+                    
+                    with c2:
+                        st.subheader(curso.get('titulo'))
+                        st.caption(f"Categoria: {curso.get('categoria')} | Progresso: {mat.get('progresso', 0)}%")
+                        st.progress(mat.get('progresso', 0) / 100)
+                        
+                        if st.button(f"▶️ Acessar Aula", key=f"go_c_{mat['id']}"):
+                            # Aqui futuramente entra o player de aula
+                            st.session_state.curso_ativo_id = mat['curso_id']
+                            st.toast("Acessando ambiente de aula...")
+                            # st.rerun() 
+
+    # --- ABA 2: CATÁLOGO ---
+    with tab_catalogo:
+        st.subheader("Cursos Disponíveis")
+        
+        # Busca cursos ativos
+        cursos_ref = db.collection('cursos').where('ativo', '==', True).stream()
+        
+        # Lista de IDs já matriculados
+        ids_matriculados = [m['curso_id'] for m in matriculas]
+        
+        cursos_visiveis = []
+
+        for doc in cursos_ref:
+            c = doc.to_dict()
+            c['id'] = doc.id
+            
+            # --- FILTRO DE VISIBILIDADE ---
+            visibilidade = c.get('visibilidade', 'todos')
+            equipe_curso = c.get('equipe_id')
+            
+            mostrar = False
+            
+            # Regra 1: Público
+            if visibilidade == 'todos':
+                mostrar = True
+            
+            # Regra 2: Equipe (Aluno deve ser da mesma equipe do criador)
+            elif visibilidade == 'equipe':
+                # Compara como string para garantir
+                if user_equipe and equipe_curso and (str(user_equipe) == str(equipe_curso)):
+                    mostrar = True
+            
+            if mostrar:
+                cursos_visiveis.append(c)
+
+        if not cursos_visiveis:
+            st.info("Nenhum curso disponível para o seu perfil no momento.")
+        else:
+            cols = st.columns(3)
+            for i, curso in enumerate(cursos_visiveis):
+                with cols[i % 3]:
+                    with st.container(border=True):
+                        if curso.get('url_capa'):
+                            st.image(curso.get('url_capa'), use_container_width=True)
+                        
+                        st.markdown(f"**{curso.get('titulo')}**")
+                        st.caption(f"{curso.get('categoria')}")
+                        
+                        # Verifica matrícula
+                        if curso['id'] in ids_matriculados:
+                            st.success("✅ Já Matriculado")
+                        else:
+                            with st.expander("Ver Detalhes"):
+                                st.write(curso.get('descricao'))
+                                st.caption(f"Duração: {curso.get('duracao_estimada')}")
+                                
+                                if st.button("Inscrever-se Grátis", key=f"sub_{curso['id']}", type="primary"):
+                                    try:
+                                        dados_matricula = {
+                                            "curso_id": curso['id'],
+                                            "titulo_curso": curso['titulo'],
+                                            "data_inscricao": firestore.SERVER_TIMESTAMP,
+                                            "progresso": 0,
+                                            "status": "ativo",
+                                            "ultimo_acesso": firestore.SERVER_TIMESTAMP
+                                        }
+                                        db.collection('usuarios').document(user_id).collection('matriculas').add(dados_matricula)
+                                        st.toast(f"Inscrito em {curso.get('titulo')}")
+                                        time.sleep(1.5); st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro: {e}")
+
 # =========================================
 # CARREGADOR DE EXAME (Inalterado)
 # =========================================
@@ -78,7 +199,7 @@ def carregar_exame_especifico(faixa_alvo):
     return questoes_finais, tempo, nota
 
 # =========================================
-# TELAS SECUNDÁRIAS
+# TELAS SECUNDÁRIAS (Inalteradas)
 # =========================================
 def modo_rola(usuario):
     st.markdown("## 🥋 Modo Rola"); st.info("Em breve.")
@@ -96,14 +217,14 @@ def meus_certificados(usuario):
         
         lista_certificados = []
         
-        # --- INÍCIO DA CORREÇÃO DE DATAS E ALINHAMENTO ---
+        # --- INÍCIO DA CORREÇÃO DE DATAS E ALINHAMENTO (MANTIDO) ---
         for doc in docs:
             cert = doc.to_dict()
             
             data_raw = cert.get('data')
             data_obj = datetime.min 
 
-            # 1. Se for Timestamp do Google (tem método .to_datetime)
+            # 1. Se for Timestamp do Google
             if hasattr(data_raw, 'to_datetime'):
                 data_obj = data_raw.to_datetime()
             
@@ -116,7 +237,7 @@ def meus_certificados(usuario):
                 try: data_obj = datetime.fromisoformat(data_raw.replace('Z', ''))
                 except: pass
             
-            # IMPORTANTE: Remove fuso horário para garantir que a ordenação funcione
+            # Remove fuso horário
             if data_obj.tzinfo is not None:
                 data_obj = data_obj.replace(tzinfo=None)
             
@@ -124,7 +245,6 @@ def meus_certificados(usuario):
             lista_certificados.append(cert)
         # --- FIM DA CORREÇÃO ---
             
-        # 2. Ordena a lista do mais recente para o mais antigo
         lista_certificados.sort(key=lambda x: x.get('data_ordenacao', datetime.min), reverse=True)
         
         if not lista_certificados:
@@ -144,7 +264,6 @@ def meus_certificados(usuario):
 
                 c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao', 0):.0f}% | Ref: {cert.get('codigo_verificacao')}")
                 
-                # --- FUNÇÃO DE GERAÇÃO ENCAPSULADA PARA O BOTÃO ---
                 def generate_certificate(cert, user_name):
                     pdf_bytes, pdf_name = gerar_pdf(
                         user_name, cert.get('faixa'), 
@@ -166,8 +285,6 @@ def meus_certificados(usuario):
 
     except Exception as e: 
         st.error(f"Erro ao carregar lista de certificados: {e}")
-
-#=============================================
 
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
@@ -259,7 +376,6 @@ def exame_de_faixa(usuario):
     elegivel, motivo = verificar_elegibilidade_exame(dados)
     if not elegivel: st.error(f"🚫 {motivo}"); return
 
-    # CARREGAMENTO
     qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
     qtd = len(qs)
 
@@ -286,7 +402,6 @@ def exame_de_faixa(usuario):
             
             st.markdown("---")
             
-            # PAINEL DE MÉTRICAS (VISUAL LIMPO)
             st.markdown(f"""
             <div style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px;">
                 <div style="text-align: left;">
@@ -327,7 +442,6 @@ def exame_de_faixa(usuario):
             time.sleep(2)
             st.rerun()
 
-        # Timer Visual
         cor = "#FFD770" if restante > 300 else "#FF4B4B"
         components.html(f"""
         <div style="border:2px solid {cor};border-radius:10px;padding:10px;text-align:center;background:rgba(0,0,0,0.3);font-family:sans-serif;color:white;">
@@ -409,3 +523,60 @@ def exame_de_faixa(usuario):
                     time.sleep(3)
                 
                 st.rerun()
+
+# ==============================================================================
+# 5. APP PRINCIPAL DO ALUNO (MENU DE NAVEGAÇÃO)
+# ==============================================================================
+def app_aluno():
+    with st.sidebar:
+        st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
+        st.title("Área do Aluno")
+        
+        # Menu Principal
+        menu = st.radio(
+            "Navegação", 
+            [
+                "Dashboard", 
+                "Cursos",  # <--- NOVA OPÇÃO
+                "Modo Rola", 
+                "Exame de Faixa", 
+                "Meus Certificados", 
+                "Ranking",
+                "Sair"
+            ]
+        )
+        st.markdown("---")
+        
+        # Info do Usuário
+        user = st.session_state.usuario
+        st.caption(f"Aluno: {user.get('nome','').split()[0]}")
+        st.caption(f"Faixa: {user.get('faixa_atual', 'Branca')}")
+
+    # Roteamento
+    if menu == "Dashboard":
+        st.title("📊 Dashboard")
+        st.info("Bem-vindo à sua área de aluno!")
+        # Aqui você pode adicionar cards de progresso, última aula vista, etc.
+        
+    elif menu == "Cursos":
+        area_cursos_aluno() # <--- CHAMA A NOVA TELA DE CURSOS
+        
+    elif menu == "Modo Rola":
+        modo_rola(user)
+        
+    elif menu == "Exame de Faixa":
+        exame_de_faixa(user)
+        
+    elif menu == "Meus Certificados":
+        meus_certificados(user)
+        
+    elif menu == "Ranking":
+        ranking()
+        
+    elif menu == "Sair":
+        st.session_state.logado = False
+        st.rerun()
+
+if __name__ == "__main__":
+    app_aluno()
+    
