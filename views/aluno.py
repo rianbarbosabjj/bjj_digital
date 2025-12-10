@@ -93,6 +93,7 @@ def meus_certificados(usuario):
     
     try:
         db = get_db()
+        # Busca a lista de certificados (rápido, pois só busca dados do DB)
         docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
         lista = [d.to_dict() for d in docs]
         
@@ -105,27 +106,42 @@ def meus_certificados(usuario):
                 c1, c2 = st.columns([3, 1])
                 c1.markdown(f"**Faixa {cert.get('faixa')}**")
                 
+                # Tratamento de data seguro para exibição
+                data_raw = cert.get('data')
                 d_str = "-"
-                if cert.get('data'):
-                    try: d_str = cert.get('data').strftime('%d/%m/%Y')
-                    except: d_str = str(cert.get('data'))[:10]
+                if data_raw:
+                    try: d_str = data_raw.strftime('%d/%m/%Y')
+                    except: d_str = str(data_raw)[:10]
+
+                # Ajustei a formatação da nota para :.0f (inteiro) como conversamos
+                c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao', 0):.0f}% | Ref: {cert.get('codigo_verificacao')}")
                 
-                c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao')}% | Código: {cert.get('codigo_verificacao')}")
-                
-                pdf_bytes, pdf_name = gerar_pdf(
-                    usuario['nome'], cert.get('faixa'), 
-                    cert.get('pontuacao', 0), cert.get('total', 10), 
-                    cert.get('codigo_verificacao')
+                # --- FUNÇÃO DE GERAÇÃO ENCAPSULADA PARA O BOTÃO ---
+                # Criamos um callback que só gera o PDF quando o botão é CLICADO!
+                def generate_certificate(cert, user_name):
+                    # O Streamlit rodará esta função quando o botão for clicado
+                    pdf_bytes, pdf_name = gerar_pdf(
+                        user_name, cert.get('faixa'), 
+                        cert.get('pontuacao', 0), cert.get('total', 10), 
+                        cert.get('codigo_verificacao')
+                    )
+                    if pdf_bytes:
+                        return pdf_bytes, pdf_name
+                    # Se falhar, retorna um PDF vazio com erro no nome
+                    return b"", f"Erro_ao_baixar_{cert.get('codigo_verificacao')}.pdf"
+
+                # O download_button usa uma função anônima para chamar o callback
+                c2.download_button(
+                    label="📄 Baixar PDF",
+                    data=lambda: generate_certificate(cert, usuario['nome'])[0],
+                    file_name=lambda: generate_certificate(cert, usuario['nome'])[1],
+                    mime="application/pdf", 
+                    key=f"d_{i}",
+                    on_click=lambda: st.toast("Gerando certificado...")
                 )
-                
-                if pdf_bytes:
-                    c2.download_button("📄 Baixar PDF", pdf_bytes, pdf_name, "application/pdf", key=f"d_{i}")
-                else:
-                    c2.error(f"Erro: {pdf_name}")
 
     except Exception as e: 
-        st.error(f"Erro ao carregar certificados: {e}")
-
+        st.error(f"Erro ao carregar lista: {e}")
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
 # =========================================
