@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components 
 from database import get_db
-from firebase_admin import firestore as fs # <-- MUDANÇA CRUCIAL: Renomeando firestore para fs
+from firebase_admin import firestore
 
 # --- IMPORTAÇÃO DIRETA (PARA DIAGNÓSTICO DE ERROS) ---
 from utils import (
@@ -47,6 +47,7 @@ def carregar_exame_especifico(faixa_alvo):
                     q_snap = db.collection('questoes').document(q_id).get()
                     if q_snap.exists:
                         d = q_snap.to_dict()
+                        # Compatibilidade
                         if 'alternativas' not in d and 'opcoes' in d:
                             ops = d['opcoes']
                             d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
@@ -92,49 +93,33 @@ def meus_certificados(usuario):
     
     try:
         db = get_db()
+        # Busca a lista de certificados (rápido, pois só busca dados do DB)
         docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
+        lista = [d.to_dict() for d in docs]
         
-        lista_certificados = []
-        for doc in docs:
-            cert = doc.to_dict()
-            
-            # 1. Tenta normalizar a data para um objeto datetime para ordenação
-            data_raw = cert.get('data')
-            data_obj = datetime.min 
-
-            # --- CORREÇÃO DE ERRO: USANDO O ALIAS fs ---
-            # O objeto firestore.Timestamp deve ser acessado de forma segura
-            if isinstance(data_raw, fs.Timestamp):
-                data_obj = data_raw.to_datetime()
-            elif isinstance(data_raw, str):
-                try: data_obj = datetime.fromisoformat(data_raw.replace('Z', ''))
-                except: pass
-            
-            cert['data_ordenacao'] = data_obj
-            lista_certificados.append(cert)
-            
-        # 2. Ordena a lista do mais recente (maior data) para o mais antigo (menor data)
-        lista_certificados.sort(key=lambda x: x.get('data_ordenacao', datetime.min), reverse=True)
-        
-        if not lista_certificados:
+        if not lista:
             st.info("Nenhum certificado disponível.")
             return
 
-        for i, cert in enumerate(lista_certificados):
+        for i, cert in enumerate(lista):
             with st.container(border=True):
                 c1, c2 = st.columns([3, 1])
                 c1.markdown(f"**Faixa {cert.get('faixa')}**")
                 
+                # Tratamento de data seguro para exibição
+                data_raw = cert.get('data')
                 d_str = "-"
-                data_obj_exibicao = cert.get('data_ordenacao', datetime.min)
-                if data_obj_exibicao != datetime.min:
-                    try: d_str = data_obj_exibicao.strftime('%d/%m/%Y')
-                    except: d_str = str(data_obj_exibicao)[:10]
+                if data_raw:
+                    try: d_str = data_raw.strftime('%d/%m/%Y')
+                    except: d_str = str(data_raw)[:10]
 
+                # Ajustei a formatação da nota para :.0f (inteiro) como conversamos
                 c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao', 0):.0f}% | Ref: {cert.get('codigo_verificacao')}")
                 
                 # --- FUNÇÃO DE GERAÇÃO ENCAPSULADA PARA O BOTÃO ---
+                # Criamos um callback que só gera o PDF quando o botão é CLICADO!
                 def generate_certificate(cert, user_name):
+                    # O Streamlit rodará esta função quando o botão for clicado
                     pdf_bytes, pdf_name = gerar_pdf(
                         user_name, cert.get('faixa'), 
                         cert.get('pontuacao', 0), cert.get('total', 10), 
@@ -142,8 +127,10 @@ def meus_certificados(usuario):
                     )
                     if pdf_bytes:
                         return pdf_bytes, pdf_name
+                    # Se falhar, retorna um PDF vazio com erro no nome
                     return b"", f"Erro_ao_baixar_{cert.get('codigo_verificacao')}.pdf"
 
+                # O download_button usa uma função anônima para chamar o callback
                 c2.download_button(
                     label="📄 Baixar PDF",
                     data=lambda: generate_certificate(cert, usuario['nome'])[0],
@@ -154,9 +141,7 @@ def meus_certificados(usuario):
                 )
 
     except Exception as e: 
-        # Mensagem de erro atualizada para diagnóstico
-        st.error(f"Erro ao carregar lista de certificados: {e}")
-
+        st.error(f"Erro ao carregar lista: {e}")
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
 # =========================================
@@ -174,16 +159,18 @@ def exame_de_faixa(usuario):
     if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
-    # === TELA DE RESULTADO ===
+    # === TELA DE RESULTADO (APÓS APROVAÇÃO) ===
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons()
         
         with st.container(border=True):
-            st.success(f"Parabéns você foi aprovado(a)! Sua nota foi {res['nota']:.0f}%.")
+            # --- MUDANÇA AQUI: VISUAL LIMPO ---
+            st.success(f"Parabéns você foi aprovado(a)! Sua média de acertos foi de {res['nota']:.0f}%.")
             
+            # GERAÇÃO COM DIAGNÓSTICO E SPINNER
             try:
-                with st.spinner("Preparando seu certificado oficial..."):
+                with st.spinner("Estamos preparando seu certificado. Aguarde para baixá-lo..."):
                     p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
                 
                 if p_b: 
@@ -388,12 +375,12 @@ def exame_de_faixa(usuario):
                             "total": len(qs),
                             "aprovado": aprovado,
                             "codigo_verificacao": cod,
-                            "data": fs.SERVER_TIMESTAMP # Usando o alias fs.SERVER_TIMESTAMP
+                            "data": firestore.SERVER_TIMESTAMP
                         })
                     except: pass
                 
                 else:
-                    st.error(f"Reprovado. Nota: {nota:.0f}%")
+                    st.error(f"Reprovado. Nota: {nota:.1f}%")
                     time.sleep(3)
                 
                 st.rerun()
