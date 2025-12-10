@@ -259,7 +259,7 @@ def exame_de_faixa(usuario):
                     <span style="font-size: 1.5em; font-weight: bold; color: white;">{tempo_limite} min</span>
                 </div>
                 <div style="text-align: right;">
-                    <span style="font-size: 0.9em; color: #aaa;">Mínimo para aprovação</span><br>
+                    <span style="font-size: 0.9em; color: #aaa;">Pontuação minima</span><br>
                     <span style="font-size: 1.5em; font-weight: bold; color: white;">{min_aprovacao}%</span>
                 </div>
             </div>
