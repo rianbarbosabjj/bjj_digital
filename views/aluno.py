@@ -94,16 +94,23 @@ def meus_certificados(usuario):
         
         lista_certificados = []
         
-        # --- CORREÇÃO INFALÍVEL DO ERRO 'firestore' attribute ---
-        # Acessa a classe Timestamp do cliente de forma garantida.
-        Timestamp_Class = db.client.Timestamp 
-        
+        # --- CORREÇÃO INFALÍVEL DO ERRO: Obtendo o Tipo Timestamp da Instância ---
+        # 1. Tenta obter a classe Timestamp do objeto do cliente.
+        # Se db é um Client (que é o que get_db() retorna), o Timestamp é um atributo dele.
+        try:
+            Timestamp_Class = db.Timestamp 
+        except:
+            # Fallback para a importação direta
+            Timestamp_Class = firestore.Timestamp
+        # Fim da injeção de segurança
+
         for doc in docs:
             cert = doc.to_dict()
             
             data_raw = cert.get('data')
             data_obj = datetime.min 
 
+            # Usa a classe Timestamp obtida acima
             if isinstance(data_raw, Timestamp_Class):
                 data_obj = data_raw.to_datetime()
             elif isinstance(data_raw, str):
@@ -155,6 +162,7 @@ def meus_certificados(usuario):
 
     except Exception as e: 
         st.error(f"Erro ao carregar lista de certificados: {e}")
+        
 
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
