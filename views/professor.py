@@ -475,13 +475,14 @@ def painel_professor():
     if st.button("🏠 Voltar ao Início", key="btn_voltar_prof"):
         st.session_state.menu_selection = "Início"; st.rerun()
 
+    # Note que agora temos 3 abas, a Gestão de Cursos é a segunda.
     tab1, tab2, tab3 = st.tabs(["👥 Gestão de Equipe", "📚 Gestão de Cursos", "📊 Estatísticas & Dashboard"])
     
     with tab1:
         gestao_equipes()
         
-    with tab2: # <-- NOVA ABA
+    with tab2: # <-- Nova aba para cursos
         gestao_cursos_tab()
         
-    with tab3: # <-- ABA MOVIDA
+    with tab3:
         dashboard.dashboard_professor()
