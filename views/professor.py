@@ -177,6 +177,7 @@ def gestao_cursos_tab():
     st.markdown("<h1 style='color:#32CD32;'>📚 Gestão Acadêmica</h1>", unsafe_allow_html=True)
     
     user = st.session_state.usuario
+    # PERMISSÃO: Admin, Professor ou Delegado (se houver essa role no futuro)
     if str(user.get("tipo", "")).lower() not in ["admin", "professor", "delegado"]:
         st.error("Acesso negado.")
         return
@@ -197,14 +198,65 @@ def gestao_cursos_tab():
 
         # --- SUB-ABA: CRIAR CURSO ---
         with sub_tab_add:
+            # Inicializa variável de sessão para armazenar o delegado encontrado
+            if 'novo_delegado_temp' not in st.session_state:
+                st.session_state.novo_delegado_temp = None
+
+            # Área de Busca de Delegado FORA do formulário principal para permitir interatividade
+            st.markdown("##### 1. Configurar Tutoria (Opcional)")
+            c_busca_1, c_busca_2 = st.columns([3, 1])
+            cpf_search = c_busca_1.text_input("Buscar Tutor Delegado por CPF:", placeholder="000.000.000-00", key="search_cpf_new")
+            
+            if c_busca_2.button("🔍 Buscar", key="btn_search_new"):
+                if cpf_search:
+                    # Limpa CPF
+                    cpf_clean = ''.join(filter(str.isdigit, cpf_search))
+                    # Busca Exata
+                    users_found = list(db.collection('usuarios').where('cpf', '==', cpf_search).limit(1).stream())
+                    if not users_found and cpf_clean:
+                        users_found = list(db.collection('usuarios').where('cpf', '==', cpf_clean).limit(1).stream())
+                    
+                    if users_found:
+                        u_doc = users_found[0].to_dict()
+                        u_id = users_found[0].id
+                        
+                        # Busca nome da equipe se tiver ID
+                        nome_equipe = "Sem Equipe"
+                        if u_doc.get('equipe_id'):
+                            try:
+                                eq_doc = db.collection('equipes').document(u_doc.get('equipe_id')).get()
+                                if eq_doc.exists: nome_equipe = eq_doc.to_dict().get('nome')
+                            except: pass
+                        
+                        st.session_state.novo_delegado_temp = {
+                            "id": u_id,
+                            "nome": u_doc.get('nome', 'Sem Nome'),
+                            "equipe": nome_equipe
+                        }
+                    else:
+                        st.error("❌ Usuário não encontrado.")
+                        st.session_state.novo_delegado_temp = None
+
+            # Mostra Resultado da Busca
+            if st.session_state.novo_delegado_temp:
+                del_data = st.session_state.novo_delegado_temp
+                st.success(f"✅ **Selecionado:** {del_data['nome']} | **Equipe:** {del_data['equipe']}")
+                if st.button("🗑️ Remover Seleção", key="rm_sel_new"):
+                    st.session_state.novo_delegado_temp = None
+                    st.rerun()
+            else:
+                st.info("Nenhum delegado selecionado. O curso será gerido apenas por você.")
+
+            st.divider()
+
+            # Formulário Principal
             with st.form("form_novo_curso"):
-                st.markdown("##### Informações Básicas")
+                st.markdown("##### 2. Detalhes do Curso")
                 c1, c2 = st.columns(2)
                 titulo = c1.text_input("Título do Curso *", max_chars=100)
                 categoria = c2.text_input("Categoria", "Geral")
                 descricao = st.text_area("Descrição Completa *", height=100)
                 
-                st.markdown("##### Configurações e Tutoria")
                 c3, c4 = st.columns(2)
                 duracao = c3.text_input("Duração Est.", "Não especificada")
                 
@@ -214,10 +266,6 @@ def gestao_cursos_tab():
                     ["Todos (Público)", "Apenas Minha Equipe"],
                     help="Se 'Apenas Minha Equipe', somente seus alunos verão."
                 )
-
-                st.markdown("**Adicionar Tutor Delegado (Opcional)**")
-                st.caption("Digite o CPF de um usuário cadastrado para adicioná-lo como tutor delegado deste curso.")
-                cpf_delegado_input = st.text_input("CPF do Delegado:", placeholder="000.000.000-00", max_chars=14)
                 
                 st.markdown("##### Mídia e Status")
                 col_up, col_link = st.columns(2)
@@ -229,31 +277,6 @@ def gestao_cursos_tab():
                     if not titulo or not descricao: 
                         st.error("Preencha Título e Descrição.")
                     else:
-                        # 1. Validação do Delegado (Se houver CPF)
-                        delegado_dados = None
-                        if cpf_delegado_input:
-                            # Limpa o CPF para busca (remove pontos e traços se salvou limpo, ou busca string exata)
-                            # Aqui assumimos busca exata pela string digitada ou limpa. Vamos tentar ambas.
-                            cpf_clean = ''.join(filter(str.isdigit, cpf_delegado_input))
-                            
-                            # Busca no banco
-                            # Tenta busca exata primeiro
-                            users_found = list(db.collection('usuarios').where('cpf', '==', cpf_delegado_input).limit(1).stream())
-                            if not users_found and cpf_clean:
-                                # Tenta busca pelo CPF limpo se não achou formatado
-                                users_found = list(db.collection('usuarios').where('cpf', '==', cpf_clean).limit(1).stream())
-                            
-                            if users_found:
-                                user_doc = users_found[0]
-                                delegado_dados = {
-                                    'id': user_doc.id,
-                                    'nome': user_doc.to_dict().get('nome', 'Tutor')
-                                }
-                            else:
-                                st.error(f"❌ CPF {cpf_delegado_input} não encontrado no sistema. Verifique e tente novamente.")
-                                st.stop() # Para a execução aqui se o CPF for inválido
-
-                        # 2. Upload
                         url_final = url_capa
                         if up_img:
                             try:
@@ -263,6 +286,9 @@ def gestao_cursos_tab():
                             except: pass
 
                         visib_valor = "equipe" if visibilidade_label == "Apenas Minha Equipe" else "todos"
+                        
+                        # Pega o delegado da sessão
+                        delegado_final = st.session_state.novo_delegado_temp
                         
                         try:
                             novo_curso = {
@@ -277,19 +303,17 @@ def gestao_cursos_tab():
                                 "criado_por_id": user_id, 
                                 "criado_por_nome": user_nome,
                                 # Salva dados do delegado
-                                "delegado_id": delegado_dados['id'] if delegado_dados else None,
-                                "delegado_nome": delegado_dados['nome'] if delegado_dados else None,
+                                "delegado_id": delegado_final['id'] if delegado_final else None,
+                                "delegado_nome": delegado_final['nome'] if delegado_final else None,
                                 "data_criacao": firestore.SERVER_TIMESTAMP, 
                                 "modulos": []
                             }
                             db.collection('cursos').add(novo_curso)
                             
-                            msg_sucesso = "Curso criado com sucesso!"
-                            if delegado_dados:
-                                msg_sucesso += f" Tutor Delegado: {delegado_dados['nome']}."
-                            
-                            st.success(msg_sucesso)
-                            time.sleep(2); st.rerun()
+                            st.success(f"Curso criado com sucesso!")
+                            # Limpa sessão
+                            st.session_state.novo_delegado_temp = None
+                            time.sleep(1.5); st.rerun()
                         except Exception as e: st.error(f"Erro: {e}")
 
         # --- SUB-ABA: LISTAR E EDITAR ---
@@ -338,23 +362,66 @@ def gestao_cursos_tab():
                     # 2. BOTÃO DE EDIÇÃO DE METADADOS
                     if st.button("✏️ Editar Informações e Tutores", key=f"btn_edit_{curso['id']}"):
                         st.session_state[f"edit_mode_{curso['id']}"] = not st.session_state.get(f"edit_mode_{curso['id']}", False)
+                        # Limpa variável temp de busca da edição
+                        if f"del_edit_temp_{curso['id']}" not in st.session_state:
+                             st.session_state[f"del_edit_temp_{curso['id']}"] = None
 
                     # FORMULÁRIO DE EDIÇÃO
                     if st.session_state.get(f"edit_mode_{curso['id']}"):
+                        st.markdown("#### Editando Curso")
+                        
+                        # --- BUSCA DE NOVO DELEGADO NA EDIÇÃO ---
+                        st.caption("Alterar Tutor Delegado (Busque por CPF)")
+                        c_ed_b1, c_ed_b2 = st.columns([3, 1])
+                        cpf_edit_search = c_ed_b1.text_input("", placeholder="CPF...", key=f"cpf_search_edit_{curso['id']}", label_visibility="collapsed")
+                        
+                        if c_ed_b2.button("🔍", key=f"btn_s_edit_{curso['id']}"):
+                             if cpf_edit_search:
+                                cln = ''.join(filter(str.isdigit, cpf_edit_search))
+                                u_f = list(db.collection('usuarios').where('cpf', '==', cpf_edit_search).limit(1).stream())
+                                if not u_f and cln: u_f = list(db.collection('usuarios').where('cpf', '==', cln).limit(1).stream())
+                                
+                                if u_f:
+                                    u_d = u_f[0].to_dict()
+                                    eq_n = "Sem Equipe"
+                                    if u_d.get('equipe_id'):
+                                        try:
+                                            eq_doc = db.collection('equipes').document(u_d.get('equipe_id')).get()
+                                            if eq_doc.exists: eq_n = eq_doc.to_dict().get('nome')
+                                        except: pass
+                                    
+                                    st.session_state[f"del_edit_temp_{curso['id']}"] = {
+                                        "id": u_f[0].id, "nome": u_d.get('nome'), "equipe": eq_n
+                                    }
+                                else: st.error("CPF não encontrado.")
+                        
+                        # Mostra quem está selecionado (Atual ou Novo)
+                        novo_del = st.session_state.get(f"del_edit_temp_{curso['id']}")
+                        
+                        if novo_del:
+                            st.success(f"Novo Delegado Selecionado: {novo_del['nome']} ({novo_del['equipe']})")
+                            if st.button("Desfazer Seleção", key=f"undo_del_{curso['id']}"):
+                                st.session_state[f"del_edit_temp_{curso['id']}"] = None
+                                st.rerun()
+                        else:
+                            curr_del = curso.get('delegado_nome', 'Nenhum')
+                            st.info(f"Delegado Atual: {curr_del}")
+                            if curr_del != 'Nenhum':
+                                if st.button("🗑️ Remover Delegado Atual", key=f"rm_curr_del_{curso['id']}"):
+                                    # Marca flag para remover no save
+                                    st.session_state[f"del_edit_temp_{curso['id']}"] = "REMOVER"
+                                    st.rerun()
+                            
+                            if st.session_state.get(f"del_edit_temp_{curso['id']}") == "REMOVER":
+                                st.warning("O delegado será removido ao salvar.")
+
                         with st.form(f"form_edit_{curso['id']}"):
-                            st.markdown("#### Editando Curso")
                             nt = st.text_input("Título", value=curso.get('titulo'))
                             nd = st.text_area("Descrição", value=curso.get('descricao'))
                             nc = st.text_input("Categoria", value=curso.get('categoria'))
                             
-                            c_edit_1, c_edit_2 = st.columns(2)
-                            
                             idx_vis = 1 if curso.get('visibilidade') == 'equipe' else 0
-                            nvis = c_edit_1.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"], index=idx_vis)
-                            
-                            # Edição de Delegado
-                            cpf_del_edit = c_edit_2.text_input("Alterar Delegado (CPF):", placeholder="Deixe vazio para remover/manter")
-                            st.caption(f"Delegado atual: {curso.get('delegado_nome', 'Nenhum')}")
+                            nvis = st.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"], index=idx_vis)
 
                             if st.form_submit_button("💾 Salvar Alterações"):
                                 updates = {
@@ -364,26 +431,19 @@ def gestao_cursos_tab():
                                     "visibilidade": "equipe" if nvis == "Apenas Minha Equipe" else "todos"
                                 }
                                 
-                                # Lógica para alterar delegado na edição
-                                if cpf_del_edit:
-                                    # Busca novo
-                                    users_found = list(db.collection('usuarios').where('cpf', '==', cpf_del_edit).limit(1).stream())
-                                    if not users_found:
-                                        # Tenta limpo
-                                        cln = ''.join(filter(str.isdigit, cpf_del_edit))
-                                        users_found = list(db.collection('usuarios').where('cpf', '==', cln).limit(1).stream())
-                                    
-                                    if users_found:
-                                        u_doc = users_found[0]
-                                        updates['delegado_id'] = u_doc.id
-                                        updates['delegado_nome'] = u_doc.to_dict().get('nome', 'Tutor')
-                                        st.success(f"Delegado alterado para: {updates['delegado_nome']}")
+                                # Aplica mudança de delegado se houver
+                                temp_del = st.session_state.get(f"del_edit_temp_{curso['id']}")
+                                if temp_del:
+                                    if temp_del == "REMOVER":
+                                        updates['delegado_id'] = None
+                                        updates['delegado_nome'] = None
                                     else:
-                                        st.error("CPF do novo delegado não encontrado!")
-                                        st.stop()
-                                
+                                        updates['delegado_id'] = temp_del['id']
+                                        updates['delegado_nome'] = temp_del['nome']
+
                                 db.collection('cursos').document(curso['id']).update(updates)
                                 st.session_state[f"edit_mode_{curso['id']}"] = False
+                                st.session_state[f"del_edit_temp_{curso['id']}"] = None # Limpa
                                 st.success("Atualizado!"); time.sleep(1); st.rerun()
                         st.divider()
                     
