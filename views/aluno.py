@@ -99,19 +99,29 @@ def meus_certificados(usuario):
         # --- INÍCIO DA CORREÇÃO ---
         # Removemos a linha problemática: Timestamp_Class = firestore.Timestamp
         
-        for doc in docs:
+           for doc in docs:
             cert = doc.to_dict()
             
             data_raw = cert.get('data')
             data_obj = datetime.min 
 
-            # Correção: Verifica se o objeto tem o método 'to_datetime'
-            # Isso funciona independente da versão da biblioteca do Firestore
+            # 1. Se for Timestamp do Google (tem método .to_datetime)
             if hasattr(data_raw, 'to_datetime'):
                 data_obj = data_raw.to_datetime()
+            
+            # 2. Se JÁ for um datetime do Python (o caso que estava falhando)
+            elif isinstance(data_raw, datetime):
+                data_obj = data_raw
+            
+            # 3. Se for texto (string)
             elif isinstance(data_raw, str):
                 try: data_obj = datetime.fromisoformat(data_raw.replace('Z', ''))
                 except: pass
+            
+            # IMPORTANTE: Remove fuso horário para garantir que a ordenação funcione
+            # (evita erro de comparar data com fuso vs data sem fuso)
+            if data_obj.tzinfo is not None:
+                data_obj = data_obj.replace(tzinfo=None)
             
             cert['data_ordenacao'] = data_obj
             lista_certificados.append(cert)
