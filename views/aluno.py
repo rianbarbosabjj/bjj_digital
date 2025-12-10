@@ -143,20 +143,18 @@ def exame_de_faixa(usuario):
     if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
-    # === TELA DE RESULTADO ===
+    # === TELA DE RESULTADO (APÓS APROVAÇÃO) ===
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons()
         
         with st.container(border=True):
-            st.markdown(f"<h2 style='text-align:center; color:green'>APROVADO! 🥋</h2>", unsafe_allow_html=True)
-            st.markdown(f"<h3 style='text-align:center'>Nota Final: {res['nota']:.1f}%</h3>", unsafe_allow_html=True)
-            st.divider()
+            # --- MUDANÇA AQUI: VISUAL LIMPO ---
+            st.success(f"Parabéns você foi aprovado(a)! Sua nota foi {res['nota']:.0f}%.")
             
-            st.info("O seu certificado já foi gerado. Clique abaixo para baixar.")
-            
+            # GERAÇÃO COM DIAGNÓSTICO E SPINNER
             try:
-                with st.spinner("Preparando seu certificado oficial..."):
+                with st.spinner("Estamos preparando seu certificado. Aguarde para fazer p download..."):
                     p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
                 
                 if p_b: 
@@ -247,7 +245,7 @@ def exame_de_faixa(usuario):
             
             st.markdown("---")
             
-            # --- PAINEL DE MÉTRICAS PERSONALIZADO (ALINHAMENTO ESQUERDA - CENTRO - DIREITA) ---
+            # PAINEL DE MÉTRICAS (VISUAL LIMPO)
             st.markdown(f"""
             <div style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px;">
                 <div style="text-align: left;">
@@ -259,12 +257,12 @@ def exame_de_faixa(usuario):
                     <span style="font-size: 1.5em; font-weight: bold; color: white;">{tempo_limite} min</span>
                 </div>
                 <div style="text-align: right;">
-                    <span style="font-size: 0.9em; color: #aaa;">Pontuação minima</span><br>
+                    <span style="font-size: 0.9em; color: #aaa;">Mínimo</span><br>
                     <span style="font-size: 1.5em; font-weight: bold; color: white;">{min_aprovacao}%</span>
                 </div>
             </div>
             """, unsafe_allow_html=True)
-            st.write("") # Espaçamento
+            st.write("") 
         
         if qtd > 0:
             if st.button("✅ (estou ciente) INICIAR EXAME", type="primary", use_container_width=True):
@@ -310,7 +308,6 @@ def exame_de_faixa(usuario):
             for i, q in enumerate(qs):
                 st.markdown(f"**{i+1}. {q.get('pergunta')}**")
                 
-                # Mídia
                 if q.get('url_imagem'):
                     st.image(q.get('url_imagem'), use_container_width=True)
                 
@@ -341,7 +338,6 @@ def exame_de_faixa(usuario):
                 nota = (acertos/len(qs))*100
                 aprovado = nota >= st.session_state.params_prova['min']
                 
-                # Grava no banco e define status
                 registrar_fim_exame(usuario['id'], aprovado)
                 st.session_state.exame_iniciado = False
                 
@@ -354,7 +350,6 @@ def exame_de_faixa(usuario):
                         "total": len(qs), "codigo": cod
                     }
                     
-                    # Salva histórico
                     try:
                         db.collection('resultados').add({
                             "usuario": usuario['nome'],
