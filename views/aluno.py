@@ -101,25 +101,26 @@ def meus_certificados(usuario):
             
             # 1. Tenta normalizar a data para um objeto datetime para ordenação
             data_raw = cert.get('data')
-            data_obj = datetime.min # Valor mínimo para certificados sem data (vão para o final)
+            data_obj = datetime.min # Valor mínimo para certificados sem data
 
+            # --- CORREÇÃO DO ERRO 'firestore' ---
+            # Usamos os objetos de Timestamp diretamente para comparação de tipo
             if isinstance(data_raw, firestore.client.firestore.server_timestamp):
-                # Se for um marcador de timestamp do servidor (como o usado no seu código)
-                # O valor é nulo até ser gravado, vamos usar uma data genérica de fallback se for None
-                data_obj = data_raw.to_datetime() if data_raw else datetime.min
-            elif isinstance(data_raw, firestore.client.firestore.Timestamp):
+                # Se for um marcador de timestamp do servidor (ainda não gravado)
+                data_obj = datetime.min
+            elif isinstance(data_raw, firestore.Timestamp):
                 # Se for um Timestamp já gravado
                 data_obj = data_raw.to_datetime()
             elif isinstance(data_raw, str):
                 # Tenta converter de string ISO
                 try: data_obj = datetime.fromisoformat(data_raw.replace('Z', ''))
                 except: pass
+            # --- FIM DA CORREÇÃO ---
             
-            cert['data_ordenacao'] = data_obj # Adiciona a chave de ordenação
+            cert['data_ordenacao'] = data_obj
             lista_certificados.append(cert)
             
         # 2. Ordena a lista do mais recente (maior data) para o mais antigo (menor data)
-        # Usamos reverse=True para ter a data mais nova no topo
         lista_certificados.sort(key=lambda x: x.get('data_ordenacao', datetime.min), reverse=True)
         
         if not lista_certificados:
@@ -131,14 +132,13 @@ def meus_certificados(usuario):
                 c1, c2 = st.columns([3, 1])
                 c1.markdown(f"**Faixa {cert.get('faixa')}**")
                 
-                # Tratamento de data para exibição (apenas string)
+                # Tratamento de data para exibição
                 d_str = "-"
                 data_obj_exibicao = cert.get('data_ordenacao', datetime.min)
                 if data_obj_exibicao != datetime.min:
                     try: d_str = data_obj_exibicao.strftime('%d/%m/%Y')
                     except: d_str = str(data_obj_exibicao)[:10]
 
-                # Ajustei a formatação da nota para :.0f (inteiro)
                 c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao', 0):.0f}% | Ref: {cert.get('codigo_verificacao')}")
                 
                 # --- FUNÇÃO DE GERAÇÃO ENCAPSULADA PARA O BOTÃO ---
