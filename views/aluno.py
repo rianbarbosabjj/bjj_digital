@@ -93,33 +93,51 @@ def meus_certificados(usuario):
     
     try:
         db = get_db()
-        # Busca a lista de certificados (rápido, pois só busca dados do DB)
         docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
-        lista = [d.to_dict() for d in docs]
         
-        if not lista:
+        lista_certificados = []
+        # Obtém a classe Timestamp de forma segura, usando a importação global
+        Timestamp_Class = firestore.Timestamp 
+        
+        for doc in docs:
+            cert = doc.to_dict()
+            
+            # 1. Tenta normalizar a data para um objeto datetime para ordenação
+            data_raw = cert.get('data')
+            data_obj = datetime.min 
+
+            # --- CORREÇÃO DE ERRO: USANDO firestore.Timestamp ---
+            if isinstance(data_raw, Timestamp_Class):
+                data_obj = data_raw.to_datetime()
+            elif isinstance(data_raw, str):
+                try: data_obj = datetime.fromisoformat(data_raw.replace('Z', ''))
+                except: pass
+            
+            cert['data_ordenacao'] = data_obj
+            lista_certificados.append(cert)
+            
+        # 2. Ordena a lista do mais recente para o mais antigo
+        lista_certificados.sort(key=lambda x: x.get('data_ordenacao', datetime.min), reverse=True)
+        
+        if not lista_certificados:
             st.info("Nenhum certificado disponível.")
             return
 
-        for i, cert in enumerate(lista):
+        for i, cert in enumerate(lista_certificados):
             with st.container(border=True):
                 c1, c2 = st.columns([3, 1])
                 c1.markdown(f"**Faixa {cert.get('faixa')}**")
                 
-                # Tratamento de data seguro para exibição
-                data_raw = cert.get('data')
                 d_str = "-"
-                if data_raw:
-                    try: d_str = data_raw.strftime('%d/%m/%Y')
-                    except: d_str = str(data_raw)[:10]
+                data_obj_exibicao = cert.get('data_ordenacao', datetime.min)
+                if data_obj_exibicao != datetime.min:
+                    try: d_str = data_obj_exibicao.strftime('%d/%m/%Y')
+                    except: d_str = str(data_obj_exibicao)[:10]
 
-                # Ajustei a formatação da nota para :.0f (inteiro) como conversamos
                 c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao', 0):.0f}% | Ref: {cert.get('codigo_verificacao')}")
                 
                 # --- FUNÇÃO DE GERAÇÃO ENCAPSULADA PARA O BOTÃO ---
-                # Criamos um callback que só gera o PDF quando o botão é CLICADO!
                 def generate_certificate(cert, user_name):
-                    # O Streamlit rodará esta função quando o botão for clicado
                     pdf_bytes, pdf_name = gerar_pdf(
                         user_name, cert.get('faixa'), 
                         cert.get('pontuacao', 0), cert.get('total', 10), 
@@ -127,10 +145,8 @@ def meus_certificados(usuario):
                     )
                     if pdf_bytes:
                         return pdf_bytes, pdf_name
-                    # Se falhar, retorna um PDF vazio com erro no nome
                     return b"", f"Erro_ao_baixar_{cert.get('codigo_verificacao')}.pdf"
 
-                # O download_button usa uma função anônima para chamar o callback
                 c2.download_button(
                     label="📄 Baixar PDF",
                     data=lambda: generate_certificate(cert, usuario['nome'])[0],
@@ -141,7 +157,7 @@ def meus_certificados(usuario):
                 )
 
     except Exception as e: 
-        st.error(f"Erro ao carregar lista: {e}")
+        st.error(f"Erro ao carregar lista de certificados: {e}")
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
 # =========================================
