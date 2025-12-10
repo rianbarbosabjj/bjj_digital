@@ -330,14 +330,26 @@ def app_principal():
             st.session_state.menu_selection = menu
             st.rerun()
 
-    if pg == "Modo Rola": aluno.modo_rola(usuario)
-    elif pg == "Cursos": aluno.cursos_e_exames_menu(usuario) # <--- NOVA FUNÇÃO CONTROLADORA
-    elif pg == "Ranking": aluno.ranking()
-    elif pg == "Gestão de Equipes": professor.gestao_equipes()
-    elif pg == "Gestão de Questões": admin.gestao_questoes()
-    elif pg == "Gestão de Exame": admin.gestao_exame_de_faixa()
-    elif pg == "Gestão de Cursos": professor.gestao_cursos_tab()
-
+    if pg == "Modo Rola": 
+        aluno.modo_rola(usuario)
+        
+    elif pg == "Cursos": 
+        aluno.area_cursos_aluno()  # <--- CORRIGIDO AQUI
+        
+    elif pg == "Ranking": 
+        aluno.ranking()
+        
+    elif pg == "Gestão de Equipes": 
+        professor.gestao_equipes()
+        
+    elif pg == "Gestão de Questões": 
+        admin.gestao_questoes()
+        
+    elif pg == "Gestão de Exame": 
+        admin.gestao_exame_de_faixa()
+        
+    elif pg == "Gestão de Cursos": 
+        professor.gestao_cursos_tab()
 if __name__ == "__main__":
     if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
         login.tela_login()
