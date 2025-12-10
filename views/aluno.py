@@ -96,9 +96,8 @@ def meus_certificados(usuario):
         
         lista_certificados = []
         
-        # --- CORREÇÃO FINAL: Usando firestore.Timestamp ---
-        # Definimos o objeto de classe Timestamp
-        Timestamp_Class = firestore.Timestamp
+        # --- INÍCIO DA CORREÇÃO ---
+        # Removemos a linha problemática: Timestamp_Class = firestore.Timestamp
         
         for doc in docs:
             cert = doc.to_dict()
@@ -106,8 +105,9 @@ def meus_certificados(usuario):
             data_raw = cert.get('data')
             data_obj = datetime.min 
 
-            # Verifica se é um objeto Timestamp e converte
-            if isinstance(data_raw, Timestamp_Class):
+            # Correção: Verifica se o objeto tem o método 'to_datetime'
+            # Isso funciona independente da versão da biblioteca do Firestore
+            if hasattr(data_raw, 'to_datetime'):
                 data_obj = data_raw.to_datetime()
             elif isinstance(data_raw, str):
                 try: data_obj = datetime.fromisoformat(data_raw.replace('Z', ''))
@@ -115,6 +115,7 @@ def meus_certificados(usuario):
             
             cert['data_ordenacao'] = data_obj
             lista_certificados.append(cert)
+        # --- FIM DA CORREÇÃO ---
             
         # 2. Ordena a lista do mais recente para o mais antigo
         lista_certificados.sort(key=lambda x: x.get('data_ordenacao', datetime.min), reverse=True)
