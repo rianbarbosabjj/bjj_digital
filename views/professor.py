@@ -177,7 +177,6 @@ def gestao_cursos_tab():
     st.markdown("<h1 style='color:#32CD32;'>📚 Gestão Acadêmica</h1>", unsafe_allow_html=True)
     
     user = st.session_state.usuario
-    # PERMISSÃO: Admin, Professor ou Delegado (se houver essa role no futuro)
     if str(user.get("tipo", "")).lower() not in ["admin", "professor", "delegado"]:
         st.error("Acesso negado.")
         return
@@ -205,17 +204,20 @@ def gestao_cursos_tab():
                 categoria = c2.text_input("Categoria", "Geral")
                 descricao = st.text_area("Descrição Completa *", height=100)
                 
-                st.markdown("##### Segmentação")
-                c3, c4, c5 = st.columns(3)
-                faixa_minima = c3.selectbox("Faixa Mínima:", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"])
-                duracao = c4.text_input("Duração Est.", "Não especificada")
+                st.markdown("##### Configurações e Tutoria")
+                c3, c4 = st.columns(2)
+                duracao = c3.text_input("Duração Est.", "Não especificada")
                 
                 # Seletor de Visibilidade
-                visibilidade_label = c5.selectbox(
+                visibilidade_label = c4.selectbox(
                     "Quem pode ver este curso?", 
                     ["Todos (Público)", "Apenas Minha Equipe"],
                     help="Se 'Apenas Minha Equipe', somente seus alunos verão."
                 )
+
+                st.markdown("**Adicionar Tutor Delegado (Opcional)**")
+                st.caption("Digite o CPF de um usuário cadastrado para adicioná-lo como tutor delegado deste curso.")
+                cpf_delegado_input = st.text_input("CPF do Delegado:", placeholder="000.000.000-00", max_chars=14)
                 
                 st.markdown("##### Mídia e Status")
                 col_up, col_link = st.columns(2)
@@ -224,8 +226,34 @@ def gestao_cursos_tab():
                 ativo = st.checkbox("Curso Ativo?", value=True)
 
                 if st.form_submit_button("💾 Criar Curso", type="primary"):
-                    if not titulo or not descricao: st.error("Preencha Título e Descrição.")
+                    if not titulo or not descricao: 
+                        st.error("Preencha Título e Descrição.")
                     else:
+                        # 1. Validação do Delegado (Se houver CPF)
+                        delegado_dados = None
+                        if cpf_delegado_input:
+                            # Limpa o CPF para busca (remove pontos e traços se salvou limpo, ou busca string exata)
+                            # Aqui assumimos busca exata pela string digitada ou limpa. Vamos tentar ambas.
+                            cpf_clean = ''.join(filter(str.isdigit, cpf_delegado_input))
+                            
+                            # Busca no banco
+                            # Tenta busca exata primeiro
+                            users_found = list(db.collection('usuarios').where('cpf', '==', cpf_delegado_input).limit(1).stream())
+                            if not users_found and cpf_clean:
+                                # Tenta busca pelo CPF limpo se não achou formatado
+                                users_found = list(db.collection('usuarios').where('cpf', '==', cpf_clean).limit(1).stream())
+                            
+                            if users_found:
+                                user_doc = users_found[0]
+                                delegado_dados = {
+                                    'id': user_doc.id,
+                                    'nome': user_doc.to_dict().get('nome', 'Tutor')
+                                }
+                            else:
+                                st.error(f"❌ CPF {cpf_delegado_input} não encontrado no sistema. Verifique e tente novamente.")
+                                st.stop() # Para a execução aqui se o CPF for inválido
+
+                        # 2. Upload
                         url_final = url_capa
                         if up_img:
                             try:
@@ -235,18 +263,33 @@ def gestao_cursos_tab():
                             except: pass
 
                         visib_valor = "equipe" if visibilidade_label == "Apenas Minha Equipe" else "todos"
+                        
                         try:
                             novo_curso = {
-                                "titulo": titulo.upper(), "descricao": descricao, "categoria": categoria,
-                                "faixa_minima": faixa_minima, "duracao_estimada": duracao,
-                                "url_capa": url_final, "ativo": ativo,
+                                "titulo": titulo.upper(), 
+                                "descricao": descricao, 
+                                "categoria": categoria,
+                                "duracao_estimada": duracao,
+                                "url_capa": url_final, 
+                                "ativo": ativo,
                                 "visibilidade": visib_valor,
                                 "equipe_id": equipe_id_prof,
-                                "criado_por_id": user_id, "criado_por_nome": user_nome,
-                                "data_criacao": firestore.SERVER_TIMESTAMP, "modulos": []
+                                "criado_por_id": user_id, 
+                                "criado_por_nome": user_nome,
+                                # Salva dados do delegado
+                                "delegado_id": delegado_dados['id'] if delegado_dados else None,
+                                "delegado_nome": delegado_dados['nome'] if delegado_dados else None,
+                                "data_criacao": firestore.SERVER_TIMESTAMP, 
+                                "modulos": []
                             }
                             db.collection('cursos').add(novo_curso)
-                            st.success("Curso criado!"); time.sleep(1.5); st.rerun()
+                            
+                            msg_sucesso = "Curso criado com sucesso!"
+                            if delegado_dados:
+                                msg_sucesso += f" Tutor Delegado: {delegado_dados['nome']}."
+                            
+                            st.success(msg_sucesso)
+                            time.sleep(2); st.rerun()
                         except Exception as e: st.error(f"Erro: {e}")
 
         # --- SUB-ABA: LISTAR E EDITAR ---
@@ -254,58 +297,92 @@ def gestao_cursos_tab():
             cursos_ref = list(db.collection('cursos').stream())
             cursos_data = [d.to_dict() | {"id": d.id} for d in cursos_ref]
             
-            # FILTRO DE SEGURANÇA:
-            # Se for Admin ou Delegado, vê tudo.
-            # Se for Professor, vê apenas o que ele criou.
+            # FILTRO DE PERMISSÃO: Admin, Criador ou Delegado
             tipo_user = str(user.get("tipo")).lower()
-            if tipo_user not in ["admin", "delegado"]:
-                cursos_data = [c for c in cursos_data if c.get('criado_por_id') == user_id]
+            if tipo_user not in ["admin"]:
+                cursos_data = [
+                    c for c in cursos_data 
+                    if c.get('criado_por_id') == user_id or c.get('delegado_id') == user_id
+                ]
 
             filtro = st.text_input("🔍 Buscar Curso:", key="filtro_cur_main")
             if filtro:
                 cursos_data = [c for c in cursos_data if filtro.upper() in c.get('titulo','').upper()]
 
-            if not cursos_data: st.info("Nenhum curso encontrado onde você seja o instrutor responsável.")
+            if not cursos_data: st.info("Nenhum curso encontrado onde você seja Tutor (Criador ou Delegado).")
 
             for i, curso in enumerate(cursos_data):
                 status_icon = '🟢' if curso.get('ativo') else '🔴'
                 visib = curso.get('visibilidade', 'todos')
                 visib_icon = "🌍 Público" if visib == 'todos' else "🔒 Equipe"
                 
+                # Monta string de Tutores
+                tutor_pri = curso.get('criado_por_nome', 'Desconhecido')
+                tutor_del = curso.get('delegado_nome')
+                txt_tutores = f"Tutores: {tutor_pri}"
+                if tutor_del:
+                    txt_tutores += f" & {tutor_del}"
+
                 with st.expander(f"{status_icon} {curso.get('titulo')} | {visib_icon}"):
                     
                     # 1. VISUALIZAÇÃO
                     c_img, c_info = st.columns([1, 3])
                     if curso.get('url_capa'): c_img.image(curso.get('url_capa'), width=150)
                     with c_info:
-                        st.caption(f"ID: {curso['id']} | Min: {curso.get('faixa_minima')} | Visibilidade: {visib.upper()}")
+                        st.caption(f"ID: {curso['id']} | Visibilidade: {visib.upper()}")
+                        st.markdown(f"**{txt_tutores}**")
                         st.write(curso.get('descricao'))
                     
                     st.divider()
 
-                    # 2. BOTÃO DE EDIÇÃO DE METADADOS (NOVO)
-                    if st.button("✏️ Editar Informações Principais", key=f"btn_edit_{curso['id']}"):
+                    # 2. BOTÃO DE EDIÇÃO DE METADADOS
+                    if st.button("✏️ Editar Informações e Tutores", key=f"btn_edit_{curso['id']}"):
                         st.session_state[f"edit_mode_{curso['id']}"] = not st.session_state.get(f"edit_mode_{curso['id']}", False)
 
-                    # FORMULÁRIO DE EDIÇÃO (Aparece se clicado)
+                    # FORMULÁRIO DE EDIÇÃO
                     if st.session_state.get(f"edit_mode_{curso['id']}"):
                         with st.form(f"form_edit_{curso['id']}"):
                             st.markdown("#### Editando Curso")
                             nt = st.text_input("Título", value=curso.get('titulo'))
                             nd = st.text_area("Descrição", value=curso.get('descricao'))
                             nc = st.text_input("Categoria", value=curso.get('categoria'))
-                            nf = st.selectbox("Faixa Mínima", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"], index=["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"].index(curso.get('faixa_minima', 'Nenhuma')))
                             
-                            # Edição de Visibilidade
+                            c_edit_1, c_edit_2 = st.columns(2)
+                            
                             idx_vis = 1 if curso.get('visibilidade') == 'equipe' else 0
-                            nvis = st.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"], index=idx_vis)
+                            nvis = c_edit_1.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"], index=idx_vis)
+                            
+                            # Edição de Delegado
+                            cpf_del_edit = c_edit_2.text_input("Alterar Delegado (CPF):", placeholder="Deixe vazio para remover/manter")
+                            st.caption(f"Delegado atual: {curso.get('delegado_nome', 'Nenhum')}")
 
                             if st.form_submit_button("💾 Salvar Alterações"):
-                                vis_val = "equipe" if nvis == "Apenas Minha Equipe" else "todos"
-                                db.collection('cursos').document(curso['id']).update({
-                                    "titulo": nt.upper(), "descricao": nd, "categoria": nc,
-                                    "faixa_minima": nf, "visibilidade": vis_val
-                                })
+                                updates = {
+                                    "titulo": nt.upper(), 
+                                    "descricao": nd, 
+                                    "categoria": nc,
+                                    "visibilidade": "equipe" if nvis == "Apenas Minha Equipe" else "todos"
+                                }
+                                
+                                # Lógica para alterar delegado na edição
+                                if cpf_del_edit:
+                                    # Busca novo
+                                    users_found = list(db.collection('usuarios').where('cpf', '==', cpf_del_edit).limit(1).stream())
+                                    if not users_found:
+                                        # Tenta limpo
+                                        cln = ''.join(filter(str.isdigit, cpf_del_edit))
+                                        users_found = list(db.collection('usuarios').where('cpf', '==', cln).limit(1).stream())
+                                    
+                                    if users_found:
+                                        u_doc = users_found[0]
+                                        updates['delegado_id'] = u_doc.id
+                                        updates['delegado_nome'] = u_doc.to_dict().get('nome', 'Tutor')
+                                        st.success(f"Delegado alterado para: {updates['delegado_nome']}")
+                                    else:
+                                        st.error("CPF do novo delegado não encontrado!")
+                                        st.stop()
+                                
+                                db.collection('cursos').document(curso['id']).update(updates)
                                 st.session_state[f"edit_mode_{curso['id']}"] = False
                                 st.success("Atualizado!"); time.sleep(1); st.rerun()
                         st.divider()
@@ -337,11 +414,18 @@ def gestao_cursos_tab():
 
                     st.divider()
                     cb1, cb2, cb3 = st.columns(3)
+                    
+                    # Apenas o CRIADOR (dono original) ou ADMIN pode deletar. Delegado edita mas não deleta.
+                    pode_deletar = (tipo_user == 'admin' or curso.get('criado_por_id') == user_id)
+                    
                     if cb1.button(f"{'Desativar' if curso.get('ativo') else 'Ativar'}", key=f"togg_{curso['id']}"):
                          db.collection('cursos').document(curso['id']).update({"ativo": not curso.get('ativo')}); st.rerun()
 
-                    if cb3.button("🗑️ Excluir Curso", key=f"del_{curso['id']}"):
-                        db.collection('cursos').document(curso['id']).delete(); st.rerun()
+                    if pode_deletar:
+                        if cb3.button("🗑️ Excluir Curso", key=f"del_{curso['id']}"):
+                            db.collection('cursos').document(curso['id']).delete(); st.rerun()
+                    else:
+                        cb3.caption("🚫 Apenas o dono pode excluir")
 
     # --------------------------------------------------------------------------
     # ABA 2: PROVAS
