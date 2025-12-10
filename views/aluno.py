@@ -150,7 +150,7 @@ def exame_de_faixa(usuario):
         
         with st.container(border=True):
             # --- MUDANÇA AQUI: VISUAL LIMPO ---
-            st.success(f"Parabéns você foi aprovado(a)! Sua nota foi {res['nota']:.0f}%.")
+            st.success(f"Parabéns você foi aprovado(a)! Sua média de acertos foi de {res['nota']:.0f}%.")
             
             # GERAÇÃO COM DIAGNÓSTICO E SPINNER
             try:
