@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components 
 from database import get_db
-from firebase_admin import firestore
+from firebase_admin import firestore # Mantemos a importação para ter acesso ao módulo
 
 # --- IMPORTAÇÃO DIRETA (PARA DIAGNÓSTICO DE ERROS) ---
 from utils import (
@@ -47,7 +47,6 @@ def carregar_exame_especifico(faixa_alvo):
                     q_snap = db.collection('questoes').document(q_id).get()
                     if q_snap.exists:
                         d = q_snap.to_dict()
-                        # Compatibilidade
                         if 'alternativas' not in d and 'opcoes' in d:
                             ops = d['opcoes']
                             d['alternativas'] = {"A": ops[0], "B": ops[1], "C": ops[2], "D": ops[3]} if len(ops)>=4 else {}
@@ -96,17 +95,17 @@ def meus_certificados(usuario):
         docs = db.collection('resultados').where('usuario', '==', usuario['nome']).where('aprovado', '==', True).stream()
         
         lista_certificados = []
-        # Obtém a classe Timestamp de forma segura, usando a importação global
-        Timestamp_Class = firestore.Timestamp 
+        
+        # --- SOLUÇÃO PARA O ERRO 'firestore' attribute ---
+        # Acessa a classe Timestamp do cliente de forma garantida.
+        Timestamp_Class = db._client._firestore_client.Timestamp if hasattr(db, '_client') and hasattr(db._client, '_firestore_client') else firestore.client.firestore.Timestamp
         
         for doc in docs:
             cert = doc.to_dict()
             
-            # 1. Tenta normalizar a data para um objeto datetime para ordenação
             data_raw = cert.get('data')
             data_obj = datetime.min 
 
-            # --- CORREÇÃO DE ERRO: USANDO firestore.Timestamp ---
             if isinstance(data_raw, Timestamp_Class):
                 data_obj = data_raw.to_datetime()
             elif isinstance(data_raw, str):
@@ -158,6 +157,7 @@ def meus_certificados(usuario):
 
     except Exception as e: 
         st.error(f"Erro ao carregar lista de certificados: {e}")
+
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
 # =========================================
@@ -175,18 +175,16 @@ def exame_de_faixa(usuario):
     if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
-    # === TELA DE RESULTADO (APÓS APROVAÇÃO) ===
+    # === TELA DE RESULTADO ===
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons()
         
         with st.container(border=True):
-            # --- MUDANÇA AQUI: VISUAL LIMPO ---
-            st.success(f"Parabéns você foi aprovado(a)! Sua média de acertos foi de {res['nota']:.0f}%.")
+            st.success(f"Parabéns você foi aprovado(a)! Sua nota foi {res['nota']:.0f}%.")
             
-            # GERAÇÃO COM DIAGNÓSTICO E SPINNER
             try:
-                with st.spinner("Estamos preparando seu certificado. Aguarde para baixá-lo..."):
+                with st.spinner("Preparando seu certificado oficial..."):
                     p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
                 
                 if p_b: 
@@ -396,7 +394,7 @@ def exame_de_faixa(usuario):
                     except: pass
                 
                 else:
-                    st.error(f"Reprovado. Nota: {nota:.1f}%")
+                    st.error(f"Reprovado. Nota: {nota:.0f}%")
                     time.sleep(3)
                 
                 st.rerun()
