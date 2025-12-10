@@ -5,7 +5,7 @@ import time
 from firebase_admin import firestore
 
 # ==============================================================================
-# 0. CONFIGURAÇÕES LOCAIS (Para evitar erros de importação do utils.py)
+# 0. CONFIGURAÇÕES LOCAIS (Para evitar erros visuais se utils falhar)
 # ==============================================================================
 FAIXAS_COMPLETAS = [
     "Branca", 
@@ -30,15 +30,31 @@ def get_badge_nivel(nivel):
     badges = {1: "🟢", 2: "🟡", 3: "🔴", 4: "💀"}
     return badges.get(nivel, "⚪")
 
-# Tenta importar APENAS as funções de banco e upload do utils
+# ==============================================================================
+# 1. IMPORTAÇÕES ROBUSTAS (Correção do erro da barra vermelha)
+# ==============================================================================
 try:
+    # Tenta importar do utils.py
     from utils import get_db, fazer_upload_midia, normalizar_link_video
-except ImportError as e:
-    st.error(f"Erro Crítico: Não foi possível importar 'get_db' do arquivo utils.py. Detalhes: {e}")
-    st.stop()
+except ImportError:
+    # SE FALHAR, tenta importar o banco direto e cria funções dummy para não travar
+    try:
+        from database import get_db
+        
+        # Funções provisórias caso utils falhe
+        def fazer_upload_midia(arquivo):
+            st.warning("Função de upload indisponível (utils.py não encontrado).")
+            return None
+            
+        def normalizar_link_video(url):
+            return url
+            
+    except ImportError:
+        st.error("ERRO CRÍTICO: Não foi possível conectar ao banco de dados. Verifique se 'database.py' ou 'utils.py' existem.")
+        st.stop()
 
 # ==============================================================================
-# 1. COMPONENTE: GESTÃO DE PROVAS DE CURSOS (Lógica Auxiliar)
+# 2. COMPONENTE: GESTÃO DE PROVAS DE CURSOS (Lógica Auxiliar)
 # ==============================================================================
 def componente_gestao_provas():
     """
@@ -209,9 +225,10 @@ def componente_gestao_provas():
             st.divider()
 
 # ==============================================================================
-# 2. ROTA: GESTÃO DE CURSOS (Conteúdo + Provas)
+# 3. ROTA: GESTÃO DE CURSOS (Conteúdo + Provas)
+# AQUI ESTAVA O ERRO: Renomeado de 'gestao_cursos_route' para 'gestao_cursos_tab'
 # ==============================================================================
-def gestao_cursos_route():
+def gestao_cursos_tab():
     st.markdown("<h1 style='color:#32CD32;'>📚 Gestão Acadêmica</h1>", unsafe_allow_html=True)
     
     user = st.session_state.usuario
@@ -350,7 +367,7 @@ def gestao_cursos_route():
 
 
 # ==============================================================================
-# 3. ROTA: GESTÃO DE EXAMES DE FAIXA (Lógica Original)
+# 4. ROTA: GESTÃO DE EXAMES DE FAIXA (Lógica Original)
 # ==============================================================================
 def gestao_exame_de_faixa_route():
     st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames (Faixa)</h1>", unsafe_allow_html=True)
@@ -463,7 +480,7 @@ def gestao_exame_de_faixa_route():
             st.divider()
 
 # ==============================================================================
-# 4. ROTAS AUXILIARES (Placeholders para o menu funcionar)
+# 5. ROTAS AUXILIARES (Placeholders para o menu funcionar)
 # ==============================================================================
 def dashboard_route():
     st.title("📊 Dashboard do Professor")
@@ -474,19 +491,20 @@ def gestao_alunos_route():
     st.info("Ferramenta de consulta e edição de alunos.")
 
 # ==============================================================================
-# 5. APP PRINCIPAL DO PROFESSOR (Menu Lateral)
+# 6. APP PRINCIPAL DO PROFESSOR (Menu Lateral)
 # ==============================================================================
 def app_professor():
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
         st.title("Painel Professor")
         
+        # IMPORTANTE: A opção aqui DEVE bater com o IF abaixo
         menu = st.radio(
             "Navegação",
             [
                 "Dashboard",
                 "Gestão de Alunos",
-                "Gestão Acadêmica (Cursos)",
+                "Gestão de Cursos", # <--- Nome exato que está no seu app.py (provavelmente)
                 "Gestão de Exames (Faixa)",
                 "Sair"
             ]
@@ -500,8 +518,9 @@ def app_professor():
     elif menu == "Gestão de Alunos":
         gestao_alunos_route()
         
-    elif menu == "Gestão Acadêmica (Cursos)":
-        gestao_cursos_route()
+    elif menu == "Gestão de Cursos": 
+        # AQUI CHAMAMOS A FUNÇÃO COM O NOME CORRIGIDO
+        gestao_cursos_tab()
         
     elif menu == "Gestão de Exames (Faixa)":
         gestao_exame_de_faixa_route()
