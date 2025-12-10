@@ -9,8 +9,7 @@ import streamlit.components.v1 as components
 from database import get_db
 from firebase_admin import firestore
 
-# --- IMPORTAÇÃO DIRETA (PARA DIAGONÓSTICO DE ERROS) ---
-# Removemos o try/except para que, se faltar biblioteca, o erro apareça na tela
+# --- IMPORTAÇÃO DIRETA (PARA DIAGNÓSTICO DE ERROS) ---
 from utils import (
     registrar_inicio_exame, 
     registrar_fim_exame, 
@@ -106,7 +105,6 @@ def meus_certificados(usuario):
                 c1, c2 = st.columns([3, 1])
                 c1.markdown(f"**Faixa {cert.get('faixa')}**")
                 
-                # Tratamento de data seguro
                 d_str = "-"
                 if cert.get('data'):
                     try: d_str = cert.get('data').strftime('%d/%m/%Y')
@@ -114,8 +112,6 @@ def meus_certificados(usuario):
                 
                 c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao')}% | Código: {cert.get('codigo_verificacao')}")
                 
-                # GERAÇÃO DO PDF (Com tratamento de erro)
-                # O utils.py retorna (bytes, nome) se der certo, ou (None, mensagem_erro) se falhar
                 pdf_bytes, pdf_name = gerar_pdf(
                     usuario['nome'], cert.get('faixa'), 
                     cert.get('pontuacao', 0), cert.get('total', 10), 
@@ -125,7 +121,6 @@ def meus_certificados(usuario):
                 if pdf_bytes:
                     c2.download_button("📄 Baixar PDF", pdf_bytes, pdf_name, "application/pdf", key=f"d_{i}")
                 else:
-                    # Se falhar, pdf_name contém a mensagem de erro
                     c2.error(f"Erro: {pdf_name}")
 
     except Exception as e: 
@@ -148,7 +143,7 @@ def exame_de_faixa(usuario):
     if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
-    # === TELA DE RESULTADO (APÓS APROVAÇÃO) ===
+    # === TELA DE RESULTADO ===
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons()
@@ -160,7 +155,6 @@ def exame_de_faixa(usuario):
             
             st.info("O seu certificado já foi gerado. Clique abaixo para baixar.")
             
-            # GERAÇÃO COM DIAGNÓSTICO E SPINNER
             try:
                 with st.spinner("Preparando seu certificado oficial..."):
                     p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
@@ -176,7 +170,6 @@ def exame_de_faixa(usuario):
                         use_container_width=True
                     )
                 else:
-                    # Exibe o erro específico retornado pelo utils.py
                     st.error(f"⚠️ {p_n}")
                     st.caption("Tente novamente na aba 'Meus Certificados'.")
             except Exception as e: 
@@ -231,7 +224,7 @@ def exame_de_faixa(usuario):
     qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
     qtd = len(qs)
 
-    # TELA INICIAL (COM SEUS TEXTOS PREFERIDOS)
+    # === TELA DE INÍCIO ===
     if not st.session_state.exame_iniciado:
         st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
         
@@ -251,11 +244,27 @@ def exame_de_faixa(usuario):
 
 **Boa prova!** 🥋
             """)
+            
             st.markdown("---")
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Questões", qtd)
-            c2.metric("Tempo", f"{tempo_limite} min")
-            c3.metric("Mínimo", f"{min_aprovacao}%")
+            
+            # --- PAINEL DE MÉTRICAS PERSONALIZADO (ALINHAMENTO ESQUERDA - CENTRO - DIREITA) ---
+            st.markdown(f"""
+            <div style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px;">
+                <div style="text-align: left;">
+                    <span style="font-size: 0.9em; color: #aaa;">Questões</span><br>
+                    <span style="font-size: 1.5em; font-weight: bold; color: white;">{qtd}</span>
+                </div>
+                <div style="text-align: center;">
+                    <span style="font-size: 0.9em; color: #aaa;">Tempo</span><br>
+                    <span style="font-size: 1.5em; font-weight: bold; color: white;">{tempo_limite} min</span>
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 0.9em; color: #aaa;">Mínimo</span><br>
+                    <span style="font-size: 1.5em; font-weight: bold; color: white;">{min_aprovacao}%</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.write("") # Espaçamento
         
         if qtd > 0:
             if st.button("✅ (estou ciente) INICIAR EXAME", type="primary", use_container_width=True):
@@ -267,7 +276,7 @@ def exame_de_faixa(usuario):
                 st.rerun()
         else: st.warning("Sem questões disponíveis.")
 
-    # PROVA
+    # === TELA DA PROVA ===
     else:
         qs = st.session_state.get('questoes_prova', [])
         restante = int(st.session_state.fim_prova_ts - time.time())
@@ -279,7 +288,7 @@ def exame_de_faixa(usuario):
             time.sleep(2)
             st.rerun()
 
-        # Timer JS (Seu visual preferido)
+        # Timer Visual
         cor = "#FFD770" if restante > 300 else "#FF4B4B"
         components.html(f"""
         <div style="border:2px solid {cor};border-radius:10px;padding:10px;text-align:center;background:rgba(0,0,0,0.3);font-family:sans-serif;color:white;">
@@ -316,11 +325,10 @@ def exame_de_faixa(usuario):
                 elif 'opcoes' in q:
                     opts = q['opcoes']
                 
-                # Index=None para vir vazio
                 resps[i] = st.radio("R:", opts, key=f"q{i}", index=None, label_visibility="collapsed")
                 st.markdown("---")
                 
-            if st.form_submit_button("Finalizar Exame"):
+            if st.form_submit_button("Finalizar Exame", type="primary"):
                 acertos = 0
                 for i, q in enumerate(qs):
                     resp = str(resps.get(i) or "").strip().lower()
