@@ -96,9 +96,11 @@ def meus_certificados(usuario):
         
         lista_certificados = []
         
-        # --- CORREÇÃO FINAL: Usando o objeto de classe Timestamp diretamente ---
-        # Acessa o objeto de classe do Timestamp para o 'isinstance'
-        Timestamp_Class = firestore.Timestamp
+        # --- CORREÇÃO FINAL: Usando o objeto Timestamp do CLIENTE DB ---
+        # No seu setup, onde db é firestore.client(database_id=...),
+        # o objeto Timestamp deve ser acessado via db.Timestamp (sem o 'client' extra).
+        # Vamos tentar garantir que pegamos o objeto correto do cliente:
+        Timestamp_Class = db.Timestamp 
         
         for doc in docs:
             cert = doc.to_dict()
@@ -157,6 +159,7 @@ def meus_certificados(usuario):
                 )
 
     except Exception as e: 
+        # Esta linha de erro agora deve capturar o problema real
         st.error(f"Erro ao carregar lista de certificados: {e}")
 
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
