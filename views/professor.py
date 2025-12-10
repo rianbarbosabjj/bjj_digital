@@ -5,7 +5,7 @@ import time
 from firebase_admin import firestore
 
 # ==============================================================================
-# 0. CONFIGURAÇÕES LOCAIS (Listas e Helpers)
+# 0. CONFIGURAÇÕES LOCAIS
 # ==============================================================================
 FAIXAS_COMPLETAS = [
     "Branca", 
@@ -31,42 +31,32 @@ def get_badge_nivel(nivel):
     return badges.get(nivel, "⚪")
 
 # ==============================================================================
-# 1. IMPORTAÇÕES ROBUSTAS (Banco de Dados e Utils)
+# 1. IMPORTAÇÕES ROBUSTAS
 # ==============================================================================
 try:
-    # Tenta importar do utils.py
     from utils import get_db, fazer_upload_midia, normalizar_link_video
 except ImportError:
-    # SE FALHAR, tenta importar o banco direto e cria funções dummy
     try:
         from database import get_db
-        
         def fazer_upload_midia(arquivo):
             st.warning("Função de upload indisponível (utils.py não encontrado).")
             return None
-            
-        def normalizar_link_video(url):
-            return url
-            
+        def normalizar_link_video(url): return url
     except ImportError:
-        st.error("ERRO CRÍTICO: Não foi possível conectar ao banco de dados. Verifique 'database.py' ou 'utils.py'.")
+        st.error("ERRO CRÍTICO: Não foi possível conectar ao banco de dados.")
         st.stop()
 
 # ==============================================================================
 # 2. COMPONENTE: GESTÃO DE PROVAS DE CURSOS
 # ==============================================================================
 def componente_gestao_provas():
-    """
-    Gerencia a criação de provas e autorização de alunos.
-    """
     db = get_db()
     
     # Busca cursos
     try:
         cursos_ref = db.collection('cursos').stream()
         LISTA_CURSOS = sorted([d.to_dict().get('titulo', d.to_dict().get('nome', d.id)) for d in cursos_ref])
-    except: 
-        LISTA_CURSOS = []
+    except: LISTA_CURSOS = []
     
     if not LISTA_CURSOS:
         st.warning("⚠️ Nenhum curso encontrado. Cadastre um curso na aba ao lado primeiro.")
@@ -119,107 +109,76 @@ def componente_gestao_provas():
             nota = c2.number_input("Aprovação Mínima (%)", 10, 100, int(st.session_state.cfg_atual.get('aprovacao_minima',70)))
             
             if st.form_submit_button("💾 Salvar Configuração da Prova"):
-                if qt == 0:
-                    st.error("Selecione pelo menos uma questão.")
+                if qt == 0: st.error("Selecione pelo menos uma questão.")
                 else:
-                    dados = {
-                        "curso_alvo": c_sel, 
-                        "questoes_ids": list(st.session_state.sel_ids), 
-                        "qtd_questoes": qt, 
-                        "tempo_limite": tmp, 
-                        "aprovacao_minima": nota, 
-                        "tipo_prova": "curso", 
-                        "atualizado_em": firestore.SERVER_TIMESTAMP
-                    }
-                    if st.session_state.cfg_id: 
-                        db.collection('config_provas_cursos').document(st.session_state.cfg_id).update(dados)
-                    else: 
-                        db.collection('config_provas_cursos').add(dados)
-                    st.success("Prova Salva com Sucesso!"); time.sleep(1); st.rerun()
+                    dados = {"curso_alvo": c_sel, "questoes_ids": list(st.session_state.sel_ids), "qtd_questoes": qt, "tempo_limite": tmp, "aprovacao_minima": nota, "tipo_prova": "curso", "atualizado_em": firestore.SERVER_TIMESTAMP}
+                    if st.session_state.cfg_id: db.collection('config_provas_cursos').document(st.session_state.cfg_id).update(dados)
+                    else: db.collection('config_provas_cursos').add(dados)
+                    st.success("Prova Salva!"); time.sleep(1); st.rerun()
 
     # --- ABA 2: VISUALIZAR ---
     with t2:
         st.subheader("Provas Configuradas")
         all_c = list(db.collection('config_provas_cursos').stream())
-        if not all_c: st.info("Nenhuma prova de curso configurada.")
-        
+        if not all_c: st.info("Nenhuma prova configurada.")
         cols = st.columns(3)
         for i, dc in enumerate(all_c):
             dd = dc.to_dict()
             with cols[i%3]:
                 with st.container(border=True):
                     st.markdown(f"### 📘 {dd.get('curso_alvo')}")
-                    st.caption(f"Questões: {dd.get('qtd_questoes')} | Tempo: {dd.get('tempo_limite')}min")
-                    st.caption(f"Aprovação: {dd.get('aprovacao_minima')}%")
-                    if st.button("🗑️ Excluir Config", key=f"del_p_{dc.id}"):
+                    st.caption(f"Questões: {dd.get('qtd_questoes')} | Min: {dd.get('aprovacao_minima')}%")
+                    if st.button("🗑️ Excluir", key=f"del_p_{dc.id}"):
                         db.collection('config_provas_cursos').document(dc.id).delete(); st.rerun()
 
     # --- ABA 3: AUTORIZAR ---
     with t3:
-        st.subheader("Liberar Prova para Alunos")
+        st.subheader("Liberar Prova")
         c1, c2 = st.columns(2)
         ini = datetime.combine(c1.date_input("Início", key="di_p"), dtime(0,0))
         fim = datetime.combine(c2.date_input("Fim", key="df_p"), dtime(23,59))
-        
-        busca = st.text_input("Buscar aluno:", key="bus_al", placeholder="Nome do aluno...")
+        busca = st.text_input("Buscar aluno:", key="bus_al")
         als = db.collection('usuarios').where('tipo_usuario','==','aluno').stream()
-        
         st.markdown("---")
         h1, h2, h3, h4 = st.columns([3, 3, 2, 1])
-        h1.markdown("**Nome**"); h2.markdown("**Prova Alvo**"); h3.markdown("**Status**"); h4.markdown("**Ação**")
+        h1.markdown("**Nome**"); h2.markdown("**Prova**"); h3.markdown("**Status**"); h4.markdown("**Ação**")
         st.markdown("---")
-
         for a in als:
             ad = a.to_dict(); aid = a.id
             if busca and busca.lower() not in ad.get('nome','').lower(): continue
-            
             ca, cb, cc, cd = st.columns([3, 3, 2, 1])
             ca.write(f"**{ad.get('nome')}**")
-            
             curs_atv = ad.get('curso_prova_alvo','')
             try: idx = LISTA_CURSOS.index(curs_atv)
             except: idx = 0
             sel_c = cb.selectbox("Curso", LISTA_CURSOS, index=idx, key=f"s_c_{aid}", label_visibility="collapsed")
-            
             stt = "⚪ Off"
-            habilitado = ad.get('exame_habilitado')
+            hab = ad.get('exame_habilitado')
             tipo = ad.get('tipo_exame') 
-
-            if habilitado and tipo == 'curso':
+            if hab and tipo == 'curso':
                 s = ad.get('status_exame','pendente')
                 if s=='aprovado': stt="🏆 Aprovado"
                 elif s=='reprovado': stt="🔴 Reprovado"
-                elif s=='em_andamento': stt="🟡 Fazendo..."
                 else: stt="🟢 Liberado"
-            elif habilitado and tipo == 'faixa':
-                stt = "⚠️ Prova de Faixa"
-
+            elif hab and tipo == 'faixa': stt = "⚠️ Prova de Faixa"
             cc.write(stt)
-            
-            if habilitado and tipo == 'curso':
-                if cd.button("⛔", key=f"b_p_{aid}", help="Bloquear prova"):
-                    db.collection('usuarios').document(aid).update({"exame_habilitado":False, "status_exame": "pendente"}); st.rerun()
+            if hab and tipo == 'curso':
+                if cd.button("⛔", key=f"b_p_{aid}"):
+                    db.collection('usuarios').document(aid).update({"exame_habilitado":False}); st.rerun()
             else:
-                if cd.button("✅", key=f"l_p_{aid}", help="Liberar prova"):
-                    db.collection('usuarios').document(aid).update({
-                        "exame_habilitado":True, 
-                        "tipo_exame":"curso", 
-                        "curso_prova_alvo": sel_c,
-                        "exame_inicio": ini.isoformat(), 
-                        "exame_fim": fim.isoformat(),
-                        "status_exame":"pendente", 
-                        "status_exame_em_andamento": False
-                    }); st.rerun()
+                if cd.button("✅", key=f"l_p_{aid}"):
+                    db.collection('usuarios').document(aid).update({"exame_habilitado":True, "tipo_exame":"curso", "curso_prova_alvo": sel_c, "exame_inicio": ini.isoformat(), "exame_fim": fim.isoformat(), "status_exame":"pendente"}); st.rerun()
             st.divider()
 
 # ==============================================================================
-# 3. ROTA: GESTÃO DE CURSOS (Conteúdo + Provas)
+# 3. ROTA: GESTÃO DE CURSOS
 # ==============================================================================
 def gestao_cursos_tab():
     st.markdown("<h1 style='color:#32CD32;'>📚 Gestão Acadêmica</h1>", unsafe_allow_html=True)
     
     user = st.session_state.usuario
-    if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
+    # PERMISSÃO: Admin, Professor ou Delegado (se houver essa role no futuro)
+    if str(user.get("tipo", "")).lower() not in ["admin", "professor", "delegado"]:
         st.error("Acesso negado.")
         return
 
@@ -232,11 +191,10 @@ def gestao_cursos_tab():
         db = get_db()
         user_id = user['id']
         user_nome = user['nome']
-        # Recupera o ID da equipe do professor para salvar no curso
         equipe_id_prof = user.get('equipe_id') 
 
         st.markdown("### Conteúdo dos Cursos")
-        sub_tab_list, sub_tab_add = st.tabs(["🔎 Listar e Editar Conteúdo", "➕ Criar Novo Curso"])
+        sub_tab_list, sub_tab_add = st.tabs(["🔎 Listar e Editar", "➕ Criar Novo Curso"])
 
         # --- SUB-ABA: CRIAR CURSO ---
         with sub_tab_add:
@@ -252,22 +210,21 @@ def gestao_cursos_tab():
                 faixa_minima = c3.selectbox("Faixa Mínima:", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"])
                 duracao = c4.text_input("Duração Est.", "Não especificada")
                 
-                # NOVO: SELETOR DE VISIBILIDADE
+                # Seletor de Visibilidade
                 visibilidade_label = c5.selectbox(
                     "Quem pode ver este curso?", 
                     ["Todos (Público)", "Apenas Minha Equipe"],
-                    help="Se escolher 'Apenas Minha Equipe', somente alunos da sua equipe verão este curso."
+                    help="Se 'Apenas Minha Equipe', somente seus alunos verão."
                 )
                 
                 st.markdown("##### Mídia e Status")
                 col_up, col_link = st.columns(2)
                 up_img = col_up.file_uploader("Capa (Imagem):", type=["jpg","png", "jpeg"])
                 url_capa = col_link.text_input("Ou Link da Capa:")
-                ativo = st.checkbox("Curso Ativo (Visível)?", value=True)
+                ativo = st.checkbox("Curso Ativo?", value=True)
 
                 if st.form_submit_button("💾 Criar Curso", type="primary"):
-                    if not titulo or not descricao:
-                        st.error("Título e Descrição são obrigatórios.")
+                    if not titulo or not descricao: st.error("Preencha Título e Descrição.")
                     else:
                         url_final = url_capa
                         if up_img:
@@ -277,28 +234,19 @@ def gestao_cursos_tab():
                                     if res: url_final = res
                             except: pass
 
-                        # Define valor interno da visibilidade
                         visib_valor = "equipe" if visibilidade_label == "Apenas Minha Equipe" else "todos"
-
                         try:
                             novo_curso = {
-                                "titulo": titulo.upper(), 
-                                "descricao": descricao, 
-                                "categoria": categoria,
-                                "faixa_minima": faixa_minima, 
-                                "duracao_estimada": duracao,
-                                "url_capa": url_final, 
-                                "ativo": ativo,
-                                "visibilidade": visib_valor,      # <--- NOVO CAMPO
-                                "equipe_id": equipe_id_prof,      # <--- SALVA EQUIPE DO PROF
-                                "criado_por_id": user_id, 
-                                "criado_por_nome": user_nome,
-                                "data_criacao": firestore.SERVER_TIMESTAMP, 
-                                "modulos": []
+                                "titulo": titulo.upper(), "descricao": descricao, "categoria": categoria,
+                                "faixa_minima": faixa_minima, "duracao_estimada": duracao,
+                                "url_capa": url_final, "ativo": ativo,
+                                "visibilidade": visib_valor,
+                                "equipe_id": equipe_id_prof,
+                                "criado_por_id": user_id, "criado_por_nome": user_nome,
+                                "data_criacao": firestore.SERVER_TIMESTAMP, "modulos": []
                             }
                             db.collection('cursos').add(novo_curso)
-                            st.success(f"Curso criado com visibilidade: {visibilidade_label}!"); 
-                            time.sleep(1.5); st.rerun()
+                            st.success("Curso criado!"); time.sleep(1.5); st.rerun()
                         except Exception as e: st.error(f"Erro: {e}")
 
         # --- SUB-ABA: LISTAR E EDITAR ---
@@ -306,23 +254,27 @@ def gestao_cursos_tab():
             cursos_ref = list(db.collection('cursos').stream())
             cursos_data = [d.to_dict() | {"id": d.id} for d in cursos_ref]
             
-            if str(user.get("tipo")).lower() != "admin":
+            # FILTRO DE SEGURANÇA:
+            # Se for Admin ou Delegado, vê tudo.
+            # Se for Professor, vê apenas o que ele criou.
+            tipo_user = str(user.get("tipo")).lower()
+            if tipo_user not in ["admin", "delegado"]:
                 cursos_data = [c for c in cursos_data if c.get('criado_por_id') == user_id]
 
             filtro = st.text_input("🔍 Buscar Curso:", key="filtro_cur_main")
             if filtro:
                 cursos_data = [c for c in cursos_data if filtro.upper() in c.get('titulo','').upper()]
 
-            if not cursos_data: st.info("Nenhum curso encontrado.")
+            if not cursos_data: st.info("Nenhum curso encontrado onde você seja o instrutor responsável.")
 
             for i, curso in enumerate(cursos_data):
                 status_icon = '🟢' if curso.get('ativo') else '🔴'
-                # Ícone de visibilidade
                 visib = curso.get('visibilidade', 'todos')
                 visib_icon = "🌍 Público" if visib == 'todos' else "🔒 Equipe"
                 
                 with st.expander(f"{status_icon} {curso.get('titulo')} | {visib_icon}"):
                     
+                    # 1. VISUALIZAÇÃO
                     c_img, c_info = st.columns([1, 3])
                     if curso.get('url_capa'): c_img.image(curso.get('url_capa'), width=150)
                     with c_info:
@@ -330,13 +282,39 @@ def gestao_cursos_tab():
                         st.write(curso.get('descricao'))
                     
                     st.divider()
+
+                    # 2. BOTÃO DE EDIÇÃO DE METADADOS (NOVO)
+                    if st.button("✏️ Editar Informações Principais", key=f"btn_edit_{curso['id']}"):
+                        st.session_state[f"edit_mode_{curso['id']}"] = not st.session_state.get(f"edit_mode_{curso['id']}", False)
+
+                    # FORMULÁRIO DE EDIÇÃO (Aparece se clicado)
+                    if st.session_state.get(f"edit_mode_{curso['id']}"):
+                        with st.form(f"form_edit_{curso['id']}"):
+                            st.markdown("#### Editando Curso")
+                            nt = st.text_input("Título", value=curso.get('titulo'))
+                            nd = st.text_area("Descrição", value=curso.get('descricao'))
+                            nc = st.text_input("Categoria", value=curso.get('categoria'))
+                            nf = st.selectbox("Faixa Mínima", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"], index=["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"].index(curso.get('faixa_minima', 'Nenhuma')))
+                            
+                            # Edição de Visibilidade
+                            idx_vis = 1 if curso.get('visibilidade') == 'equipe' else 0
+                            nvis = st.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"], index=idx_vis)
+
+                            if st.form_submit_button("💾 Salvar Alterações"):
+                                vis_val = "equipe" if nvis == "Apenas Minha Equipe" else "todos"
+                                db.collection('cursos').document(curso['id']).update({
+                                    "titulo": nt.upper(), "descricao": nd, "categoria": nc,
+                                    "faixa_minima": nf, "visibilidade": vis_val
+                                })
+                                st.session_state[f"edit_mode_{curso['id']}"] = False
+                                st.success("Atualizado!"); time.sleep(1); st.rerun()
+                        st.divider()
                     
+                    # 3. MÓDULOS
                     st.subheader("🛠️ Módulos e Aulas")
                     modulos = curso.get('modulos', [])
-                    
                     if modulos:
-                        st.dataframe(pd.DataFrame(modulos), use_container_width=True, hide_index=True, 
-                                   column_config={"titulo_modulo": "Módulo", "descricao_modulo": "Desc", "aulas": "Aulas"})
+                        st.dataframe(pd.DataFrame(modulos), use_container_width=True, hide_index=True, column_config={"titulo_modulo": "Módulo", "descricao_modulo": "Desc", "aulas": "Aulas"})
                     else: st.info("Sem módulos ainda.")
 
                     with st.form(f"add_mod_{curso['id']}"):
@@ -344,20 +322,16 @@ def gestao_cursos_tab():
                         mt = c_m1.text_input("Novo Módulo (Título):")
                         md = c_m2.text_input("Descrição Curta:")
                         aul = st.text_area("Aulas (uma por linha):", height=80)
-                        
                         if st.form_submit_button("➕ Adicionar/Atualizar Módulo"):
                             if mt:
                                 novas_aulas = [x.strip() for x in aul.split('\n') if x.strip()]
                                 novo_mod = {"titulo_modulo": mt, "descricao_modulo": md, "aulas": novas_aulas}
-                                
                                 mods_atual = list(modulos)
                                 idx_found = -1
                                 for idx, m in enumerate(mods_atual):
                                     if m.get('titulo_modulo') == mt: idx_found = idx
-                                
                                 if idx_found >= 0: mods_atual[idx_found] = novo_mod
                                 else: mods_atual.append(novo_mod)
-                                
                                 db.collection('cursos').document(curso['id']).update({"modulos": mods_atual})
                                 st.rerun()
 
@@ -370,7 +344,7 @@ def gestao_cursos_tab():
                         db.collection('cursos').document(curso['id']).delete(); st.rerun()
 
     # --------------------------------------------------------------------------
-    # ABA 2: PROVAS E CERTIFICADOS
+    # ABA 2: PROVAS
     # --------------------------------------------------------------------------
     with tab_provas:
         componente_gestao_provas()
@@ -440,7 +414,6 @@ def gestao_exame_de_faixa_route():
 
     with tab2:
         st.subheader("Exames de Faixa Ativos")
-        # Visualização simplificada
         configs_stream = db.collection('config_exames').stream()
         for doc in configs_stream:
             d = doc.to_dict()
@@ -455,38 +428,26 @@ def gestao_exame_de_faixa_route():
         d_ini = c1.date_input("Início:", datetime.now(), key="d_ini_ex")
         d_fim = c2.date_input("Fim:", datetime.now(), key="d_fim_ex")
         dt_ini = datetime.combine(d_ini, dtime(0,0)); dt_fim = datetime.combine(d_fim, dtime(23,59))
-        
         alunos_ref = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
         for doc in alunos_ref:
             d = doc.to_dict(); d['id'] = doc.id
             c1, c2, c3, c4 = st.columns([3, 2, 3, 1])
             c1.write(f"**{d.get('nome')}**")
-            
             fx_idx = 0
             if d.get('faixa_exame') in FAIXAS_COMPLETAS: fx_idx = FAIXAS_COMPLETAS.index(d.get('faixa_exame'))
             fx_sel = c2.selectbox("Faixa", FAIXAS_COMPLETAS, index=fx_idx, key=f"fx_s_{d['id']}", label_visibility="collapsed")
-            
             status = "⚪ Off"
             hab = d.get('exame_habilitado')
             tp = d.get('tipo_exame')
-
-            if hab and tp == 'faixa':
-                status = "🟢 Faixa Liberada"
-            elif hab and tp == 'curso':
-                status = "⚠️ Curso Ativo"
-            
+            if hab and tp == 'faixa': status = "🟢 Faixa Liberada"
+            elif hab and tp == 'curso': status = "⚠️ Curso Ativo"
             c3.write(status)
-            
             if hab and tp == 'faixa':
                  if c4.button("⛔", key=f"blk_f_{d['id']}"):
                      db.collection('usuarios').document(d['id']).update({"exame_habilitado": False}); st.rerun()
             else:
                  if c4.button("✅", key=f"lib_f_{d['id']}"):
-                     db.collection('usuarios').document(d['id']).update({
-                         "exame_habilitado": True, "tipo_exame": "faixa", "faixa_exame": fx_sel,
-                         "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(),
-                         "status_exame": "pendente"
-                     }); st.rerun()
+                     db.collection('usuarios').document(d['id']).update({"exame_habilitado": True, "tipo_exame": "faixa", "faixa_exame": fx_sel, "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(), "status_exame": "pendente"}); st.rerun()
             st.divider()
 
 # ==============================================================================
@@ -501,38 +462,20 @@ def gestao_alunos_route():
     st.info("Ferramenta de consulta e edição de alunos.")
 
 # ==============================================================================
-# 6. APP PRINCIPAL DO PROFESSOR (Menu Lateral)
+# 6. APP PRINCIPAL DO PROFESSOR
 # ==============================================================================
 def app_professor():
     with st.sidebar:
         st.image("https://cdn-icons-png.flaticon.com/512/3135/3135715.png", width=100)
         st.title("Painel Professor")
-        
-        menu = st.radio(
-            "Navegação",
-            [
-                "Dashboard",
-                "Gestão de Alunos",
-                "Gestão de Cursos", 
-                "Gestão de Exames (Faixa)",
-                "Sair"
-            ]
-        )
+        menu = st.radio("Navegação", ["Dashboard", "Gestão de Alunos", "Gestão de Cursos", "Gestão de Exames (Faixa)", "Sair"])
         st.markdown("---")
         st.caption("Mestre Tunico v2.0")
 
-    if menu == "Dashboard":
-        dashboard_route()
-        
-    elif menu == "Gestão de Alunos":
-        gestao_alunos_route()
-        
-    elif menu == "Gestão de Cursos": 
-        gestao_cursos_tab() # <--- Nome corrigido aqui também
-        
-    elif menu == "Gestão de Exames (Faixa)":
-        gestao_exame_de_faixa_route()
-        
+    if menu == "Dashboard": dashboard_route()
+    elif menu == "Gestão de Alunos": gestao_alunos_route()
+    elif menu == "Gestão de Cursos": gestao_cursos_tab()
+    elif menu == "Gestão de Exames (Faixa)": gestao_exame_de_faixa_route()
     elif menu == "Sair":
         st.session_state.logado = False
         st.rerun()
