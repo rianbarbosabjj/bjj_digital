@@ -16,7 +16,6 @@ FAIXAS_COMPLETAS = [
 ]
 
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
-
 MAPA_NIVEIS = {1: "Fácil", 2: "Médio", 3: "Difícil", 4: "Mestre"}
 
 def get_badge_nivel(nivel):
@@ -48,10 +47,10 @@ def componente_gestao_provas():
     except: LISTA_CURSOS = []
     
     if not LISTA_CURSOS:
-        st.warning("⚠️ Nenhum curso encontrado. Cadastre um curso na aba ao lado primeiro.")
+        st.warning("⚠️ Nenhum curso encontrado.")
         return
 
-    t1, t2, t3 = st.tabs(["📝 Montar Prova", "👁️ Ver Provas Criadas", "✅ Autorizar Alunos"])
+    t1, t2, t3 = st.tabs(["📝 Montar Prova", "👁️ Ver Provas", "✅ Autorizar"])
 
     with t1:
         st.subheader("Configurar Prova")
@@ -65,7 +64,6 @@ def componente_gestao_provas():
             st.session_state.last_c_sel = c_sel
             
         q_all = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
-        
         col_a, col_b = st.columns(2)
         f_niv = col_a.multiselect("Nível:", NIVEIS_DIFICULDADE, default=NIVEIS_DIFICULDADE, format_func=lambda x: MAPA_NIVEIS.get(x, str(x)), key="f_niv_p")
         cats = sorted(list(set([d.to_dict().get('categoria','Geral') for d in q_all])))
@@ -207,12 +205,18 @@ def gestao_cursos_tab():
             with st.form("form_novo_curso"):
                 st.markdown("##### 2. Detalhes do Curso")
                 c1, c2 = st.columns(2)
-                titulo = c1.text_input("Título *"); categoria = c2.text_input("Categoria")
-                descricao = st.text_area("Descrição *")
-                c3, c4 = st.columns(2)
-                duracao = c3.text_input("Duração"); visibilidade_label = c4.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"])
+                titulo = c1.text_input("Título *", max_chars=100); categoria = c2.text_input("Categoria", "Geral")
+                descricao = st.text_area("Descrição *", height=100)
+                
+                # --- NOVO: MODALIDADE ---
+                c3, c4, c5 = st.columns(3)
+                duracao = c3.text_input("Duração")
+                modalidade_label = c4.selectbox("Modalidade", ["EAD (Online)", "Presencial"]) # NOVO CAMPO
+                visibilidade_label = c5.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"])
+                
+                st.markdown("##### Mídia e Status")
                 col_up, col_link = st.columns(2)
-                up_img = col_up.file_uploader("Capa (Img):", type=["jpg","png"]); url_capa = col_link.text_input("Link Capa:")
+                up_img = col_up.file_uploader("Capa (Imagem):", type=["jpg","png", "jpeg"]); url_capa = col_link.text_input("Link Capa:")
                 ativo = st.checkbox("Curso Ativo?", value=True)
 
                 if st.form_submit_button("💾 Criar Curso", type="primary"):
@@ -227,13 +231,17 @@ def gestao_cursos_tab():
                             except: pass
 
                         visib_valor = "equipe" if visibilidade_label == "Apenas Minha Equipe" else "todos"
+                        mod_valor = "presencial" if modalidade_label == "Presencial" else "ead" # VALOR SALVO
+                        
                         delegado_final = st.session_state.novo_delegado_temp
                         
                         try:
                             novo_curso = {
                                 "titulo": titulo.upper(), "descricao": descricao, "categoria": categoria,
                                 "duracao_estimada": duracao, "url_capa": url_final, "ativo": ativo,
-                                "visibilidade": visib_valor, "equipe_id": equipe_id_prof,
+                                "visibilidade": visib_valor, 
+                                "modalidade": mod_valor, # SALVANDO MODALIDADE
+                                "equipe_id": equipe_id_prof,
                                 "criado_por_id": user_id, "criado_por_nome": user_nome,
                                 "delegado_id": delegado_final['id'] if delegado_final else None,
                                 "delegado_nome": delegado_final['nome'] if delegado_final else None,
@@ -258,13 +266,19 @@ def gestao_cursos_tab():
 
             for i, curso in enumerate(cursos_data):
                 status_icon = '🟢' if curso.get('ativo') else '🔴'
-                visib_icon = "🌍 Público" if curso.get('visibilidade') == 'todos' else "🔒 Equipe"
                 
+                # ÍCONES
+                visib = curso.get('visibilidade', 'todos')
+                visib_icon = "🌍 Público" if visib == 'todos' else "🔒 Equipe"
+                
+                modal = curso.get('modalidade', 'ead')
+                modal_icon = "🏢 Presencial" if modal == 'presencial' else "💻 EAD"
+
                 txt_tutores = f"Tutores: {curso.get('criado_por_nome', '?')}"
                 if curso.get('delegado_nome'): txt_tutores += f" & {curso.get('delegado_nome')}"
 
-                with st.expander(f"{status_icon} {curso.get('titulo')} | {visib_icon}"):
-                    # TABS INTERNAS DE CADA CURSO
+                with st.expander(f"{status_icon} {curso.get('titulo')} | {modal_icon} | {visib_icon}"):
+                    # TABS INTERNAS
                     t_info, t_mods, t_alunos = st.tabs(["📝 Info & Edição", "🛠️ Módulos", "👥 Alunos Inscritos"])
 
                     # --- ABA INFO & EDIÇÃO ---
@@ -281,7 +295,7 @@ def gestao_cursos_tab():
 
                         if st.session_state.get(f"edit_mode_{curso['id']}"):
                             st.markdown("---")
-                            st.caption("Alterar Tutor Delegado (Busque por CPF)")
+                            st.caption("Alterar Delegado (Busque por CPF)")
                             c_ed_b1, c_ed_b2 = st.columns([3, 1])
                             cpf_edit = c_ed_b1.text_input("", placeholder="CPF...", key=f"cpf_s_{curso['id']}", label_visibility="collapsed")
                             
@@ -290,34 +304,43 @@ def gestao_cursos_tab():
                                     cln = ''.join(filter(str.isdigit, cpf_edit))
                                     u_f = list(db.collection('usuarios').where('cpf', '==', cpf_edit).limit(1).stream())
                                     if not u_f and cln: u_f = list(db.collection('usuarios').where('cpf', '==', cln).limit(1).stream())
-                                    
                                     if u_f:
                                         u_d = u_f[0].to_dict()
                                         st.session_state[f"del_edit_temp_{curso['id']}"] = {"id": u_f[0].id, "nome": u_d.get('nome')}
                                     else: st.error("Não encontrado.")
                             
                             novo_del = st.session_state.get(f"del_edit_temp_{curso['id']}")
-                            
                             if novo_del == "REMOVER":
-                                st.warning("⚠️ Delegado será REMOVIDO.")
-                                if st.button("Cancelar Remoção", key=f"undo_{curso['id']}"): st.session_state[f"del_edit_temp_{curso['id']}"] = None; st.rerun()
+                                st.warning("⚠️ Delegado será removido.")
+                                if st.button("Cancelar", key=f"undo_{curso['id']}"): st.session_state[f"del_edit_temp_{curso['id']}"] = None; st.rerun()
                             elif novo_del:
                                 st.success(f"Novo: {novo_del['nome']}")
                                 if st.button("Desfazer", key=f"undo_{curso['id']}"): st.session_state[f"del_edit_temp_{curso['id']}"] = None; st.rerun()
                             else:
                                 if curso.get('delegado_nome'):
                                     st.info(f"Atual: {curso.get('delegado_nome')}")
-                                    if st.button("Remover Atual", key=f"rm_{curso['id']}"): st.session_state[f"del_edit_temp_{curso['id']}"] = "REMOVER"; st.rerun()
+                                    if st.button("Remover", key=f"rm_{curso['id']}"): st.session_state[f"del_edit_temp_{curso['id']}"] = "REMOVER"; st.rerun()
 
                             with st.form(f"form_ed_{curso['id']}"):
                                 nt = st.text_input("Título", value=curso.get('titulo'))
                                 nd = st.text_area("Descrição", value=curso.get('descricao'))
                                 nc = st.text_input("Categoria", value=curso.get('categoria'))
+                                
+                                c_ed_1, c_ed_2 = st.columns(2)
+                                
+                                # EDITAR MODALIDADE
+                                idx_mod = 1 if curso.get('modalidade') == 'presencial' else 0
+                                nmod = c_ed_1.selectbox("Modalidade", ["EAD (Online)", "Presencial"], index=idx_mod)
+                                
                                 idx_vis = 1 if curso.get('visibilidade') == 'equipe' else 0
-                                nvis = st.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"], index=idx_vis)
+                                nvis = c_ed_2.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"], index=idx_vis)
 
                                 if st.form_submit_button("Salvar"):
-                                    updates = {"titulo": nt.upper(), "descricao": nd, "categoria": nc, "visibilidade": "equipe" if nvis == "Apenas Minha Equipe" else "todos"}
+                                    updates = {
+                                        "titulo": nt.upper(), "descricao": nd, "categoria": nc, 
+                                        "visibilidade": "equipe" if nvis == "Apenas Minha Equipe" else "todos",
+                                        "modalidade": "presencial" if nmod == "Presencial" else "ead"
+                                    }
                                     temp_del = st.session_state.get(f"del_edit_temp_{curso['id']}")
                                     if temp_del:
                                         if temp_del == "REMOVER": updates['delegado_id'] = None; updates['delegado_nome'] = None
@@ -356,7 +379,7 @@ def gestao_cursos_tab():
                                 db.collection('cursos').document(curso['id']).update({"modulos": mods})
                                 st.rerun()
 
-                    # --- ABA ALUNOS INSCRITOS (NOVIDADE) ---
+                    # --- ABA ALUNOS INSCRITOS ---
                     with t_alunos:
                         st.markdown("#### 📋 Lista de Chamada")
                         inscritos_ref = list(db.collection('cursos').document(curso['id']).collection('inscritos').stream())
