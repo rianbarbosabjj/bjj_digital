@@ -272,7 +272,202 @@ def gestao_equipes():
                 st.divider()
 
 # =========================================
-# FUNÇÃO PRINCIPAL: PAINEL DO PROFESSOR
+# FUNÇÃO: GESTÃO DE CURSOS (NOVA FUNÇÃO)
+# =========================================
+def gestao_cursos_tab():
+    st.markdown("<h1 style='color:#FFD770;'>📚 Gestão de Cursos</h1>", unsafe_allow_html=True)
+    db = get_db()
+    user = st.session_state.usuario
+    user_id = user['id']
+    user_nome = user['nome']
+    
+    # Verifica se o usuário tem permissão
+    if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
+        st.error("Acesso negado. Apenas professores e administradores podem gerenciar cursos.")
+        return
+
+    # Tabs para organizar a interface
+    tab_list, tab_add = st.tabs(["Listar e Editar Cursos", "Criar Novo Curso"])
+
+    with tab_add:
+        st.markdown("#### 📝 Criar Novo Curso")
+        with st.form("form_novo_curso"):
+            
+            # Dados básicos
+            c1, c2 = st.columns(2)
+            titulo = c1.text_input("Título do Curso *", max_chars=100)
+            categoria = c2.text_input("Categoria (Ex: Defesa Pessoal, Posições de Guarda, etc.)", "Geral")
+            
+            descricao = st.text_area("Descrição Completa *", height=150)
+            
+            # Requisitos e Faixa Alvo
+            c3, c4 = st.columns(2)
+            faixa_minima = c3.selectbox("Faixa Mínima Requerida:", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"])
+            duracao_estimada = c4.text_input("Duração Estimada (Ex: 10 horas, 3 semanas)", "Não especificada")
+            
+            # URL de Imagem/Capa
+            url_capa = st.text_input("URL da Imagem de Capa (Opcional):")
+            
+            # Status e Autor
+            ativo = st.checkbox("Curso Ativo (Disponível para Alunos)", value=True)
+            
+            if st.form_submit_button("💾 Salvar Curso", type="primary"):
+                if not titulo or not descricao:
+                    st.error("Preencha o Título e a Descrição.")
+                else:
+                    try:
+                        novo_curso = {
+                            "titulo": titulo.upper(),
+                            "descricao": descricao,
+                            "categoria": categoria,
+                            "faixa_minima": faixa_minima,
+                            "duracao_estimada": duracao_estimada,
+                            "url_capa": url_capa,
+                            "ativo": ativo,
+                            "criado_por_id": user_id,
+                            "criado_por_nome": user_nome,
+                            "data_criacao": firestore.SERVER_TIMESTAMP,
+                            "modulos": [], # Lista vazia para módulos/aulas
+                        }
+                        
+                        db.collection('cursos').add(novo_curso)
+                        st.success("✅ Curso criado com sucesso! Ele aparecerá na lista abaixo.")
+                        time.sleep(1.5)
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Erro ao salvar curso: {e}")
+
+    with tab_list:
+        st.markdown("#### 📝 Cursos Existentes")
+        
+        # Carrega e filtra os cursos
+        cursos_ref = list(db.collection('cursos').stream())
+        cursos_data = [d.to_dict() | {"id": d.id} for d in cursos_ref]
+        
+        # Filtro para cursos criados pelo usuário atual, se não for admin
+        if str(user.get("tipo", "")).lower() != "admin":
+            cursos_data = [c for c in cursos_data if c.get('criado_por_id') == user_id]
+
+        if not cursos_data:
+            st.info("Nenhum curso encontrado.")
+            return
+
+        # Busca/Filtro
+        filtro_titulo = st.text_input("🔍 Buscar por Título:", key="f_titulo_curso")
+        if filtro_titulo:
+            term = filtro_titulo.upper()
+            cursos_data = [c for c in cursos_data if term in c.get('titulo', '').upper()]
+
+        
+        for i, curso in enumerate(cursos_data):
+            # Expander para cada curso
+            with st.expander(f"**{curso.get('titulo')}** | Categoria: {curso.get('categoria')} | Status: {'🟢 Ativo' if curso.get('ativo') else '🔴 Rascunho'}"):
+                
+                # Exibe detalhes do módulo
+                st.caption(f"Criado por: {curso.get('criado_por_nome')} em {curso.get('data_criacao').strftime('%d/%m/%Y') if hasattr(curso.get('data_criacao'), 'strftime') else 'Desconhecida'}")
+                st.markdown(f"**Descrição:** {curso.get('descricao')}")
+                st.markdown(f"**Faixa Mínima:** {curso.get('faixa_minima')}")
+                st.markdown("---")
+                
+                # Adicionar e Gerenciar Módulos
+                st.subheader("🛠️ Módulos e Aulas")
+                
+                modulos = curso.get('modulos', [])
+                if not modulos:
+                    st.warning("Nenhum módulo cadastrado neste curso.")
+                else:
+                    st.dataframe(
+                        pd.DataFrame(modulos),
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "titulo_modulo": "Módulo/Capítulo",
+                            "aulas": st.column_config.ListColumn("Total de Aulas", width="small", help="Quantidade de Aulas (Itens na Lista)"),
+                            "descricao_modulo": st.column_config.TextColumn("Descrição")
+                        }
+                    )
+                
+                # Formulário de Adição de Módulo
+                with st.form(f"form_mod_{curso['id']}"):
+                    st.markdown("##### ➕ Adicionar/Editar Módulo")
+                    m_titulo = st.text_input("Título do Módulo:", key=f"mt_{i}")
+                    m_desc = st.text_area("Descrição do Módulo:", key=f"md_{i}")
+                    
+                    # Usamos um widget temporário para gerenciar a lista de aulas (simplesmente strings)
+                    # O professor terá que colar/digitar as aulas aqui.
+                    aulas_raw = st.text_area("Aulas (Uma por linha: Ex: 'Pegada Cruzada', 'Defesa de Queda'):", height=100, key=f"aulas_{i}")
+                    
+                    if st.form_submit_button("✅ Salvar Módulo/Atualizar Curso"):
+                        if m_titulo:
+                            
+                            # Prepara a lista de aulas (limpa strings vazias)
+                            aulas_list = [a.strip() for a in aulas_raw.split('\n') if a.strip()]
+                            
+                            # Cria o novo objeto módulo
+                            novo_modulo = {
+                                "titulo_modulo": m_titulo,
+                                "descricao_modulo": m_desc,
+                                "aulas": aulas_list,
+                            }
+                            
+                            # Verifica se o módulo já existe (pelo título)
+                            modulos_existentes = curso.get('modulos', [])
+                            encontrado = False
+                            for j, mod in enumerate(modulos_existentes):
+                                if mod.get('titulo_modulo', '').upper() == m_titulo.upper():
+                                    modulos_existentes[j] = novo_modulo
+                                    encontrado = True
+                                    break
+                            
+                            if not encontrado:
+                                modulos_existentes.append(novo_modulo)
+                                
+                            # Atualiza o curso no banco
+                            db.collection('cursos').document(curso['id']).update({"modulos": modulos_existentes})
+                            st.success(f"Módulo '{m_titulo}' atualizado/adicionado.")
+                            time.sleep(1.5); st.rerun()
+
+                        else:
+                            st.error("O Título do Módulo é obrigatório.")
+                        
+                # Botões de Ação do Curso (Edição Rápida)
+                c_act1, c_act2, c_act3 = st.columns(3)
+                if c_act1.button("✏️ Editar Metadados", key=f"edt_cur_{curso['id']}"):
+                    st.session_state[f"edit_mode_{curso['id']}"] = True
+                
+                if c_act2.button(f"{'🔴 Desativar' if curso.get('ativo') else '🟢 Ativar'}", key=f"stt_cur_{curso['id']}"):
+                    db.collection('cursos').document(curso['id']).update({"ativo": not curso.get('ativo')})
+                    st.toast("Status atualizado."); time.sleep(1); st.rerun()
+                    
+                if c_act3.button("🗑️ Deletar Curso", key=f"del_cur_{curso['id']}", type="primary"):
+                    db.collection('cursos').document(curso['id']).delete()
+                    st.toast("Curso deletado."); time.sleep(1); st.rerun()
+
+                # Formulário de edição de Metadados (oculto por padrão)
+                if st.session_state.get(f"edit_mode_{curso['id']}"):
+                    st.markdown("---")
+                    st.markdown("##### Edição Rápida de Metadados")
+                    with st.form(f"form_edit_meta_{curso['id']}"):
+                        n_titulo = st.text_input("Título", value=curso.get('titulo'))
+                        n_desc = st.text_area("Descrição", value=curso.get('descricao'))
+                        n_cat = st.text_input("Categoria", value=curso.get('categoria'))
+                        n_faixa = st.selectbox("Faixa Mínima", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"], index=["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"].index(curso.get('faixa_minima')))
+                        n_dur = st.text_input("Duração Estimada", value=curso.get('duracao_estimada'))
+                        
+                        if st.form_submit_button("💾 Salvar Edição"):
+                            db.collection('cursos').document(curso['id']).update({
+                                "titulo": n_titulo.upper(),
+                                "descricao": n_desc,
+                                "categoria": n_cat,
+                                "faixa_minima": n_faixa,
+                                "duracao_estimada": n_dur
+                            })
+                            st.session_state.pop(f"edit_mode_{curso['id']}")
+                            st.success("Metadados atualizados."); time.sleep(1.5); st.rerun()
+                            
+# =========================================
+# FUNÇÃO PRINCIPAL: PAINEL DO PROFESSOR (ATUALIZADA)
 # =========================================
 def painel_professor():
     st.markdown("<h1 style='color:#FFD770;'>👨‍🏫 Painel do Professor</h1>", unsafe_allow_html=True)
@@ -280,10 +475,13 @@ def painel_professor():
     if st.button("🏠 Voltar ao Início", key="btn_voltar_prof"):
         st.session_state.menu_selection = "Início"; st.rerun()
 
-    tab1, tab2 = st.tabs(["👥 Gestão de Equipe", "📊 Estatísticas & Dashboard"])
+    tab1, tab2, tab3 = st.tabs(["👥 Gestão de Equipe", "📚 Gestão de Cursos", "📊 Estatísticas & Dashboard"])
     
     with tab1:
         gestao_equipes()
         
-    with tab2:
+    with tab2: # <-- NOVA ABA
+        gestao_cursos_tab()
+        
+    with tab3: # <-- ABA MOVIDA
         dashboard.dashboard_professor()
