@@ -305,8 +305,13 @@ def gestao_cursos_tab():
             faixa_minima = c3.selectbox("Faixa Mínima Requerida:", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"])
             duracao_estimada = c4.text_input("Duração Estimada (Ex: 10 horas, 3 semanas)", "Não especificada")
             
-            # URL de Imagem/Capa
-            url_capa = st.text_input("URL da Imagem de Capa (Opcional):")
+            st.markdown("---")
+            st.markdown("##### 🖼️ Imagem de Capa (Opcional)")
+
+            # NOVO BLOCO: UPLOAD DE IMAGEM
+            col_up, col_link = st.columns(2)
+            up_img = col_up.file_uploader("Upload da Imagem de Capa:", type=["jpg","png", "jpeg"])
+            url_capa = col_link.text_input("Ou use um Link Externo/URL (será ignorado se houver upload):")
             
             # Status e Autor
             ativo = st.checkbox("Curso Ativo (Disponível para Alunos)", value=True)
@@ -315,6 +320,17 @@ def gestao_cursos_tab():
                 if not titulo or not descricao:
                     st.error("Preencha o Título e a Descrição.")
                 else:
+                    url_final = url_capa # Começa com o link (se houver)
+
+                    if up_img:
+                        with st.spinner("Subindo imagem..."):
+                            url_upload = fazer_upload_midia(up_img)
+                            if url_upload:
+                                url_final = url_upload
+                            else:
+                                st.error("Erro ao fazer upload da imagem. Use um link externo ou tente novamente.")
+                                return
+                    
                     try:
                         novo_curso = {
                             "titulo": titulo.upper(),
@@ -322,7 +338,7 @@ def gestao_cursos_tab():
                             "categoria": categoria,
                             "faixa_minima": faixa_minima,
                             "duracao_estimada": duracao_estimada,
-                            "url_capa": url_capa,
+                            "url_capa": url_final, # Usa a URL final (Upload ou Link)
                             "ativo": ativo,
                             "criado_por_id": user_id,
                             "criado_por_nome": user_nome,
@@ -368,6 +384,10 @@ def gestao_cursos_tab():
                 st.caption(f"Criado por: {curso.get('criado_por_nome')} em {curso.get('data_criacao').strftime('%d/%m/%Y') if hasattr(curso.get('data_criacao'), 'strftime') else 'Desconhecida'}")
                 st.markdown(f"**Descrição:** {curso.get('descricao')}")
                 st.markdown(f"**Faixa Mínima:** {curso.get('faixa_minima')}")
+                
+                if curso.get('url_capa'):
+                    st.image(curso.get('url_capa'), caption="Capa Atual", width=200)
+
                 st.markdown("---")
                 
                 # Adicionar e Gerenciar Módulos
@@ -480,9 +500,6 @@ def painel_professor():
     
     with tab1:
         gestao_equipes()
-        
-    with tab2: # <-- Nova aba para cursos
-        gestao_cursos_tab()
-        
-    with tab3:
+               
+    with tab2:
         dashboard.dashboard_professor()
