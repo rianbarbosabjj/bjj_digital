@@ -583,7 +583,167 @@ def gestao_cursos_tab():
                             })
                             st.session_state.pop(f"edit_mode_{curso['id']}")
                             st.success("Metadados atualizados."); time.sleep(1.5); st.rerun()
-                            
+
+Sem problemas, Mestre Tunico! Vamos simplificar.
+
+Para que a Gestão de Provas de Cursos funcione, você precisa fazer duas alterações no seu arquivo professor.py:
+
+Adicionar a função nova (o código da lógica).
+
+Adicionar o botão no Menu (para você conseguir clicar e entrar nela).
+
+Abaixo estão os códigos prontos.
+
+Passo 1: Copie e cole a função nova
+Vá até o final do seu arquivo professor.py e cole este bloco de código inteiro. Ele contém toda a lógica para criar as provas e liberar os alunos.
+
+Python
+
+# ==============================================================================
+# NOVA FUNÇÃO: GESTÃO DE PROVAS (CURSOS)
+# Cole isso no final do seu arquivo professor.py
+# ==============================================================================
+def gestao_prova_curso_route():
+    st.markdown("<h1 style='color:#00BFFF;'>🎓 Montador de Provas (Cursos)</h1>", unsafe_allow_html=True)
+    
+    db = get_db() 
+    
+    # --- BUSCA DINÂMICA DE CURSOS ---
+    try:
+        cursos_ref = db.collection('cursos').stream()
+        # Cria lista ordenada pegando o título ou nome do curso
+        LISTA_CURSOS = sorted([d.to_dict().get('titulo', d.to_dict().get('nome', d.id)) for d in cursos_ref])
+    except Exception as e:
+        LISTA_CURSOS = []
+        st.error(f"Erro ao carregar cursos: {e}")
+
+    if not LISTA_CURSOS:
+        st.warning("⚠️ Nenhum curso encontrado. Cadastre um curso primeiro.")
+        LISTA_CURSOS = ["Curso Genérico"]
+
+    tab1, tab2, tab3 = st.tabs(["📝 Montar Prova", "👁️ Visualizar", "✅ Autorizar Alunos"])
+
+    # --- TAB 1: MONTAR ---
+    with tab1:
+        st.subheader("1. Selecione o Curso")
+        curso_sel = st.selectbox("Prova para qual Curso?", LISTA_CURSOS)
+        
+        if 'last_curso_sel' not in st.session_state or st.session_state.last_curso_sel != curso_sel:
+            configs = list(db.collection('config_provas_cursos').where('curso_alvo', '==', curso_sel).limit(1).stream())
+            conf_atual = configs[0].to_dict() if configs else {}
+            st.session_state.conf_atual_curso = conf_atual
+            st.session_state.doc_id_curso = configs[0].id if configs else None
+            st.session_state.selected_ids_curso = set(conf_atual.get('questoes_ids', []))
+            st.session_state.last_curso_sel = curso_sel
+        
+        conf_atual = st.session_state.conf_atual_curso
+        todas_questoes = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
+        
+        st.markdown("### 2. Selecione as Questões")
+        c_f1, c_f2 = st.columns(2)
+        # Assumindo que NIVEIS_DIFICULDADE e MAPA_NIVEIS existem no seu código
+        filtro_nivel = c_f1.multiselect("Nível:", NIVEIS_DIFICULDADE, default=[1,2,3,4], format_func=lambda x: MAPA_NIVEIS.get(x, str(x)), key="f_niv_c")
+        cats = sorted(list(set([d.to_dict().get('categoria', 'Geral') for d in todas_questoes])))
+        filtro_tema = c_f2.multiselect("Tema:", cats, default=cats, key="f_tema_c")
+        
+        with st.container(height=500, border=True):
+            count_visible = 0
+            for doc in todas_questoes:
+                d = doc.to_dict(); niv = d.get('dificuldade', 1); cat = d.get('categoria', 'Geral')
+                if niv in filtro_nivel and cat in filtro_tema:
+                    count_visible += 1
+                    c_chk, c_content = st.columns([1, 15])
+                    is_checked = doc.id in st.session_state.selected_ids_curso
+                    def update_selection_curso(qid=doc.id):
+                        if st.session_state[f"chk_c_{qid}"]: st.session_state.selected_ids_curso.add(qid)
+                        else: st.session_state.selected_ids_curso.discard(qid)
+                    c_chk.checkbox("", value=is_checked, key=f"chk_c_{doc.id}", on_change=update_selection_curso)
+                    with c_content:
+                        st.markdown(f"**{get_badge_nivel(niv)}** | {cat}")
+                        st.markdown(f"{d.get('pergunta')}")
+                        if d.get('url_imagem'): st.image(d.get('url_imagem'), width=100)
+                    st.divider()
+            if count_visible == 0: st.warning("Nada encontrado.")
+        
+        total_sel = len(st.session_state.selected_ids_curso)
+        st.success(f"**{total_sel}** questões selecionadas.")
+        
+        st.markdown("### 3. Regras")
+        with st.form("save_conf_curso"):
+            c1, c2 = st.columns(2)
+            tempo = c1.number_input("Tempo (min):", 10, 180, int(conf_atual.get('tempo_limite', 60)))
+            nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_atual.get('aprovacao_minima', 70)))
+            if st.form_submit_button("💾 Salvar Prova"):
+                if total_sel > 0:
+                    dados = {"curso_alvo": curso_sel, "questoes_ids": list(st.session_state.selected_ids_curso), "qtd_questoes": total_sel, "tempo_limite": tempo, "aprovacao_minima": nota, "tipo_prova": "curso", "atualizado_em": firestore.SERVER_TIMESTAMP}
+                    if st.session_state.doc_id_curso: db.collection('config_provas_cursos').document(st.session_state.doc_id_curso).update(dados)
+                    else: db.collection('config_provas_cursos').add(dados)
+                    st.success("Salvo!"); time.sleep(1); st.rerun()
+                else: st.error("Selecione questões.")
+
+    # --- TAB 2: VISUALIZAR ---
+    with tab2:
+        st.subheader("Provas Criadas")
+        configs = list(db.collection('config_provas_cursos').stream())
+        if not configs: st.info("Nenhuma prova criada.")
+        cols = st.columns(3)
+        for i, doc in enumerate(configs):
+            conf = doc.to_dict(); conf['id'] = doc.id
+            with cols[i%3]:
+                with st.container(border=True):
+                    st.markdown(f"### 📘 {conf.get('curso_alvo')}")
+                    st.caption(f"Questões: {conf.get('qtd_questoes')} | Nota Min: {conf.get('aprovacao_minima')}%")
+                    if st.button("🗑️ Excluir", key=f"del_c_{conf['id']}"):
+                        db.collection('config_provas_cursos').document(conf['id']).delete(); st.rerun()
+
+    # --- TAB 3: AUTORIZAR ---
+    with tab3:
+        st.subheader("Autorizar Alunos")
+        c1, c2 = st.columns(2)
+        d_ini = c1.date_input("Início:", datetime.now(), key="d_ini_c", format="DD/MM/YYYY")
+        d_fim = c2.date_input("Fim:", datetime.now(), key="d_fim_c", format="DD/MM/YYYY")
+        dt_ini = datetime.combine(d_ini, dtime(0,0)); dt_fim = datetime.combine(d_fim, dtime(23,59))
+        
+        search = st.text_input("Buscar Aluno:", placeholder="Nome...")
+        alunos = db.collection('usuarios').where('tipo_usuario', '==', 'aluno').stream()
+        
+        st.markdown("---")
+        for doc in alunos:
+            d = doc.to_dict(); d['id'] = doc.id
+            if search and search.lower() not in d.get('nome', '').lower(): continue
+            
+            c1, c2, c3, c4 = st.columns([3, 3, 2, 1])
+            c1.write(f"**{d.get('nome')}**")
+            
+            cur_ativo = d.get('curso_prova_alvo', '')
+            idx = LISTA_CURSOS.index(cur_ativo) if cur_ativo in LISTA_CURSOS else 0
+            sel_curso = c2.selectbox("Curso", LISTA_CURSOS, index=idx, key=f"sc_{d['id']}", label_visibility="collapsed")
+            
+            status = "⚪ Off"
+            if d.get('exame_habilitado') and d.get('tipo_exame') == 'curso':
+                stt = d.get('status_exame', 'pendente')
+                if stt == 'aprovado': status = "🏆 Aprovado"
+                elif stt == 'reprovado': status = "🔴 Reprovado"
+                else: status = "🟢 Liberado"
+            elif d.get('exame_habilitado') and d.get('tipo_exame') != 'curso':
+                status = "⚠️ Outra Prova"
+            
+            c3.write(status)
+            
+            if d.get('exame_habilitado') and d.get('tipo_exame') == 'curso':
+                if c4.button("⛔", key=f"bk_{d['id']}"):
+                    db.collection('usuarios').document(d['id']).update({"exame_habilitado": False})
+                    st.rerun()
+            else:
+                if c4.button("✅", key=f"lb_{d['id']}"):
+                    db.collection('usuarios').document(d['id']).update({
+                        "exame_habilitado": True, "tipo_exame": "curso", "curso_prova_alvo": sel_curso,
+                        "exame_inicio": dt_ini.isoformat(), "exame_fim": dt_fim.isoformat(), 
+                        "status_exame": "pendente", "status_exame_em_andamento": False
+                    })
+                    st.rerun()
+            st.divider()
+            
 # =========================================
 # FUNÇÃO PRINCIPAL: PAINEL DO PROFESSOR (ATUALIZADA)
 # =========================================
