@@ -154,7 +154,7 @@ def exame_de_faixa(usuario):
             
             # GERAÇÃO COM DIAGNÓSTICO E SPINNER
             try:
-                with st.spinner("Estamos preparando seu certificado. Aguarde para fazer p download..."):
+                with st.spinner("Estamos preparando seu certificado. Aguarde para baixá-lo..."):
                     p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
                 
                 if p_b: 
