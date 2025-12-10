@@ -198,20 +198,16 @@ def gestao_cursos_tab():
 
         # --- SUB-ABA: CRIAR CURSO ---
         with sub_tab_add:
-            # Inicializa variável de sessão para armazenar o delegado encontrado
             if 'novo_delegado_temp' not in st.session_state:
                 st.session_state.novo_delegado_temp = None
 
-            # Área de Busca de Delegado FORA do formulário principal para permitir interatividade
             st.markdown("##### 1. Configurar Tutoria (Opcional)")
             c_busca_1, c_busca_2 = st.columns([3, 1])
             cpf_search = c_busca_1.text_input("Buscar Tutor Delegado por CPF:", placeholder="000.000.000-00", key="search_cpf_new")
             
             if c_busca_2.button("🔍 Buscar", key="btn_search_new"):
                 if cpf_search:
-                    # Limpa CPF
                     cpf_clean = ''.join(filter(str.isdigit, cpf_search))
-                    # Busca Exata
                     users_found = list(db.collection('usuarios').where('cpf', '==', cpf_search).limit(1).stream())
                     if not users_found and cpf_clean:
                         users_found = list(db.collection('usuarios').where('cpf', '==', cpf_clean).limit(1).stream())
@@ -219,8 +215,6 @@ def gestao_cursos_tab():
                     if users_found:
                         u_doc = users_found[0].to_dict()
                         u_id = users_found[0].id
-                        
-                        # Busca nome da equipe se tiver ID
                         nome_equipe = "Sem Equipe"
                         if u_doc.get('equipe_id'):
                             try:
@@ -228,16 +222,11 @@ def gestao_cursos_tab():
                                 if eq_doc.exists: nome_equipe = eq_doc.to_dict().get('nome')
                             except: pass
                         
-                        st.session_state.novo_delegado_temp = {
-                            "id": u_id,
-                            "nome": u_doc.get('nome', 'Sem Nome'),
-                            "equipe": nome_equipe
-                        }
+                        st.session_state.novo_delegado_temp = {"id": u_id, "nome": u_doc.get('nome', 'Sem Nome'), "equipe": nome_equipe}
                     else:
                         st.error("❌ Usuário não encontrado.")
                         st.session_state.novo_delegado_temp = None
 
-            # Mostra Resultado da Busca
             if st.session_state.novo_delegado_temp:
                 del_data = st.session_state.novo_delegado_temp
                 st.success(f"✅ **Selecionado:** {del_data['nome']} | **Equipe:** {del_data['equipe']}")
@@ -249,7 +238,6 @@ def gestao_cursos_tab():
 
             st.divider()
 
-            # Formulário Principal
             with st.form("form_novo_curso"):
                 st.markdown("##### 2. Detalhes do Curso")
                 c1, c2 = st.columns(2)
@@ -259,13 +247,7 @@ def gestao_cursos_tab():
                 
                 c3, c4 = st.columns(2)
                 duracao = c3.text_input("Duração Est.", "Não especificada")
-                
-                # Seletor de Visibilidade
-                visibilidade_label = c4.selectbox(
-                    "Quem pode ver este curso?", 
-                    ["Todos (Público)", "Apenas Minha Equipe"],
-                    help="Se 'Apenas Minha Equipe', somente seus alunos verão."
-                )
+                visibilidade_label = c4.selectbox("Quem pode ver este curso?", ["Todos (Público)", "Apenas Minha Equipe"])
                 
                 st.markdown("##### Mídia e Status")
                 col_up, col_link = st.columns(2)
@@ -274,8 +256,7 @@ def gestao_cursos_tab():
                 ativo = st.checkbox("Curso Ativo?", value=True)
 
                 if st.form_submit_button("💾 Criar Curso", type="primary"):
-                    if not titulo or not descricao: 
-                        st.error("Preencha Título e Descrição.")
+                    if not titulo or not descricao: st.error("Preencha Título e Descrição.")
                     else:
                         url_final = url_capa
                         if up_img:
@@ -286,32 +267,20 @@ def gestao_cursos_tab():
                             except: pass
 
                         visib_valor = "equipe" if visibilidade_label == "Apenas Minha Equipe" else "todos"
-                        
-                        # Pega o delegado da sessão
                         delegado_final = st.session_state.novo_delegado_temp
                         
                         try:
                             novo_curso = {
-                                "titulo": titulo.upper(), 
-                                "descricao": descricao, 
-                                "categoria": categoria,
-                                "duracao_estimada": duracao,
-                                "url_capa": url_final, 
-                                "ativo": ativo,
-                                "visibilidade": visib_valor,
-                                "equipe_id": equipe_id_prof,
-                                "criado_por_id": user_id, 
-                                "criado_por_nome": user_nome,
-                                # Salva dados do delegado
+                                "titulo": titulo.upper(), "descricao": descricao, "categoria": categoria,
+                                "duracao_estimada": duracao, "url_capa": url_final, "ativo": ativo,
+                                "visibilidade": visib_valor, "equipe_id": equipe_id_prof,
+                                "criado_por_id": user_id, "criado_por_nome": user_nome,
                                 "delegado_id": delegado_final['id'] if delegado_final else None,
                                 "delegado_nome": delegado_final['nome'] if delegado_final else None,
-                                "data_criacao": firestore.SERVER_TIMESTAMP, 
-                                "modulos": []
+                                "data_criacao": firestore.SERVER_TIMESTAMP, "modulos": []
                             }
                             db.collection('cursos').add(novo_curso)
-                            
                             st.success(f"Curso criado com sucesso!")
-                            # Limpa sessão
                             st.session_state.novo_delegado_temp = None
                             time.sleep(1.5); st.rerun()
                         except Exception as e: st.error(f"Erro: {e}")
@@ -321,56 +290,43 @@ def gestao_cursos_tab():
             cursos_ref = list(db.collection('cursos').stream())
             cursos_data = [d.to_dict() | {"id": d.id} for d in cursos_ref]
             
-            # FILTRO DE PERMISSÃO: Admin, Criador ou Delegado
             tipo_user = str(user.get("tipo")).lower()
             if tipo_user not in ["admin"]:
-                cursos_data = [
-                    c for c in cursos_data 
-                    if c.get('criado_por_id') == user_id or c.get('delegado_id') == user_id
-                ]
+                cursos_data = [c for c in cursos_data if c.get('criado_por_id') == user_id or c.get('delegado_id') == user_id]
 
             filtro = st.text_input("🔍 Buscar Curso:", key="filtro_cur_main")
             if filtro:
                 cursos_data = [c for c in cursos_data if filtro.upper() in c.get('titulo','').upper()]
 
-            if not cursos_data: st.info("Nenhum curso encontrado onde você seja Tutor (Criador ou Delegado).")
+            if not cursos_data: st.info("Nenhum curso encontrado onde você seja Tutor.")
 
             for i, curso in enumerate(cursos_data):
                 status_icon = '🟢' if curso.get('ativo') else '🔴'
                 visib = curso.get('visibilidade', 'todos')
                 visib_icon = "🌍 Público" if visib == 'todos' else "🔒 Equipe"
                 
-                # Monta string de Tutores
                 tutor_pri = curso.get('criado_por_nome', 'Desconhecido')
                 tutor_del = curso.get('delegado_nome')
                 txt_tutores = f"Tutores: {tutor_pri}"
-                if tutor_del:
-                    txt_tutores += f" & {tutor_del}"
+                if tutor_del: txt_tutores += f" & {tutor_del}"
 
                 with st.expander(f"{status_icon} {curso.get('titulo')} | {visib_icon}"):
-                    
-                    # 1. VISUALIZAÇÃO
                     c_img, c_info = st.columns([1, 3])
                     if curso.get('url_capa'): c_img.image(curso.get('url_capa'), width=150)
                     with c_info:
                         st.caption(f"ID: {curso['id']} | Visibilidade: {visib.upper()}")
                         st.markdown(f"**{txt_tutores}**")
                         st.write(curso.get('descricao'))
-                    
                     st.divider()
 
-                    # 2. BOTÃO DE EDIÇÃO DE METADADOS
                     if st.button("✏️ Editar Informações e Tutores", key=f"btn_edit_{curso['id']}"):
                         st.session_state[f"edit_mode_{curso['id']}"] = not st.session_state.get(f"edit_mode_{curso['id']}", False)
-                        # Limpa variável temp de busca da edição
                         if f"del_edit_temp_{curso['id']}" not in st.session_state:
                              st.session_state[f"del_edit_temp_{curso['id']}"] = None
 
-                    # FORMULÁRIO DE EDIÇÃO
                     if st.session_state.get(f"edit_mode_{curso['id']}"):
                         st.markdown("#### Editando Curso")
                         
-                        # --- BUSCA DE NOVO DELEGADO NA EDIÇÃO ---
                         st.caption("Alterar Tutor Delegado (Busque por CPF)")
                         c_ed_b1, c_ed_b2 = st.columns([3, 1])
                         cpf_edit_search = c_ed_b1.text_input("", placeholder="CPF...", key=f"cpf_search_edit_{curso['id']}", label_visibility="collapsed")
@@ -390,48 +346,44 @@ def gestao_cursos_tab():
                                             if eq_doc.exists: eq_n = eq_doc.to_dict().get('nome')
                                         except: pass
                                     
-                                    st.session_state[f"del_edit_temp_{curso['id']}"] = {
-                                        "id": u_f[0].id, "nome": u_d.get('nome'), "equipe": eq_n
-                                    }
+                                    st.session_state[f"del_edit_temp_{curso['id']}"] = {"id": u_f[0].id, "nome": u_d.get('nome'), "equipe": eq_n}
                                 else: st.error("CPF não encontrado.")
                         
-                        # Mostra quem está selecionado (Atual ou Novo)
                         novo_del = st.session_state.get(f"del_edit_temp_{curso['id']}")
                         
-                        if novo_del:
-                            st.success(f"Novo Delegado Selecionado: {novo_del['nome']} ({novo_del['equipe']})")
+                        # -- CORREÇÃO DO ERRO ANTERIOR: LÓGICA DE EXIBIÇÃO --
+                        if novo_del == "REMOVER":
+                            st.warning("⚠️ O delegado atual será removido ao salvar.")
+                            if st.button("Desfazer Remoção", key=f"undo_rm_{curso['id']}"):
+                                st.session_state[f"del_edit_temp_{curso['id']}"] = None
+                                st.rerun()
+                        
+                        elif novo_del: # É um dicionário com os dados
+                            st.success(f"✅ Novo Delegado Selecionado: {novo_del['nome']} ({novo_del['equipe']})")
                             if st.button("Desfazer Seleção", key=f"undo_del_{curso['id']}"):
                                 st.session_state[f"del_edit_temp_{curso['id']}"] = None
                                 st.rerun()
-                        else:
+                        
+                        else: # Estado Inicial (Nada selecionado ainda)
                             curr_del = curso.get('delegado_nome', 'Nenhum')
                             st.info(f"Delegado Atual: {curr_del}")
                             if curr_del != 'Nenhum':
                                 if st.button("🗑️ Remover Delegado Atual", key=f"rm_curr_del_{curso['id']}"):
-                                    # Marca flag para remover no save
                                     st.session_state[f"del_edit_temp_{curso['id']}"] = "REMOVER"
                                     st.rerun()
-                            
-                            if st.session_state.get(f"del_edit_temp_{curso['id']}") == "REMOVER":
-                                st.warning("O delegado será removido ao salvar.")
 
                         with st.form(f"form_edit_{curso['id']}"):
                             nt = st.text_input("Título", value=curso.get('titulo'))
                             nd = st.text_area("Descrição", value=curso.get('descricao'))
                             nc = st.text_input("Categoria", value=curso.get('categoria'))
-                            
                             idx_vis = 1 if curso.get('visibilidade') == 'equipe' else 0
                             nvis = st.selectbox("Visibilidade", ["Todos (Público)", "Apenas Minha Equipe"], index=idx_vis)
 
                             if st.form_submit_button("💾 Salvar Alterações"):
                                 updates = {
-                                    "titulo": nt.upper(), 
-                                    "descricao": nd, 
-                                    "categoria": nc,
+                                    "titulo": nt.upper(), "descricao": nd, "categoria": nc,
                                     "visibilidade": "equipe" if nvis == "Apenas Minha Equipe" else "todos"
                                 }
-                                
-                                # Aplica mudança de delegado se houver
                                 temp_del = st.session_state.get(f"del_edit_temp_{curso['id']}")
                                 if temp_del:
                                     if temp_del == "REMOVER":
@@ -443,11 +395,10 @@ def gestao_cursos_tab():
 
                                 db.collection('cursos').document(curso['id']).update(updates)
                                 st.session_state[f"edit_mode_{curso['id']}"] = False
-                                st.session_state[f"del_edit_temp_{curso['id']}"] = None # Limpa
+                                st.session_state[f"del_edit_temp_{curso['id']}"] = None
                                 st.success("Atualizado!"); time.sleep(1); st.rerun()
                         st.divider()
                     
-                    # 3. MÓDULOS
                     st.subheader("🛠️ Módulos e Aulas")
                     modulos = curso.get('modulos', [])
                     if modulos:
@@ -474,18 +425,13 @@ def gestao_cursos_tab():
 
                     st.divider()
                     cb1, cb2, cb3 = st.columns(3)
-                    
-                    # Apenas o CRIADOR (dono original) ou ADMIN pode deletar. Delegado edita mas não deleta.
                     pode_deletar = (tipo_user == 'admin' or curso.get('criado_por_id') == user_id)
-                    
                     if cb1.button(f"{'Desativar' if curso.get('ativo') else 'Ativar'}", key=f"togg_{curso['id']}"):
                          db.collection('cursos').document(curso['id']).update({"ativo": not curso.get('ativo')}); st.rerun()
-
                     if pode_deletar:
                         if cb3.button("🗑️ Excluir Curso", key=f"del_{curso['id']}"):
                             db.collection('cursos').document(curso['id']).delete(); st.rerun()
-                    else:
-                        cb3.caption("🚫 Apenas o dono pode excluir")
+                    else: cb3.caption("🚫 Apenas o dono pode excluir")
 
     # --------------------------------------------------------------------------
     # ABA 2: PROVAS
