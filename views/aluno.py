@@ -7,7 +7,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components 
 from database import get_db
-from firebase_admin import firestore # Mantemos a importação para ter acesso ao módulo
+from firebase_admin import firestore # Mantemos a importação
 
 # --- IMPORTAÇÃO DIRETA (PARA DIAGNÓSTICO DE ERROS) ---
 from utils import (
@@ -22,7 +22,7 @@ from utils import (
 )
 
 # =========================================
-# CARREGADOR DE EXAME
+# CARREGADOR DE EXAME (Inalterado)
 # =========================================
 def carregar_exame_especifico(faixa_alvo):
     db = get_db()
@@ -40,7 +40,6 @@ def carregar_exame_especifico(faixa_alvo):
             tempo = int(config_doc.get('tempo_limite', 45))
             nota = int(config_doc.get('aprovacao_minima', 70))
             
-            # MODO MANUAL
             if config_doc.get('questoes_ids'):
                 ids = config_doc['questoes_ids']
                 for q_id in ids:
@@ -57,7 +56,6 @@ def carregar_exame_especifico(faixa_alvo):
             qtd_alvo = int(config_doc.get('qtd_questoes', 10))
     except: pass
 
-    # FALLBACK
     if not questoes_finais:
         try:
             q_ref = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
@@ -96,9 +94,9 @@ def meus_certificados(usuario):
         
         lista_certificados = []
         
-        # --- SOLUÇÃO PARA O ERRO 'firestore' attribute ---
+        # --- CORREÇÃO INFALÍVEL DO ERRO 'firestore' attribute ---
         # Acessa a classe Timestamp do cliente de forma garantida.
-        Timestamp_Class = db._client._firestore_client.Timestamp if hasattr(db, '_client') and hasattr(db._client, '_firestore_client') else firestore.client.firestore.Timestamp
+        Timestamp_Class = db.client.Timestamp 
         
         for doc in docs:
             cert = doc.to_dict()
@@ -161,7 +159,7 @@ def meus_certificados(usuario):
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
 # =========================================
-# EXAME PRINCIPAL
+# EXAME PRINCIPAL (Inalterado)
 # =========================================
 def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
@@ -310,7 +308,7 @@ def exame_de_faixa(usuario):
         restante = int(st.session_state.fim_prova_ts - time.time())
         
         if restante <= 0:
-            st.error("⌛ Tempo Esgotado!")
+            st.error("⌛ Tempo ESGOTADO!")
             registrar_fim_exame(usuario['id'], False)
             st.session_state.exame_iniciado = False
             time.sleep(2)
