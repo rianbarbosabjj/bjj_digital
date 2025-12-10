@@ -271,334 +271,155 @@ def gestao_equipes():
                         st.rerun()
                 st.divider()
 
-# =========================================
-# FUNÇÃO: GESTÃO DE CURSOS (NOVA FUNÇÃO)
-# =========================================
-def gestao_cursos_tab():
-    st.markdown("<h1 style='color:#FFD770;'>📚 Gestão de Cursos</h1>", unsafe_allow_html=True)
-    db = get_db()
-    user = st.session_state.usuario
-    user_id = user['id']
-    user_nome = user['nome']
+# ==============================================================================
+# GESTÃO DE CURSOS (ROTA PRINCIPAL)
+# Substitua a função antiga por esta completa
+# ==============================================================================
+def gestao_cursos_route():
+    st.markdown("<h1 style='color:#32CD32;'>📚 Gestão Acadêmica</h1>", unsafe_allow_html=True)
     
+    # Verificação de Permissão
+    user = st.session_state.usuario
     if str(user.get("tipo", "")).lower() not in ["admin", "professor"]:
-        st.error("Acesso negado. Apenas professores e administradores podem gerenciar cursos.")
+        st.error("Acesso negado.")
         return
 
-    tab_list, tab_add = st.tabs(["Listar e Editar Cursos", "Criar Novo Curso"])
+    # --- AQUI ESTÁ A MÁGICA: DIVIDIMOS EM DUAS GRANDES ABAS ---
+    tab_conteudo, tab_provas = st.tabs(["📚 Conteúdo & Módulos", "🎓 Provas & Certificados"])
 
-    with tab_add:
-        # ... (Criação de Novo Curso - Mantida do passo anterior) ...
-        st.markdown("#### 📝 Criar Novo Curso")
-        with st.form("form_novo_curso"):
-            
-            # Dados básicos
-            c1, c2 = st.columns(2)
-            titulo = c1.text_input("Título do Curso *", max_chars=100)
-            categoria = c2.text_input("Categoria (Ex: Defesa Pessoal, Posições de Guarda, etc.)", "Geral")
-            
-            descricao = st.text_area("Descrição Completa *", height=150)
-            
-            # Requisitos e Faixa Alvo
-            c3, c4 = st.columns(2)
-            faixa_minima = c3.selectbox("Faixa Mínima Requerida:", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"])
-            duracao_estimada = c4.text_input("Duração Estimada (Ex: 10 horas, 3 semanas)", "Não especificada")
-            
-            st.markdown("---")
-            st.markdown("##### 🖼️ Imagem de Capa (Opcional)")
+    # ==========================================================================
+    # ABA 1: CONTEÚDO (O SEU CÓDIGO VAI AQUI, FOCADO EM CURSO E MÓDULOS)
+    # ==========================================================================
+    with tab_conteudo:
+        db = get_db()
+        user_id = user['id']
+        user_nome = user['nome']
 
-            col_up, col_link = st.columns(2)
-            up_img = col_up.file_uploader("Upload da Imagem de Capa:", type=["jpg","png", "jpeg"])
-            url_capa = col_link.text_input("Ou use um Link Externo/URL (será ignorado se houver upload):")
-            
-            # Status e Autor
-            ativo = st.checkbox("Curso Ativo (Disponível para Alunos)", value=True)
-            
-            if st.form_submit_button("💾 Salvar Curso", type="primary"):
-                if not titulo or not descricao:
-                    st.error("Preencha o Título e a Descrição.")
-                else:
-                    url_final = url_capa # Começa com o link (se houver)
+        # Sub-abas para organizar a criação e edição
+        st.markdown("### Conteúdo dos Cursos")
+        sub_tab_list, sub_tab_add = st.tabs(["🔎 Listar e Editar", "➕ Criar Novo Curso"])
 
-                    if up_img:
-                        from utils import fazer_upload_midia # Importação local para garantir
-                        with st.spinner("Subindo imagem..."):
-                            url_upload = fazer_upload_midia(up_img)
-                            if url_upload:
-                                url_final = url_upload
-                            else:
-                                st.error("Erro ao fazer upload da imagem. Use um link externo ou tente novamente.")
-                                return
-                    
-                    try:
-                        novo_curso = {
-                            "titulo": titulo.upper(),
-                            "descricao": descricao,
-                            "categoria": categoria,
-                            "faixa_minima": faixa_minima,
-                            "duracao_estimada": duracao_estimada,
-                            "url_capa": url_final,
-                            "ativo": ativo,
-                            "criado_por_id": user_id,
-                            "criado_por_nome": user_nome,
-                            "data_criacao": firestore.SERVER_TIMESTAMP,
-                            "modulos": [],
-                        }
-                        
-                        db.collection('cursos').add(novo_curso)
-                        st.success("✅ Curso criado com sucesso! Ele aparecerá na lista abaixo.")
-                        time.sleep(1.5)
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"Erro ao salvar curso: {e}")
-
-
-    with tab_list:
-        st.markdown("#### 📝 Cursos Existentes")
-        
-        # Carrega e filtra os cursos
-        cursos_ref = list(db.collection('cursos').stream())
-        cursos_data = [d.to_dict() | {"id": d.id} for d in cursos_ref]
-        
-        if str(user.get("tipo", "")).lower() != "admin":
-            cursos_data = [c for c in cursos_data if c.get('criado_por_id') == user_id]
-
-        if not cursos_data:
-            st.info("Nenhum curso encontrado.")
-            return
-
-        filtro_titulo = st.text_input("🔍 Buscar por Título:", key="f_titulo_curso")
-        if filtro_titulo:
-            term = filtro_titulo.upper()
-            cursos_data = [c for c in cursos_data if term in c.get('titulo', '').upper()]
-
-        
-        for i, curso in enumerate(cursos_data):
-            # Expander para cada curso
-            with st.expander(f"**{curso.get('titulo')}** | Categoria: {curso.get('categoria')} | Status: {'🟢 Ativo' if curso.get('ativo') else '🔴 Rascunho'}"):
+        # --- SUB-ABA: CRIAR CURSO ---
+        with sub_tab_add:
+            with st.form("form_novo_curso"):
+                c1, c2 = st.columns(2)
+                titulo = c1.text_input("Título do Curso *", max_chars=100)
+                categoria = c2.text_input("Categoria", "Geral")
+                descricao = st.text_area("Descrição Completa *", height=100)
                 
-                # Exibe detalhes do módulo
-                st.caption(f"Criado por: {curso.get('criado_por_nome')} em {curso.get('data_criacao').strftime('%d/%m/%Y') if hasattr(curso.get('data_criacao'), 'strftime') else 'Desconhecida'}")
-                st.markdown(f"**Descrição:** {curso.get('descricao')}")
-                st.markdown(f"**Faixa Mínima:** {curso.get('faixa_minima')}")
+                c3, c4 = st.columns(2)
+                faixa_minima = c3.selectbox("Faixa Mínima:", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"])
+                duracao = c4.text_input("Duração Estimada", "Não especificada")
                 
-                if curso.get('url_capa'):
-                    st.image(curso.get('url_capa'), caption="Capa Atual", width=200)
-
                 st.markdown("---")
-                
-                # =================================================================
-                # NOVO BLOCO: GESTÃO DA PROVA DO CURSO
-                # =================================================================
-                st.subheader("📝 Avaliação do Curso")
-                
-                # 1. Busca a configuração de prova existente para este curso (subcoleção 'provas_curso')
-                prova_ref = db.collection('cursos').document(curso['id']).collection('provas_curso').document('config')
-                prova_doc = prova_ref.get()
-                conf_prova = prova_doc.to_dict() if prova_doc.exists else {}
-                
-                tab_montar, tab_liberar = st.tabs(["🔨 Montar Prova", "✅ Liberar Alunos"])
+                col_up, col_link = st.columns(2)
+                up_img = col_up.file_uploader("Capa (Imagem):", type=["jpg","png", "jpeg"])
+                url_capa = col_link.text_input("Ou Link da Capa:")
+                ativo = st.checkbox("Curso Ativo?", value=True)
 
-                with tab_montar:
-                    st.markdown("##### 1. Configuração da Prova")
-                    
-                    # Carrega todas as questões (aprovadas) para seleção
-                    todas_questoes_aprovadas = list(db.collection('questoes').where('status', '==', 'aprovada').stream())
-                    mapa_questoes = {d.id: d.to_dict() for d in todas_questoes_aprovadas}
-                    
-                    # Usa session state para a seleção de IDs, garantindo persistência no formulário
-                    selected_ids_key = f'selected_ids_{curso["id"]}'
-                    if selected_ids_key not in st.session_state:
-                        st.session_state[selected_ids_key] = set(conf_prova.get('questoes_ids', []))
-
-                    with st.form(f"form_montar_prova_{curso['id']}"):
-                        
-                        q_sel = len(st.session_state[selected_ids_key])
-                        st.success(f"**{q_sel}** questões selecionadas atualmente.")
-
-                        # Interface de seleção (Simplificada, como em admin.gestao_exame_de_faixa)
-                        with st.expander("Clique para selecionar/remover questões"):
-                            c_f1, c_f2 = st.columns(2)
-                            # Adicionar filtros aqui, se necessário (nível/categoria)
-                            
-                            for qid, qdata in mapa_questoes.items():
-                                is_checked = qid in st.session_state[selected_ids_key]
-                                
-                                # Cria uma função de callback para atualizar o set
-                                def update_selection_curso(qid=qid):
-                                    if st.session_state[f"chk_curso_{qid}_{curso['id']}"]:
-                                        st.session_state[selected_ids_key].add(qid)
-                                    else:
-                                        st.session_state[selected_ids_key].discard(qid)
-
-                                c_chk, c_content = st.columns([1, 15])
-                                c_chk.checkbox("", value=is_checked, key=f"chk_curso_{qid}_{curso['id']}", on_change=update_selection_curso)
-                                with c_content:
-                                    st.caption(f"ID: {qid[:4]} | Nível: {qdata.get('dificuldade', 1)}")
-                                    st.markdown(f"*{qdata.get('pergunta')}*")
-                                    st.markdown("---")
-
-
-                        st.markdown("##### 2. Regras da Avaliação")
-                        c1, c2 = st.columns(2)
-                        tempo = c1.number_input("Tempo (min):", 10, 180, int(conf_prova.get('tempo_limite', 30)), key=f"t_lim_{curso['id']}")
-                        nota = c2.number_input("Aprovação (%):", 10, 100, int(conf_prova.get('aprovacao_minima', 70)), key=f"n_min_{curso['id']}")
-
-                        if st.form_submit_button("💾 Salvar Prova do Curso", type="primary"):
-                            if len(st.session_state[selected_ids_key]) == 0:
-                                st.error("Selecione questões para a prova.")
-                            else:
-                                try:
-                                    dados_prova = {
-                                        "curso_id": curso['id'], 
-                                        "titulo": f"Prova: {curso['titulo']}",
-                                        "questoes_ids": list(st.session_state[selected_ids_key]), 
-                                        "qtd_questoes": len(st.session_state[selected_ids_key]), 
-                                        "tempo_limite": tempo, 
-                                        "aprovacao_minima": nota, 
-                                        "atualizado_em": firestore.SERVER_TIMESTAMP
-                                    }
-                                    
-                                    prova_ref.set(dados_prova) # Cria ou sobrescreve o documento 'config'
-                                    st.success("✅ Prova do curso salva/atualizada!")
-                                    time.sleep(1.5); st.rerun()
-
-                                except Exception as e:
-                                    st.error(f"Erro ao salvar prova: {e}")
-                
-                with tab_liberar:
-                    st.markdown("##### 3. Liberar Prova para Alunos")
-                    
-                    if not conf_prova:
-                        st.warning("Monte a prova na aba 'Montar Prova' antes de liberar.")
-                        
-                    elif conf_prova.get('qtd_questoes', 0) == 0:
-                        st.warning("A prova está vazia (0 questões).")
-                    
+                if st.form_submit_button("💾 Criar Curso", type="primary"):
+                    if not titulo or not descricao:
+                        st.error("Título e Descrição são obrigatórios.")
                     else:
-                        st.info(f"Prova disponível: {conf_prova.get('qtd_questoes')} questões | Min. {conf_prova.get('aprovacao_minima')}%")
-                        
-                        # Interface de liberação
-                        st.divider()
-                        
-                        # Aqui você listaria os alunos desta equipe para liberar individualmente
-                        st.caption("A liberação será implementada na próxima etapa, juntamente com a matrícula do aluno.")
-                        
-                        # --- EXIBIÇÃO DE ALUNOS ATUALMENTE MATRICULADOS E SEU STATUS ---
-                        
-                        # Para fins de demonstração da estrutura, vamos manter uma mensagem provisória:
-                        st.markdown("**Status dos Alunos** (A ser implementado):")
-                        st.code("Consulta ao status de matrícula do aluno na subcoleção 'matriculas_curso'...")
+                        # Lógica de Upload (simplificada para o exemplo)
+                        url_final = url_capa
+                        if up_img:
+                            try:
+                                from utils import fazer_upload_midia
+                                with st.spinner("Subindo imagem..."):
+                                    url_final = fazer_upload_midia(up_img) or url_capa
+                            except: pass
 
-                # ... (restante do código do expander - Módulos, Edição de Metadados) ...
-                st.markdown("---")
-                
-                # Adicionar e Gerenciar Módulos
-                st.subheader("🛠️ Módulos e Aulas")
-                
-                modulos = curso.get('modulos', [])
-                if not modulos:
-                    st.warning("Nenhum módulo cadastrado neste curso.")
-                else:
-                    st.dataframe(
-                        pd.DataFrame(modulos),
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "titulo_modulo": "Módulo/Capítulo",
-                            "aulas": st.column_config.ListColumn("Total de Aulas", width="small", help="Quantidade de Aulas (Itens na Lista)"),
-                            "descricao_modulo": st.column_config.TextColumn("Descrição")
-                        }
-                    )
-                
-                # Formulário de Adição de Módulo
-                with st.form(f"form_mod_{curso['id']}"):
-                    st.markdown("##### ➕ Adicionar/Editar Módulo")
-                    m_titulo = st.text_input("Título do Módulo:", key=f"mt_{i}")
-                    m_desc = st.text_area("Descrição do Módulo:", key=f"md_{i}")
-                    
-                    aulas_raw = st.text_area("Aulas (Uma por linha: Ex: 'Pegada Cruzada', 'Defesa de Queda'):", height=100, key=f"aulas_{i}")
-                    
-                    if st.form_submit_button("✅ Salvar Módulo/Atualizar Curso"):
-                        if m_titulo:
-                            
-                            aulas_list = [a.strip() for a in aulas_raw.split('\n') if a.strip()]
-                            
-                            novo_modulo = {
-                                "titulo_modulo": m_titulo,
-                                "descricao_modulo": m_desc,
-                                "aulas": aulas_list,
+                        try:
+                            novo_curso = {
+                                "titulo": titulo.upper(), "descricao": descricao, "categoria": categoria,
+                                "faixa_minima": faixa_minima, "duracao_estimada": duracao,
+                                "url_capa": url_final, "ativo": ativo,
+                                "criado_por_id": user_id, "criado_por_nome": user_nome,
+                                "data_criacao": firestore.SERVER_TIMESTAMP, "modulos": []
                             }
-                            
-                            modulos_existentes = curso.get('modulos', [])
-                            encontrado = False
-                            for j, mod in enumerate(modulos_existentes):
-                                if mod.get('titulo_modulo', '').upper() == m_titulo.upper():
-                                    modulos_existentes[j] = novo_modulo
-                                    encontrado = True
-                                    break
-                            
-                            if not encontrado:
-                                modulos_existentes.append(novo_modulo)
-                                
-                            db.collection('cursos').document(curso['id']).update({"modulos": modulos_existentes})
-                            st.success(f"Módulo '{m_titulo}' atualizado/adicionado.")
-                            time.sleep(1.5); st.rerun()
+                            db.collection('cursos').add(novo_curso)
+                            st.success("Curso criado!"); time.sleep(1); st.rerun()
+                        except Exception as e: st.error(f"Erro: {e}")
 
-                        else:
-                            st.error("O Título do Módulo é obrigatório.")
-                        
-                # Botões de Ação do Curso (Edição Rápida)
-                c_act1, c_act2, c_act3 = st.columns(3)
-                if c_act1.button("✏️ Editar Metadados", key=f"edt_cur_{curso['id']}"):
-                    st.session_state[f"edit_mode_{curso['id']}"] = True
-                
-                if c_act2.button(f"{'🔴 Desativar' if curso.get('ativo') else '🟢 Ativar'}", key=f"stt_cur_{curso['id']}"):
-                    db.collection('cursos').document(curso['id']).update({"ativo": not curso.get('ativo')})
-                    st.toast("Status atualizado."); time.sleep(1); st.rerun()
+        # --- SUB-ABA: LISTAR E EDITAR ---
+        with sub_tab_list:
+            # Filtros e Busca
+            cursos_ref = list(db.collection('cursos').stream())
+            cursos_data = [d.to_dict() | {"id": d.id} for d in cursos_ref]
+            
+            # Filtra se não for admin
+            if str(user.get("tipo")).lower() != "admin":
+                cursos_data = [c for c in cursos_data if c.get('criado_por_id') == user_id]
+
+            filtro = st.text_input("🔍 Buscar Curso:", key="filtro_cur_main")
+            if filtro:
+                cursos_data = [c for c in cursos_data if filtro.upper() in c.get('titulo','').upper()]
+
+            if not cursos_data: st.info("Nenhum curso encontrado.")
+
+            for i, curso in enumerate(cursos_data):
+                status_icon = '🟢' if curso.get('ativo') else '🔴'
+                with st.expander(f"{status_icon} {curso.get('titulo')} ({curso.get('categoria')})"):
                     
-                if c_act3.button("🗑️ Deletar Curso", key=f"del_cur_{curso['id']}", type="primary"):
-                    db.collection('cursos').document(curso['id']).delete()
-                    st.toast("Curso deletado."); time.sleep(1); st.rerun()
+                    # 1. Dados Básicos e Imagem
+                    c_img, c_info = st.columns([1, 3])
+                    if curso.get('url_capa'): c_img.image(curso.get('url_capa'), width=150)
+                    with c_info:
+                        st.caption(f"ID: {curso['id']} | Min: {curso.get('faixa_minima')}")
+                        st.write(curso.get('descricao'))
+                    
+                    st.divider()
+                    
+                    # 2. Gestão de Módulos (Seu código original de módulos vem aqui)
+                    st.subheader("🛠️ Módulos e Aulas")
+                    modulos = curso.get('modulos', [])
+                    
+                    # Exibe tabela simples dos módulos
+                    if modulos:
+                        st.dataframe(pd.DataFrame(modulos), use_container_width=True, hide_index=True, 
+                                   column_config={"titulo_modulo": "Módulo", "descricao_modulo": "Desc", "aulas": "Aulas"})
+                    else: st.info("Sem módulos ainda.")
 
-                # Formulário de edição de Metadados (oculto por padrão)
-                if st.session_state.get(f"edit_mode_{curso['id']}"):
-                    st.markdown("---")
-                    st.markdown("##### Edição Rápida de Metadados")
-                    with st.form(f"form_edit_meta_{curso['id']}"):
-                        n_titulo = st.text_input("Título", value=curso.get('titulo'))
-                        n_desc = st.text_area("Descrição", value=curso.get('descricao'))
-                        n_cat = st.text_input("Categoria", value=curso.get('categoria'))
-                        n_faixa = st.selectbox("Faixa Mínima", ["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"], index=["Nenhuma", "Branca", "Azul", "Roxa", "Marrom", "Preta"].index(curso.get('faixa_minima')))
-                        n_dur = st.text_input("Duração Estimada", value=curso.get('duracao_estimada'))
+                    # Formulário rápido de adicionar módulo
+                    with st.form(f"add_mod_{curso['id']}"):
+                        c_m1, c_m2 = st.columns(2)
+                        mt = c_m1.text_input("Novo Módulo (Título):")
+                        md = c_m2.text_input("Descrição Curta:")
+                        aul = st.text_area("Aulas (uma por linha):", height=80)
                         
-                        if st.form_submit_button("💾 Salvar Edição"):
-                            db.collection('cursos').document(curso['id']).update({
-                                "titulo": n_titulo.upper(),
-                                "descricao": n_desc,
-                                "categoria": n_cat,
-                                "faixa_minima": n_faixa,
-                                "duracao_estimada": n_dur
-                            })
-                            st.session_state.pop(f"edit_mode_{curso['id']}")
-                            st.success("Metadados atualizados."); time.sleep(1.5); st.rerun()
+                        if st.form_submit_button("➕ Adicionar/Atualizar Módulo"):
+                            if mt:
+                                novas_aulas = [x.strip() for x in aul.split('\n') if x.strip()]
+                                novo_mod = {"titulo_modulo": mt, "descricao_modulo": md, "aulas": novas_aulas}
+                                
+                                # Lógica simples: se já existe com mesmo nome, atualiza. Se não, adiciona.
+                                mods_atual = list(modulos)
+                                idx_found = -1
+                                for idx, m in enumerate(mods_atual):
+                                    if m.get('titulo_modulo') == mt: idx_found = idx
+                                
+                                if idx_found >= 0: mods_atual[idx_found] = novo_mod
+                                else: mods_atual.append(novo_mod)
+                                
+                                db.collection('cursos').document(curso['id']).update({"modulos": mods_atual})
+                                st.rerun()
 
-Sem problemas, Mestre Tunico! Vamos simplificar.
+                    st.divider()
+                    
+                    # 3. Botões de Ação Gerais
+                    cb1, cb2, cb3 = st.columns(3)
+                    if cb1.button("🗑️ Excluir Curso", key=f"del_{curso['id']}"):
+                        db.collection('cursos').document(curso['id']).delete(); st.rerun()
+                    
+                    # (OBS: Removemos o bloco de PROVAS daqui de dentro, pois ele agora tem a aba própria)
 
-Para que a Gestão de Provas de Cursos funcione, você precisa fazer duas alterações no seu arquivo professor.py:
-
-Adicionar a função nova (o código da lógica).
-
-Adicionar o botão no Menu (para você conseguir clicar e entrar nela).
-
-Abaixo estão os códigos prontos.
-
-Passo 1: Copie e cole a função nova
-Vá até o final do seu arquivo professor.py e cole este bloco de código inteiro. Ele contém toda a lógica para criar as provas e liberar os alunos.
-
-Python
-
+    # ==========================================================================
+    # ABA 2: PROVAS E CERTIFICADOS (CHAMA O COMPONENTE NOVO)
+    # ==========================================================================
+    with tab_provas:
+        # Aqui chamamos aquela função que você colou no final do arquivo
+        componente_gestao_provas()
 # ==============================================================================
 # COLE ISSO NO FINAL DO ARQUIVO PROFESSOR.PY
 # Esta é a lógica das provas, transformada em um componente.
