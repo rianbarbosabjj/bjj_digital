@@ -1,9 +1,0 @@
-# Ignora o arquivo de segredos
-/.streamlit/secrets.toml
-
-# Ignora a pasta do banco de dados
-database/
-
-# Arquivos de cache do Python
-__pycache__/
-*.pyc
