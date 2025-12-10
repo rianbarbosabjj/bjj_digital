@@ -2,9 +2,12 @@
 <svg width="3508" height="2480" viewBox="0 0 3508 2480" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="champagneMetal" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0%" stop-color="#eee5d5"/>   <stop offset="25%" stop-color="#fffaf0"/>
-      <stop offset="50%" stop-color="#ffffff"/>  <stop offset="75%" stop-color="#fffaf0"/>
-      <stop offset="100%" stop-color="#eee5d5"/> </linearGradient>
+      <stop offset="0%" stop-color="#eee5d5"/>
+      <stop offset="25%" stop-color="#fffaf0"/>
+      <stop offset="50%" stop-color="#ffffff"/>
+      <stop offset="75%" stop-color="#fffaf0"/>
+      <stop offset="100%" stop-color="#eee5d5"/>
+    </linearGradient>
 
     <linearGradient id="brushLine" x1="0" y1="0" x2="1" y2="0">
       <stop offset="0%" stop-color="rgba(255,255,255,0.5)"/>
@@ -14,10 +17,14 @@
 
     <linearGradient id="diagonalGlow" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="rgba(255,255,255,0.0)"/>
-      <stop offset="40%" stop-color="rgba(255,255,255,0.7)"/> 
+      <stop offset="40%" stop-color="rgba(255,255,255,0.9)"/> 
       <stop offset="60%" stop-color="rgba(255,255,255,0.1)"/>
-      <stop offset="100%" stop-color="rgba(255,255,255,0.3)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.4)"/>
     </linearGradient>
+
+    <radialGradient id="spotlightGlow" cx="25%" cy="25%" r="60%" fx="20%" fy="20%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.8)"/> <stop offset="30%" stop-color="rgba(255,255,255,0.3)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0.0)"/> </radialGradient>
 
     <linearGradient id="goldBorder" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#8b6c21"/>
@@ -69,6 +76,8 @@
   </g>
 
   <rect x="-400" y="-300" width="4300" height="3100" fill="url(#diagonalGlow)" opacity="1.0"/>
+
+  <rect x="0" y="0" width="3508" height="2480" fill="url(#spotlightGlow)" opacity="0.7"/>
 
   <rect x="140" y="140" width="3228" height="2200" rx="70" ry="70"
         fill="none" stroke="url(#goldBorder)" stroke-width="24"/>
