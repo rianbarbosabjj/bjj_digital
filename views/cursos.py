@@ -85,24 +85,47 @@ def _prof_listar_cursos(usuario: dict):
                 if desc:
                     st.caption(f"{desc[:140]}{'...' if len(desc)>140 else ''}")
                 
-                # --- VISUAL NOVO DAS TAGS (BADGES) ---
+                # --- VISUAL NOVO (ESTILO TERMINAL/CLEAN) ---
                 mod_texto = curso.get('modalidade', '-')
                 pub_texto = 'Equipe' if curso.get('publico') == 'equipe' else 'Geral'
                 
-                # Cores inspiradas em UI moderna (Dark Mode friendly)
-                # Modalidade: Tom de roxo/indigo | Público: Tom de azul/teal
+                # Paleta escolhida:
+                # 1. Verde Neon (Cyber Green) -> Para Modalidade
+                # 2. Dourado (Gold) -> Para Público (Combina com o #0e2d26 e substitui o roxo)
+                
                 html_badges = f"""
-                <div style="display: flex; gap: 8px; margin-top: 8px;">
-                    <span style="background-color: #2e1065; color: #d8b4fe; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; border: 1px solid #581c87;">
+                <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
+                    <span style="
+                        background-color: rgba(16, 185, 129, 0.15); 
+                        color: #6ee7b7; 
+                        padding: 4px 12px; 
+                        border-radius: 6px; 
+                        font-size: 0.85rem; 
+                        font-family: monospace; 
+                        border: 1px solid rgba(16, 185, 129, 0.4);
+                        letter-spacing: 0.5px;
+                    ">
                         🎓 {mod_texto}
                     </span>
-                    <span style="background-color: #064e3b; color: #6ee7b7; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; border: 1px solid #065f46;">
+                    
+                    <span style="color: #4b5563; font-size: 1.2rem; font-weight: 300;">|</span>
+
+                    <span style="
+                        background-color: rgba(251, 191, 36, 0.15); 
+                        color: #fcd34d; 
+                        padding: 4px 12px; 
+                        border-radius: 6px; 
+                        font-size: 0.85rem; 
+                        font-family: monospace;
+                        border: 1px solid rgba(251, 191, 36, 0.4);
+                        letter-spacing: 0.5px;
+                    ">
                         👥 {pub_texto}
                     </span>
                 </div>
                 """
                 st.markdown(html_badges, unsafe_allow_html=True)
-                # -------------------------------------
+                # -------------------------------------------
 
             with col_stats:
                 preco = curso.get('preco', 0.0)
@@ -116,7 +139,6 @@ def _prof_listar_cursos(usuario: dict):
             with col_actions:
                 st.write("") 
                 
-                # ATENÇÃO: Agora passamos 'usuario' para o modal verificar se é admin
                 if st.button("✏️ Editar", key=f"btn_edit_{curso['id']}", use_container_width=True):
                     _dialogo_editar_curso(curso, usuario)
 
@@ -126,7 +148,6 @@ def _prof_listar_cursos(usuario: dict):
                 if st.button(label_btn, key=f"toggle_{curso['id']}", type=type_btn, use_container_width=True):
                     _toggle_status_curso(curso["id"], not ativo)
                     st.rerun()
-
 
 def _prof_criar_curso(usuario: dict):
     st.markdown("### Preencha os detalhes do novo curso")
