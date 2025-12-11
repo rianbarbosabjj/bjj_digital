@@ -45,6 +45,7 @@ def _interface_professor(usuario):
 
 
 def _prof_listar_cursos(usuario):
+
     st.subheader("📘 Meus Cursos")
 
     cursos = listar_cursos_do_professor(usuario["id"])
@@ -53,19 +54,46 @@ def _prof_listar_cursos(usuario):
         st.info("Você ainda não criou nenhum curso.")
         return
 
-    df = pd.DataFrame([
-        {
-            "Título": c.get("titulo"),
-            "Modalidade": c.get("modalidade"),
-            "Público": "Todos" if c.get("publico") == "geral" else "Equipe",
-            "Pago?": "Sim" if c.get("pago") else "Não",
-            "Preço (R$)": c.get("preco", 0.0),
-            "Certificado Automático": "Sim" if c.get("certificado_automatico") else "Não",
-        }
-        for c in cursos
-    ])
+    st.write("")  
+    for curso in cursos:
 
-    st.dataframe(df, use_container_width=True)
+        with st.container(border=True):
+
+            st.markdown(f"### {curso.get('titulo')}")
+
+            # Descrição pequena
+            if curso.get("descricao"):
+                st.markdown(f"<p style='color:#ccc'>{curso['descricao'][:180]}...</p>", unsafe_allow_html=True)
+
+            col1, col2, col3 = st.columns([1.5, 1, 0.7])
+
+            with col1:
+                st.write(f"**Modalidade:** {curso.get('modalidade')}")
+                st.write(f"**Público:** {'Todos' if curso.get('publico')=='geral' else 'Equipe'}")
+
+            with col2:
+                if curso.get("pago"):
+                    st.write(f"💰 **Pago** — R$ {curso.get('preco', 0.0):.2f}")
+                else:
+                    st.write("🆓 **Gratuito**")
+
+                st.write(f"Certificado: {'Sim' if curso.get('certificado_automatico') else 'Não'}")
+
+            with col3:
+
+                if st.button("✏️ Editar", key=f"edit_{curso['id']}", use_container_width=True):
+                    st.session_state["edit_course"] = curso
+
+                ativo = curso.get("ativo", True)
+                if st.button("🟢 Ativar" if not ativo else "🔴 Desativar",
+                             key=f"toggle_{curso['id']}",
+                             use_container_width=True):
+                    _toggle_status_curso(curso["id"], not ativo)
+                    st.rerun()
+
+    # Painel de edição
+    if "edit_course" in st.session_state:
+        _editor_curso(st.session_state["edit_course"])
 
 
 def _prof_criar_curso(usuario):
