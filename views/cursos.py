@@ -44,13 +44,21 @@ def pagina_cursos(usuario: dict):
 # ======================================================
 
 def _interface_professor(usuario: dict):
-    tab1, tab2 = st.tabs(["📘 Gerenciar Cursos", "➕ Criar Novo Curso"])
+    # 🔹 AGORA COM 3 ABAS: GERENCIAR / CRIAR / PAINEL
+    tab1, tab2, tab3 = st.tabs([
+        "📘 Gerenciar Cursos",
+        "➕ Criar Novo Curso",
+        "📊 Painel dos Cursos"
+    ])
 
     with tab1:
         _prof_listar_cursos(usuario)
 
     with tab2:
         _prof_criar_curso(usuario)
+
+    with tab3:
+        _prof_dashboard_cursos(usuario)
 
 
 def _prof_listar_cursos(usuario: dict):
@@ -71,8 +79,10 @@ def _prof_listar_cursos(usuario: dict):
     for curso in cursos:
         ativo = curso.get("ativo", True)
         
-        if filtro_status == "Ativos" and not ativo: continue
-        if filtro_status == "Inativos" and ativo: continue
+        if filtro_status == "Ativos" and not ativo:
+            continue
+        if filtro_status == "Inativos" and ativo:
+            continue
 
         with st.container(border=True):
             col_info, col_stats, col_actions = st.columns([3, 1.5, 1])
@@ -80,17 +90,15 @@ def _prof_listar_cursos(usuario: dict):
             with col_info:
                 status_icon = "🟢" if ativo else "🔴"
                 st.subheader(f"{status_icon} {curso.get('titulo')}")
-                
+
                 desc = (curso.get("descricao") or "").strip()
                 if desc:
                     st.caption(f"{desc[:140]}{'...' if len(desc)>140 else ''}")
-                
-                # --- VISUAL NOVO (SEM IDENTAÇÃO PARA NÃO QUEBRAR) ---
+
+                # --- BADGES BONITAS DE MODALIDADE E PÚBLICO ---
                 mod_texto = curso.get('modalidade', '-')
                 pub_texto = 'Equipe' if curso.get('publico') == 'equipe' else 'Geral'
-                
-                # Cores: Verde Neon (Modalidade) e Dourado/Âmbar (Público)
-                # IMPORTANTE: O HTML abaixo não tem espaços no início das linhas para evitar erro de exibição
+
                 html_badges = f"""
 <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
 <span style="background-color: rgba(16, 185, 129, 0.15); color: #6ee7b7; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; font-family: monospace; border: 1px solid rgba(16, 185, 129, 0.4); letter-spacing: 0.5px;">
@@ -108,28 +116,29 @@ def _prof_listar_cursos(usuario: dict):
             with col_stats:
                 preco = curso.get('preco', 0.0)
                 split = int(curso.get('split_custom', 10))
-                
+
                 if curso.get("pago"):
                     st.metric("Preço", f"R$ {preco:.2f}", delta=f"Taxa App: {split}%", delta_color="inverse")
                 else:
                     st.metric("Preço", "Gratuito", delta="Taxa Isenta")
 
             with col_actions:
-                st.write("") 
-                
+                st.write("")
+
                 if st.button("✏️ Editar", key=f"btn_edit_{curso['id']}", use_container_width=True):
                     _dialogo_editar_curso(curso, usuario)
 
                 label_btn = "Desativar" if ativo else "Ativar"
                 type_btn = "primary" if not ativo else "secondary"
-                
+
                 if st.button(label_btn, key=f"toggle_{curso['id']}", type=type_btn, use_container_width=True):
                     _toggle_status_curso(curso["id"], not ativo)
                     st.rerun()
 
+
 def _prof_criar_curso(usuario: dict):
     st.markdown("### Preencha os detalhes do novo curso")
-    
+
     # Verifica permissão
     is_admin = usuario.get("tipo") == "admin"
 
@@ -146,7 +155,7 @@ def _prof_criar_curso(usuario: dict):
                 "Público Alvo", ["geral", "equipe"],
                 format_func=lambda v: "Aberto (Geral)" if v == "geral" else "Restrito (Equipe)"
             )
-            
+
             equipe_destino = None
             if publico == "equipe":
                 equipe_destino = st.text_input("Nome/ID da Equipe")
@@ -154,29 +163,28 @@ def _prof_criar_curso(usuario: dict):
             certificado_auto = st.checkbox("Certificado Automático?", value=True)
 
         st.divider()
-        
+
         c_fin1, c_fin2, c_fin3 = st.columns(3)
         with c_fin1:
             pago = st.toggle("Curso Pago?", value=False)
-        
+
         with c_fin2:
             preco = st.number_input("Preço (R$)", min_value=0.0, step=10.0, disabled=not pago)
-        
+
         with c_fin3:
             # TRAVA DE SEGURANÇA: Só Admin mexe aqui
             help_text = "Definido pelo Administrador" if not is_admin else "Percentual retido pelo App"
-            
+
             split_custom = st.slider(
-                "Split (%)", 0, 100, 
-                value=10, 
-                disabled=(not pago or not is_admin), # Desabilitado se não for pago OU não for admin
+                "Split (%)", 0, 100,
+                value=10,
+                disabled=(not pago or not is_admin),  # Desabilitado se não for pago OU não for admin
                 help=help_text
             )
 
         submit_btn = st.form_submit_button("🚀 Criar Curso", use_container_width=True, type="primary")
 
     if submit_btn:
-        # (Lógica de salvamento permanece igual...)
         if not titulo.strip():
             st.error("⚠️ O título é obrigatório.")
             return
@@ -198,6 +206,127 @@ def _prof_criar_curso(usuario: dict):
             st.rerun()
         except Exception as e:
             st.error(f"Erro: {e}")
+
+
+# ======================================================
+# PAINEL DO PROFESSOR (ALUNOS / PROGRESSO / PAGAMENTO)
+# ======================================================
+
+def _prof_dashboard_cursos(usuario: dict):
+    """
+    Dashboard de cursos do professor:
+    - métricas gerais
+    - seleção de curso
+    - lista de alunos com progresso e pagamento
+    """
+    db = get_db()
+    if not db:
+        st.error("Erro de conexão com o banco de dados.")
+        return
+
+    cursos = listar_cursos_do_professor(usuario["id"])
+    if not cursos:
+        st.info("Você ainda não criou cursos. Crie um curso para visualizar o painel.")
+        return
+
+    # --------- COLETA DE MATRÍCULAS POR CURSO ---------
+    # Mapa: course_id -> lista de enrollments
+    mapa_inscricoes: Dict[str, List[Dict]] = {}
+    total_matriculas = 0
+    total_pago = 0
+    soma_progresso = 0.0
+    cont_progresso = 0
+
+    for c in cursos:
+        cid = c["id"]
+        q = db.collection("enrollments").where("course_id", "==", cid).stream()
+        lista = []
+        for snap in q:
+            d = snap.to_dict()
+            d["id"] = snap.id
+            lista.append(d)
+
+            total_matriculas += 1
+            if d.get("pago"):
+                total_pago += 1
+            if d.get("progresso") is not None:
+                soma_progresso += float(d.get("progresso", 0.0))
+                cont_progresso += 1
+
+        mapa_inscricoes[cid] = lista
+
+    # --------- MÉTRICAS GERAIS ---------
+    total_cursos = len(cursos)
+    perc_pago = (total_pago / total_matriculas * 100) if total_matriculas > 0 else 0.0
+    progresso_medio = (soma_progresso / cont_progresso) if cont_progresso > 0 else 0.0
+
+    c1, c2, c3, c4 = st.columns(4)
+    with c1:
+        st.metric("Cursos criados", total_cursos)
+    with c2:
+        st.metric("Matrículas totais", total_matriculas)
+    with c3:
+        st.metric("% pagamentos concluídos", f"{perc_pago:.0f}%")
+    with c4:
+        st.metric("Progresso médio", f"{progresso_medio:.0f}%")
+
+    st.markdown("---")
+
+    # --------- SELEÇÃO DE CURSO PARA DETALHE ---------
+    # Mapa simples id -> título
+    opcoes = {c["titulo"]: c["id"] for c in cursos}
+    nome_escolhido = st.selectbox("Selecione um curso para ver o detalhamento:", list(opcoes.keys()))
+    curso_id_escolhido = opcoes[nome_escolhido]
+
+    inscricoes_curso = mapa_inscricoes.get(curso_id_escolhido, [])
+
+    if not inscricoes_curso:
+        st.info("Ainda não há matrículas neste curso.")
+        return
+
+    st.markdown(f"### 👥 Alunos matriculados em: **{nome_escolhido}**")
+
+    # Cache de nomes dos usuários
+    cache_nomes: Dict[str, str] = {}
+
+    def get_nome_usuario(uid: str) -> str:
+        if uid in cache_nomes:
+            return cache_nomes[uid]
+        doc = db.collection("usuarios").document(uid).get()
+        if doc.exists:
+            nome = doc.to_dict().get("nome", "Sem nome")
+        else:
+            nome = "Sem nome"
+        cache_nomes[uid] = nome
+        return nome
+
+    # Monta uma lista estruturada
+    linhas = []
+    for ins in inscricoes_curso:
+        uid = ins.get("user_id")
+        nome_aluno = get_nome_usuario(uid)
+        prog = float(ins.get("progresso", 0.0))
+        pago = "Sim" if ins.get("pago") else "Não"
+        cert = "Sim" if ins.get("certificado_emitido") else "Não"
+
+        linhas.append({
+            "Aluno": nome_aluno,
+            "Progresso (%)": f"{prog:.0f}",
+            "Pagamento OK": pago,
+            "Certificado": cert,
+        })
+
+    # Ordena por progresso desc
+    linhas.sort(key=lambda x: float(x["Progresso (%)"]), reverse=True)
+
+    # Exibe em tabela bonita
+    st.dataframe(linhas, use_container_width=True)
+
+    # Pequeno resumo visual de distribuição de progresso (opcional)
+    st.markdown("#### Distribuição de progresso dos alunos")
+    valores_prog = [float(l["Progresso (%)"]) for l in linhas]
+    if valores_prog:
+        st.bar_chart(valores_prog, height=200)
 
 
 # ======================================================
@@ -226,7 +355,7 @@ def _dialogo_editar_curso(curso: dict, usuario: dict):
     # Verifica permissão
     is_admin = usuario.get("tipo") == "admin"
 
-    with st.form("form_edit_course_dialog", border=False): # border=False para limpar visual interno
+    with st.form("form_edit_course_dialog", border=False):  # border=False para limpar visual interno
         titulo = st.text_input("Título", value=curso.get("titulo", ""))
         descricao = st.text_area("Descrição", value=curso.get("descricao", ""), height=120)
 
@@ -243,7 +372,7 @@ def _dialogo_editar_curso(curso: dict, usuario: dict):
         with c2:
             pago = st.checkbox("Pago?", value=curso.get("pago", False))
             preco = st.number_input(
-                "Valor (R$)", 
+                "Valor (R$)",
                 value=float(curso.get("preco", 0.0)),
                 disabled=not pago
             )
@@ -251,20 +380,20 @@ def _dialogo_editar_curso(curso: dict, usuario: dict):
         equipe_destino = curso.get("equipe_destino", "")
         if publico == "equipe":
             equipe_destino = st.text_input("Equipe de Destino", value=equipe_destino or "")
-        
+
         st.divider()
-        
+
         c3, c4 = st.columns(2)
         with c3:
-             certificado_auto = st.checkbox("Certificado Auto.", value=curso.get("certificado_automatico", True))
+            certificado_auto = st.checkbox("Certificado Auto.", value=curso.get("certificado_automatico", True))
         with c4:
-             valor_atual_split = int(curso.get("split_custom", 10))
-             split_custom = st.slider(
-                 "Split App %", 0, 100, 
-                 value=valor_atual_split,
-                 disabled=not is_admin,
-                 help="Somente administradores podem alterar a taxa." if not is_admin else ""
-             )
+            valor_atual_split = int(curso.get("split_custom", 10))
+            split_custom = st.slider(
+                "Split App %", 0, 100,
+                value=valor_atual_split,
+                disabled=not is_admin,
+                help="Somente administradores podem alterar a taxa." if not is_admin else ""
+            )
 
         submitted = st.form_submit_button("💾 Salvar Alterações", type="primary", use_container_width=True)
 
@@ -286,6 +415,7 @@ def _dialogo_editar_curso(curso: dict, usuario: dict):
             st.rerun()
         except Exception as e:
             st.error(f"Erro ao salvar: {e}")
+
 
 # ======================================================
 # VISÃO DO ALUNO
@@ -310,23 +440,23 @@ def _aluno_cursos_disponiveis(usuario: dict):
         return
 
     # Grid responsivo de cursos
-    col1, col2 = st.columns(2) 
-    
+    col1, col2 = st.columns(2)
+
     for idx, curso in enumerate(cursos):
         inscricao = obter_inscricao(usuario["id"], curso["id"])
-        
+
         # Alterna colunas para criar grid
         with (col1 if idx % 2 == 0 else col2):
             with st.container(border=True):
                 st.markdown(f"#### {curso.get('titulo')}")
-                
+
                 # Badges
                 bagde_mod = f"📍 {curso.get('modalidade')}"
                 badge_price = f"R$ {curso.get('preco', 0.0):.2f}" if curso.get('pago') else "🆓 Gratuito"
                 st.caption(f"{bagde_mod}  •  {badge_price}")
 
                 st.markdown("---")
-                
+
                 desc = (curso.get("descricao") or "").strip()
                 if desc:
                     st.write(f"{desc[:100]}...")
@@ -334,7 +464,12 @@ def _aluno_cursos_disponiveis(usuario: dict):
                 if inscricao:
                     st.button("✅ Inscrito", key=f"btn_ja_inscrito_{curso['id']}", disabled=True, use_container_width=True)
                 else:
-                    if st.button(f"Inscrever-se", key=f"btn_inscrever_{curso['id']}", type="primary", use_container_width=True):
+                    if st.button(
+                        "Inscrever-se",
+                        key=f"btn_inscrever_{curso['id']}",
+                        type="primary",
+                        use_container_width=True
+                    ):
                         inscrever_usuario_em_curso(usuario["id"], curso["id"])
                         st.success("Inscrição realizada!")
                         st.rerun()
@@ -346,7 +481,6 @@ def _aluno_meus_cursos(usuario: dict):
         st.error("Erro de conexão com banco.")
         return
 
-    # Otimização: Trazendo apenas os campos necessários se possível
     q = db.collection("enrollments").where("user_id", "==", usuario["id"]).stream()
     inscricoes = list(q)
 
@@ -358,8 +492,6 @@ def _aluno_meus_cursos(usuario: dict):
         d = ins.to_dict()
         curso_id = d.get("course_id")
 
-        # Buscar dados do curso
-        # (Idealmente isso seria feito em batch ou query otimizada, mas mantendo simples:)
         snap = db.collection("courses").document(curso_id).get()
         if not snap.exists:
             continue
@@ -369,16 +501,15 @@ def _aluno_meus_cursos(usuario: dict):
 
         with st.container(border=True):
             c_img, c_data, c_act = st.columns([0.5, 2, 1])
-            
-            # Simulando um ícone/thumbnail na c_img
+
+            # Ícone/thumbnail
             with c_img:
                 st.markdown("<div style='font-size:3rem; text-align:center;'>🥋</div>", unsafe_allow_html=True)
 
             with c_data:
                 st.subheader(curso.get('titulo'))
-                # Barra de progresso nativa
                 st.progress(progresso / 100, text=f"Progresso: {int(progresso)}%")
-                
+
                 if curso.get("pago") and not d.get("pago"):
                     st.warning("⚠️ Pagamento pendente")
 
@@ -406,8 +537,7 @@ def _salvar_edicao_curso(
 ):
     """Atualiza o documento do curso no Firestore."""
     db = get_db()
-    
-    # Validações básicas
+
     safe_preco = float(preco) if (pago and preco is not None) else 0.0
     safe_split = int(split_custom) if split_custom is not None else 10
 
@@ -422,7 +552,7 @@ def _salvar_edicao_curso(
         "split_custom": safe_split,
         "certificado_automatico": bool(certificado_automatico),
     }
-    
+
     db.collection("courses").document(curso_id).update(doc_updates)
 
 
@@ -431,6 +561,5 @@ def _toggle_status_curso(curso_id: str, novo_ativo: bool):
     db = get_db()
     db.collection("courses").document(curso_id).update({
         "ativo": bool(novo_ativo),
-        # Mantendo 'status' redundante caso seu sistema legado use string
         "status": "ativo" if novo_ativo else "inativo"
     })
