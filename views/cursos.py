@@ -60,23 +60,20 @@ def _prof_listar_cursos(usuario: dict):
         st.info("Você ainda não criou nenhum curso. Vá na aba 'Criar Novo Curso' para começar.")
         return
 
-    # Filtros rápidos (opcional, melhora a UX quando há muitos cursos)
+    # Filtros rápidos
     filtro_status = st.radio(
         "Filtrar por:", ["Todos", "Ativos", "Inativos"],
         horizontal=True,
         label_visibility="collapsed"
     )
-
-    st.write("") # Espaçamento
+    st.write("")
 
     for curso in cursos:
         ativo = curso.get("ativo", True)
         
-        # Lógica de filtro visual
         if filtro_status == "Ativos" and not ativo: continue
         if filtro_status == "Inativos" and ativo: continue
 
-        # Card do Curso
         with st.container(border=True):
             col_info, col_stats, col_actions = st.columns([3, 1.5, 1])
 
@@ -88,10 +85,24 @@ def _prof_listar_cursos(usuario: dict):
                 if desc:
                     st.caption(f"{desc[:140]}{'...' if len(desc)>140 else ''}")
                 
-                tags = []
-                tags.append(f"🎓 {curso.get('modalidade', '-')}")
-                tags.append(f"👥 {'Equipe' if curso.get('publico') == 'equipe' else 'Geral'}")
-                st.markdown(" | ".join([f"`{t}`" for t in tags]))
+                # --- VISUAL NOVO DAS TAGS (BADGES) ---
+                mod_texto = curso.get('modalidade', '-')
+                pub_texto = 'Equipe' if curso.get('publico') == 'equipe' else 'Geral'
+                
+                # Cores inspiradas em UI moderna (Dark Mode friendly)
+                # Modalidade: Tom de roxo/indigo | Público: Tom de azul/teal
+                html_badges = f"""
+                <div style="display: flex; gap: 8px; margin-top: 8px;">
+                    <span style="background-color: #2e1065; color: #d8b4fe; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; border: 1px solid #581c87;">
+                        🎓 {mod_texto}
+                    </span>
+                    <span style="background-color: #064e3b; color: #6ee7b7; padding: 4px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; border: 1px solid #065f46;">
+                        👥 {pub_texto}
+                    </span>
+                </div>
+                """
+                st.markdown(html_badges, unsafe_allow_html=True)
+                # -------------------------------------
 
             with col_stats:
                 preco = curso.get('preco', 0.0)
@@ -103,13 +114,12 @@ def _prof_listar_cursos(usuario: dict):
                     st.metric("Preço", "Gratuito", delta="Taxa Isenta")
 
             with col_actions:
-                st.write("") # Alinha botões verticalmente
+                st.write("") 
                 
-                # Botão de Editar chama o Modal Nativo
+                # ATENÇÃO: Agora passamos 'usuario' para o modal verificar se é admin
                 if st.button("✏️ Editar", key=f"btn_edit_{curso['id']}", use_container_width=True):
-                    _dialogo_editar_curso(curso)
+                    _dialogo_editar_curso(curso, usuario)
 
-                # Botão de Toggle Status
                 label_btn = "Desativar" if ativo else "Ativar"
                 type_btn = "primary" if not ativo else "secondary"
                 
@@ -120,32 +130,32 @@ def _prof_listar_cursos(usuario: dict):
 
 def _prof_criar_curso(usuario: dict):
     st.markdown("### Preencha os detalhes do novo curso")
-    st.info("💡 Dica: Cursos bem descritos atraem mais alunos.")
+    
+    # Verifica permissão
+    is_admin = usuario.get("tipo") == "admin"
 
     with st.form("form_criar_curso", border=True):
         col1, col2 = st.columns([2, 1])
 
         with col1:
             titulo = st.text_input("Título do Curso", placeholder="Ex: Jiu-Jitsu para Iniciantes")
-            descricao = st.text_area("Descrição Detalhada", height=150, placeholder="O que o aluno vai aprender...")
+            descricao = st.text_area("Descrição Detalhada", height=150)
 
         with col2:
             modalidade = st.selectbox("Modalidade", ["EAD", "Presencial"])
             publico = st.selectbox(
-                "Público Alvo",
-                ["geral", "equipe"],
+                "Público Alvo", ["geral", "equipe"],
                 format_func=lambda v: "Aberto (Geral)" if v == "geral" else "Restrito (Equipe)"
             )
             
             equipe_destino = None
             if publico == "equipe":
-                equipe_destino = st.text_input("Nome ou ID da Equipe")
+                equipe_destino = st.text_input("Nome/ID da Equipe")
 
-            certificado_auto = st.checkbox("Gerar Certificado Automático?", value=True)
+            certificado_auto = st.checkbox("Certificado Automático?", value=True)
 
         st.divider()
         
-        # Seção Financeira
         c_fin1, c_fin2, c_fin3 = st.columns(3)
         with c_fin1:
             pago = st.toggle("Curso Pago?", value=False)
@@ -154,18 +164,25 @@ def _prof_criar_curso(usuario: dict):
             preco = st.number_input("Preço (R$)", min_value=0.0, step=10.0, disabled=not pago)
         
         with c_fin3:
-            st.caption("Percentual retido pelo App")
-            split_custom = st.slider("Split (%)", 0, 100, 10, disabled=not pago)
+            # TRAVA DE SEGURANÇA: Só Admin mexe aqui
+            help_text = "Definido pelo Administrador" if not is_admin else "Percentual retido pelo App"
+            
+            split_custom = st.slider(
+                "Split (%)", 0, 100, 
+                value=10, 
+                disabled=(not pago or not is_admin), # Desabilitado se não for pago OU não for admin
+                help=help_text
+            )
 
         submit_btn = st.form_submit_button("🚀 Criar Curso", use_container_width=True, type="primary")
 
     if submit_btn:
+        # (Lógica de salvamento permanece igual...)
         if not titulo.strip():
             st.error("⚠️ O título é obrigatório.")
             return
-
         try:
-            course_id = criar_curso(
+            criar_curso(
                 professor_id=usuario["id"],
                 nome_professor=usuario.get("nome", ""),
                 titulo=titulo,
@@ -178,11 +195,10 @@ def _prof_criar_curso(usuario: dict):
                 split_custom=split_custom,
                 certificado_automatico=certificado_auto
             )
-            st.success(f"Curso criado com sucesso! (ID: {course_id})")
-            st.balloons()
-            # Opcional: sleep(1) e rerun() para limpar o form
+            st.success("Curso criado com sucesso!")
+            st.rerun()
         except Exception as e:
-            st.error(f"Erro ao criar curso: {e}")
+            st.error(f"Erro: {e}")
 
 
 # ======================================================
@@ -190,11 +206,10 @@ def _prof_criar_curso(usuario: dict):
 # ======================================================
 
 @st.dialog("✏️ Editar Curso")
-def _dialogo_editar_curso(curso: dict):
-    """
-    Substitui o antigo modal CSS por um dialog nativo.
-    O código roda isolado aqui dentro.
-    """
+def _dialogo_editar_curso(curso: dict, usuario: dict):
+    # Verifica permissão
+    is_admin = usuario.get("tipo") == "admin"
+
     with st.form("form_edit_course_dialog"):
         titulo = st.text_input("Título", value=curso.get("titulo", ""))
         descricao = st.text_area("Descrição", value=curso.get("descricao", ""), height=120)
@@ -217,7 +232,6 @@ def _dialogo_editar_curso(curso: dict):
                 disabled=not pago
             )
 
-        # Lógica condicional para equipe (fora das colunas para ter largura total se necessário)
         equipe_destino = curso.get("equipe_destino", "")
         if publico == "equipe":
             equipe_destino = st.text_input("Equipe de Destino", value=equipe_destino or "")
@@ -228,9 +242,16 @@ def _dialogo_editar_curso(curso: dict):
         with c3:
              certificado_auto = st.checkbox("Certificado Auto.", value=curso.get("certificado_automatico", True))
         with c4:
-             split_custom = st.slider("Split App %", 0, 100, value=int(curso.get("split_custom", 10)))
+             # Lógica de bloqueio do Admin
+             valor_atual_split = int(curso.get("split_custom", 10))
+             
+             split_custom = st.slider(
+                 "Split App %", 0, 100, 
+                 value=valor_atual_split,
+                 disabled=not is_admin,  # Se não for admin, fica cinza/travado
+                 help="Somente administradores podem alterar a taxa." if not is_admin else ""
+             )
 
-        # Botões de ação
         submitted = st.form_submit_button("💾 Salvar Alterações", type="primary", use_container_width=True)
 
     if submitted:
@@ -248,10 +269,9 @@ def _dialogo_editar_curso(curso: dict):
                 certificado_automatico=certificado_auto
             )
             st.success("Curso atualizado!")
-            st.rerun() # Recarrega a página para fechar o modal e atualizar a lista
+            st.rerun()
         except Exception as e:
             st.error(f"Erro ao salvar: {e}")
-
 
 # ======================================================
 # VISÃO DO ALUNO
