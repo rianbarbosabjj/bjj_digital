@@ -175,8 +175,6 @@ def auditoria_ia_openai(pergunta, alternativas, correta):
         if "quota" in str(e): return "❌ Sem saldo na OpenAI."
         return f"Erro GPT: {e}"
         
-def auditoria_ia_openai(p, a, c): return "Indisponível"
-
 def normalizar_nome(nome):
     if not nome: return "sem_nome"
     return "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split()).lower()
