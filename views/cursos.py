@@ -184,50 +184,87 @@ def _prof_criar_curso(usuario: dict):
 # ======================================================
 
 def _editor_curso(curso: dict):
-    st.sidebar.markdown("## ✏️ Editar Curso")
-    st.sidebar.markdown("---")
+    import streamlit as st
 
-    with st.sidebar.form("form_edit_course"):
-        novo_titulo = st.text_input("Título", curso.get("titulo", ""))
-        nova_desc = st.text_area("Descrição", curso.get("descricao", ""))
+    st.markdown("""
+        <style>
+        .modal-fundo {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.65);
+            z-index: 9999;
+        }
+        .modal-corpo {
+            background: #0e2d26;
+            border: 1px solid rgba(255,215,112,0.4);
+            padding: 30px;
+            border-radius: 12px;
+            width: 60%;
+            margin: 5% auto;
+            box-shadow: 0 0 25px rgba(0,0,0,0.5);
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-        modalidade = st.selectbox(
-            "Modalidade",
-            ["EAD", "Presencial"],
-            index=0 if curso.get("modalidade") == "EAD" else 1
-        )
+    # fundo escurecido
+    with st.container():
+        st.markdown('<div class="modal-fundo">', unsafe_allow_html=True)
 
-        publico = st.selectbox(
-            "Público",
-            ["geral", "equipe"],
-            index=0 if curso.get("publicpublico") == "geral" else 1
-        )
+        # corpo do modal
+        st.markdown('<div class="modal-corpo">', unsafe_allow_html=True)
 
-        equipe_destino = None
-        if publico == "equipe":
-            equipe_destino = st.text_input(
-                "Equipe",
-                curso.get("equipe_destino", "")
+        st.markdown("## ✏️ Editar Curso")
+
+        with st.form("form_edit_course"):
+
+            novo_titulo = st.text_input("Título", curso.get("titulo", ""))
+            nova_desc = st.text_area("Descrição", curso.get("descricao", ""))
+
+            modalidade = st.selectbox(
+                "Modalidade",
+                ["EAD", "Presencial"],
+                index=0 if curso.get("modalidade") == "EAD" else 1
             )
 
-        pago = st.checkbox("Curso Pago?", value=curso.get("pago", False))
-        preco = st.number_input("Preço (R$)", value=float(curso.get("preco", 0.0))) if pago else None
+            publico = st.selectbox(
+                "Público",
+                ["geral", "equipe"],
+                index=0 if curso.get("publico") == "geral" else 1
+            )
 
-        certificado_auto = st.checkbox(
-            "Certificado Automático",
-            value=curso.get("certificado_automatico", True)
-        )
+            equipe_destino = None
+            if publico == "equipe":
+                equipe_destino = st.text_input(
+                    "Equipe",
+                    curso.get("equipe_destino", "")
+                )
 
-        # 🔥 ALTERADO: padrão 10%
-        split_custom = st.slider(
-            "Percentual do App",
-            min_value=0,
-            max_value=100,
-            value=int(curso.get("split_custom", 10)),   # SE NÃO EXISTIR, ASSUME 10%
-            step=5
-        )
+            pago = st.checkbox("Curso Pago?", value=curso.get("pago", False))
+            preco = st.number_input("Preço (R$)", value=float(curso.get("preco", 0.0))) if pago else None
 
-        salvar = st.form_submit_button("Salvar Alterações")
+            certificado_auto = st.checkbox(
+                "Certificado Automático",
+                value=curso.get("certificado_automatico", True)
+            )
+
+            split_custom = st.slider(
+                "Percentual do App",
+                0, 100,
+                value=int(curso.get("split_custom", 10)),
+                step=5
+            )
+
+            col1, col2 = st.columns(2)
+            salvar = col1.form_submit_button("Salvar Alterações")
+            cancelar = col2.form_submit_button("Cancelar")
+
+        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if cancelar:
+        del st.session_state["edit_course"]
+        st.rerun()
 
     if salvar:
         try:
@@ -243,13 +280,13 @@ def _editor_curso(curso: dict):
                 split_custom=split_custom,
                 certificado_automatico=certificado_auto
             )
-
             del st.session_state["edit_course"]
             st.success("Curso atualizado!")
             st.rerun()
 
         except Exception as e:
             st.error(f"Erro ao atualizar curso: {e}")
+
 
 
 # ======================================================
