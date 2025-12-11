@@ -14,12 +14,12 @@ from database import get_db
 
 
 # ======================================================
-# FUNÇÃO PRINCIPAL DA PÁGINA
+# PÁGINA PRINCIPAL
 # ======================================================
 
 def pagina_cursos(usuario: dict):
     """
-    Página de Cursos — interface adaptada ao tipo de usuário (aluno/professor/admin).
+    Interface de cursos, adaptada ao tipo de usuário.
     """
     tipo = str(usuario.get("tipo", "aluno")).lower()
 
@@ -56,39 +56,35 @@ def _prof_listar_cursos(usuario: dict):
 
     st.write("")
 
+    # Cards modernos
     for curso in cursos:
         ativo = curso.get("ativo", True)
-        status = curso.get("status", "ativo")
 
         with st.container(border=True):
-            # Título
             st.markdown(f"### {curso.get('titulo')}")
 
-            # Descrição curta
             desc = (curso.get("descricao") or "").strip()
             if desc:
-                if len(desc) > 200:
-                    desc_show = desc[:200] + "..."
-                else:
-                    desc_show = desc
                 st.markdown(
-                    f"<p style='color:#dddddd; font-size:0.9rem;'>{desc_show}</p>",
+                    f"<p style='color:#dddddd; font-size:0.9rem;'>{desc[:200]}{'...' if len(desc)>200 else ''}</p>",
                     unsafe_allow_html=True
                 )
 
             col1, col2, col3 = st.columns([1.5, 1, 0.8])
 
+            # Informações do curso
             with col1:
-                st.write(f"**Modalidade:** {curso.get('modalidade', '—')}")
+                st.write(f"**Modalidade:** {curso.get('modalidade', '-')}")
                 st.write(
                     f"**Público:** "
                     f"{'Todos' if curso.get('publico') == 'geral' else 'Equipe'}"
                 )
-                st.write(f"**Status:** {'Ativo' if ativo and status=='ativo' else 'Inativo'}")
+                st.write(f"**Status:** {'🟢 Ativo' if ativo else '🔴 Inativo'}")
 
+            # Pagamento, certificado e split
             with col2:
                 if curso.get("pago"):
-                    st.write(f"💰 **Pago** — R$ {curso.get('preco', 0.0):.2f}")
+                    st.write(f"💰 **Pago — R$ {curso.get('preco', 0.0):.2f}**")
                 else:
                     st.write("🆓 **Gratuito**")
 
@@ -97,25 +93,27 @@ def _prof_listar_cursos(usuario: dict):
                     f"{'Sim' if curso.get('certificado_automatico') else 'Não'}"
                 )
 
-                split = curso.get("split_custom")
-                if split is not None:
-                    st.write(f"**% App:** {int(split)}%")
+                split = curso.get("split_custom", 10)
+                st.write(f"**% App:** {int(split)}%")
 
+            # Botões
             with col3:
-                # Botão Editar
-                if st.button("✏️ Editar", key=f"edit_{curso['id']}", use_container_width=True):
+                if st.button(
+                    "✏️ Editar",
+                    key=f"edit_{curso['id']}",
+                    use_container_width=True
+                ):
                     st.session_state["edit_course"] = curso
 
-                # Botão Ativar/Desativar
                 if st.button(
-                    "🔴 Desativar" if ativo and status == "ativo" else "🟢 Ativar",
+                    "🔴 Desativar" if ativo else "🟢 Ativar",
                     key=f"toggle_{curso['id']}",
                     use_container_width=True
                 ):
-                    _toggle_status_curso(curso["id"], not (ativo and status == "ativo"))
+                    _toggle_status_curso(curso["id"], not ativo)
                     st.rerun()
 
-    # Se tem curso em edição, abre editor na sidebar
+    # Editor lateral
     if "edit_course" in st.session_state:
         _editor_curso(st.session_state["edit_course"])
 
@@ -125,8 +123,9 @@ def _prof_criar_curso(usuario: dict):
 
     with st.form("form_criar_curso"):
         titulo = st.text_input("Título do Curso")
-        descricao = st.text_area("Descrição do Curso")
+        descricao = st.text_area("Descrição")
         modalidade = st.selectbox("Modalidade", ["EAD", "Presencial"])
+
         publico = st.selectbox(
             "Público",
             ["geral", "equipe"],
@@ -137,16 +136,17 @@ def _prof_criar_curso(usuario: dict):
         if publico == "equipe":
             equipe_destino = st.text_input("Nome/ID da Equipe")
 
-        pago = st.checkbox("Curso Pago?", value=False)
+        pago = st.checkbox("Curso Pago?")
         preco = st.number_input("Preço (R$)", min_value=0.0, step=10.0) if pago else None
 
-        certificado_auto = st.checkbox("Gerar Certificado Automaticamente?", value=True)
+        certificado_auto = st.checkbox("Certificado Automático?", value=True)
 
+        # 🔥 ALTERADO: padrão 10%
         split_custom = st.slider(
-            "Percentual do App (pode ser ajustado pelo Admin depois)",
+            "Percentual do App",
             min_value=0,
             max_value=100,
-            value=20,
+            value=10,   # PADRÃO ALTERADO PARA 10%
             step=5
         )
 
@@ -171,16 +171,19 @@ def _prof_criar_curso(usuario: dict):
                 split_custom=split_custom,
                 certificado_automatico=certificado_auto
             )
-            st.success(f"Curso criado com sucesso! ID: {course_id}")
+
+            st.success(f"Curso criado! ID: {course_id}")
             st.balloons()
+
         except Exception as e:
             st.error(f"Erro ao criar curso: {e}")
 
 
+# ======================================================
+# EDITOR DE CURSOS (SIDEBAR)
+# ======================================================
+
 def _editor_curso(curso: dict):
-    """
-    Editor de curso exibido na sidebar.
-    """
     st.sidebar.markdown("## ✏️ Editar Curso")
     st.sidebar.markdown("---")
 
@@ -197,36 +200,30 @@ def _editor_curso(curso: dict):
         publico = st.selectbox(
             "Público",
             ["geral", "equipe"],
-            index=0 if curso.get("publico") == "geral" else 1
+            index=0 if curso.get("publicpublico") == "geral" else 1
         )
 
         equipe_destino = None
         if publico == "equipe":
             equipe_destino = st.text_input(
                 "Equipe",
-                curso.get("equipe_destino", "") or ""
+                curso.get("equipe_destino", "")
             )
 
         pago = st.checkbox("Curso Pago?", value=curso.get("pago", False))
-        preco = None
-        if pago:
-            preco = st.number_input(
-                "Preço (R$)",
-                value=float(curso.get("preco", 0.0)),
-                min_value=0.0,
-                step=10.0
-            )
+        preco = st.number_input("Preço (R$)", value=float(curso.get("preco", 0.0))) if pago else None
 
         certificado_auto = st.checkbox(
             "Certificado Automático",
             value=curso.get("certificado_automatico", True)
         )
 
+        # 🔥 ALTERADO: padrão 10%
         split_custom = st.slider(
             "Percentual do App",
             min_value=0,
             max_value=100,
-            value=int(curso.get("split_custom", 20)),
+            value=int(curso.get("split_custom", 10)),   # SE NÃO EXISTIR, ASSUME 10%
             step=5
         )
 
@@ -246,10 +243,11 @@ def _editor_curso(curso: dict):
                 split_custom=split_custom,
                 certificado_automatico=certificado_auto
             )
-            if "edit_course" in st.session_state:
-                del st.session_state["edit_course"]
+
+            del st.session_state["edit_course"]
             st.success("Curso atualizado!")
             st.rerun()
+
         except Exception as e:
             st.error(f"Erro ao atualizar curso: {e}")
 
@@ -274,7 +272,7 @@ def _aluno_cursos_disponiveis(usuario: dict):
     cursos = listar_cursos_disponiveis_para_usuario(usuario)
 
     if not cursos:
-        st.info("Ainda não há cursos disponíveis.")
+        st.info("Nenhum curso disponível no momento.")
         return
 
     for curso in cursos:
@@ -282,30 +280,33 @@ def _aluno_cursos_disponiveis(usuario: dict):
 
         with st.container(border=True):
             st.markdown(f"### {curso.get('titulo')}")
+
             desc = (curso.get("descricao") or "").strip()
             if desc:
-                st.markdown(f"<p style='color:#dddddd; font-size:0.9rem;'>{desc}</p>",
-                            unsafe_allow_html=True)
+                st.markdown(
+                    f"<p style='color:#dddddd; font-size:0.9rem;'>{desc}</p>",
+                    unsafe_allow_html=True
+                )
 
             st.write(
-                f"**Modalidade:** {curso.get('modalidade', '—')} | "
+                f"**Modalidade:** {curso.get('modalidade')} | "
                 f"**Público:** {'Todos' if curso.get('publico') == 'geral' else 'Equipe'}"
             )
 
             if curso.get("pago"):
-                st.write(f"💰 Curso Pago — **R$ {curso.get('preco', 0.0):.2f}**")
+                st.write(f"💰 Pago — **R$ {curso.get('preco', 0.0):.2f}**")
             else:
-                st.write("🆓 Curso Gratuito")
+                st.write("🆓 Gratuito")
 
             if inscricao:
-                st.success("Você já está inscrita(o) neste curso.")
+                st.success("Você já está inscrita(o).")
             else:
                 if st.button(
-                    f"Inscrever-se em {curso.get('titulo')}",
+                    f"Inscrever-se em {curso['titulo']}",
                     key=f"btn_inscrever_{curso['id']}"
                 ):
                     inscrever_usuario_em_curso(usuario["id"], curso["id"])
-                    st.success("Inscrição realizada com sucesso!")
+                    st.success("Inscrição feita!")
                     st.rerun()
 
 
@@ -314,7 +315,7 @@ def _aluno_meus_cursos(usuario: dict):
 
     db = get_db()
     if not db:
-        st.error("Erro ao conectar ao banco.")
+        st.error("Erro de conexão com banco.")
         return
 
     q = db.collection("enrollments").where("user_id", "==", usuario["id"]).stream()
@@ -327,38 +328,39 @@ def _aluno_meus_cursos(usuario: dict):
     for ins in inscricoes:
         d = ins.to_dict()
         curso_id = d.get("course_id")
-        if not curso_id:
+
+        snap = db.collection("courses").document(curso_id).get()
+        if not snap.exists:
             continue
 
-        curso_snap = db.collection("courses").document(curso_id).get()
-        if not curso_snap.exists:
-            continue
-
-        curso = curso_snap.to_dict()
-        progresso = d.get("progresso", 0.0)
+        curso = snap.to_dict()
+        progresso = d.get("progresso", 0)
 
         with st.container(border=True):
             st.markdown(f"### {curso.get('titulo')}")
+
             desc = (curso.get("descricao") or "").strip()
             if desc:
-                st.markdown(f"<p style='color:#dddddd; font-size:0.9rem;'>{desc}</p>",
-                            unsafe_allow_html=True)
+                st.markdown(
+                    f"<p style='color:#dddddd; font-size:0.9rem;'>{desc}</p>",
+                    unsafe_allow_html=True
+                )
 
-            st.write(f"📊 Progresso: **{progresso:.0f}%**")
+            st.write(f"📊 **Progresso:** {progresso:.0f}%")
 
             if curso.get("pago"):
                 if d.get("pago"):
-                    st.write("💰 Situação: Pagamento Confirmado")
+                    st.write("💰 Pagamento confirmado")
                 else:
-                    st.warning("💰 Pagamento Pendente")
+                    st.warning("💰 Pagamento pendente")
             else:
-                st.write("🆓 Curso Gratuito")
+                st.write("🆓 Curso gratuito")
 
-            st.caption("Em breve: aulas, módulos, provas e certificados aparecerão aqui.")
+            st.caption("Em breve: acesso a módulos, aulas e certificados.")
 
 
 # ======================================================
-# FUNÇÕES AUXILIARES (EDIÇÃO / STATUS)
+# FUNÇÕES AUXILIARES
 # ======================================================
 
 def _salvar_edicao_curso(
@@ -374,34 +376,22 @@ def _salvar_edicao_curso(
     certificado_automatico: bool
 ):
     db = get_db()
-    if not db:
-        raise RuntimeError("Erro ao conectar ao banco.")
-
     doc = {
-        "titulo": (titulo or "").strip(),
-        "descricao": (descricao or "").strip(),
+        "titulo": titulo.strip(),
+        "descricao": descricao.strip(),
         "modalidade": modalidade,
         "publico": publico,
         "equipe_destino": equipe_destino or None,
         "pago": bool(pago),
         "preco": float(preco) if (pago and preco is not None) else 0.0,
-        "split_custom": int(split_custom) if split_custom is not None else None,
+        "split_custom": int(split_custom) if split_custom is not None else 10,
         "certificado_automatico": bool(certificado_automatico),
     }
-
     db.collection("courses").document(curso_id).update(doc)
 
 
 def _toggle_status_curso(curso_id: str, novo_ativo: bool):
-    """
-    Ativa/Desativa curso.
-    - Se novo_ativo = True → status = 'ativo'
-    - Se novo_ativo = False → status = 'inativo'
-    """
     db = get_db()
-    if not db:
-        raise RuntimeError("Erro ao conectar ao banco.")
-
     db.collection("courses").document(curso_id).update({
         "ativo": bool(novo_ativo),
         "status": "ativo" if novo_ativo else "inativo"
