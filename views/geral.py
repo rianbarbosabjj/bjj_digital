@@ -46,7 +46,7 @@ def tela_inicio():
         c1, c2, c3 = st.columns(3)
         with c1: render_card("🧠 Questões", "Crie, edite e visualize o banco de questões.", "Gerenciar", "g1", "Gestão de Questões")
         with c2: render_card("🏛️ Equipes", "Gerencie sua Equipe", "Gerenciar", "g2", "Gestão de Equipes")
-        with c3: render_card("📜 Exames", "Crie edite e libere exames para seus alunos.", "Gerenciar", "g3", "Gestão de Exame")
+        with c3: render_card("📜 Exames", "Crie, edite e libere exames para seus alunos.", "Gerenciar", "g3", "Gestão de Exame")
 
 def tela_meu_perfil(usuario_logado):
     if st.button("🏠 Voltar ao Início", key="btn_voltar_perfil"):
