@@ -1,5 +1,3 @@
-# bjj_digital/views/cursos.py
-
 import streamlit as st
 import pandas as pd
 
@@ -11,51 +9,46 @@ from courses_engine import (
     obter_inscricao,
 )
 
+from database import get_db
 
-def _get_tipo(usuario):
-    return usuario.get("tipo", "aluno")
 
+# ----------------------------------------------------
+#  Função principal da página
+# ----------------------------------------------------
 
 def pagina_cursos(usuario: dict):
     """
-    Página única de Cursos. 
-    - Se for aluno → lista cursos disponíveis + meus cursos
-    - Se for professor/admin → inclui aba de criação e gestão de cursos
+    Página de Cursos — interface adaptada ao tipo de usuário (aluno/professor/admin).
     """
-    tipo = _get_tipo(usuario)
+    tipo = usuario.get("tipo", "aluno").lower()
 
-    st.markdown(
-        "<h1 style='color:#FFD770; text-transform:uppercase;'>📚 Cursos</h1>",
-        unsafe_allow_html=True
-    )
+    st.markdown("<h1>📚 Cursos</h1>", unsafe_allow_html=True)
 
     if tipo in ["admin", "professor"]:
-        _pagina_cursos_professor(usuario)
+        _interface_professor(usuario)
     else:
-        _pagina_cursos_aluno(usuario)
+        _interface_aluno(usuario)
 
 
-# ============================
-# VISÃO: PROFESSOR / ADMIN
-# ============================
+# ----------------------------------------------------
+#  VISÃO DO PROFESSOR / ADMIN
+# ----------------------------------------------------
 
-def _pagina_cursos_professor(usuario: dict):
-    tab1, tab2 = st.tabs([
-        "📘 Meus Cursos",
-        "➕ Criar Novo Curso",
-    ])
+def _interface_professor(usuario):
+    tab1, tab2 = st.tabs(["📘 Meus Cursos", "➕ Criar Novo Curso"])
 
     with tab1:
-        _bloco_meus_cursos_professor(usuario)
+        _prof_listar_cursos(usuario)
 
     with tab2:
-        _bloco_criar_curso(usuario)
+        _prof_criar_curso(usuario)
 
 
-def _bloco_meus_cursos_professor(usuario: dict):
+def _prof_listar_cursos(usuario):
     st.subheader("📘 Meus Cursos")
 
     cursos = listar_cursos_do_professor(usuario["id"])
+
     if not cursos:
         st.info("Você ainda não criou nenhum curso.")
         return
@@ -67,7 +60,7 @@ def _bloco_meus_cursos_professor(usuario: dict):
             "Público": "Todos" if c.get("publico") == "geral" else "Equipe",
             "Pago?": "Sim" if c.get("pago") else "Não",
             "Preço (R$)": c.get("preco", 0.0),
-            "Certificado Auto?": "Sim" if c.get("certificado_automatico") else "Não",
+            "Certificado Automático": "Sim" if c.get("certificado_automatico") else "Não",
         }
         for c in cursos
     ])
@@ -75,41 +68,41 @@ def _bloco_meus_cursos_professor(usuario: dict):
     st.dataframe(df, use_container_width=True)
 
 
-def _bloco_criar_curso(usuario: dict):
+def _prof_criar_curso(usuario):
     st.subheader("➕ Criar Novo Curso")
 
     with st.form("form_criar_curso"):
         titulo = st.text_input("Título do Curso")
         descricao = st.text_area("Descrição do Curso")
         modalidade = st.selectbox("Modalidade", ["EAD", "Presencial"])
-        publico = st.selectbox("Público", ["geral", "equipe"], format_func=lambda v: "Todos" if v == "geral" else "Somente minha Equipe")
+        publico = st.selectbox(
+            "Público",
+            ["geral", "equipe"],
+            format_func=lambda v: "Todos" if v == "geral" else "Somente Minha Equipe"
+        )
 
         equipe_destino = None
         if publico == "equipe":
-            # FUTURO: carregar equipes reais do professor
-            equipe_destino = st.text_input("Identificador da Equipe (por enquanto texto livre)")
+            equipe_destino = st.text_input("Nome/ID da Equipe")
 
         pago = st.checkbox("Curso Pago?", value=False)
-        preco = None
-        if pago:
-            preco = st.number_input("Preço (R$)", min_value=0.0, step=10.0)
+        preco = st.number_input("Preço (R$)", min_value=0.0, step=10.0) if pago else None
 
-        st.markdown("### Configuração de Split (App x Professor)")
+        certificado_auto = st.checkbox("Gerar Certificado Automaticamente?", value=True)
+
         split_custom = st.slider(
-            "Percentual do App sobre o valor do curso (pode ser alterado pelo Admin depois)",
+            "Percentual do App (Admin pode alterar depois)",
             min_value=0,
             max_value=100,
             value=20,
-            step=5,
-            help="Esse valor poderá ser sobrescrito pelas regras globais ou específicas do Admin."
+            step=5
         )
-        certificado_auto = st.checkbox("Emitir certificado automaticamente ao concluir o curso?", value=True)
 
-        submitted = st.form_submit_button("Salvar Curso")
+        enviar = st.form_submit_button("Salvar Curso")
 
-    if submitted:
+    if enviar:
         if not titulo.strip():
-            st.error("Informe um título para o curso.")
+            st.error("O título é obrigatório.")
             return
 
         try:
@@ -132,96 +125,96 @@ def _bloco_criar_curso(usuario: dict):
             st.error(f"Erro ao criar curso: {e}")
 
 
-# ============================
-# VISÃO: ALUNO
-# ============================
+# ----------------------------------------------------
+#  VISÃO DO ALUNO
+# ----------------------------------------------------
 
-def _pagina_cursos_aluno(usuario: dict):
-    tab1, tab2 = st.tabs([
-        "📚 Cursos Disponíveis",
-        "🎓 Meus Cursos",
-    ])
+def _interface_aluno(usuario):
+    tab1, tab2 = st.tabs(["📚 Cursos Disponíveis", "🎓 Meus Cursos"])
 
     with tab1:
-        _bloco_cursos_disponiveis(usuario)
+        _aluno_cursos_disponiveis(usuario)
 
     with tab2:
-        _bloco_meus_cursos_aluno(usuario)
+        _aluno_meus_cursos(usuario)
 
 
-def _bloco_cursos_disponiveis(usuario: dict):
+def _aluno_cursos_disponiveis(usuario):
     st.subheader("📚 Cursos Disponíveis")
 
     cursos = listar_cursos_disponiveis_para_usuario(usuario)
+
     if not cursos:
         st.info("Ainda não há cursos disponíveis.")
         return
 
     for curso in cursos:
+        inscricao = obter_inscricao(usuario["id"], curso["id"])
+
         with st.container(border=True):
             st.markdown(f"### {curso.get('titulo')}")
             st.write(curso.get("descricao") or "")
+
             st.write(
-                f"**Modalidade:** {curso.get('modalidade', '—')} | "
+                f"**Modalidade:** {curso.get('modalidade')} | "
                 f"**Público:** {'Todos' if curso.get('publico') == 'geral' else 'Equipe'}"
             )
 
-            pago = curso.get("pago", False)
-            if pago:
-                st.write(f"💰 Curso pago — valor aproximado: R$ {curso.get('preco', 0.0):.2f}")
-                st.caption("🚧 Pagamento e split ainda serão implementados. Por enquanto, a inscrição é livre para desenvolvimento.")
+            if curso.get("pago"):
+                st.write(f"💰 Curso Pago — R$ {curso.get('preco', 0.0):.2f}")
             else:
-                st.write("✅ Curso gratuito")
+                st.write("🆓 Curso Gratuito")
 
-            inscricao = obter_inscricao(usuario["id"], curso["id"])
             if inscricao:
                 st.success("Você já está inscrita(o) neste curso.")
             else:
-                if st.button(f"Inscrever-se em {curso.get('titulo')}", key=f"btn_inscrever_{curso['id']}"):
+                if st.button(
+                    f"Inscrever-se em {curso['titulo']}",
+                    key=f"btn_inscrever_{curso['id']}"
+                ):
                     inscrever_usuario_em_curso(usuario["id"], curso["id"])
-                    st.success("Inscrição realizada com sucesso! (sem pagamento neste momento)")
-                    st.experimental_rerun()
+                    st.success("Inscrição realizada com sucesso!")
+                    st.rerun()
 
 
-def _bloco_meus_cursos_aluno(usuario: dict):
+def _aluno_meus_cursos(usuario):
     st.subheader("🎓 Meus Cursos")
 
-    # Simplesmente reutiliza a coleção de enrollments + courses
-    from database import get_db
     db = get_db()
     if not db:
-        st.error("Não foi possível conectar ao banco de dados.")
+        st.error("Erro ao conectar ao banco.")
         return
 
-    q = db.collection("enrollments").where("user_id", "==", usuario["id"])
-    inscricoes = list(q.stream())
+    q = db.collection("enrollments").where("user_id", "==", usuario["id"]).stream()
+    inscricoes = list(q)
+
     if not inscricoes:
         st.info("Você ainda não está inscrita(o) em nenhum curso.")
         return
 
-    cursos_por_id = {}
     for ins in inscricoes:
-        d_ins = ins.to_dict()
-        course_id = d_ins.get("course_id")
-        if not course_id:
-            continue
-        if course_id not in cursos_por_id:
-            snap_course = db.collection("courses").document(course_id).get()
-            if snap_course.exists:
-                cursos_por_id[course_id] = snap_course.to_dict() | {"id": course_id}
+        d = ins.to_dict()
+        curso_id = d.get("course_id")
 
-    for course_id, curso in cursos_por_id.items():
-        ins_doc = obter_inscricao(usuario["id"], course_id)
-        progresso = (ins_doc or {}).get("progresso", 0.0)
+        curso_snap = db.collection("courses").document(curso_id).get()
+        if not curso_snap.exists:
+            continue
+
+        curso = curso_snap.to_dict()
+        progresso = d.get("progresso", 0)
 
         with st.container(border=True):
             st.markdown(f"### {curso.get('titulo')}")
-            st.write(curso.get("descricao") or "")
-            st.write(f"Progresso: **{progresso:.0f}%**")
-            pago = (ins_doc or {}).get("pago", False)
-            if pago:
-                st.write("💰 Situação: Pago")
-            else:
-                st.write("💰 Situação: Em aberto (pagamento ainda não implementado)")
+            st.write(curso.get("descricao", ""))
 
-            st.caption("Em breve: acesso direto às aulas, módulos, provas e certificados por aqui.")
+            st.write(f"📊 Progresso: **{progresso:.0f}%**")
+
+            if curso.get("pago"):
+                if d.get("pago"):
+                    st.write("💰 Situação: Pagamento Confirmado")
+                else:
+                    st.warning("💰 Pagamento Pendente")
+            else:
+                st.write("🆓 Curso Gratuito")
+
+            st.caption("Aulas, módulos e certificados serão exibidos aqui em breve.")
