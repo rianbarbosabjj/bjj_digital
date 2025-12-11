@@ -1,6 +1,7 @@
 # bjj_digital/views/cursos.py
 
 import streamlit as st
+from typing import Optional
 
 from courses_engine import (
     criar_curso,
