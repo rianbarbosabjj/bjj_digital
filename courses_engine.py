@@ -1,6 +1,5 @@
 # bjj_digital/courses_engine.py
 
-import math
 from typing import Optional, Dict, List
 from datetime import datetime
 from firebase_admin import firestore
@@ -15,9 +14,9 @@ def _get_db():
     return db
 
 
-# ============================
-# CRIAÇÃO E LEITURA DE CURSOS
-# ============================
+# ======================================================
+# CURSOS
+# ======================================================
 
 def criar_curso(
     professor_id: str,
@@ -34,25 +33,31 @@ def criar_curso(
 ) -> str:
     """
     Cria um curso no Firestore.
-    A coleção 'courses' será criada automaticamente pelo Firebase na primeira gravação.
+    A coleção 'courses' será criada automaticamente na primeira gravação.
     """
     db = _get_db()
 
     doc = {
-        "titulo": titulo.strip(),
-        "descricao": descricao.strip(),
-        "modalidade": modalidade,            # "EAD" | "Presencial"
-        "publico": publico,                  # "geral" | "equipe"
+        "titulo": (titulo or "").strip(),
+        "descricao": (descricao or "").strip(),
+
+        "modalidade": modalidade,           # "EAD" | "Presencial"
+        "publico": publico,                 # "geral" | "equipe"
         "equipe_destino": equipe_destino or None,
+
         "pago": bool(pago),
-        "preco": float(preco) if pago and preco is not None else 0.0,
+        "preco": float(preco) if (pago and preco is not None) else 0.0,
+
         "split_custom": float(split_custom) if split_custom is not None else None,
         "certificado_automatico": bool(certificado_automatico),
 
         "professor_id": professor_id,
         "professor_nome": nome_professor,
 
-        "status": "ativo",                  # "ativo", "rascunho", "arquivado"
+        # status de publicação
+        "status": "ativo",     # "ativo", "inativo", "rascunho"
+        "ativo": True,
+
         "criado_em": firestore.SERVER_TIMESTAMP,
     }
 
@@ -66,48 +71,58 @@ def listar_cursos_do_professor(professor_id: str) -> List[Dict]:
     Lista cursos criados por um professor.
     """
     db = _get_db()
-    cursos = []
+    cursos: List[Dict] = []
 
-    q = (
-        db.collection("courses")
-        .where("professor_id", "==", professor_id)
-    )
-
+    q = db.collection("courses").where("professor_id", "==", professor_id)
     for snap in q.stream():
         d = snap.to_dict()
         d["id"] = snap.id
         cursos.append(d)
 
-    # Ordena localmente por data (se já tiver sido preenchida)
-    cursos.sort(key=lambda c: c.get("criado_em") or datetime.min, reverse=True)
+    # Ordena por data de criação (mais recentes primeiro), se houver timestamp
+    def _key(c):
+        dt = c.get("criado_em")
+        if isinstance(dt, datetime):
+            return dt
+        return datetime.min
+
+    cursos.sort(key=_key, reverse=True)
     return cursos
 
 
 def listar_cursos_disponiveis_para_usuario(usuario: Dict) -> List[Dict]:
     """
     Lista cursos que o usuário pode ver.
-    Por enquanto:
-      - cursos com status "ativo"
-      - sem filtro refinado de equipe_destino (pode ser refinado depois)
+    Regra simples inicial:
+      - cursos com status == "ativo"
+      - não filtra ainda por equipe_destino (isso pode ser refinado depois)
     """
     db = _get_db()
-    cursos = []
+    cursos: List[Dict] = []
 
+    # Busca apenas cursos com status "ativo"
     q = db.collection("courses").where("status", "==", "ativo")
     for snap in q.stream():
         d = snap.to_dict()
         d["id"] = snap.id
 
-        # FUTURO: se publico == "equipe", filtrar por equipe_destino e equipes do aluno.
-        # Por enquanto, deixamos todos os ativos visíveis.
+        # FUTURO: se publico == "equipe", filtrar por equipes do usuário
         cursos.append(d)
 
+    # Ordena por data de criação, se existir
+    def _key(c):
+        dt = c.get("criado_em")
+        if isinstance(dt, datetime):
+            return dt
+        return datetime.min
+
+    cursos.sort(key=_key, reverse=True)
     return cursos
 
 
-# ============================
+# ======================================================
 # MATRÍCULAS / INSCRIÇÕES
-# ============================
+# ======================================================
 
 def get_inscricao_id(user_id: str, course_id: str) -> str:
     """Convenção de ID para matrícula."""
@@ -154,9 +169,9 @@ def inscrever_usuario_em_curso(user_id: str, course_id: str) -> str:
     return doc_id
 
 
-# ============================
-# PROGRESSO (ESQUELETO)
-# ============================
+# ======================================================
+# PROGRESSO
+# ======================================================
 
 def atualizar_progresso(user_id: str, course_id: str, progresso: float):
     """
@@ -175,14 +190,19 @@ def atualizar_progresso(user_id: str, course_id: str, progresso: float):
     ref.update({"progresso": progresso})
 
 
-# ============================
-# GANCHOS PARA PAGAMENTO (FUTURO)
-# ============================
+# ======================================================
+# PAGAMENTO (GANCHO FUTURO)
+# ======================================================
 
-def registrar_pagamento_sucesso(user_id: str, course_id: str, valor: float, metodo: str = "manual"):
+def registrar_pagamento_sucesso(
+    user_id: str,
+    course_id: str,
+    valor: float,
+    metodo: str = "manual"
+):
     """
     Hook para ser chamado quando o pagamento for confirmado.
-    Posteriormente será ligado ao webhook do Mercado Pago com split.
+    No futuro será ligado ao webhook do Mercado Pago com split.
     """
     db = _get_db()
     doc_id = get_inscricao_id(user_id, course_id)
@@ -198,5 +218,3 @@ def registrar_pagamento_sucesso(user_id: str, course_id: str, valor: float, meto
         "metodo_pagamento": metodo,
         "data_pagamento": firestore.SERVER_TIMESTAMP,
     })
-
-    # Poderíamos também registrar em uma collection "payments" aqui, se quiser.
