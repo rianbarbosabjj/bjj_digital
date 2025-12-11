@@ -271,7 +271,7 @@ def gestao_questoes_tab():
     if user_tipo not in ["admin", "professor"]:
         st.error("Acesso negado."); return
 
-    titulos = ["📚 Listar/Editar", "➕ Criar Questão", "🔎 Minhas Submissões"]
+    titulos = ["📚 Listar/Editar", "➕ Criar Questões", "🔎 Minhas Submissões"]
     if user_tipo == "admin":
         titulos.append("⏳ Aprovações (Admin)")
     
