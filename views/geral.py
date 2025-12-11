@@ -37,8 +37,8 @@ def tela_inicio():
     
     col1, col2, col3 = st.columns(3)
     with col1: render_card("🤼 Modo Rola", "Responda questões e alcance o topo do ranking.", "Acessar", "n1", "Modo Rola")
-    with col2: render_card("🥋 Exame de Faixa", "Avaliação teórica.", "Acessar", "n2", "Exame de Faixa")
-    with col3: render_card("🏆 Ranking", "Posição no ranking.", "Acessar", "n3", "Ranking")
+    with col2: render_card("🥋 Exames", "Realize seus exames de faixa e provas dos cursos.", "Acessar", "n2", "Exame de Faixa")
+    with col3: render_card("🏆 Ranking", "Acompanhe sua colocação no ranking.", "Acessar", "n3", "Ranking")
 
     tipo = str(st.session_state.usuario.get("tipo", "aluno")).lower()
     if tipo in ["admin", "professor"]:
