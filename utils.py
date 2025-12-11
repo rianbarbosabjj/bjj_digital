@@ -91,7 +91,7 @@ try:
     @st.cache_resource
     def carregar_modelo_ia():
         return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.75):
+    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.65):
         try:
             if not lista_existentes: return False, None
             model = carregar_modelo_ia()
@@ -116,7 +116,65 @@ except ImportError:
 def carregar_todas_questoes(): return []
 def salvar_questoes(t, q): pass
 
-def auditoria_ia_questao(p, a, c): return "Indisponível"
+def auditoria_ia_questao(pergunta, alternativas, correta):
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key:
+        return "⚠️ Chave GEMINI_API_KEY não configurada."
+
+    prompt = f"""
+    Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
+    Enunciado: {pergunta}
+    Alternativas: A) {alternativas.get('A')} | B) {alternativas.get('B')} | C) {alternativas.get('C')} | D) {alternativas.get('D')}
+    Gabarito: {correta}
+    
+    Verifique consistência técnica e português. Responda curto.
+    """
+
+    # Tenta usar a lib oficial
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        
+        # Tenta pegar um modelo disponível
+        try:
+            modelos = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+            modelo_escolhido = modelos[0]
+            for m in modelos:
+                if 'flash' in m: modelo_escolhido = m; break
+        except:
+            modelo_escolhido = 'models/gemini-1.5-flash'
+
+        model = genai.GenerativeModel(modelo_escolhido)
+        response = model.generate_content(prompt)
+        return response.text
+    except:
+        # Fallback REST
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+            payload = {"contents": [{"parts": [{"text": prompt}]}]}
+            headers = {'Content-Type': 'application/json'}
+            response = requests.post(url, headers=headers, data=json.dumps(payload))
+            if response.status_code == 200:
+                return response.json()['candidates'][0]['content']['parts'][0]['text']
+            return "Erro na IA (REST)"
+        except: return "Erro na IA."
+
+# =========================================
+# AUDITORIA OPENAI (GPT)
+# =========================================
+def auditoria_ia_openai(pergunta, alternativas, correta):
+    api_key = st.secrets.get("OPENAI_API_KEY")
+    if not api_key: return "⚠️ Chave OPENAI_API_KEY ausente."
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=api_key)
+        prompt = f"Audite esta questão de BJJ:\n{pergunta}\nOpções: {alternativas}\nCorreta: {correta}"
+        response = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role":"user", "content":prompt}])
+        return response.choices[0].message.content
+    except Exception as e:
+        if "quota" in str(e): return "❌ Sem saldo na OpenAI."
+        return f"Erro GPT: {e}"
+        
 def auditoria_ia_openai(p, a, c): return "Indisponível"
 
 def normalizar_nome(nome):
