@@ -232,7 +232,13 @@ def tela_cadastro_interno():
     
     # Lógica de seleção (Inclusiva)
     if "Aluno" in tipo:
-        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        with cf: faixa = st.selectbox("Faixa:", [
+    " ", "Branca" "Cinza e Branca", "Cinza", "Cinza e Preta",
+    "Amarela e Branca", "Amarela", "Amarela e Preta",
+    "Laranja e Branca", "Laranja", "Laranja e Preta",
+    "Verde e Branca", "Verde", "Verde e Preta",
+    "Azul", "Roxa", "Marrom", "Preta"
+])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
@@ -256,7 +262,7 @@ def tela_cadastro_interno():
                         lista_profs_filtrada.append(p_nome)
                         mapa_profs_final[p_nome] = p_uid
         
-        prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
+        prof_sel = st.selectbox("Professor(a):", lista_profs_filtrada)
         
     else: 
         with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
@@ -278,7 +284,7 @@ def tela_cadastro_interno():
     
     c_cep, c_btn = st.columns([3, 1])
     cep = c_cep.text_input("CEP:", key="input_cep_cad", value=st.session_state.cad_cep)
-    if c_btn.button("Buscar", key="btn_cep_cad"):
+    if c_btn.button("🔎Buscar CEP", key="btn_cep_cad"):
         end = buscar_cep(cep)
         if end:
             st.session_state.cad_cep = cep
