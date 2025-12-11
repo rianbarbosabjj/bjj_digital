@@ -85,45 +85,23 @@ def _prof_listar_cursos(usuario: dict):
                 if desc:
                     st.caption(f"{desc[:140]}{'...' if len(desc)>140 else ''}")
                 
-                # --- VISUAL NOVO (ESTILO TERMINAL/CLEAN) ---
+                # --- VISUAL NOVO (SEM IDENTAÇÃO PARA NÃO QUEBRAR) ---
                 mod_texto = curso.get('modalidade', '-')
                 pub_texto = 'Equipe' if curso.get('publico') == 'equipe' else 'Geral'
                 
-                # Paleta escolhida:
-                # 1. Verde Neon (Cyber Green) -> Para Modalidade
-                # 2. Dourado (Gold) -> Para Público (Combina com o #0e2d26 e substitui o roxo)
-                
+                # Cores: Verde Neon (Modalidade) e Dourado/Âmbar (Público)
+                # IMPORTANTE: O HTML abaixo não tem espaços no início das linhas para evitar erro de exibição
                 html_badges = f"""
-                <div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
-                    <span style="
-                        background-color: rgba(16, 185, 129, 0.15); 
-                        color: #6ee7b7; 
-                        padding: 4px 12px; 
-                        border-radius: 6px; 
-                        font-size: 0.85rem; 
-                        font-family: monospace; 
-                        border: 1px solid rgba(16, 185, 129, 0.4);
-                        letter-spacing: 0.5px;
-                    ">
-                        🎓 {mod_texto}
-                    </span>
-                    
-                    <span style="color: #4b5563; font-size: 1.2rem; font-weight: 300;">|</span>
-
-                    <span style="
-                        background-color: rgba(251, 191, 36, 0.15); 
-                        color: #fcd34d; 
-                        padding: 4px 12px; 
-                        border-radius: 6px; 
-                        font-size: 0.85rem; 
-                        font-family: monospace;
-                        border: 1px solid rgba(251, 191, 36, 0.4);
-                        letter-spacing: 0.5px;
-                    ">
-                        👥 {pub_texto}
-                    </span>
-                </div>
-                """
+<div style="display: flex; gap: 10px; margin-top: 10px; align-items: center;">
+<span style="background-color: rgba(16, 185, 129, 0.15); color: #6ee7b7; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; font-family: monospace; border: 1px solid rgba(16, 185, 129, 0.4); letter-spacing: 0.5px;">
+🎓 {mod_texto}
+</span>
+<span style="color: #4b5563; font-size: 1.2rem; font-weight: 300;">|</span>
+<span style="background-color: rgba(251, 191, 36, 0.15); color: #fcd34d; padding: 4px 12px; border-radius: 6px; font-size: 0.85rem; font-family: monospace; border: 1px solid rgba(251, 191, 36, 0.4); letter-spacing: 0.5px;">
+👥 {pub_texto}
+</span>
+</div>
+"""
                 st.markdown(html_badges, unsafe_allow_html=True)
                 # -------------------------------------------
 
