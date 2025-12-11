@@ -202,15 +202,32 @@ def _prof_criar_curso(usuario: dict):
 
 
 # ======================================================
-# MODAL NATIVO (st.dialog) - Streamlit 1.34+
+# MODAL NATIVO (st.dialog) - COM ESTILO CUSTOMIZADO
 # ======================================================
 
 @st.dialog("✏️ Editar Curso")
 def _dialogo_editar_curso(curso: dict, usuario: dict):
+    # --- CSS PARA CUSTOMIZAR O FUNDO DO MODAL ---
+    st.markdown("""
+        <style>
+        /* Altera a cor de fundo do container do modal (role="dialog") */
+        div[data-testid="stDialog"] div[role="dialog"] {
+            background-color: #0e2d26; /* Sua cor de fundo personalizada */
+            border: 1px solid rgba(255,215,112,0.2); /* Borda sutil para destaque */
+            color: white; /* Garante que o texto fique legível */
+        }
+        /* Ajusta a cor do botão de fechar (X) para ficar visível */
+        div[data-testid="stDialog"] button[aria-label="Close"] {
+            color: white;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    # --------------------------------------------
+
     # Verifica permissão
     is_admin = usuario.get("tipo") == "admin"
 
-    with st.form("form_edit_course_dialog"):
+    with st.form("form_edit_course_dialog", border=False): # border=False para limpar visual interno
         titulo = st.text_input("Título", value=curso.get("titulo", ""))
         descricao = st.text_area("Descrição", value=curso.get("descricao", ""), height=120)
 
@@ -242,13 +259,11 @@ def _dialogo_editar_curso(curso: dict, usuario: dict):
         with c3:
              certificado_auto = st.checkbox("Certificado Auto.", value=curso.get("certificado_automatico", True))
         with c4:
-             # Lógica de bloqueio do Admin
              valor_atual_split = int(curso.get("split_custom", 10))
-             
              split_custom = st.slider(
                  "Split App %", 0, 100, 
                  value=valor_atual_split,
-                 disabled=not is_admin,  # Se não for admin, fica cinza/travado
+                 disabled=not is_admin,
                  help="Somente administradores podem alterar a taxa." if not is_admin else ""
              )
 
