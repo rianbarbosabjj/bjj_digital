@@ -41,8 +41,19 @@ def tela_login():
     st.session_state.setdefault("modo_login", "login")
     logo = get_logo_path()
 
+    # CORREÇÃO: Verificar se registration_pending existe e tem dados
     if "registration_pending" in st.session_state:
-        tela_completar_cadastro(st.session_state.registration_pending)
+        # CORREÇÃO: Passar o valor direto, não uma referência
+        user_data = st.session_state.registration_pending
+        
+        # Verificar se user_data tem dados válidos
+        if user_data and isinstance(user_data, dict) and ('id' in user_data or 'email' in user_data):
+            tela_completar_cadastro(user_data)
+        else:
+            st.error("Dados de registro inválidos ou incompletos.")
+            st.session_state.registration_pending = None
+            time.sleep(2)
+            st.rerun()
         return
 
     c1, c2, c3 = st.columns([1, 1.5, 1])
@@ -104,25 +115,37 @@ def tela_login():
                         if res and res.get("token"):
                             token = res.get("token").get("access_token")
                             try:
-                                r = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", headers={"Authorization": f"Bearer {token}"})
+                                r = requests.get("https://www.googleapis.com/oauth2/v1/userinfo", 
+                                               headers={"Authorization": f"Bearer {token}"})
                                 if r.status_code == 200:
                                     u_info = r.json()
                                     email = u_info["email"].lower()
                                     nome = u_info.get("name", "").upper()
                                     
+                                    # CORREÇÃO: Debug para ver o que está vindo
+                                    print(f"Google Login: Email={email}, Nome={nome}")
+                                    
                                     exist = buscar_usuario_por_email(email)
                                     if exist:
-                                        if not exist.get("perfil_completo"):
+                                        # CORREÇÃO: Verificar estrutura do usuário
+                                        if not exist.get("perfil_completo", True):
                                             st.session_state.registration_pending = exist
+                                            print(f"Usuário encontrado: {exist}")
                                         else:
                                             st.session_state.usuario = exist
                                         st.rerun()
                                     else:
+                                        # CORREÇÃO: Criar usuário parcial
                                         novo = criar_usuario_parcial_google(email, nome)
-                                        st.session_state.registration_pending = novo
+                                        if novo:
+                                            st.session_state.registration_pending = novo
+                                            print(f"Novo usuário criado: {novo}")
+                                        else:
+                                            st.error("Erro ao criar usuário parcial")
                                         st.rerun()
                             except Exception as e:
                                 st.error(f"Erro de conexão Google: {e}")
+                                print(f"Erro detalhado: {str(e)}")
                                 
                     except Exception as e:
                         st.warning("Sessão expirada. Recarregando...")
@@ -232,13 +255,14 @@ def tela_cadastro_interno():
     
     # Lógica de seleção (Inclusiva)
     if "Aluno" in tipo:
-        with cf: faixa = st.selectbox("Faixa:", [
-            " ", "Branca", "Cinza e Branca", "Cinza", "Cinza e Preta",
-            "Amarela e Branca", "Amarela", "Amarela e Preta",
-            "Laranja e Branca", "Laranja", "Laranja e Preta",
-            "Verde e Branca", "Verde", "Verde e Preta",
-            "Azul", "Roxa", "Marrom", "Preta"
-        ])
+        with cf: 
+            faixa = st.selectbox("Faixa:", [
+                " ", "Branca", "Cinza e Branca", "Cinza", "Cinza e Preta",
+                "Amarela e Branca", "Amarela", "Amarela e Preta",
+                "Laranja e Branca", "Laranja", "Laranja e Preta",
+                "Verde e Branca", "Verde", "Verde e Preta",
+                "Azul", "Roxa", "Marrom", "Preta"
+            ])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
@@ -382,275 +406,399 @@ def tela_cadastro_interno():
 def tela_completar_cadastro(user_data):
     """Tela para completar cadastro após registro via Google"""
     
-    # CORREÇÃO 1: Validação segura do user_data
+    # CORREÇÃO CRÍTICA: Verificação robusta do user_data
     if not user_data:
-        st.error("❌ Dados de registro não encontrados.")
-        st.session_state.registration_pending = None
-        time.sleep(1)
+        st.error("❌ Erro: Dados do usuário não recebidos.")
+        if "registration_pending" in st.session_state:
+            del st.session_state.registration_pending
         st.rerun()
         return
     
-    # CORREÇÃO 2: Garantir que temos um nome válido
-    nome_usuario = user_data.get('nome', '')
-    if not nome_usuario or nome_usuario == '':
-        nome_usuario = "Novo Usuário"
+    # CORREÇÃO: Garantir que é um dicionário
+    if not isinstance(user_data, dict):
+        st.error("❌ Erro: Formato inválido dos dados do usuário.")
+        if "registration_pending" in st.session_state:
+            del st.session_state.registration_pending
+        st.rerun()
+        return
     
-    # CORREÇÃO 3: Exibir header de forma segura
-    st.subheader(f"👋 Olá, {nome_usuario}!")
-    st.info("Para finalizar seu acesso via Google, precisamos de alguns dados.")
+    # CORREÇÃO: Verificar campos mínimos
+    required_fields = ['id', 'email']
+    missing_fields = [field for field in required_fields if field not in user_data]
+    
+    if missing_fields:
+        st.error(f"❌ Dados incompletos. Faltam: {', '.join(missing_fields)}")
+        print(f"DEBUG: user_data recebido = {user_data}")
+        if "registration_pending" in st.session_state:
+            del st.session_state.registration_pending
+        st.rerun()
+        return
+    
+    # CORREÇÃO: Obter nome de forma segura
+    nome_usuario = user_data.get('nome', '')
+    if not nome_usuario or nome_usuario.strip() == '':
+        # Tentar obter do email se nome estiver vazio
+        email = user_data.get('email', '')
+        if email:
+            nome_usuario = email.split('@')[0].title()
+        else:
+            nome_usuario = "Novo Usuário"
+    
+    email_usuario = user_data.get('email', 'E-mail não informado')
+    
+    # Header corrigido
+    st.markdown(f"""
+    <div style="text-align: center; margin-bottom: 2rem;">
+        <h1>👋 Olá, {nome_usuario}!</h1>
+        <p style="opacity: 0.8;">Complete seu cadastro para acessar o sistema</p>
+        <p><small>E-mail: {email_usuario}</small></p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.info("📋 Para finalizar seu acesso via Google, precisamos de alguns dados adicionais.")
     
     db = get_db()
     if not db: 
         st.error("Erro de conexão com o banco de dados")
         return
 
-    # CORREÇÃO 4: Verificar se user_data tem ID
-    if 'id' not in user_data:
-        st.error("ID do usuário não encontrado nos dados de registro.")
-        st.session_state.registration_pending = None
-        time.sleep(1)
-        st.rerun()
-        return
-
-    # ... (Carga de listas igual ao cadastro interno) ...
+    # Carregar listas para o formulário
     try:
         equipes_ref = db.collection('equipes').stream()
         lista_equipes = ["Nenhuma (Vínculo Pendente)"]
         mapa_equipes = {} 
         info_equipes = {} 
+        
         for doc in equipes_ref:
-            d = doc.to_dict(); nm = d.get('nome', 'Sem Nome')
-            lista_equipes.append(nm); mapa_equipes[nm] = doc.id; info_equipes[doc.id] = d
+            d = doc.to_dict()
+            nm = d.get('nome', 'Sem Nome')
+            lista_equipes.append(nm)
+            mapa_equipes[nm] = doc.id
+            info_equipes[doc.id] = d
         
         profs_users_ref = db.collection('usuarios').where('tipo_usuario', '==', 'professor').stream()
         mapa_nomes_profs = {} 
-        for doc in profs_users_ref: mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
+        for doc in profs_users_ref: 
+            mapa_nomes_profs[doc.id] = doc.to_dict().get('nome', 'Sem Nome')
 
         vincs_ref = db.collection('professores').where('status_vinculo', '==', 'ativo').stream()
         profs_por_equipe = {} 
         for doc in vincs_ref:
-            d = doc.to_dict(); eid = d.get('equipe_id'); uid = d.get('usuario_id')
+            d = doc.to_dict()
+            eid = d.get('equipe_id')
+            uid = d.get('usuario_id')
             if eid and uid and uid in mapa_nomes_profs:
-                if eid not in profs_por_equipe: profs_por_equipe[eid] = []
+                if eid not in profs_por_equipe: 
+                    profs_por_equipe[eid] = []
                 profs_por_equipe[eid].append((mapa_nomes_profs[uid], uid))
     except Exception as e:
-        st.warning(f"Algumas opções podem estar limitadas: {e}")
+        st.warning(f"⚠️ Algumas opções podem estar limitadas: {str(e)}")
+        lista_equipes = ["Nenhuma (Vínculo Pendente)"]
+        mapa_equipes = {}
+        info_equipes = {}
+        mapa_nomes_profs = {}
+        profs_por_equipe = {}
 
-    # CORREÇÃO 5: Adicionar validação do CPF como obrigatório
-    c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
-    cpf_inp = c_cpf.text_input("CPF (Obrigatório):", help="Digite seu CPF para completar o cadastro")
-    
-    # CORREÇÃO 6: Validar CPF antes de prosseguir
-    if cpf_inp:
-        cpf_validado = formatar_e_validar_cpf(cpf_inp)
-        if cpf_validado:
-            # Verificar se CPF já existe no banco
-            q_cpf = list(db.collection('usuarios').where('cpf', '==', cpf_validado).stream())
-            for d in q_cpf:
-                if d.id != user_data['id']:
-                    st.error("⚠️ Este CPF já está cadastrado em outra conta.")
-                    cpf_inp = ""
-                    st.stop()
-    
-    sexo = c_sexo.selectbox("Sexo:", OPCOES_SEXO)
-    data_nasc = c_nasc.date_input("Nascimento:", value=None, min_value=date(1940,1,1), max_value=date.today(), format="DD/MM/YYYY")
+    # Formulário de dados
+    with st.container(border=True):
+        st.markdown("### 📝 Dados Pessoais")
+        
+        c_cpf, c_sexo, c_nasc = st.columns([2, 1, 1])
+        
+        with c_cpf:
+            cpf_inp = st.text_input("CPF (Obrigatório):", 
+                                   placeholder="000.000.000-00",
+                                   help="Digite apenas números ou com pontuação")
+        
+        with c_sexo:
+            sexo = st.selectbox("Sexo:", OPCOES_SEXO)
+        
+        with c_nasc:
+            data_nasc = st.date_input("Data de Nascimento:", 
+                                     value=date(1990, 1, 1),
+                                     min_value=date(1940, 1, 1), 
+                                     max_value=date.today(), 
+                                     format="DD/MM/YYYY")
 
-    tipo = st.selectbox("Sou:", ["Aluno(a)", "Professor(a)"])
-    
-    cf, ce = st.columns(2)
-    nome_nova_equipe = None; desc_nova_equipe = None
-    
-    # CORREÇÃO 7: Faixas corretas para aluno
-    if "Aluno" in tipo:
-        with cf: 
-            faixa = st.selectbox("Faixa:", [
-                "Branca", "Cinza e Branca", "Cinza", "Cinza e Preta",
-                "Amarela e Branca", "Amarela", "Amarela e Preta",
-                "Laranja e Branca", "Laranja", "Laranja e Preta",
-                "Verde e Branca", "Verde", "Verde e Preta",
-                "Azul", "Roxa", "Marrom", "Preta"
-            ])
-        with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
+        # Tipo de usuário
+        tipo = st.selectbox("Sou:", ["Aluno(a)", "Professor(a)"])
         
-        lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
-        mapa_profs_final = {}
-        eq_id_sel = mapa_equipes.get(eq_sel)
-        prof_resp_id = None
+        # Faixa e equipe
+        cf, ce = st.columns(2)
+        nome_nova_equipe = None
+        desc_nova_equipe = None
+        
+        if "Aluno" in tipo:
+            with cf: 
+                faixa = st.selectbox("Faixa:", [
+                    "Branca", "Cinza e Branca", "Cinza", "Cinza e Preta",
+                    "Amarela e Branca", "Amarela", "Amarela e Preta",
+                    "Laranja e Branca", "Laranja", "Laranja e Preta",
+                    "Verde e Branca", "Verde", "Verde e Preta",
+                    "Azul", "Roxa", "Marrom", "Preta"
+                ])
+            
+            with ce: 
+                eq_sel = st.selectbox("Equipe:", lista_equipes)
+            
+            # Professores disponíveis para a equipe selecionada
+            lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
+            mapa_profs_final = {}
+            eq_id_sel = mapa_equipes.get(eq_sel)
+            prof_resp_id = None
 
-        if eq_id_sel:
-            dados_eq = info_equipes.get(eq_id_sel, {})
-            prof_resp_id = dados_eq.get('professor_responsavel_id')
-            if prof_resp_id and prof_resp_id in mapa_nomes_profs:
-                nome_resp = mapa_nomes_profs[prof_resp_id]
-                label_resp = f"{nome_resp} (Responsável)"
-                lista_profs_filtrada.append(label_resp)
-                mapa_profs_final[label_resp] = prof_resp_id
-            if eq_id_sel in profs_por_equipe:
-                for p_nome, p_uid in profs_por_equipe[eq_id_sel]:
-                    if p_uid != prof_resp_id:
-                        lista_profs_filtrada.append(p_nome)
-                        mapa_profs_final[p_nome] = p_uid
-        prof_sel = st.selectbox("Professor:", lista_profs_filtrada)
-        
-    else: 
-        with cf: faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
-        with ce:
-            opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
-            eq_sel = st.selectbox("Equipe:", opcoes_prof_eq)
-        if eq_sel == "🆕 Criar Nova Equipe":
-            nome_nova_equipe = st.text_input("Nome da Nova Equipe:")
-            desc_nova_equipe = st.text_input("Descrição:")
-
-    st.markdown("#### Endereço")
-    if 'google_cep' not in st.session_state: st.session_state.google_cep = ''
-    
-    c_cep, c_btn = st.columns([3, 1])
-    cep = c_cep.text_input("CEP:", key="cep_g", value=st.session_state.google_cep)
-    if c_btn.button("Buscar", key="btn_g"):
-        end = buscar_cep(cep)
-        if end:
-            st.session_state.google_cep = cep
-            st.session_state.google_end = end
-            st.success("OK!")
-        else: st.error("Inválido")
-    
-    ec = st.session_state.get('google_end', {})
-    c1, c2 = st.columns(2)
-    logr = c1.text_input("Logradouro:", value=ec.get('logradouro',''))
-    bairro = c2.text_input("Bairro:", value=ec.get('bairro',''))
-    c3, c4 = st.columns(2)
-    cid = c3.text_input("Cidade:", value=ec.get('cidade',''))
-    uf = c4.text_input("UF:", value=ec.get('uf',''))
-    c5, c6 = st.columns(2)
-    num = c5.text_input("Número:")
-    comp = c6.text_input("Complemento:")
-
-    # CORREÇÃO 8: Adicionar validação obrigatória do CPF
-    if st.button("Finalizar Cadastro", type="primary", use_container_width=True):
-        if not cpf_inp:
-            st.error("❌ CPF é obrigatório para completar o cadastro.")
-            return
-        
-        cpf_fin = formatar_e_validar_cpf(cpf_inp)
-        if not cpf_fin: 
-            st.error("❌ CPF Inválido. Digite um CPF válido.")
-            return
-        
-        # Verificação adicional de CPF duplicado
-        q_cpf = list(db.collection('usuarios').where('cpf', '==', cpf_fin).stream())
-        for d in q_cpf:
-            if d.id != user_data['id']:
-                st.error("❌ CPF já cadastrado em outra conta.")
-                return
-        
-        try:
-            with st.spinner("Salvando..."):
-                uid = user_data['id']
-                tipo_db = "professor" if "Professor" in tipo else "aluno"
+            if eq_id_sel:
+                dados_eq = info_equipes.get(eq_id_sel, {})
+                prof_resp_id = dados_eq.get('professor_responsavel_id')
                 
-                # CORREÇÃO 9: Atualizar apenas os campos necessários
-                update_data = {
-                    "cpf": cpf_fin, 
-                    "tipo_usuario": tipo_db, 
-                    "perfil_completo": True,
-                    "cep": formatar_cep(cep) if cep else None, 
-                    "logradouro": logr.upper() if logr else None, 
-                    "numero": num if num else None,
-                    "complemento": comp.upper() if comp else None, 
-                    "bairro": bairro.upper() if bairro else None, 
-                    "cidade": cid.upper() if cid else None, 
-                    "uf": uf.upper() if uf else None, 
-                    "faixa_atual": faixa,
-                    "sexo": sexo,
-                    "data_nascimento": data_nasc.isoformat() if data_nasc else None,
-                    "auth_provider": "google",  # Garantir que está marcado como Google
-                    "ultima_atualizacao": firestore.SERVER_TIMESTAMP
-                }
+                if prof_resp_id and prof_resp_id in mapa_nomes_profs:
+                    nome_resp = mapa_nomes_profs[prof_resp_id]
+                    label_resp = f"{nome_resp} (Responsável)"
+                    lista_profs_filtrada.append(label_resp)
+                    mapa_profs_final[label_resp] = prof_resp_id
                 
-                # Remover campos None para não sobrescrever com None
-                update_data = {k: v for k, v in update_data.items() if v is not None}
-                
-                db.collection('usuarios').document(uid).update(update_data)
-                
-                # Criar vínculos
-                if tipo_db == "professor":
-                    if eq_sel == "🆕 Criar Nova Equipe":
-                        if not nome_nova_equipe:
-                            st.error("Informe o nome da nova equipe.")
-                            return
-                            
-                        _, ref_team = db.collection('equipes').add({
-                            "nome": nome_nova_equipe.upper(), 
-                            "descricao": desc_nova_equipe,
-                            "professor_responsavel_id": uid, 
-                            "ativo": True,
-                            "data_criacao": firestore.SERVER_TIMESTAMP
-                        })
-                        eq_id = ref_team.id
-                        db.collection('professores').add({
-                            "usuario_id": uid, 
-                            "equipe_id": eq_id, 
-                            "status_vinculo": "ativo", 
-                            "eh_responsavel": True, 
-                            "pode_aprovar": True,
-                            "data_vinculo": firestore.SERVER_TIMESTAMP
-                        })
+                if eq_id_sel in profs_por_equipe:
+                    for p_nome, p_uid in profs_por_equipe[eq_id_sel]:
+                        if p_uid != prof_resp_id:
+                            lista_profs_filtrada.append(p_nome)
+                            mapa_profs_final[p_nome] = p_uid
+            
+            prof_sel = st.selectbox("Professor Responsável:", lista_profs_filtrada)
+            
+        else:  # Professor
+            with cf: 
+                faixa = st.selectbox("Faixa:", ["Marrom", "Preta"])
+                st.caption("Professores devem ser faixa Marrom ou Preta")
+            
+            with ce:
+                opcoes_prof_eq = lista_equipes + ["🆕 Criar Nova Equipe"]
+                eq_sel = st.selectbox("Equipe:", opcoes_prof_eq)
+            
+            if eq_sel == "🆕 Criar Nova Equipe":
+                st.info("⭐ Você será cadastrado como **Professor(a) Responsável**.")
+                nome_nova_equipe = st.text_input("Nome da Nova Equipe:")
+                desc_nova_equipe = st.text_input("Descrição (Opcional):")
+            else:
+                st.info("ℹ️ Você será registrado como **Professor(a) Adjunto(a)**.")
+
+        # Endereço
+        st.markdown("### 📍 Endereço")
+        
+        if 'google_cep' not in st.session_state: 
+            st.session_state.google_cep = ''
+        
+        c_cep, c_btn = st.columns([3, 1])
+        
+        with c_cep:
+            cep = st.text_input("CEP:", key="cep_g", 
+                               value=st.session_state.google_cep,
+                               placeholder="00000-000")
+        
+        with c_btn:
+            st.write("")  # Espaçamento
+            if st.button("🔍 Buscar", key="btn_g", use_container_width=True):
+                if cep:
+                    end = buscar_cep(cep)
+                    if end:
+                        st.session_state.google_cep = cep
+                        st.session_state.google_end = end
+                        st.success("✅ Endereço encontrado!")
                     else:
-                        eq_id = mapa_equipes.get(eq_sel)
-                        if eq_id:
+                        st.error("CEP não encontrado")
+                else:
+                    st.warning("Digite um CEP")
+        
+        # Campos de endereço
+        ec = st.session_state.get('google_end', {})
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            logr = st.text_input("Logradouro:", 
+                                value=ec.get('logradouro', ''),
+                                placeholder="Rua, Avenida, etc.")
+            cid = st.text_input("Cidade:", 
+                               value=ec.get('cidade', ''),
+                               placeholder="Nome da cidade")
+        
+        with col2:
+            bairro = st.text_input("Bairro:", 
+                                  value=ec.get('bairro', ''),
+                                  placeholder="Nome do bairro")
+            uf = st.text_input("UF:", 
+                              value=ec.get('uf', ''),
+                              placeholder="SP",
+                              max_chars=2).upper()
+        
+        col_num, col_comp = st.columns(2)
+        with col_num:
+            num = st.text_input("Número:", placeholder="123")
+        
+        with col_comp:
+            comp = st.text_input("Complemento:", placeholder="Apto, Bloco, etc.")
+
+    # Botões de ação
+    st.markdown("---")
+    col_btn1, col_btn2 = st.columns(2)
+    
+    with col_btn1:
+        if st.button("✅ Finalizar Cadastro", type="primary", use_container_width=True):
+            # Validações
+            if not cpf_inp:
+                st.error("❌ CPF é obrigatório")
+                return
+            
+            cpf_fin = formatar_e_validar_cpf(cpf_inp)
+            if not cpf_fin:
+                st.error("❌ CPF inválido")
+                return
+            
+            # Verificar duplicidade de CPF
+            try:
+                q_cpf = list(db.collection('usuarios').where('cpf', '==', cpf_fin).stream())
+                for d in q_cpf:
+                    if d.id != user_data['id']:
+                        st.error("❌ Este CPF já está cadastrado em outra conta")
+                        return
+            except Exception as e:
+                st.error(f"Erro ao verificar CPF: {e}")
+                return
+            
+            # Validar criação de nova equipe
+            if tipo == "Professor(a)" and eq_sel == "🆕 Criar Nova Equipe":
+                if not nome_nova_equipe:
+                    st.error("❌ Informe o nome da nova equipe")
+                    return
+            
+            # Processar dados
+            try:
+                with st.spinner("Salvando seus dados..."):
+                    uid = user_data['id']
+                    tipo_db = "professor" if "Professor" in tipo else "aluno"
+                    
+                    # Dados para atualização
+                    update_data = {
+                        "cpf": cpf_fin,
+                        "tipo_usuario": tipo_db,
+                        "perfil_completo": True,
+                        "faixa_atual": faixa,
+                        "sexo": sexo,
+                        "data_nascimento": data_nasc.isoformat() if data_nasc else None,
+                        "auth_provider": "google",
+                        "ultima_atualizacao": firestore.SERVER_TIMESTAMP
+                    }
+                    
+                    # Adicionar endereço se preenchido
+                    if cep:
+                        update_data["cep"] = formatar_cep(cep)
+                    if logr:
+                        update_data["logradouro"] = logr.upper()
+                    if num:
+                        update_data["numero"] = num
+                    if comp:
+                        update_data["complemento"] = comp.upper()
+                    if bairro:
+                        update_data["bairro"] = bairro.upper()
+                    if cid:
+                        update_data["cidade"] = cid.upper()
+                    if uf:
+                        update_data["uf"] = uf.upper()
+                    
+                    # Atualizar usuário
+                    db.collection('usuarios').document(uid).update(update_data)
+                    
+                    # Criar vínculos
+                    if tipo_db == "professor":
+                        if eq_sel == "🆕 Criar Nova Equipe":
+                            # Criar nova equipe
+                            _, ref_team = db.collection('equipes').add({
+                                "nome": nome_nova_equipe.upper(),
+                                "descricao": desc_nova_equipe if desc_nova_equipe else "",
+                                "professor_responsavel_id": uid,
+                                "ativo": True,
+                                "data_criacao": firestore.SERVER_TIMESTAMP
+                            })
+                            eq_id = ref_team.id
+                            
+                            # Criar vínculo como responsável
                             db.collection('professores').add({
-                                "usuario_id": uid, 
-                                "equipe_id": eq_id, 
-                                "status_vinculo": "pendente", 
-                                "eh_responsavel": False,
+                                "usuario_id": uid,
+                                "equipe_id": eq_id,
+                                "status_vinculo": "ativo",
+                                "eh_responsavel": True,
+                                "pode_aprovar": True,
+                                "data_vinculo": firestore.SERVER_TIMESTAMP
+                            })
+                        else:
+                            # Vínculo como professor adjunto
+                            eq_id = mapa_equipes.get(eq_sel)
+                            if eq_id:
+                                db.collection('professores').add({
+                                    "usuario_id": uid,
+                                    "equipe_id": eq_id,
+                                    "status_vinculo": "pendente",
+                                    "eh_responsavel": False,
+                                    "tipo_solicitacao": "adjunto",
+                                    "data_solicitacao": firestore.SERVER_TIMESTAMP
+                                })
+                    else:  # Aluno
+                        eq_id = mapa_equipes.get(eq_sel)
+                        prof_id = None
+                        
+                        if prof_sel and prof_sel != "Nenhum (Vínculo Pendente)":
+                            prof_id = mapa_profs_final.get(prof_sel)
+                        
+                        if eq_id:
+                            db.collection('alunos').add({
+                                "usuario_id": uid,
+                                "faixa_atual": faixa,
+                                "equipe_id": eq_id,
+                                "professor_id": prof_id,
+                                "status_vinculo": "pendente",
                                 "data_solicitacao": firestore.SERVER_TIMESTAMP
                             })
-                else:
-                    eq_id = mapa_equipes.get(eq_sel)
-                    prof_id = mapa_profs_final.get(prof_sel) if (tipo == "Aluno(a)" and prof_sel and prof_sel != "Nenhum (Vínculo Pendente)") else None
                     
-                    if eq_id:
-                        db.collection('alunos').add({
-                            "usuario_id": uid, 
-                            "faixa_atual": faixa, 
-                            "equipe_id": eq_id, 
-                            "professor_id": prof_id, 
-                            "status_vinculo": "pendente",
-                            "data_solicitacao": firestore.SERVER_TIMESTAMP
-                        })
-                
-                # Atualizar sessão
-                user_data.update({
-                    'perfil_completo': True,
-                    'tipo': tipo_db,
-                    'faixa_atual': faixa
-                })
-                st.session_state.usuario = user_data
-                
-                # Limpar estado de registro pendente
-                del st.session_state.registration_pending
+                    # Atualizar sessão
+                    user_data.update({
+                        'perfil_completo': True,
+                        'tipo': tipo_db,
+                        'faixa_atual': faixa,
+                        'nome': nome_usuario
+                    })
+                    st.session_state.usuario = user_data
+                    
+                    # Limpar estado
+                    if "registration_pending" in st.session_state:
+                        del st.session_state.registration_pended
+                    
+                    # Limpar estados temporários
+                    for key in ['google_cep', 'google_end']:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    
+                    st.success("""
+                    🎉 **Cadastro completado com sucesso!**
+                    
+                    Você será redirecionado para o sistema em instantes...
+                    """)
+                    
+                    time.sleep(2)
+                    st.rerun()
+                    
+            except Exception as e:
+                st.error(f"❌ Erro ao salvar: {str(e)}")
+                print(f"DEBUG - Erro detalhado: {str(e)}")
+    
+    with col_btn2:
+        if st.button("❌ Cancelar", type="secondary", use_container_width=True):
+            if st.confirm("Deseja realmente cancelar o cadastro?"):
+                if "registration_pending" in st.session_state:
+                    del st.session_state.registration_pending
                 
                 # Limpar estados temporários
                 for key in ['google_cep', 'google_end']:
                     if key in st.session_state:
                         del st.session_state[key]
                 
-                st.success("✅ Cadastro Completo! Redirecionando...")
-                time.sleep(2)
-                st.rerun()
-
-        except Exception as e:
-            st.error(f"❌ Erro ao salvar: {e}")
-            st.info("Por favor, tente novamente ou entre em contato com o suporte.")
-
-    # CORREÇÃO 10: Botão de cancelar melhorado
-    st.markdown("---")
-    col_cancel1, col_cancel2, col_cancel3 = st.columns([1, 2, 1])
-    
-    with col_cancel2:
-        if st.button("❌ Cancelar e Sair", use_container_width=True, type="secondary"):
-            if st.confirm("Tem certeza que deseja cancelar o cadastro? Seus dados parciais serão mantidos para tentar novamente mais tarde."):
-                del st.session_state.registration_pending
-                st.success("Cadastro cancelado. Você pode completá-lo mais tarde.")
+                st.warning("Cadastro cancelado")
                 time.sleep(1)
                 st.rerun()
