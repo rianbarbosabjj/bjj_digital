@@ -913,4 +913,233 @@ def _aluno_cursos_disponiveis_moderno(usuario: dict):
             continue
         elif tipo_filtro == "Pagos" and not curso.get('pago'):
             continue
-        elif tipo_filtro == "EAD" and curso.get('modal
+        elif tipo_filtro == "EAD" and curso.get('modalidade') != 'EAD':
+            continue
+        elif tipo_filtro == "Presencial" and curso.get('modalidade') != 'Presencial':
+            continue
+        
+        cursos_filtrados.append(curso)
+    
+    # Exibição
+    st.markdown(f"### 📚 Cursos Disponíveis ({len(cursos_filtrados)})")
+    
+    if not cursos_filtrados:
+        st.warning("Nenhum curso encontrado com os filtros aplicados.")
+        return
+    
+    # Grid de cards
+    cols = st.columns(2)
+    for idx, curso in enumerate(cursos_filtrados):
+        with cols[idx % 2]:
+            _card_curso_aluno(curso, usuario)
+
+def _card_curso_aluno(curso: dict, usuario: dict):
+    """Card moderno para curso disponível para aluno"""
+    
+    with st.container():
+        st.markdown("<div class='curso-card'>", unsafe_allow_html=True)
+        
+        # Verificar se já está inscrito
+        try:
+            inscricao = obter_inscricao(usuario["id"], curso["id"])
+        except:
+            inscricao = None
+        
+        # Header
+        st.markdown(f"#### {curso.get('titulo', 'Sem Título')}")
+        
+        # Badges
+        col_badges = st.columns(3)
+        with col_badges[0]:
+            modalidade = curso.get('modalidade', '-')
+            st.markdown(f"<span class='badge badge-azul'>{modalidade}</span>", unsafe_allow_html=True)
+        
+        with col_badges[1]:
+            if curso.get('pago'):
+                preco = curso.get('preco', 0.0)
+                st.markdown(f"<span class='badge badge-amarelo'>R$ {preco:.2f}</span>", unsafe_allow_html=True)
+            else:
+                st.markdown(f"<span class='badge badge-verde'>Gratuito</span>", unsafe_allow_html=True)
+        
+        with col_badges[2]:
+            professor = curso.get('nome_professor', 'Professor')
+            st.caption(f"👨‍🏫 {professor}")
+        
+        # Descrição
+        desc = curso.get("descricao", "")
+        if desc:
+            st.markdown(f"<div style='opacity: 0.8; margin: 1rem 0;'>{desc[:120]}...</div>", unsafe_allow_html=True)
+        
+        # Botão de ação
+        if inscricao:
+            st.success("✅ Você já está inscrito!")
+            if st.button("Acessar Curso", key=f"acessar_{curso['id']}", use_container_width=True):
+                # Aqui você pode redirecionar para o curso
+                st.session_state['curso_atual'] = curso['id']
+                st.rerun()
+        else:
+            if st.button("Inscrever-se", key=f"inscrever_{curso['id']}", use_container_width=True, type="primary"):
+                try:
+                    inscrever_usuario_em_curso(usuario["id"], curso["id"])
+                    st.success("🎉 Inscrição realizada com sucesso!")
+                    time.sleep(1.5)
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Erro na inscrição: {e}")
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
+def _aluno_meus_cursos_moderno(usuario: dict):
+    """Exibição moderna dos cursos do aluno"""
+    
+    db = get_db()
+    if not db:
+        st.error("❌ Erro de conexão com o banco de dados.")
+        return
+    
+    try:
+        # Buscar inscrições
+        inscricoes_ref = db.collection("enrollments").where("user_id", "==", usuario["id"]).stream()
+        inscricoes = []
+        
+        for ins in inscricoes_ref:
+            dados = ins.to_dict()
+            dados["inscricao_id"] = ins.id
+            inscricoes.append(dados)
+    except Exception as e:
+        st.error(f"❌ Erro ao carregar inscrições: {e}")
+        inscricoes = []
+    
+    if not inscricoes:
+        st.info("""
+        📭 **Você ainda não está matriculado em nenhum curso**
+        
+        Explore os cursos disponíveis e comece sua jornada de aprendizado!
+        """)
+        return
+    
+    # Organizar por progresso
+    cursos_em_andamento = []
+    cursos_concluidos = []
+    
+    for ins in inscricoes:
+        try:
+            curso_ref = db.collection("courses").document(ins.get("course_id")).get()
+            if curso_ref.exists:
+                curso = curso_ref.to_dict()
+                curso["id"] = curso_ref.id
+                curso["progresso"] = float(ins.get("progresso", 0))
+                curso["pago_status"] = "✅ Pago" if ins.get("pago") else "⏳ Pendente"
+                curso["inscricao_id"] = ins["inscricao_id"]
+                
+                if curso["progresso"] >= 100:
+                    cursos_concluidos.append(curso)
+                else:
+                    cursos_em_andamento.append(curso)
+        except:
+            continue
+    
+    # Exibição
+    if cursos_em_andamento:
+        st.markdown(f"### 📚 Cursos em Andamento ({len(cursos_em_andamento)})")
+        
+        for curso in cursos_em_andamento:
+            _card_meu_curso(curso, usuario)
+    
+    if cursos_concluidos:
+        st.markdown(f"### 🎓 Cursos Concluídos ({len(cursos_concluidos)})")
+        
+        for curso in cursos_concluidos:
+            _card_meu_curso(curso, usuario, concluido=True)
+
+def _card_meu_curso(curso: dict, usuario: dict, concluido: bool = False):
+    """Card para curso do aluno (inscrito)"""
+    
+    with st.container():
+        st.markdown("<div class='curso-card'>", unsafe_allow_html=True)
+        
+        col1, col2, col3 = st.columns([1, 3, 1])
+        
+        with col1:
+            # Ícone
+            emoji = "🥋" if concluido else "📚"
+            st.markdown(f"<div style='font-size: 2.5rem; text-align: center;'>{emoji}</div>", unsafe_allow_html=True)
+        
+        with col2:
+            # Informações
+            st.markdown(f"#### {curso.get('titulo', 'Sem Título')}")
+            
+            if not concluido:
+                # Barra de progresso
+                progresso = curso.get("progresso", 0)
+                st.progress(progresso / 100, text=f"Progresso: {int(progresso)}%")
+                
+                # Status de pagamento
+                if curso.get("pago") and curso.get("pago_status") == "⏳ Pendente":
+                    st.warning("⚠️ Pagamento pendente")
+            else:
+                st.success("✅ Curso concluído!")
+        
+        with col3:
+            st.write("")  # Espaçamento
+            
+            if concluido:
+                if st.button("📜 Certificado", key=f"cert_{curso['id']}", use_container_width=True):
+                    # Em produção, integrar com geração de certificado
+                    st.info("Funcionalidade de certificado em desenvolvimento")
+            else:
+                if st.button("▶️ Continuar", key=f"continuar_{curso['id']}", use_container_width=True, type="primary"):
+                    st.session_state['curso_atual'] = curso['id']
+                    st.rerun()
+        
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# ======================================================
+# FUNÇÕES AUXILIARES (MANTIDAS DO ORIGINAL)
+# ======================================================
+
+def _salvar_edicao_curso(
+    curso_id: str,
+    titulo: str,
+    descricao: str,
+    modalidade: str,
+    publico: str,
+    equipe_destino: Optional[str],
+    pago: bool,
+    preco: Optional[float],
+    split_custom: Optional[int],
+    certificado_automatico: bool
+):
+    """Atualiza o documento do curso no Firestore."""
+    db = get_db()
+    
+    safe_preco = float(preco) if (pago and preco is not None) else 0.0
+    safe_split = int(split_custom) if split_custom is not None else 10
+
+    doc_updates = {
+        "titulo": titulo.strip(),
+        "descricao": descricao.strip(),
+        "modalidade": modalidade,
+        "publico": publico,
+        "equipe_destino": equipe_destino or None,
+        "pago": bool(pago),
+        "preco": safe_preco,
+        "split_custom": safe_split,
+        "certificado_automatico": bool(certificado_automatico),
+    }
+
+    db.collection("courses").document(curso_id).update(doc_updates)
+
+def _toggle_status_curso(curso_id: str, novo_ativo: bool):
+    """Ativa ou desativa o curso."""
+    db = get_db()
+    db.collection("courses").document(curso_id).update({
+        "ativo": bool(novo_ativo),
+        "status": "ativo" if novo_ativo else "inativo"
+    })
+
+# ======================================================
+# IMPORTAÇÃO NECESSÁRIA
+# ======================================================
+
+import time  # Adicionado para usar time.sleep()
