@@ -74,6 +74,32 @@ def aplicar_estilos_cursos():
         border: 1px solid rgba(59, 130, 246, 0.3);
     }
     
+    /* Modal customizado */
+    .modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+    }
+    
+    .modal-content {
+        background: linear-gradient(145deg, #1e293b, #0f172a);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 2rem;
+        width: 90%;
+        max-width: 800px;
+        max-height: 90vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    }
+    
     /* Progress bars */
     .stProgress > div > div > div {
         background: linear-gradient(90deg, #10b981, #3b82f6);
@@ -119,6 +145,10 @@ def pagina_cursos(usuario: dict):
 
     st.markdown("---")
 
+    # Verificar se há modal para mostrar
+    if 'show_edit_modal' in st.session_state and st.session_state.show_edit_modal:
+        _render_modal_editar_curso()
+    
     if tipo in ["admin", "professor"]:
         _interface_professor_moderna(usuario)
     else:
@@ -273,6 +303,8 @@ def _card_curso_professor(curso: dict, usuario: dict):
             with col_btn1:
                 if st.button("✏️", key=f"edit_{curso['id']}", help="Editar curso", use_container_width=True):
                     st.session_state['edit_curso'] = curso
+                    st.session_state['show_edit_modal'] = True
+                    st.rerun()
             
             with col_btn2:
                 if ativo:
@@ -285,10 +317,6 @@ def _card_curso_professor(curso: dict, usuario: dict):
                         st.rerun()
         
         st.markdown("</div>", unsafe_allow_html=True)
-    
-    # Modal de edição
-    if 'edit_curso' in st.session_state and st.session_state['edit_curso']['id'] == curso['id']:
-        _modal_editar_curso_moderno(st.session_state['edit_curso'], usuario)
 
 def _prof_criar_curso_moderno(usuario: dict):
     """Formulário moderno para criação de curso"""
@@ -351,7 +379,7 @@ def _prof_criar_curso_moderno(usuario: dict):
             certificado_auto = st.checkbox(
                 "Emitir certificado automaticamente",
                 value=True,
-                help="O certificado será gerado automaticamente ao concluir o curso"
+                help="O certificado será gerado automatically ao concluir o curso"
             )
         
         with col_config2:
@@ -599,151 +627,225 @@ def _prof_dashboard_moderno(usuario: dict):
             st.error(f"❌ Erro ao carregar dados do curso: {e}")
 
 # ======================================================
-# MODAL DE EDIÇÃO MODERNO
+# MODAL DE EDIÇÃO ALTERNATIVO (COMPATÍVEL)
 # ======================================================
 
-def _modal_editar_curso_moderno(curso: dict, usuario: dict):
-    """Modal moderno para edição de curso"""
+def _render_modal_editar_curso():
+    """Renderiza o modal de edição usando HTML/JavaScript"""
     
-    with st.dialog("✏️ Editar Curso"):
-        st.markdown("""
-        <div style="margin-bottom: 1.5rem;">
-            <h3>Editar Curso</h3>
-            <p style="opacity: 0.8;">Atualize as informações do curso</p>
-        </div>
-        """, unsafe_allow_html=True)
+    if 'edit_curso' not in st.session_state:
+        st.session_state.show_edit_modal = False
+        return
+    
+    curso = st.session_state['edit_curso']
+    usuario = st.session_state.get('usuario', {})
+    
+    # HTML/JS para o modal
+    modal_html = f"""
+    <div id="modal-overlay" class="modal-overlay">
+        <div id="modal-content" class="modal-content animate-fadeIn">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                <h3 style="margin: 0;">✏️ Editar Curso</h3>
+                <button onclick="closeModal()" style="
+                    background: none;
+                    border: none;
+                    color: white;
+                    font-size: 1.5rem;
+                    cursor: pointer;
+                    opacity: 0.7;
+                ">×</button>
+            </div>
+    """
+    
+    # Formulário dentro do modal (usaremos um formulário do Streamlit separado)
+    st.markdown(modal_html, unsafe_allow_html=True)
+    
+    # Aqui começa o formulário do Streamlit
+    is_admin = usuario.get("tipo") == "admin"
+    
+    with st.form(f"form_editar_{curso['id']}", border=False):
+        # Informações básicas
+        titulo = st.text_input("Título *", value=curso.get("titulo", ""), key=f"titulo_{curso['id']}")
+        descricao = st.text_area("Descrição *", value=curso.get("descricao", ""), height=100, key=f"desc_{curso['id']}")
         
-        is_admin = usuario.get("tipo") == "admin"
+        col1, col2 = st.columns(2)
         
-        with st.form("form_editar_curso_modal"):
-            # Informações básicas
-            titulo = st.text_input("Título *", value=curso.get("titulo", ""))
-            descricao = st.text_area("Descrição *", value=curso.get("descricao", ""), height=100)
+        with col1:
+            modalidade = st.selectbox(
+                "Modalidade",
+                ["EAD", "Presencial", "Híbrido"],
+                index=["EAD", "Presencial", "Híbrido"].index(
+                    curso.get("modalidade", "EAD")
+                ) if curso.get("modalidade") in ["EAD", "Presencial", "Híbrido"] else 0,
+                key=f"modalidade_{curso['id']}"
+            )
+        
+        with col2:
+            publico = st.selectbox(
+                "Público",
+                ["geral", "equipe"],
+                index=0 if curso.get("publico") == "geral" else 1,
+                format_func=lambda v: "🌍 Geral" if v == "geral" else "👥 Equipe",
+                key=f"publico_{curso['id']}"
+            )
             
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                modalidade = st.selectbox(
-                    "Modalidade",
-                    ["EAD", "Presencial", "Híbrido"],
-                    index=["EAD", "Presencial", "Híbrido"].index(
-                        curso.get("modalidade", "EAD")
-                    ) if curso.get("modalidade") in ["EAD", "Presencial", "Híbrido"] else 0
+            equipe_destino = None
+            if publico == "equipe":
+                equipe_destino = st.text_input(
+                    "Equipe Destino",
+                    value=curso.get("equipe_destino", ""),
+                    key=f"equipe_{curso['id']}"
                 )
+        
+        # Status e certificado
+        col3, col4 = st.columns(2)
+        
+        with col3:
+            ativo = st.checkbox("Curso Ativo", value=curso.get("ativo", True), key=f"ativo_{curso['id']}")
+        
+        with col4:
+            certificado_auto = st.checkbox(
+                "Certificado Automático",
+                value=curso.get("certificado_automatico", True),
+                key=f"cert_{curso['id']}"
+            )
+        
+        # Valores
+        st.markdown("#### 💰 Valores")
+        
+        col5, col6 = st.columns(2)
+        
+        with col5:
+            pago = st.checkbox("Curso Pago", value=curso.get("pago", False), key=f"pago_{curso['id']}")
             
-            with col2:
-                publico = st.selectbox(
-                    "Público",
-                    ["geral", "equipe"],
-                    index=0 if curso.get("publico") == "geral" else 1,
-                    format_func=lambda v: "🌍 Geral" if v == "geral" else "👥 Equipe"
+            preco = st.number_input(
+                "Valor (R$)",
+                value=float(curso.get("preco", 0.0)),
+                min_value=0.0,
+                step=10.0,
+                disabled=not pago,
+                key=f"preco_{curso['id']}"
+            )
+        
+        with col6:
+            if pago and is_admin:
+                split_custom = st.slider(
+                    "Taxa da Plataforma (%)",
+                    0, 100,
+                    value=int(curso.get("split_custom", 10)),
+                    key=f"split_{curso['id']}"
                 )
-                
-                equipe_destino = None
-                if publico == "equipe":
-                    equipe_destino = st.text_input(
-                        "Equipe Destino",
-                        value=curso.get("equipe_destino", "")
+            else:
+                split_custom = curso.get("split_custom", 10)
+                if pago:
+                    st.info(f"Taxa atual: {split_custom}%")
+                    st.caption("Apenas administradores podem alterar")
+        
+        # Botões
+        st.markdown("---")
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+        
+        with col_btn2:
+            submitted = st.form_submit_button(
+                "💾 Salvar Alterações",
+                type="primary",
+                use_container_width=True
+            )
+        
+        with col_btn3:
+            cancelar = st.form_submit_button(
+                "❌ Cancelar",
+                type="secondary",
+                use_container_width=True
+            )
+        
+        if submitted:
+            # Validações
+            if not titulo.strip():
+                st.error("⚠️ O título é obrigatório")
+            elif not descricao.strip():
+                st.error("⚠️ A descrição é obrigatória")
+            else:
+                try:
+                    _salvar_edicao_curso(
+                        curso_id=curso["id"],
+                        titulo=titulo,
+                        descricao=descricao,
+                        modalidade=modalidade,
+                        publico=publico,
+                        equipe_destino=equipe_destino,
+                        pago=pago,
+                        preco=preco,
+                        split_custom=split_custom,
+                        certificado_automatico=certificado_auto
                     )
-            
-            # Status e certificado
-            col3, col4 = st.columns(2)
-            
-            with col3:
-                ativo = st.checkbox("Curso Ativo", value=curso.get("ativo", True))
-            
-            with col4:
-                certificado_auto = st.checkbox(
-                    "Certificado Automático",
-                    value=curso.get("certificado_automatico", True)
-                )
-            
-            # Valores
-            st.markdown("#### 💰 Valores")
-            
-            col5, col6 = st.columns(2)
-            
-            with col5:
-                pago = st.checkbox("Curso Pago", value=curso.get("pago", False))
-                
-                preco = st.number_input(
-                    "Valor (R$)",
-                    value=float(curso.get("preco", 0.0)),
-                    min_value=0.0,
-                    step=10.0,
-                    disabled=not pago
-                )
-            
-            with col6:
-                if pago and is_admin:
-                    split_custom = st.slider(
-                        "Taxa da Plataforma (%)",
-                        0, 100,
-                        value=int(curso.get("split_custom", 10))
-                    )
-                else:
-                    split_custom = curso.get("split_custom", 10)
-                    if pago:
-                        st.info(f"Taxa atual: {split_custom}%")
-                        st.caption("Apenas administradores podem alterar")
-            
-            # Botões
-            st.markdown("---")
-            col_btn1, col_btn2 = st.columns(2)
-            
-            with col_btn1:
-                submitted = st.form_submit_button(
-                    "💾 Salvar Alterações",
-                    type="primary",
-                    use_container_width=True
-                )
-            
-            with col_btn2:
-                cancelar = st.form_submit_button(
-                    "Cancelar",
-                    type="secondary",
-                    use_container_width=True
-                )
-            
-            if submitted:
-                # Validações
-                if not titulo.strip():
-                    st.error("⚠️ O título é obrigatório")
-                elif not descricao.strip():
-                    st.error("⚠️ A descrição é obrigatória")
-                else:
-                    try:
-                        _salvar_edicao_curso(
-                            curso_id=curso["id"],
-                            titulo=titulo,
-                            descricao=descricao,
-                            modalidade=modalidade,
-                            publico=publico,
-                            equipe_destino=equipe_destino,
-                            pago=pago,
-                            preco=preco,
-                            split_custom=split_custom,
-                            certificado_automatico=certificado_auto
-                        )
-                        
-                        # Atualizar status
-                        db = get_db()
-                        if db:
-                            db.collection("courses").document(curso["id"]).update({
-                                "ativo": ativo
-                            })
-                        
-                        st.success("✅ Curso atualizado com sucesso!")
-                        st.session_state.pop('edit_curso', None)
-                        time.sleep(1.5)
-                        st.rerun()
-                        
-                    except Exception as e:
-                        st.error(f"❌ Erro ao salvar: {str(e)}")
-            
-            if cancelar:
-                st.session_state.pop('edit_curso', None)
-                st.rerun()
+                    
+                    # Atualizar status
+                    db = get_db()
+                    if db:
+                        db.collection("courses").document(curso["id"]).update({
+                            "ativo": ativo
+                        })
+                    
+                    st.success("✅ Curso atualizado com sucesso!")
+                    
+                    # Limpar estado do modal
+                    st.session_state.pop('edit_curso', None)
+                    st.session_state.pop('show_edit_modal', None)
+                    
+                    # JavaScript para recarregar a página
+                    st.markdown("""
+                    <script>
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 1500);
+                    </script>
+                    """, unsafe_allow_html=True)
+                    
+                except Exception as e:
+                    st.error(f"❌ Erro ao salvar: {str(e)}")
+        
+        if cancelar:
+            st.session_state.pop('edit_curso', None)
+            st.session_state.pop('show_edit_modal', None)
+            st.rerun()
+    
+    # Fechar o modal HTML
+    st.markdown("</div></div>", unsafe_allow_html=True)
+    
+    # JavaScript para fechar o modal
+    st.markdown("""
+    <script>
+    function closeModal() {{
+        // Remove o modal do DOM
+        var modal = document.getElementById('modal-overlay');
+        if (modal) {{
+            modal.style.display = 'none';
+        }}
+        
+        // Envia uma requisição para fechar o modal no servidor
+        fetch(window.location.href + '?close_modal=true', {{method: 'GET'}})
+            .then(() => {{
+                // Recarrega a página para atualizar o estado
+                setTimeout(() => {{ window.location.reload(); }}, 100);
+            }});
+    }}
+    
+    // Fecha o modal ao pressionar ESC
+    document.addEventListener('keydown', function(event) {{
+        if (event.key === 'Escape') {{
+            closeModal();
+        }}
+    }});
+    
+    // Fecha o modal ao clicar fora
+    document.getElementById('modal-overlay').addEventListener('click', function(event) {{
+        if (event.target.id === 'modal-overlay') {{
+            closeModal();
+        }}
+    }});
+    </script>
+    """, unsafe_allow_html=True)
 
 # ======================================================
 # VISÃO DO ALUNO MODERNA
@@ -811,233 +913,4 @@ def _aluno_cursos_disponiveis_moderno(usuario: dict):
             continue
         elif tipo_filtro == "Pagos" and not curso.get('pago'):
             continue
-        elif tipo_filtro == "EAD" and curso.get('modalidade') != 'EAD':
-            continue
-        elif tipo_filtro == "Presencial" and curso.get('modalidade') != 'Presencial':
-            continue
-        
-        cursos_filtrados.append(curso)
-    
-    # Exibição
-    st.markdown(f"### 📚 Cursos Disponíveis ({len(cursos_filtrados)})")
-    
-    if not cursos_filtrados:
-        st.warning("Nenhum curso encontrado com os filtros aplicados.")
-        return
-    
-    # Grid de cards
-    cols = st.columns(2)
-    for idx, curso in enumerate(cursos_filtrados):
-        with cols[idx % 2]:
-            _card_curso_aluno(curso, usuario)
-
-def _card_curso_aluno(curso: dict, usuario: dict):
-    """Card moderno para curso disponível para aluno"""
-    
-    with st.container():
-        st.markdown("<div class='curso-card'>", unsafe_allow_html=True)
-        
-        # Verificar se já está inscrito
-        try:
-            inscricao = obter_inscricao(usuario["id"], curso["id"])
-        except:
-            inscricao = None
-        
-        # Header
-        st.markdown(f"#### {curso.get('titulo', 'Sem Título')}")
-        
-        # Badges
-        col_badges = st.columns(3)
-        with col_badges[0]:
-            modalidade = curso.get('modalidade', '-')
-            st.markdown(f"<span class='badge badge-azul'>{modalidade}</span>", unsafe_allow_html=True)
-        
-        with col_badges[1]:
-            if curso.get('pago'):
-                preco = curso.get('preco', 0.0)
-                st.markdown(f"<span class='badge badge-amarelo'>R$ {preco:.2f}</span>", unsafe_allow_html=True)
-            else:
-                st.markdown(f"<span class='badge badge-verde'>Gratuito</span>", unsafe_allow_html=True)
-        
-        with col_badges[2]:
-            professor = curso.get('nome_professor', 'Professor')
-            st.caption(f"👨‍🏫 {professor}")
-        
-        # Descrição
-        desc = curso.get("descricao", "")
-        if desc:
-            st.markdown(f"<div style='opacity: 0.8; margin: 1rem 0;'>{desc[:120]}...</div>", unsafe_allow_html=True)
-        
-        # Botão de ação
-        if inscricao:
-            st.success("✅ Você já está inscrito!")
-            if st.button("Acessar Curso", key=f"acessar_{curso['id']}", use_container_width=True):
-                # Aqui você pode redirecionar para o curso
-                st.session_state['curso_atual'] = curso['id']
-                st.rerun()
-        else:
-            if st.button("Inscrever-se", key=f"inscrever_{curso['id']}", use_container_width=True, type="primary"):
-                try:
-                    inscrever_usuario_em_curso(usuario["id"], curso["id"])
-                    st.success("🎉 Inscrição realizada com sucesso!")
-                    time.sleep(1.5)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Erro na inscrição: {e}")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-
-def _aluno_meus_cursos_moderno(usuario: dict):
-    """Exibição moderna dos cursos do aluno"""
-    
-    db = get_db()
-    if not db:
-        st.error("❌ Erro de conexão com o banco de dados.")
-        return
-    
-    try:
-        # Buscar inscrições
-        inscricoes_ref = db.collection("enrollments").where("user_id", "==", usuario["id"]).stream()
-        inscricoes = []
-        
-        for ins in inscricoes_ref:
-            dados = ins.to_dict()
-            dados["inscricao_id"] = ins.id
-            inscricoes.append(dados)
-    except Exception as e:
-        st.error(f"❌ Erro ao carregar inscrições: {e}")
-        inscricoes = []
-    
-    if not inscricoes:
-        st.info("""
-        📭 **Você ainda não está matriculado em nenhum curso**
-        
-        Explore os cursos disponíveis e comece sua jornada de aprendizado!
-        """)
-        return
-    
-    # Organizar por progresso
-    cursos_em_andamento = []
-    cursos_concluidos = []
-    
-    for ins in inscricoes:
-        try:
-            curso_ref = db.collection("courses").document(ins.get("course_id")).get()
-            if curso_ref.exists:
-                curso = curso_ref.to_dict()
-                curso["id"] = curso_ref.id
-                curso["progresso"] = float(ins.get("progresso", 0))
-                curso["pago_status"] = "✅ Pago" if ins.get("pago") else "⏳ Pendente"
-                curso["inscricao_id"] = ins["inscricao_id"]
-                
-                if curso["progresso"] >= 100:
-                    cursos_concluidos.append(curso)
-                else:
-                    cursos_em_andamento.append(curso)
-        except:
-            continue
-    
-    # Exibição
-    if cursos_em_andamento:
-        st.markdown(f"### 📚 Cursos em Andamento ({len(cursos_em_andamento)})")
-        
-        for curso in cursos_em_andamento:
-            _card_meu_curso(curso, usuario)
-    
-    if cursos_concluidos:
-        st.markdown(f"### 🎓 Cursos Concluídos ({len(cursos_concluidos)})")
-        
-        for curso in cursos_concluidos:
-            _card_meu_curso(curso, usuario, concluido=True)
-
-def _card_meu_curso(curso: dict, usuario: dict, concluido: bool = False):
-    """Card para curso do aluno (inscrito)"""
-    
-    with st.container():
-        st.markdown("<div class='curso-card'>", unsafe_allow_html=True)
-        
-        col1, col2, col3 = st.columns([1, 3, 1])
-        
-        with col1:
-            # Ícone
-            emoji = "🥋" if concluido else "📚"
-            st.markdown(f"<div style='font-size: 2.5rem; text-align: center;'>{emoji}</div>", unsafe_allow_html=True)
-        
-        with col2:
-            # Informações
-            st.markdown(f"#### {curso.get('titulo', 'Sem Título')}")
-            
-            if not concluido:
-                # Barra de progresso
-                progresso = curso.get("progresso", 0)
-                st.progress(progresso / 100, text=f"Progresso: {int(progresso)}%")
-                
-                # Status de pagamento
-                if curso.get("pago") and curso.get("pago_status") == "⏳ Pendente":
-                    st.warning("⚠️ Pagamento pendente")
-            else:
-                st.success("✅ Curso concluído!")
-        
-        with col3:
-            st.write("")  # Espaçamento
-            
-            if concluido:
-                if st.button("📜 Certificado", key=f"cert_{curso['id']}", use_container_width=True):
-                    # Em produção, integrar com geração de certificado
-                    st.info("Funcionalidade de certificado em desenvolvimento")
-            else:
-                if st.button("▶️ Continuar", key=f"continuar_{curso['id']}", use_container_width=True, type="primary"):
-                    st.session_state['curso_atual'] = curso['id']
-                    st.rerun()
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-
-# ======================================================
-# FUNÇÕES AUXILIARES (MANTIDAS DO ORIGINAL)
-# ======================================================
-
-def _salvar_edicao_curso(
-    curso_id: str,
-    titulo: str,
-    descricao: str,
-    modalidade: str,
-    publico: str,
-    equipe_destino: Optional[str],
-    pago: bool,
-    preco: Optional[float],
-    split_custom: Optional[int],
-    certificado_automatico: bool
-):
-    """Atualiza o documento do curso no Firestore."""
-    db = get_db()
-    
-    safe_preco = float(preco) if (pago and preco is not None) else 0.0
-    safe_split = int(split_custom) if split_custom is not None else 10
-
-    doc_updates = {
-        "titulo": titulo.strip(),
-        "descricao": descricao.strip(),
-        "modalidade": modalidade,
-        "publico": publico,
-        "equipe_destino": equipe_destino or None,
-        "pago": bool(pago),
-        "preco": safe_preco,
-        "split_custom": safe_split,
-        "certificado_automatico": bool(certificado_automatico),
-    }
-
-    db.collection("courses").document(curso_id).update(doc_updates)
-
-def _toggle_status_curso(curso_id: str, novo_ativo: bool):
-    """Ativa ou desativa o curso."""
-    db = get_db()
-    db.collection("courses").document(curso_id).update({
-        "ativo": bool(novo_ativo),
-        "status": "ativo" if novo_ativo else "inativo"
-    })
-
-# ======================================================
-# IMPORTAÇÃO NECESSÁRIA
-# ======================================================
-
-import time  # Adicionado para usar time.sleep()
+        elif tipo_filtro == "EAD" and curso.get('modal
