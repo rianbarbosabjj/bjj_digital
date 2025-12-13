@@ -1,5 +1,3 @@
-[file name]: components.py
-[file content begin]
 """
 BJJ Digital - Componentes Visuais Modernos
 Componentes reutilizáveis com design atualizado
@@ -381,4 +379,3 @@ def empty_state(icon, titulo, descricao):
         <p style="opacity: 0.7; max-width: 400px; margin: 0 auto;">{descricao}</p>
     </div>
     """, unsafe_allow_html=True)
-[file content end]
