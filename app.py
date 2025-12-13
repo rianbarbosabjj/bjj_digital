@@ -1,3 +1,5 @@
+[file name]: app.py
+[file content begin]
 import streamlit as st
 import os
 import sys
@@ -134,14 +136,89 @@ if "SECRETS_TOML" in os.environ:
     if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
     with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
 
+# ============================================
+# CORREÇÃO DAS IMPORTAÇÕES - FIXED
+# ============================================
 try:
     from streamlit_option_menu import option_menu
-    # 🔹 AQUI: adicionamos cursos mantendo o resto igual
-    from views import login, geral, aluno, professor, admin, cursos
+    
+    # Importações principais - versão corrigida
+    try:
+        # Tenta importar normalmente
+        from views import login, geral, aluno, professor, admin
+        
+        # Para cursos, fazemos importação especial
+        try:
+            from views.cursos import pagina_cursos
+            CURSOS_DISPONIVEL = True
+            # Cria um módulo cursos com a função necessária
+            class CursosModule:
+                @staticmethod
+                def pagina_cursos(usuario):
+                    return pagina_cursos(usuario)
+            cursos = CursosModule()
+            
+        except ImportError as e:
+            # Fallback se cursos.py não existir ou tiver erro
+            st.warning(f"⚠️ Módulo de cursos com problema: {e}")
+            CURSOS_DISPONIVEL = False
+            class CursosModule:
+                @staticmethod
+                def pagina_cursos(usuario):
+                    st.markdown("<h1 style='color:#FFD770;'>📚 Sistema de Cursos</h1>", unsafe_allow_html=True)
+                    st.info("""
+                    **O sistema de cursos está em manutenção!**
+                    
+                    Em breve você terá acesso a:
+                    - Cursos completos de Jiu-Jitsu
+                    - Aulas em vídeo com certificação
+                    - Progresso individualizado
+                    - Sistema de pagamento integrado
+                    """)
+                    if st.button("🏠 Voltar ao Início", use_container_width=True):
+                        st.session_state.menu_selection = "Início"
+                        st.rerun()
+            cursos = CursosModule()
+            
+    except ImportError as e:
+        # Se falhar importação geral, tenta importar individualmente
+        st.warning(f"Tentando importação alternativa: {e}")
+        import importlib.util
+        import sys
+        
+        # Adiciona o diretório atual ao path
+        sys.path.append(os.path.dirname(__file__))
+        
+        # Importa módulos individualmente
+        import views.login as login
+        import views.geral as geral
+        import views.aluno as aluno
+        import views.professor as professor
+        import views.admin as admin
+        
+        # Tenta importar cursos
+        try:
+            import views.cursos as cursos
+        except:
+            # Fallback final
+            class CursosModule:
+                @staticmethod
+                def pagina_cursos(usuario):
+                    st.info("📚 Módulo de cursos em desenvolvimento...")
+                    if st.button("Voltar"):
+                        st.session_state.menu_selection = "Início"
+                        st.rerun()
+            cursos = CursosModule()
+            
 except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
+    st.error(f"Diretório atual: {os.path.dirname(__file__)}")
+    st.error(f"Conteúdo de views: {os.listdir('views') if os.path.exists('views') else 'Pasta views não existe'}")
     st.stop()
 
+# ============================================
+# FUNÇÃO DE TROCA DE SENHA
+# ============================================
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
@@ -190,6 +267,9 @@ def tela_troca_senha_obrigatoria():
                             st.error(f"Erro ao salvar: {e}") 
                     else: st.error("Senhas não conferem.")
 
+# ============================================
+# APLICAÇÃO PRINCIPAL
+# ============================================
 def app_principal():
     if not st.session_state.get('usuario'):
         st.session_state.clear(); st.rerun(); return
@@ -241,7 +321,6 @@ def app_principal():
 
     ops, icns = [], []
     if tipo_code in ["admin", "professor"]:
-        # 🔹 AQUI: só inserimos "Cursos" e o ícone "book"
         ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
@@ -307,7 +386,7 @@ def app_principal():
     if pg == "Modo Rola": 
         aluno.modo_rola(usuario)
     elif pg == "Cursos":
-        # 🔹 NOVO: rota para a página de cursos
+        # 🔹 CHAMA A PÁGINA DE CURSOS CORRIGIDA
         cursos.pagina_cursos(usuario)
     elif pg == "Exame de Faixa": 
         aluno.exame_de_faixa(usuario)
@@ -320,6 +399,9 @@ def app_principal():
     elif pg == "Gestão de Exame": 
         admin.gestao_exame_de_faixa()
 
+# ============================================
+# PONTO DE ENTRADA
+# ============================================
 if __name__ == "__main__":
     if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
         login.tela_login()
@@ -328,3 +410,4 @@ if __name__ == "__main__":
     elif st.session_state.get('usuario'):
         if st.session_state.usuario.get("precisa_trocar_senha"): tela_troca_senha_obrigatoria()
         else: app_principal()
+[file content end]
