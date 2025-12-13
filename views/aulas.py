@@ -1,5 +1,3 @@
-[file name]: views/aulas.py
-[file content begin]
 """
 BJJ Digital - Sistema de Aulas (Versão Simplificada)
 Tela de placeholder enquanto desenvolvemos o sistema completo
@@ -139,4 +137,3 @@ def navegar_para_aulas(curso_id: str, usuario: dict):
     """Redireciona para a tela de aulas (placeholder)"""
     st.session_state.curso_atual = curso_id
     st.rerun()
-[file content end]
