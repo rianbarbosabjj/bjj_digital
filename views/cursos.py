@@ -1,5 +1,3 @@
-[file name]: views/cursos.py
-[file content begin]
 """
 BJJ Digital - Sistema de Cursos (Versão Modernizada)
 Integração com aulas e design atualizado
@@ -1106,4 +1104,3 @@ def navegar_para_aulas(curso_id: str):
     """Redireciona para a tela de aulas do curso"""
     st.session_state.curso_atual = curso_id
     st.rerun()
-[file content end]
