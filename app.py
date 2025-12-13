@@ -1,5 +1,3 @@
-[file name]: app.py
-[file content begin]
 import streamlit as st
 import os
 import sys
@@ -410,4 +408,4 @@ if __name__ == "__main__":
     elif st.session_state.get('usuario'):
         if st.session_state.usuario.get("precisa_trocar_senha"): tela_troca_senha_obrigatoria()
         else: app_principal()
-[file content end]
+
