@@ -218,3 +218,379 @@ def registrar_pagamento_sucesso(
         "metodo_pagamento": metodo,
         "data_pagamento": firestore.SERVER_TIMESTAMP,
     })
+
+# Adicionar estas funções ao FINAL do arquivo courses_engine.py
+
+# ======================================================
+# MÓDULOS E AULAS
+# ======================================================
+
+def criar_modulo(course_id: str, titulo: str, descricao: str, ordem: int) -> str:
+    """
+    Cria um módulo dentro de um curso.
+    """
+    db = _get_db()
+    
+    doc = {
+        "course_id": course_id,
+        "titulo": titulo.strip(),
+        "descricao": descricao.strip(),
+        "ordem": ordem,
+        "ativo": True,
+        "criado_em": firestore.SERVER_TIMESTAMP,
+    }
+    
+    ref = db.collection("course_modules").document()
+    ref.set(doc)
+    return ref.id
+
+
+def criar_aula(module_id: str, titulo: str, tipo: str, conteudo: Dict, duracao_min: int = 0) -> str:
+    """
+    Cria uma aula dentro de um módulo.
+    Tipos: "video", "texto", "quiz", "arquivo"
+    """
+    db = _get_db()
+    
+    doc = {
+        "module_id": module_id,
+        "titulo": titulo.strip(),
+        "tipo": tipo,  # video, texto, quiz, arquivo
+        "conteudo": conteudo,  # dict com URL, texto, etc
+        "duracao_min": duracao_min,
+        "ativo": True,
+        "criado_em": firestore.SERVER_TIMESTAMP,
+        "ordem": 0,  # será atualizado
+    }
+    
+    # Define ordem automática
+    aulas_existentes = list(db.collection("course_lessons")
+                           .where("module_id", "==", module_id)
+                           .stream())
+    doc["ordem"] = len(aulas_existentes) + 1
+    
+    ref = db.collection("course_lessons").document()
+    ref.set(doc)
+    return ref.id
+
+
+def listar_modulos_do_curso(course_id: str) -> List[Dict]:
+    """
+    Lista módulos de um curso, ordenados.
+    """
+    db = _get_db()
+    modulos = []
+    
+    q = db.collection("course_modules").where("course_id", "==", course_id).where("ativo", "==", True)
+    for snap in q.stream():
+        d = snap.to_dict()
+        d["id"] = snap.id
+        modulos.append(d)
+    
+    modulos.sort(key=lambda x: x.get("ordem", 0))
+    return modulos
+
+
+def listar_aulas_do_modulo(module_id: str) -> List[Dict]:
+    """
+    Lista aulas de um módulo, ordenadas.
+    """
+    db = _get_db()
+    aulas = []
+    
+    q = db.collection("course_lessons").where("module_id", "==", module_id).where("ativo", "==", True)
+    for snap in q.stream():
+        d = snap.to_dict()
+        d["id"] = snap.id
+        aulas.append(d)
+    
+    aulas.sort(key=lambda x: x.get("ordem", 0))
+    return aulas
+
+
+def marcar_aula_concluida(user_id: str, lesson_id: str) -> bool:
+    """
+    Marca uma aula como concluída pelo usuário.
+    """
+    db = _get_db()
+    
+    # Verifica se já foi concluída
+    concluida_id = f"{user_id}__{lesson_id}"
+    ref = db.collection("lesson_completions").document(concluida_id)
+    
+    if ref.get().exists:
+        return True  # Já estava concluída
+    
+    # Marca como concluída
+    ref.set({
+        "user_id": user_id,
+        "lesson_id": lesson_id,
+        "concluido_em": firestore.SERVER_TIMESTAMP,
+    })
+    
+    # Atualiza progresso do curso
+    _atualizar_progresso_automatico(user_id, lesson_id)
+    
+    return True
+
+
+def _atualizar_progresso_automatico(user_id: str, lesson_id: str):
+    """
+    Atualiza progresso automaticamente quando aula é concluída.
+    """
+    db = _get_db()
+    
+    # 1. Encontra o curso desta aula
+    aula_doc = db.collection("course_lessons").document(lesson_id).get()
+    if not aula_doc.exists:
+        return
+    
+    aula = aula_doc.to_dict()
+    module_id = aula.get("module_id")
+    
+    # 2. Encontra o módulo
+    modulo_doc = db.collection("course_modules").document(module_id).get()
+    if not modulo_doc.exists:
+        return
+    
+    modulo = modulo_doc.to_dict()
+    course_id = modulo.get("course_id")
+    
+    # 3. Conta aulas totais do curso
+    total_aulas = 0
+    modulos_curso = listar_modulos_do_curso(course_id)
+    for mod in modulos_curso:
+        aulas_mod = listar_aulas_do_modulo(mod["id"])
+        total_aulas += len(aulas_mod)
+    
+    if total_aulas == 0:
+        return
+    
+    # 4. Conta aulas concluídas pelo usuário neste curso
+    concluidas = 0
+    for mod in modulos_curso:
+        aulas_mod = listar_aulas_do_modulo(mod["id"])
+        for a in aulas_mod:
+            concluida_id = f"{user_id}__{a['id']}"
+            if db.collection("lesson_completions").document(concluida_id).get().exists:
+                concluidas += 1
+    
+    # 5. Calcula novo progresso
+    novo_progresso = (concluidas / total_aulas) * 100 if total_aulas > 0 else 0
+    
+    # 6. Atualiza enrollment
+    enrollment_id = get_inscricao_id(user_id, course_id)
+    enrollment_ref = db.collection("enrollments").document(enrollment_id)
+    
+    if enrollment_ref.get().exists:
+        enrollment_ref.update({"progresso": novo_progresso})
+    else:
+        # Cria enrollment se não existir (para casos de teste)
+        enrollment_ref.set({
+            "user_id": user_id,
+            "course_id": course_id,
+            "progresso": novo_progresso,
+            "pago": False,
+            "criado_em": firestore.SERVER_TIMESTAMP,
+        })
+    
+    # 7. Verifica se curso foi concluído (100%)
+    if novo_progresso >= 100:
+        enrollment_ref.update({"certificado_emitido": True})
+
+
+def verificar_aula_concluida(user_id: str, lesson_id: str) -> bool:
+    """
+    Verifica se usuário já concluiu determinada aula.
+    """
+    db = _get_db()
+    concluida_id = f"{user_id}__{lesson_id}"
+    ref = db.collection("lesson_completions").document(concluida_id)
+    return ref.get().exists# Adicionar estas funções ao FINAL do arquivo courses_engine.py
+
+# ======================================================
+# MÓDULOS E AULAS
+# ======================================================
+
+def criar_modulo(course_id: str, titulo: str, descricao: str, ordem: int) -> str:
+    """
+    Cria um módulo dentro de um curso.
+    """
+    db = _get_db()
+    
+    doc = {
+        "course_id": course_id,
+        "titulo": titulo.strip(),
+        "descricao": descricao.strip(),
+        "ordem": ordem,
+        "ativo": True,
+        "criado_em": firestore.SERVER_TIMESTAMP,
+    }
+    
+    ref = db.collection("course_modules").document()
+    ref.set(doc)
+    return ref.id
+
+
+def criar_aula(module_id: str, titulo: str, tipo: str, conteudo: Dict, duracao_min: int = 0) -> str:
+    """
+    Cria uma aula dentro de um módulo.
+    Tipos: "video", "texto", "quiz", "arquivo"
+    """
+    db = _get_db()
+    
+    doc = {
+        "module_id": module_id,
+        "titulo": titulo.strip(),
+        "tipo": tipo,  # video, texto, quiz, arquivo
+        "conteudo": conteudo,  # dict com URL, texto, etc
+        "duracao_min": duracao_min,
+        "ativo": True,
+        "criado_em": firestore.SERVER_TIMESTAMP,
+        "ordem": 0,  # será atualizado
+    }
+    
+    # Define ordem automática
+    aulas_existentes = list(db.collection("course_lessons")
+                           .where("module_id", "==", module_id)
+                           .stream())
+    doc["ordem"] = len(aulas_existentes) + 1
+    
+    ref = db.collection("course_lessons").document()
+    ref.set(doc)
+    return ref.id
+
+
+def listar_modulos_do_curso(course_id: str) -> List[Dict]:
+    """
+    Lista módulos de um curso, ordenados.
+    """
+    db = _get_db()
+    modulos = []
+    
+    q = db.collection("course_modules").where("course_id", "==", course_id).where("ativo", "==", True)
+    for snap in q.stream():
+        d = snap.to_dict()
+        d["id"] = snap.id
+        modulos.append(d)
+    
+    modulos.sort(key=lambda x: x.get("ordem", 0))
+    return modulos
+
+
+def listar_aulas_do_modulo(module_id: str) -> List[Dict]:
+    """
+    Lista aulas de um módulo, ordenadas.
+    """
+    db = _get_db()
+    aulas = []
+    
+    q = db.collection("course_lessons").where("module_id", "==", module_id).where("ativo", "==", True)
+    for snap in q.stream():
+        d = snap.to_dict()
+        d["id"] = snap.id
+        aulas.append(d)
+    
+    aulas.sort(key=lambda x: x.get("ordem", 0))
+    return aulas
+
+
+def marcar_aula_concluida(user_id: str, lesson_id: str) -> bool:
+    """
+    Marca uma aula como concluída pelo usuário.
+    """
+    db = _get_db()
+    
+    # Verifica se já foi concluída
+    concluida_id = f"{user_id}__{lesson_id}"
+    ref = db.collection("lesson_completions").document(concluida_id)
+    
+    if ref.get().exists:
+        return True  # Já estava concluída
+    
+    # Marca como concluída
+    ref.set({
+        "user_id": user_id,
+        "lesson_id": lesson_id,
+        "concluido_em": firestore.SERVER_TIMESTAMP,
+    })
+    
+    # Atualiza progresso do curso
+    _atualizar_progresso_automatico(user_id, lesson_id)
+    
+    return True
+
+
+def _atualizar_progresso_automatico(user_id: str, lesson_id: str):
+    """
+    Atualiza progresso automaticamente quando aula é concluída.
+    """
+    db = _get_db()
+    
+    # 1. Encontra o curso desta aula
+    aula_doc = db.collection("course_lessons").document(lesson_id).get()
+    if not aula_doc.exists:
+        return
+    
+    aula = aula_doc.to_dict()
+    module_id = aula.get("module_id")
+    
+    # 2. Encontra o módulo
+    modulo_doc = db.collection("course_modules").document(module_id).get()
+    if not modulo_doc.exists:
+        return
+    
+    modulo = modulo_doc.to_dict()
+    course_id = modulo.get("course_id")
+    
+    # 3. Conta aulas totais do curso
+    total_aulas = 0
+    modulos_curso = listar_modulos_do_curso(course_id)
+    for mod in modulos_curso:
+        aulas_mod = listar_aulas_do_modulo(mod["id"])
+        total_aulas += len(aulas_mod)
+    
+    if total_aulas == 0:
+        return
+    
+    # 4. Conta aulas concluídas pelo usuário neste curso
+    concluidas = 0
+    for mod in modulos_curso:
+        aulas_mod = listar_aulas_do_modulo(mod["id"])
+        for a in aulas_mod:
+            concluida_id = f"{user_id}__{a['id']}"
+            if db.collection("lesson_completions").document(concluida_id).get().exists:
+                concluidas += 1
+    
+    # 5. Calcula novo progresso
+    novo_progresso = (concluidas / total_aulas) * 100 if total_aulas > 0 else 0
+    
+    # 6. Atualiza enrollment
+    enrollment_id = get_inscricao_id(user_id, course_id)
+    enrollment_ref = db.collection("enrollments").document(enrollment_id)
+    
+    if enrollment_ref.get().exists:
+        enrollment_ref.update({"progresso": novo_progresso})
+    else:
+        # Cria enrollment se não existir (para casos de teste)
+        enrollment_ref.set({
+            "user_id": user_id,
+            "course_id": course_id,
+            "progresso": novo_progresso,
+            "pago": False,
+            "criado_em": firestore.SERVER_TIMESTAMP,
+        })
+    
+    # 7. Verifica se curso foi concluído (100%)
+    if novo_progresso >= 100:
+        enrollment_ref.update({"certificado_emitido": True})
+
+
+def verificar_aula_concluida(user_id: str, lesson_id: str) -> bool:
+    """
+    Verifica se usuário já concluiu determinada aula.
+    """
+    db = _get_db()
+    concluida_id = f"{user_id}__{lesson_id}"
+    ref = db.collection("lesson_completions").document(concluida_id)
+    return ref.get().exists
