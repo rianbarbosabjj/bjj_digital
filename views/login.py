@@ -1,3 +1,5 @@
+[file name]: login.py
+[file content begin]
 import streamlit as st
 import os
 import requests 
@@ -232,13 +234,15 @@ def tela_cadastro_interno():
     
     # Lógica de seleção (Inclusiva)
     if "Aluno" in tipo:
-        with cf: faixa = st.selectbox("Faixa:", [
-    " ", "Branca" "Cinza e Branca", "Cinza", "Cinza e Preta",
-    "Amarela e Branca", "Amarela", "Amarela e Preta",
-    "Laranja e Branca", "Laranja", "Laranja e Preta",
-    "Verde e Branca", "Verde", "Verde e Preta",
-    "Azul", "Roxa", "Marrom", "Preta"
-])
+        with cf: 
+            # CORREÇÃO APLICADA AQUI: adicionada vírgula após "Branca"
+            faixa = st.selectbox("Faixa:", [
+                " ", "Branca", "Cinza e Branca", "Cinza", "Cinza e Preta",
+                "Amarela e Branca", "Amarela", "Amarela e Preta",
+                "Laranja e Branca", "Laranja", "Laranja e Preta",
+                "Verde e Branca", "Verde", "Verde e Preta",
+                "Azul", "Roxa", "Marrom", "Preta"
+            ])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
@@ -420,7 +424,15 @@ def tela_completar_cadastro(user_data):
     nome_nova_equipe = None; desc_nova_equipe = None
     
     if "Aluno" in tipo: # Correção Lógica
-        with cf: faixa = st.selectbox("Faixa:", ["Branca", "Cinza", "Amarela", "Laranja", "Verde", "Azul", "Roxa", "Marrom", "Preta"])
+        with cf: 
+            # CORREÇÃO TAMBÉM APLICADA AQUI PARA CONSISTÊNCIA
+            faixa = st.selectbox("Faixa:", [
+                "Branca", "Cinza e Branca", "Cinza", "Cinza e Preta",
+                "Amarela e Branca", "Amarela", "Amarela e Preta",
+                "Laranja e Branca", "Laranja", "Laranja e Preta",
+                "Verde e Branca", "Verde", "Verde e Preta",
+                "Azul", "Roxa", "Marrom", "Preta"
+            ])
         with ce: eq_sel = st.selectbox("Equipe:", lista_equipes)
         
         lista_profs_filtrada = ["Nenhum (Vínculo Pendente)"]
@@ -493,7 +505,7 @@ def tela_completar_cadastro(user_data):
                 db.collection('usuarios').document(uid).update({
                     "cpf": cpf_fin, "tipo_usuario": tipo_db, "perfil_completo": True,
                     "cep": formatar_cep(cep), "logradouro": logr.upper(), "numero": num,
-                    "complemento": comp.upper(), "bairro": bairro.upper(), 
+                    "complemento": comp.upper(), "bairro": br.upper(), 
                     "cidade": cid.upper(), "uf": uf.upper(), "faixa_atual": faixa,
                     "sexo": sexo,
                     "data_nascimento": data_nasc.isoformat() if data_nasc else None
@@ -536,3 +548,4 @@ def tela_completar_cadastro(user_data):
     if st.button("Cancelar e Sair", use_container_width=True):
         del st.session_state.registration_pending
         st.rerun()
+[file content end]
