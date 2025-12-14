@@ -14,7 +14,7 @@ import plotly.express as px
 from database import get_db
 
 # CORREÇÃO CRÍTICA: Importa o módulo completo com um alias (ce) para ser usado
-# em chamadas como ce.editar_curso e ce.listar_modulos_e_aulas
+# em chamadas como ce.editar_curso, ce.listar_modulos_e_aulas, etc.
 import courses_engine as ce 
 
 # Importa as funções principais da engine (para manter o escopo limpo nas funções do Streamlit)
@@ -24,49 +24,34 @@ from courses_engine import (
     listar_cursos_disponiveis_para_usuario,
     inscrever_usuario_em_curso,
     obter_inscricao,
-    # Funções de Aulas/Progresso que devem estar no courses_engine.py
-    marcar_aula_concluida,
-    verificar_aula_concluida,
-    listar_modulos_e_aulas # Esta função deve estar no seu courses_engine.py
+    # Funções de Aulas/Progresso que serão usadas nas páginas
+    listar_modulos_e_aulas
 )
 
 # ======================================================
-# LÓGICAS MOCK DE SESSÃO (MANTIDAS APENAS PARA SIMULAR PROGRESSO)
+# LÓGICAS DE CONSULTA DE PROGRESSO (AGORA USANDO O ENGINE)
 # ======================================================
 
-# Variável global para simular o armazenamento em memória para o curso_selecionado
-MOCK_CURSO_DB = {}
-
 def obter_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> bool:
-    """MOCK DE SESSÃO: Retorna True se a aula foi concluída."""
-    # Nota: No ambiente real, esta lógica seria a função verificar_aula_concluida
-    # do courses_engine, mas é mantida aqui para simular o estado na sessão.
-    key = f'progresso_{user_id}_{curso_id}_{aula_id}'
-    return st.session_state.get(key, False)
+    """Função wrapper para verificar se a aula está concluída, usando o Engine."""
+    # O user_id e lesson_id são passados para o Engine
+    return ce.verificar_aula_concluida(user_id, aula_id)
+
 
 def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
-    """MOCK DE SESSÃO: Marca uma aula como concluída e calcula novo progresso total."""
-    # Esta função simula o cálculo do progresso TOTAL após uma aula ser concluída.
+    """Marca a aula como concluída e retorna o novo progresso total."""
     
-    # 1. Marca a aula como concluída na sessão (mock)
-    st.session_state[f'progresso_{user_id}_{curso_id}_{aula_id}'] = True
+    # 1. Marca a aula como concluída no banco de dados (o Engine calcula o progresso
+    # automaticamente no _atualizar_progresso_automatico)
+    ce.marcar_aula_concluida(user_id, aula_id) 
     
-    # 2. Lógica de cálculo de progresso (Mock Simples, baseada no que viria do DB)
-    modulos = listar_modulos_e_aulas(curso_id) # Usando a função real do courses_engine
-    total_aulas = sum(len(m['aulas']) for m in modulos)
-    aulas_concluidas = 0
+    # 2. Re-consulta a inscrição para obter o progresso atualizado.
+    inscricao_atualizada = obter_inscricao(user_id, curso_id)
     
-    for modulo in modulos:
-        for aula in modulo['aulas']:
-            if obter_progresso_aula(user_id, curso_id, aula['id']):
-                aulas_concluidas += 1
-                
-    if total_aulas > 0:
-        novo_progresso = int((aulas_concluidas / total_aulas) * 100)
+    if inscricao_atualizada:
+        return inscricao_atualizada.get("progresso", 0)
     else:
-        novo_progresso = 0
-        
-    return novo_progresso
+        return 0
 
 # ======================================================
 # ESTILOS MODERNOS PARA CURSOS (Mantido)
@@ -421,18 +406,29 @@ def _pagina_aulas(curso: dict, usuario: dict):
     # CORRIGIDO: Chamada usando a função importada
     modulos = listar_modulos_e_aulas(curso['id'])
     
-    # 1. Gerenciar Aula Atual (Mock de player)
-    # Define a primeira aula como padrão se não houver 'aula_atual' no state
+    # 1. Gerenciar Aula Atual
     if 'aula_atual' not in st.session_state:
+        # Define a primeira aula como padrão se não houver 'aula_atual' no state
         try:
-            st.session_state['aula_atual'] = modulos[0]['aulas'][0]
+            # Encontra a primeira aula não concluída
+            primeira_aula = None
+            for mod in modulos:
+                for aula in mod['aulas']:
+                    if not obter_progresso_aula(usuario["id"], curso["id"], aula['id']):
+                        primeira_aula = aula
+                        break
+                if primeira_aula:
+                    break
+            
+            st.session_state['aula_atual'] = primeira_aula if primeira_aula else modulos[0]['aulas'][0]
+
         except IndexError:
              with col_video:
                 st.warning("Nenhuma aula encontrada para este curso.")
              return
     
     aula_atual = st.session_state['aula_atual']
-    # O progresso da aula é mockado localmente para demonstração
+    # O progresso da aula é lido do Engine
     aula_completa = obter_progresso_aula(usuario["id"], curso["id"], aula_atual['id'])
 
     with col_video:
@@ -453,12 +449,8 @@ def _pagina_aulas(curso: dict, usuario: dict):
         # Botão de conclusão
         if not aula_completa:
              if st.button(f"✅ Marcar '{aula_atual['titulo']}' como Concluída", key=f"btn_concluir_aula_{aula_atual['id']}", type="primary"):
-                 # Registra o progresso na sessão (mock) e obtém o novo progresso total
+                 # Registra o progresso e obtém o novo progresso total (a função faz as duas coisas)
                  novo_progresso = registrar_progresso_aula(usuario["id"], curso["id"], aula_atual['id'])
-                 
-                 # Atualiza o progresso no banco de dados e marca a aula como concluída
-                 ce.marcar_aula_concluida(usuario["id"], aula_atual['id'])
-                 ce.atualizar_progresso(usuario["id"], curso["id"], novo_progresso)
                  
                  st.success(f"Aula concluída! Progresso atualizado para {novo_progresso:.0f}%")
                  
@@ -477,7 +469,7 @@ def _pagina_aulas(curso: dict, usuario: dict):
         for modulo in modulos:
             st.subheader(f"{modulo['titulo']}", divider='orange')
             for aula in modulo['aulas']:
-                # Progresso da aula lido do mock
+                # Progresso da aula lido do Engine
                 is_completa = obter_progresso_aula(usuario["id"], curso["id"], aula['id'])
                 is_atual = aula['id'] == aula_atual['id']
                 
@@ -1144,12 +1136,8 @@ def _aluno_meus_cursos(usuario: dict):
         for curso in todos_cursos:
             inscricao = obter_inscricao(usuario["id"], curso["id"])
             if inscricao:
-                # O progresso deve ser lido do banco, mas é sobreposto pelo mock de aula para demonstração
+                # O progresso é lido do Engine
                 progresso_real = inscricao.get("progresso", 0) 
-                
-                # Mock: Se a aula "quiz" for concluída, forçamos 100%
-                if obter_progresso_aula(usuario["id"], curso["id"], f'{curso["id"]}a2-2'):
-                    progresso_real = 100
 
                 curso["progresso"] = progresso_real
                 curso["inscricao_data"] = inscricao.get("criado_em", "")
