@@ -8,82 +8,51 @@ import pandas as pd
 import time
 from datetime import datetime, MINYEAR
 from typing import Optional, Dict, List
-import plotly.express as px # <-- CORREÇÃO: Adicionado para usar px.bar() no dashboard!
+import plotly.express as px
 
-# Importações internas (Assegure-se de que estes módulos estão acessíveis)
+# Importações internas
 from database import get_db
+
+# CORREÇÃO CRÍTICA: Importa o módulo completo com um alias (ce) para ser usado
+# em chamadas como ce.editar_curso e ce.listar_modulos_e_aulas
+import courses_engine as ce 
+
+# Importa as funções principais da engine (para manter o escopo limpo nas funções do Streamlit)
 from courses_engine import (
     criar_curso,
     listar_cursos_do_professor,
     listar_cursos_disponiveis_para_usuario,
     inscrever_usuario_em_curso,
     obter_inscricao,
+    # Funções de Aulas/Progresso que devem estar no courses_engine.py
+    marcar_aula_concluida,
+    verificar_aula_concluida,
+    listar_modulos_e_aulas # Esta função deve estar no seu courses_engine.py
 )
 
 # ======================================================
-# MOCK DE FUNÇÕES DE AULAS/EDIÇÃO (Substituir por Real)
-# Estas funções devem estar no seu courses_engine.py, 
-# mas são mantidas aqui para que a lógica de navegação funcione.
+# LÓGICAS MOCK DE SESSÃO (MANTIDAS APENAS PARA SIMULAR PROGRESSO)
 # ======================================================
 
 # Variável global para simular o armazenamento em memória para o curso_selecionado
 MOCK_CURSO_DB = {}
 
-def obter_curso_por_id(curso_id: str) -> Optional[Dict]:
-    """Mock: Obtém um curso específico. Assume que os cursos já foram carregados
-        para o mock do professor, ou busca um curso genérico."""
-    # Tenta buscar na lista de cursos do professor (se a chave existir no state)
-    # Nota: Em um ambiente real, você usaria courses_engine.obter_curso_por_id
-    # e faria a lógica de mock apenas no ambiente de testes.
-    
-    # Se o curso for o 'novo_curso' (usado na criação), retorna o mock
-    if curso_id == 'novo_curso' and 'c_titulo_input' in st.session_state:
-        return {
-             'id': 'temp_new_course', 
-             'titulo': st.session_state.c_titulo_input, 
-             'descricao': st.session_state.c_descricao_input, 
-             'modalidade': st.session_state.c_modalidade_select,
-             'publico': st.session_state.c_publico_select,
-             'pago': st.session_state.criar_curso_pago_toggle_new
-        }
-        
-    # Tenta obter do mock global de edição
-    if curso_id in MOCK_CURSO_DB:
-        return MOCK_CURSO_DB[curso_id]
-    
-    # Em um ambiente real, você faria uma chamada genérica de banco aqui
-    return None
-
-def editar_curso(curso_id: str, dados_atualizados: dict) -> bool:
-    """Mock: Edita um curso no banco de dados (simulando alteração na memória)."""
-    # Esta função está implementada corretamente no seu courses_engine.py
-    # Chamando a versão do courses_engine (real)
-    return courses_engine.editar_curso(curso_id, dados_atualizados)
-
-
-def listar_modulos_e_aulas(curso_id: str) -> List[Dict]:
-    """Mock: Retorna módulos e aulas de um curso. (Adaptação para o novo courses_engine)"""
-    # Esta função está implementada corretamente no seu courses_engine.py
-    # Chamando a versão do courses_engine (real)
-    return courses_engine.listar_modulos_e_aulas(curso_id)
-
 def obter_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> bool:
-    """Mock/Lógica de Sessão: Retorna True se a aula foi concluída. Usa st.session_state para simulação."""
-    
-    # Nota: Em um ambiente real, você usaria courses_engine.verificar_aula_concluida(user_id, aula_id)
-    
-    # Simulação de cache de progresso usando Session State (para demonstração)
+    """MOCK DE SESSÃO: Retorna True se a aula foi concluída."""
+    # Nota: No ambiente real, esta lógica seria a função verificar_aula_concluida
+    # do courses_engine, mas é mantida aqui para simular o estado na sessão.
     key = f'progresso_{user_id}_{curso_id}_{aula_id}'
     return st.session_state.get(key, False)
 
 def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
-    """Mock/Lógica de Sessão: Marca uma aula como concluída e calcula novo progresso total."""
+    """MOCK DE SESSÃO: Marca uma aula como concluída e calcula novo progresso total."""
+    # Esta função simula o cálculo do progresso TOTAL após uma aula ser concluída.
     
     # 1. Marca a aula como concluída na sessão (mock)
     st.session_state[f'progresso_{user_id}_{curso_id}_{aula_id}'] = True
     
-    # 2. Lógica de cálculo de progresso (Mock Simples)
-    modulos = listar_modulos_e_aulas(curso_id)
+    # 2. Lógica de cálculo de progresso (Mock Simples, baseada no que viria do DB)
+    modulos = listar_modulos_e_aulas(curso_id) # Usando a função real do courses_engine
     total_aulas = sum(len(m['aulas']) for m in modulos)
     aulas_concluidas = 0
     
@@ -97,8 +66,6 @@ def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
     else:
         novo_progresso = 0
         
-    # 3. Em um ambiente real, chamaríamos courses_engine.marcar_aula_concluida(user_id, aula_id)
-    
     return novo_progresso
 
 # ======================================================
@@ -287,8 +254,6 @@ def aplicar_estilos_cursos():
         margin-bottom: 2rem;
     }
     
-    /* ... (outros estilos mantidos) ... */
-    
     </style>
     """, unsafe_allow_html=True)
 
@@ -303,7 +268,7 @@ def navegar_para(view: str, curso: Optional[Dict] = None):
     st.rerun()
 
 def pagina_cursos(usuario: dict):
-    """Página principal do sistema de cursos, gerencia navegação (CORRIGIDA)."""
+    """Página principal do sistema de cursos, gerencia navegação."""
     
     aplicar_estilos_cursos()
     
@@ -387,7 +352,7 @@ def _exibir_detalhes_curso(curso: dict, usuario: dict):
         })
 
         st.markdown(f"#### 📝 Conteúdo Programático (Módulos)")
-        # USANDO A FUNÇÃO REAL: listar_modulos_e_aulas do courses_engine.py
+        # CORRIGIDO: Chamada usando a função importada
         modulos = listar_modulos_e_aulas(curso['id']) 
         if modulos:
             for modulo in modulos:
@@ -453,7 +418,7 @@ def _pagina_aulas(curso: dict, usuario: dict):
 
     col_video, col_modulos = st.columns([3, 1])
 
-    # USANDO A FUNÇÃO REAL: listar_modulos_e_aulas do courses_engine.py
+    # CORRIGIDO: Chamada usando a função importada
     modulos = listar_modulos_e_aulas(curso['id'])
     
     # 1. Gerenciar Aula Atual (Mock de player)
@@ -491,8 +456,9 @@ def _pagina_aulas(curso: dict, usuario: dict):
                  # Registra o progresso na sessão (mock) e obtém o novo progresso total
                  novo_progresso = registrar_progresso_aula(usuario["id"], curso["id"], aula_atual['id'])
                  
-                 # Atualiza o progresso no banco de dados
-                 courses_engine.atualizar_progresso(usuario["id"], curso["id"], novo_progresso)
+                 # Atualiza o progresso no banco de dados e marca a aula como concluída
+                 ce.marcar_aula_concluida(usuario["id"], aula_atual['id'])
+                 ce.atualizar_progresso(usuario["id"], curso["id"], novo_progresso)
                  
                  st.success(f"Aula concluída! Progresso atualizado para {novo_progresso:.0f}%")
                  
@@ -501,8 +467,6 @@ def _pagina_aulas(curso: dict, usuario: dict):
         else:
             st.markdown('<div class="aula-completa">🎉 Concluído</div>', unsafe_allow_html=True)
             if progresso_total < 100:
-                # Lógica para ir para a próxima aula
-                # Para simplificar, basta um botão para recarregar a lista de aulas e escolher manualmente.
                 if st.button("Próxima Aula →", key=f"btn_proxima_{aula_atual['id']}", type="secondary"):
                      st.info("Função 'Próxima Aula' em desenvolvimento. Selecione a próxima aula ao lado.")
             
@@ -693,7 +657,7 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                 
                 # 3. Chama a função de edição (usando a função real do courses_engine)
                 try:
-                    if courses_engine.editar_curso(curso_original["id"], dados_atualizados):
+                    if ce.editar_curso(curso_original["id"], dados_atualizados):
                         st.success("🎉 Curso atualizado com sucesso!")
                         time.sleep(1)
                         # Redireciona de volta para os detalhes (ou lista)
@@ -833,9 +797,6 @@ def _professor_listar_cursos(usuario: dict):
         st.error(f"❌ Erro ao carregar cursos: {e}")
         cursos = []
     
-    # Filtros
-    # ... (lógica de filtros omitida para brevidade) ...
-
     # Grid de cursos
     st.markdown("### 🎯 Meus Cursos")
     
@@ -1202,8 +1163,6 @@ def _aluno_meus_cursos(usuario: dict):
     cursos_andamento = [c for c in meus_cursos if c['progresso'] < 100]
     cursos_concluidos = [c for c in meus_cursos if c['progresso'] >= 100]
     
-    # ... (Métricas omitidas para brevidade) ...
-
     # Cursos em andamento
     if cursos_andamento:
         st.markdown("---")
