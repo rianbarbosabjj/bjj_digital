@@ -3,21 +3,8 @@ import os
 import sys
 import bcrypt 
 import time
+from database import get_db
 
-# ============================================
-# CORREÇÃO: Adiciona o diretório ao path
-# ============================================
-current_dir = os.path.dirname(os.path.abspath(__file__))
-views_dir = os.path.join(current_dir, 'views')
-
-# Adiciona ao sys.path
-if views_dir not in sys.path:
-    sys.path.insert(0, views_dir)
-    sys.path.insert(0, current_dir)
-
-# ============================================
-# CONFIGURAÇÃO BÁSICA
-# ============================================
 def get_logo_path():
     if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
     if os.path.exists("logo.jpg"): return "logo.jpg"
@@ -34,293 +21,310 @@ st.set_page_config(
     initial_sidebar_state="expanded" 
 )
 
-# Cores padrão
-COR_FUNDO = "#0e2d26"
-COR_TEXTO = "#FFFFFF"
-COR_DESTAQUE = "#FFD770"
-COR_BOTAO = "#078B6C"
-COR_HOVER = "#FFD770"
-
-# ============================================
-# IMPORTAÇÕES COM TRY/EXCEPT SIMPLES
-# ============================================
 try:
-    from streamlit_option_menu import option_menu
-except:
-    st.error("streamlit_option_menu não instalado. Execute: pip install streamlit-option-menu")
-    st.stop()
-
-# Importa módulos individualmente com fallback
-def importar_modulo(modulo_nome, fallback_nome=None):
-    """Importa módulo com fallback"""
-    try:
-        if fallback_nome:
-            return __import__(modulo_nome)
-        else:
-            # Tenta importação relativa
-            import importlib
-            return importlib.import_module(f"views.{modulo_nome}")
-    except ImportError as e:
-        st.warning(f"Módulo {modulo_nome} não encontrado: {e}")
-        return None
-
-# Importa cada módulo
-login = importar_modulo("login")
-geral = importar_modulo("geral")
-aluno = importar_modulo("aluno")
-professor = importar_modulo("professor")
-admin = importar_modulo("admin")
-
-# Verifica se todos os módulos necessários foram carregados
-modulos_necessarios = [login, geral, aluno, professor, admin]
-nomes_modulos = ["login", "geral", "aluno", "professor", "admin"]
-
-for i, mod in enumerate(modulos_necessarios):
-    if mod is None:
-        st.error(f"❌ Módulo crítico '{nomes_modulos[i]}' não encontrado!")
-        st.error(f"Verifique se o arquivo views/{nomes_modulos[i]}.py existe")
-        st.stop()
-
-# Importação especial para cursos (pode ser opcional)
-try:
-    from views.cursos import pagina_cursos as cursos_pagina
-    cursos = type('obj', (object,), {'pagina_cursos': cursos_pagina})
+    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
-    # Fallback para cursos
-    st.warning("⚠️ Módulo de cursos não encontrado. Usando versão simplificada.")
-    class CursosSimples:
-        @staticmethod
-        def pagina_cursos(usuario):
-            st.markdown("<h1 style='color:#FFD770;'>📚 Cursos BJJ</h1>", unsafe_allow_html=True)
-            st.info("Sistema de cursos em desenvolvimento.")
-            if st.button("🏠 Voltar"):
-                st.session_state.menu_selection = "Início"
-                st.rerun()
-    cursos = CursosSimples()
+    COR_FUNDO = "#0e2d26"
+    COR_TEXTO = "#FFFFFF"
+    COR_DESTAQUE = "#FFD770"
+    COR_BOTAO = "#078B6C"
+    COR_HOVER = "#FFD770"
 
-# ============================================
-# CONEXÃO COM BANCO (SIMPLIFICADA)
-# ============================================
-def get_db():
-    """Versão simplificada para evitar erros"""
-    try:
-        from database import get_db as get_db_original
-        return get_db_original()
-    except:
-        st.warning("⚠️ Banco de dados temporariamente indisponível")
-        return None
-
-# ============================================
-# ESTILOS CSS
-# ============================================
 st.markdown(f"""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
 
-    html, body, [class*="css"] {{
+    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
         font-family: 'Poppins', sans-serif;
         color: {COR_TEXTO} !important;
     }}
 
     .stApp {{
-        background-color: {COR_FUNDO};
-        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%);
+        background-color: {COR_FUNDO} !important;
+        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
+    }}
+    
+    hr {{
+        margin: 2em 0 !important;
+        border: 0 !important;
+        height: 1px !important;
+        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
+    }}
+
+    div.stRadio > div[role="radiogroup"] > label > div:first-child {{
+        border-color: {COR_DESTAQUE} !important;
+        background-color: transparent !important;
+    }}
+    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
+        background-color: {COR_DESTAQUE} !important;
     }}
 
     h1, h2, h3, h4, h5, h6 {{ 
         color: {COR_DESTAQUE} !important; 
-        text-align: center;
-        font-weight: 700;
+        text-align: center !important; 
+        font-weight: 700 !important; 
+        text-transform: uppercase;
+        letter-spacing: 1px;
     }}
 
-    div.stButton > button {{ 
-        background: {COR_BOTAO} !important; 
-        color: white !important;
+    section[data-testid="stSidebar"] {{
+        background-color: #091f1a !important; 
+        border-right: 1px solid rgba(255, 215, 112, 0.15);
+        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
+    }}
+    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
+        fill: {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
+    }}
+
+    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
+    div[data-testid="stForm"] {{
+        background-color: rgba(0, 0, 0, 0.3) !important; 
+        border: 1px solid rgba(255, 215, 112, 0.2) !important; 
+        border-radius: 12px; 
+        padding: 20px;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
+        margin-bottom: 20px;
+    }}
+    
+    .streamlit-expanderHeader {{
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        color: {COR_DESTAQUE} !important;
+        border: 1px solid {COR_DESTAQUE} !important;
         border-radius: 8px;
     }}
+    .streamlit-expanderHeader svg {{
+        fill: {COR_TEXTO} !important; 
+        color: {COR_TEXTO} !important;
+    }}
 
+    div.stButton > button, div.stFormSubmitButton > button {{ 
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
+        color: white !important; 
+        border: 1px solid rgba(255,255,255,0.1) !important; 
+        padding: 0.6em 1.5em !important; 
+        font-weight: 600 !important;
+        border-radius: 8px !important; 
+        transition: all 0.3s ease !important;
+    }}
     div.stButton > button:hover {{ 
         background: {COR_HOVER} !important; 
-        color: #0e2d26 !important;
+        color: #0e2d26 !important; 
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
+
+    input, textarea, select, div[data-testid="stSelectbox"] > div {{ 
+        background-color: rgba(255, 255, 255, 0.05) !important;
+        color: white !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important; 
+        border-radius: 8px !important;
+    }}
+    .stTextInput input, .stTextArea textarea {{ color: white !important; }}
+    
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    [data-testid="stDecoration"] {{display: none;}}
+    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
+
 </style>
 """, unsafe_allow_html=True)
 
-# ============================================
-# FUNÇÃO DE TROCA DE SENHA
-# ============================================
-def tela_troca_senha_obrigatoria():
-    st.markdown("<h2>🔒 Troca de Senha</h2>", unsafe_allow_html=True)
-    st.warning("Por segurança, redefina sua senha.")
-    
-    with st.form("frm_troca"):
-        ns = st.text_input("Nova Senha:", type="password")
-        cs = st.text_input("Confirmar:", type="password")
-        if st.form_submit_button("Atualizar"):
-            if ns and ns == cs:
-                try:
-                    user = st.session_state.get('usuario')
-                    if not user or 'id' not in user:
-                        st.error("Erro de sessão")
-                        return
-                    
-                    db = get_db()
-                    if db:
-                        hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
-                        db.collection('usuarios').document(user['id']).update({
-                            "senha": hashed, 
-                            "precisa_trocar_senha": False
-                        })
-                    
-                    st.session_state.usuario['precisa_trocar_senha'] = False
-                    st.success("Senha atualizada! Redirecionando...")
-                    time.sleep(1)
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro: {e}")
-            else:
-                st.error("Senhas não conferem")
+if "SECRETS_TOML" in os.environ:
+    if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
+    with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
 
-# ============================================
-# APLICAÇÃO PRINCIPAL
-# ============================================
+try:
+    from streamlit_option_menu import option_menu
+    # 🔹 AQUI: adicionamos cursos mantendo o resto igual
+    from views import login, geral, aluno, professor, admin, cursos
+except ImportError as e:
+    st.error(f"❌ Erro crítico nas importações: {e}")
+    st.stop()
+
+def tela_troca_senha_obrigatoria():
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        if logo_file:
+            cl, cc, cr = st.columns([1, 1, 1])
+            with cc: st.image(logo_file, use_container_width=True)
+        st.write("") 
+        with st.container(border=True):
+            st.markdown("<h3>🔒 Troca de Senha</h3>", unsafe_allow_html=True)
+            st.warning("Por segurança, redefina sua senha.")
+            with st.form("frm_troca"):
+                ns = st.text_input("Nova Senha:", type="password")
+                cs = st.text_input("Confirmar:", type="password")
+                if st.form_submit_button("Atualizar", use_container_width=True):
+                    if ns and ns == cs:
+                        try:
+                            # 1. Recupera ID de forma segura
+                            user_sessao = st.session_state.get('usuario')
+                            if not user_sessao or 'id' not in user_sessao:
+                                st.error("Erro de Sessão: Usuário não identificado.")
+                                return
+
+                            uid = user_sessao['id']
+                            
+                            # 2. Gera Hash
+                            hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
+                            
+                            # 3. Conecta ao Banco
+                            db = get_db()
+                            if not db:
+                                st.error("Erro de conexão com o banco.")
+                                return
+
+                            # 4. Atualiza
+                            db.collection('usuarios').document(uid).update({
+                                "senha": hashed, 
+                                "precisa_trocar_senha": False
+                            })
+                            
+                            st.success("Sucesso! Entrando...")
+                            st.session_state.usuario['precisa_trocar_senha'] = False
+                            time.sleep(1)
+                            st.rerun()
+                            
+                        except Exception as e: 
+                            st.error(f"Erro ao salvar: {e}") 
+                    else: st.error("Senhas não conferem.")
+
 def app_principal():
     if not st.session_state.get('usuario'):
-        st.session_state.clear()
-        st.rerun()
-        return
+        st.session_state.clear(); st.rerun(); return
 
     usuario = st.session_state.usuario
-    tipo = usuario.get("tipo", "aluno").lower()
+    raw_tipo = str(usuario.get("tipo", "aluno")).lower()
     
-    # Sidebar simplificada
-    with st.sidebar:
-        if logo_file:
-            st.image(logo_file, use_container_width=True)
-        
-        st.markdown(f"**{usuario['nome'].split()[0]}**")
-        st.caption(f"{tipo.capitalize()}")
-        st.markdown("---")
-        
-        if st.button("👤 Meu Perfil"):
-            st.session_state.menu_selection = "Meu Perfil"
-            st.rerun()
-        
-        if st.button("🏠 Início"):
-            st.session_state.menu_selection = "Início"
-            st.rerun()
-        
-        if tipo in ["professor", "admin"]:
-            if st.button("🥋 Painel Prof."):
-                st.session_state.menu_selection = "Painel de Professores"
-                st.rerun()
-        
-        if tipo == "admin":
-            if st.button("📊 Gestão"):
-                st.session_state.menu_selection = "Gestão e Estatísticas"
-                st.rerun()
-        
-        st.markdown("---")
-        if st.button("🚪 Sair"):
-            st.session_state.clear()
-            st.rerun()
+    if "admin" in raw_tipo: tipo_code = "admin"
+    elif "professor" in raw_tipo: tipo_code = "professor"
+    else: tipo_code = "aluno"
 
-    # Navegação principal
-    if "menu_selection" not in st.session_state:
-        st.session_state.menu_selection = "Início"
-    
-    pagina = st.session_state.menu_selection
-    
-    # Menu horizontal
-    if tipo in ["admin", "professor"]:
-        opcoes = ["Início", "Cursos", "Exame de Faixa", "Ranking", "Questões", "Equipes"]
-        icons = ["house", "book", "journal", "trophy", "list-task", "building"]
-    else:
-        opcoes = ["Início", "Cursos", "Exame de Faixa", "Ranking"]
-        icons = ["house", "book", "journal", "trophy"]
-    
-    try:
-        menu = option_menu(
-            menu_title=None,
-            options=opcoes,
-            icons=icons,
-            default_index=opcoes.index(pagina) if pagina in opcoes else 0,
-            orientation="horizontal"
-        )
+    label_tipo = raw_tipo.capitalize()
+    if tipo_code == "admin": label_tipo = "Administrador(a)"
+    elif tipo_code == "professor": label_tipo = "Professor(a)"
+    elif tipo_code == "aluno": label_tipo = "Aluno(a)"
+
+    def nav(pg): st.session_state.menu_selection = pg
+
+    with st.sidebar:
+        if logo_file: st.image(logo_file, use_container_width=True)
+        st.markdown(f"<h3 style='color:{COR_DESTAQUE}; margin:0;'>{usuario['nome'].split()[0]}</h3>", unsafe_allow_html=True)
         
-        if menu != pagina:
+        st.markdown(f"<p style='text-align:center; color:#aaa; font-size: 0.9em;'>{label_tipo}</p>", unsafe_allow_html=True)
+        st.markdown("---")
+        
+        if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
+        
+        if tipo_code in ["admin", "professor"]:
+            if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel de Professores")
+        
+        if tipo_code != "admin":
+            if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
+        
+        if tipo_code == "admin":
+            if st.button("📊 Gestão e Estatísticas", use_container_width=True): nav("Gestão e Estatísticas")
+            
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚪 Sair", use_container_width=True):
+            st.session_state.clear(); st.rerun()
+
+    if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
+    pg = st.session_state.menu_selection
+
+    if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
+    if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
+    if pg == "Painel de Professores": professor.painel_professor(); return
+    if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
+    if pg == "Início": geral.tela_inicio(); return
+
+    ops, icns = [], []
+    if tipo_code in ["admin", "professor"]:
+        # 🔹 AQUI: só inserimos "Cursos" e o ícone "book"
+        ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+        icns = ["house", "people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
+    else:
+        ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking"]
+        icns = ["house", "people", "book", "journal", "trophy"]
+
+    try: idx = ops.index(pg)
+    except: idx = 0
+    
+    menu = option_menu(
+        menu_title=None, 
+        options=ops, 
+        icons=icns, 
+        default_index=idx, 
+        orientation="horizontal",
+        styles={
+            "container": {
+                "padding": "5px 10px", 
+                "background-color": COR_FUNDO, 
+                "margin": "0px auto",
+                "border-radius": "12px", 
+                "border": "1px solid rgba(255, 215, 112, 0.15)", 
+                "box-shadow": "0 4px 15px rgba(0,0,0,0.3)",
+                "width": "100%",       
+                "max-width": "100%",  
+                "display": "flex",     
+                "justify-content": "space-between" 
+            },
+            "icon": {
+                "color": COR_DESTAQUE, 
+                "font-size": "16px",
+                "font-weight": "bold"
+            }, 
+            "nav-link": {
+                "font-size": "14px", 
+                "text-align": "center", 
+                "margin": "0px 2px",  
+                "color": "rgba(255, 255, 255, 0.8)",
+                "font-weight": "400",
+                "border-radius": "8px",
+                "transition": "0.3s",
+                "width": "100%",       
+                "flex-grow": "1",     
+                "display": "flex",
+                "justify-content": "center",
+                "align-items": "center"
+            },
+            "nav-link-selected": {
+                "background-color": COR_DESTAQUE, 
+                "color": "#0e2d26", 
+                "font-weight": "700",
+                "box-shadow": "0px 2px 8px rgba(0,0,0,0.2)",
+            },
+        }
+    )
+
+    if menu != pg:
+        if pg == "Meus Certificados" and menu == "Início": pass 
+        else:
             st.session_state.menu_selection = menu
             st.rerun()
-    except:
-        # Fallback se option_menu falhar
-        st.write("Navegação: " + " | ".join(opcoes))
-        for op in opcoes:
-            if st.button(op, key=f"btn_{op}"):
-                st.session_state.menu_selection = op
-                st.rerun()
-    
-    # Renderiza página
-    if pagina == "Meu Perfil":
-        geral.tela_meu_perfil(usuario)
-    elif pagina == "Painel de Professores":
-        professor.painel_professor()
-    elif pagina == "Gestão e Estatísticas":
-        admin.gestao_usuarios(usuario)
-    elif pagina == "Meus Certificados":
-        aluno.meus_certificados(usuario)
-    elif pagina == "Início":
-        geral.tela_inicio()
-    elif pagina == "Cursos":
-        cursos.pagina_cursos(usuario)
-    elif pagina == "Exame de Faixa":
-        aluno.exame_de_faixa(usuario)
-    elif pagina == "Ranking":
-        aluno.ranking()
-    elif pagina == "Questões":
-        admin.gestao_questoes()
-    elif pagina == "Equipes":
-        professor.gestao_equipes()
-    else:
-        st.info(f"Página '{pagina}' em desenvolvimento")
 
-# ============================================
-# PONTO DE ENTRADA
-# ============================================
+    if pg == "Modo Rola": 
+        aluno.modo_rola(usuario)
+    elif pg == "Cursos":
+        # 🔹 NOVO: rota para a página de cursos
+        cursos.pagina_cursos(usuario)
+    elif pg == "Exame de Faixa": 
+        aluno.exame_de_faixa(usuario)
+    elif pg == "Ranking": 
+        aluno.ranking()
+    elif pg == "Gestão de Equipes": 
+        professor.gestao_equipes()
+    elif pg == "Gestão de Questões": 
+        admin.gestao_questoes()
+    elif pg == "Gestão de Exame": 
+        admin.gestao_exame_de_faixa()
+
 if __name__ == "__main__":
-    # Inicializa session_state
-    if 'usuario' not in st.session_state:
-        st.session_state.usuario = None
-    
-    if 'menu_selection' not in st.session_state:
-        st.session_state.menu_selection = "Início"
-    
-    if 'registration_pending' not in st.session_state:
-        st.session_state.registration_pending = None
-    
-    # Fluxo principal
-    if not st.session_state.usuario and not st.session_state.registration_pending:
-        # Tela de login
-        try:
-            login.tela_login()
-        except Exception as e:
-            st.error(f"Erro no login: {e}")
-            # Fallback para login básico
-            st.markdown("<h1>BJJ Digital</h1>", unsafe_allow_html=True)
-            email = st.text_input("Email")
-            senha = st.text_input("Senha", type="password")
-            if st.button("Entrar"):
-                st.error("Sistema de login temporariamente indisponível")
-    
-    elif st.session_state.registration_pending:
-        # Cadastro pendente
-        try:
-            login.tela_completar_cadastro(st.session_state.registration_pending)
-        except:
-            st.error("Erro no cadastro")
-    
-    elif st.session_state.usuario:
-        # Usuário logado
-        if st.session_state.usuario.get("precisa_trocar_senha"):
-            tela_troca_senha_obrigatoria()
-        else:
-            app_principal()
+    if not st.session_state.get('usuario') and not st.session_state.get('registration_pending'):
+        login.tela_login()
+    elif st.session_state.get('registration_pending'):
+        login.tela_completar_cadastro(st.session_state.registration_pending)
+    elif st.session_state.get('usuario'):
+        if st.session_state.usuario.get("precisa_trocar_senha"): tela_troca_senha_obrigatoria()
+        else: app_principal()
