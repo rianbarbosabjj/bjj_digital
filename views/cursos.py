@@ -8,6 +8,7 @@ import pandas as pd
 import time
 from datetime import datetime, MINYEAR
 from typing import Optional, Dict, List
+import plotly.express as px # <-- CORREÇÃO: Adicionado para usar px.bar() no dashboard!
 
 # Importações internas (Assegure-se de que estes módulos estão acessíveis)
 from database import get_db
@@ -21,6 +22,8 @@ from courses_engine import (
 
 # ======================================================
 # MOCK DE FUNÇÕES DE AULAS/EDIÇÃO (Substituir por Real)
+# Estas funções devem estar no seu courses_engine.py, 
+# mas são mantidas aqui para que a lógica de navegação funcione.
 # ======================================================
 
 # Variável global para simular o armazenamento em memória para o curso_selecionado
@@ -28,63 +31,58 @@ MOCK_CURSO_DB = {}
 
 def obter_curso_por_id(curso_id: str) -> Optional[Dict]:
     """Mock: Obtém um curso específico. Assume que os cursos já foram carregados
-       para o mock do professor, ou busca um curso genérico."""
+        para o mock do professor, ou busca um curso genérico."""
     # Tenta buscar na lista de cursos do professor (se a chave existir no state)
-    mock_cursos_prof = listar_cursos_do_professor("professor_id")
-    for curso in mock_cursos_prof:
-        if curso.get('id') == curso_id:
-            return curso
+    # Nota: Em um ambiente real, você usaria courses_engine.obter_curso_por_id
+    # e faria a lógica de mock apenas no ambiente de testes.
     
-    # Tenta buscar em um curso genérico se não for encontrado (ex: tela do aluno)
-    mock_cursos_aluno = listar_cursos_disponiveis_para_usuario({"id": "aluno_id", "tipo": "aluno"})
-    for curso in mock_cursos_aluno:
-         if curso.get('id') == curso_id:
-            return curso
-    
+    # Se o curso for o 'novo_curso' (usado na criação), retorna o mock
+    if curso_id == 'novo_curso' and 'c_titulo_input' in st.session_state:
+        return {
+             'id': 'temp_new_course', 
+             'titulo': st.session_state.c_titulo_input, 
+             'descricao': st.session_state.c_descricao_input, 
+             'modalidade': st.session_state.c_modalidade_select,
+             'publico': st.session_state.c_publico_select,
+             'pago': st.session_state.criar_curso_pago_toggle_new
+        }
+        
     # Tenta obter do mock global de edição
     if curso_id in MOCK_CURSO_DB:
         return MOCK_CURSO_DB[curso_id]
-        
+    
+    # Em um ambiente real, você faria uma chamada genérica de banco aqui
     return None
 
 def editar_curso(curso_id: str, dados_atualizados: dict) -> bool:
     """Mock: Edita um curso no banco de dados (simulando alteração na memória)."""
-    # Em uma aplicação real, aqui você chamaria a lógica de UPDATE no DB
-    
-    # Simula a persistência
-    curso_existente = obter_curso_por_id(curso_id)
-    if curso_existente:
-        curso_existente.update(dados_atualizados)
-        MOCK_CURSO_DB[curso_id] = curso_existente
-        return True
-    return False
+    # Esta função está implementada corretamente no seu courses_engine.py
+    # Chamando a versão do courses_engine (real)
+    return courses_engine.editar_curso(curso_id, dados_atualizados)
+
 
 def listar_modulos_e_aulas(curso_id: str) -> List[Dict]:
-    """Mock: Retorna módulos e aulas de um curso."""
-    # Em uma aplicação real, aqui você buscaria a estrutura de aulas no DB
-    if curso_id == 'p1' or curso_id == 'a2': # Exemplo de curso estruturado
-        return [
-            {'id': f'{curso_id}m1', 'titulo': 'Módulo 1: Fundamentos', 'aulas': [
-                {'id': f'{curso_id}a1-1', 'titulo': 'Introdução (VÍDEO)', 'tipo': 'video', 'duracao': '15min'},
-                {'id': f'{curso_id}a1-2', 'titulo': 'Conceitos de Posição (TEXTO)', 'tipo': 'texto', 'duracao': 'Leitura'},
-            ]},
-            {'id': f'{curso_id}m2', 'titulo': 'Módulo 2: Raspagens e Ataques', 'aulas': [
-                {'id': f'{curso_id}a2-1', 'titulo': 'Raspagem da Tesoura (VÍDEO)', 'tipo': 'video', 'duracao': '20min'},
-                {'id': f'{curso_id}a2-2', 'titulo': 'Quiz Final (Atinge 100%)', 'tipo': 'quiz', 'duracao': '10min'},
-            ]},
-        ]
-    return [{'id': f'{curso_id}m1', 'titulo': 'Módulo Único', 'aulas': []}]
+    """Mock: Retorna módulos e aulas de um curso. (Adaptação para o novo courses_engine)"""
+    # Esta função está implementada corretamente no seu courses_engine.py
+    # Chamando a versão do courses_engine (real)
+    return courses_engine.listar_modulos_e_aulas(curso_id)
 
 def obter_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> bool:
-    """Mock: Retorna True se a aula foi concluída. Usa st.session_state para simulação."""
+    """Mock/Lógica de Sessão: Retorna True se a aula foi concluída. Usa st.session_state para simulação."""
+    
+    # Nota: Em um ambiente real, você usaria courses_engine.verificar_aula_concluida(user_id, aula_id)
+    
+    # Simulação de cache de progresso usando Session State (para demonstração)
     key = f'progresso_{user_id}_{curso_id}_{aula_id}'
     return st.session_state.get(key, False)
 
 def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
-    """Mock: Marca uma aula como concluída e calcula novo progresso total."""
+    """Mock/Lógica de Sessão: Marca uma aula como concluída e calcula novo progresso total."""
+    
+    # 1. Marca a aula como concluída na sessão (mock)
     st.session_state[f'progresso_{user_id}_{curso_id}_{aula_id}'] = True
     
-    # Lógica de cálculo de progresso (Mock Simples)
+    # 2. Lógica de cálculo de progresso (Mock Simples)
     modulos = listar_modulos_e_aulas(curso_id)
     total_aulas = sum(len(m['aulas']) for m in modulos)
     aulas_concluidas = 0
@@ -99,12 +97,8 @@ def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
     else:
         novo_progresso = 0
         
-    # Mock: Atualiza a inscrição do usuário no DB simulado (se existir)
-    # NOTE: Em uma aplicação real, 'obter_inscricao' seria atualizado aqui
-    if curso_id == 'a2' and novo_progresso > 50:
-         # Simula o progresso inicial de 50%
-         pass 
-         
+    # 3. Em um ambiente real, chamaríamos courses_engine.marcar_aula_concluida(user_id, aula_id)
+    
     return novo_progresso
 
 # ======================================================
@@ -113,7 +107,7 @@ def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
 
 def aplicar_estilos_cursos():
     """Aplica estilos modernos específicos para cursos"""
-    # ... (Seu CSS original mantido, mas otimizado para botões Streamlit)
+    # ... (Seu CSS completo aqui) ...
     st.markdown("""
     <style>
     /* CARDS DE CURSO MODERNOS */
@@ -333,7 +327,7 @@ def pagina_cursos(usuario: dict):
     # Botão de voltar
     if st.session_state.get('cursos_view') != 'lista':
         # Botão para voltar da sub-tela para a lista principal
-        if st.button("← Voltar à Lista de Cursos", key="btn_voltar_lista_cursos"):
+        if st.button("← Voltar à Lista de Cursos", key="btn_voltar_lista_cursos", type="secondary"):
             navegar_para('lista')
     else:
         # Botão para voltar para o menu principal do aplicativo
@@ -393,7 +387,8 @@ def _exibir_detalhes_curso(curso: dict, usuario: dict):
         })
 
         st.markdown(f"#### 📝 Conteúdo Programático (Módulos)")
-        modulos = listar_modulos_e_aulas(curso['id'])
+        # USANDO A FUNÇÃO REAL: listar_modulos_e_aulas do courses_engine.py
+        modulos = listar_modulos_e_aulas(curso['id']) 
         if modulos:
             for modulo in modulos:
                 with st.expander(f"Módulo {modulos.index(modulo) + 1}: {modulo['titulo']} ({len(modulo['aulas'])} aulas)", expanded=True):
@@ -448,16 +443,22 @@ def _pagina_aulas(curso: dict, usuario: dict):
     st.markdown(f"## 🎬 Aulas: {curso.get('titulo', 'Curso')}")
     st.markdown("---")
     
-    progresso_total = obter_inscricao(usuario["id"], curso["id"]).get("progresso", 0)
+    inscricao = obter_inscricao(usuario["id"], curso["id"])
+    if not inscricao:
+        st.error("Erro: Inscrição não encontrada. Por favor, volte e inscreva-se novamente.")
+        return
+        
+    progresso_total = inscricao.get("progresso", 0)
     st.progress(progresso_total / 100, text=f"Progresso Geral: {progresso_total:.0f}%")
 
     col_video, col_modulos = st.columns([3, 1])
 
+    # USANDO A FUNÇÃO REAL: listar_modulos_e_aulas do courses_engine.py
     modulos = listar_modulos_e_aulas(curso['id'])
     
     # 1. Gerenciar Aula Atual (Mock de player)
+    # Define a primeira aula como padrão se não houver 'aula_atual' no state
     if 'aula_atual' not in st.session_state:
-        # Define a primeira aula como padrão
         try:
             st.session_state['aula_atual'] = modulos[0]['aulas'][0]
         except IndexError:
@@ -466,6 +467,7 @@ def _pagina_aulas(curso: dict, usuario: dict):
              return
     
     aula_atual = st.session_state['aula_atual']
+    # O progresso da aula é mockado localmente para demonstração
     aula_completa = obter_progresso_aula(usuario["id"], curso["id"], aula_atual['id'])
 
     with col_video:
@@ -486,17 +488,23 @@ def _pagina_aulas(curso: dict, usuario: dict):
         # Botão de conclusão
         if not aula_completa:
              if st.button(f"✅ Marcar '{aula_atual['titulo']}' como Concluída", key=f"btn_concluir_aula_{aula_atual['id']}", type="primary"):
+                 # Registra o progresso na sessão (mock) e obtém o novo progresso total
                  novo_progresso = registrar_progresso_aula(usuario["id"], curso["id"], aula_atual['id'])
+                 
+                 # Atualiza o progresso no banco de dados
+                 courses_engine.atualizar_progresso(usuario["id"], curso["id"], novo_progresso)
+                 
                  st.success(f"Aula concluída! Progresso atualizado para {novo_progresso:.0f}%")
-                 st.session_state['aula_atual_id_temp'] = aula_atual['id'] # Força o update visual
+                 
                  time.sleep(1)
                  st.rerun()
         else:
             st.markdown('<div class="aula-completa">🎉 Concluído</div>', unsafe_allow_html=True)
             if progresso_total < 100:
+                # Lógica para ir para a próxima aula
+                # Para simplificar, basta um botão para recarregar a lista de aulas e escolher manualmente.
                 if st.button("Próxima Aula →", key=f"btn_proxima_{aula_atual['id']}", type="secondary"):
-                    # Lógica de encontrar a próxima aula (simples)
-                    pass
+                     st.info("Função 'Próxima Aula' em desenvolvimento. Selecione a próxima aula ao lado.")
             
     # 2. Navegação Lateral de Módulos
     with col_modulos:
@@ -505,11 +513,11 @@ def _pagina_aulas(curso: dict, usuario: dict):
         for modulo in modulos:
             st.subheader(f"{modulo['titulo']}", divider='orange')
             for aula in modulo['aulas']:
-                key_aula = f'progresso_{usuario["id"]}_{curso["id"]}_{aula["id"]}'
-                is_completa = st.session_state.get(key_aula, False)
+                # Progresso da aula lido do mock
+                is_completa = obter_progresso_aula(usuario["id"], curso["id"], aula['id'])
                 is_atual = aula['id'] == aula_atual['id']
                 
-                label = f"{'✅' if is_completa else '⚪'} {aula['titulo']}"
+                label = f"{'✅' if is_completa else '⚪'} {aula['titulo']} ({aula.get('duracao', '')})"
                 
                 if is_atual:
                     st.markdown(f"**▶️ {label}**")
@@ -525,8 +533,9 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
     st.markdown("---")
     
     # Inicializa o estado do toggle com o valor atual do curso
-    if f"edit_pago_toggle_{curso_original['id']}" not in st.session_state:
-        st.session_state[f"edit_pago_toggle_{curso_original['id']}"] = curso_original.get("pago", False)
+    pago_toggle_key = f"edit_pago_toggle_{curso_original['id']}"
+    if pago_toggle_key not in st.session_state:
+        st.session_state[pago_toggle_key] = curso_original.get("pago", False)
 
     with st.form(f"form_editar_curso_moderno_{curso_original['id']}", border=True):
         
@@ -609,8 +618,6 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
         col5, col6, col7 = st.columns([1, 1, 1])
         
         with col5:
-            # CORREÇÃO: Associando o toggle a st.session_state
-            pago_toggle_key = f"edit_pago_toggle_{curso_original['id']}"
             st.toggle(
                 "Curso Pago?",
                 value=st.session_state[pago_toggle_key],
@@ -684,9 +691,9 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                      st.error("⚠️ Título e descrição são obrigatórios.")
                      return
                 
-                # 3. Chama a função de edição
+                # 3. Chama a função de edição (usando a função real do courses_engine)
                 try:
-                    if editar_curso(curso_original["id"], dados_atualizados):
+                    if courses_engine.editar_curso(curso_original["id"], dados_atualizados):
                         st.success("🎉 Curso atualizado com sucesso!")
                         time.sleep(1)
                         # Redireciona de volta para os detalhes (ou lista)
@@ -702,7 +709,6 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
 # ======================================================
 
 def _interface_professor_moderna(usuario: dict):
-    # ... (Conteúdo de _interface_professor_moderna mantido) ...
     tab1, tab2, tab3 = st.tabs([
         "📘 Meus Cursos",
         "➕ Criar Novo",
@@ -730,23 +736,11 @@ def _pagina_edicao_curso_new(usuario: dict):
     </div>
     """, unsafe_allow_html=True)
     
-    # Valores vazios para criar um novo curso
-    curso_vazio = {
-        'id': 'novo_curso', # ID temporário para o formulário
-        'titulo': '', 'descricao': '', 'modalidade': 'EAD', 'publico': 'geral',
-        'pago': False, 'preco': 0.0, 'split_custom': 10, 'certificado_automatico': True,
-        'ativo': True, 'nivel': 'Todos os Níveis'
-    }
-
     # Inicializa o estado do toggle
     if "criar_curso_pago_toggle_new" not in st.session_state:
         st.session_state["criar_curso_pago_toggle_new"] = False
         
     with st.form("form_criar_curso_moderno_new", clear_on_submit=False, border=True):
-        
-        # ... (Campos do formulário) ...
-        # NOTE: Aqui reescrevi o formulário de criação para ser simplificado e evitar conflitos 
-        # complexos de estado. A lógica de submissão do formulário original do usuário foi mantida.
         
         st.markdown("### 📝 Informações Básicas")
         
@@ -792,9 +786,10 @@ def _pagina_edicao_curso_new(usuario: dict):
         
         with col_submit1:
             if st.form_submit_button("❌ Limpar", use_container_width=True, type="secondary"):
+                 # Resetando inputs por chave
                  st.session_state["c_titulo_input"] = ""
                  st.session_state["c_descricao_input"] = ""
-                 st.session_state["c_equipe_input"] = ""
+                 st.session_state["c_equipe_input"] = "" if "c_equipe_input" in st.session_state else ""
                  st.session_state["c_preco_input"] = 0.0
                  st.session_state["criar_curso_pago_toggle_new"] = False
                  st.rerun() # Limpa o formulário
@@ -803,7 +798,7 @@ def _pagina_edicao_curso_new(usuario: dict):
             submit = st.form_submit_button("🚀 Criar Curso Agora", type="primary", use_container_width=True)
             
             if submit:
-                # Lógica de criação original (levemente ajustada para consistência)
+                # Lógica de criação
                 erros = []
                 if not titulo.strip(): erros.append("⚠️ O título é obrigatório.")
                 if not descricao.strip(): erros.append("⚠️ A descrição é obrigatória.")
@@ -815,6 +810,7 @@ def _pagina_edicao_curso_new(usuario: dict):
                     return
                 
                 try:
+                    # USANDO A FUNÇÃO REAL: criar_curso do courses_engine.py
                     curso_id = criar_curso(
                         professor_id=usuario["id"], nome_professor=usuario.get("nome", ""),
                         titulo=titulo, descricao=descricao, modalidade=modalidade, publico=publico,
@@ -828,8 +824,6 @@ def _pagina_edicao_curso_new(usuario: dict):
                 except Exception as e:
                     st.error(f"❌ Erro ao criar curso: {e}")
 
-# ... (outras funções do professor mantidas, com links de navegação ajustados) ...
-
 def _professor_listar_cursos(usuario: dict):
     """Lista cursos do professor com design moderno (Ajustado para navegação)"""
     
@@ -839,16 +833,14 @@ def _professor_listar_cursos(usuario: dict):
         st.error(f"❌ Erro ao carregar cursos: {e}")
         cursos = []
     
-    # ... (Filtros e Métricas mantidos) ...
-    
-    # Grid de cursos
-    # ... (Filtros e Métricas mantidos) ...
-    
+    # Filtros
+    # ... (lógica de filtros omitida para brevidade) ...
+
     # Grid de cursos
     st.markdown("### 🎯 Meus Cursos")
     
     if not cursos:
-         st.markdown("""
+        st.markdown("""
         <div class="empty-state">
         <div class="empty-state-icon">📭</div>
         <h3 style="color: #FFD770;">Nenhum Curso Criado</h3>
@@ -858,24 +850,19 @@ def _professor_listar_cursos(usuario: dict):
         </p>
         </div>
         """, unsafe_allow_html=True)
-         return
+        return
     
-    # Filtra cursos (código de filtro movido para dentro da função para ser reutilizado ou adaptado, mas o seu original está ok se a variável cursos for populada)
+    # Implemente a lógica de filtragem original aqui antes de prosseguir com o loop
+    cursos_filtrados = cursos
     
-    cursos_filtrados = cursos # Simplificando para o demo. Assumindo que o código anterior está na função.
-    
-    # ... (Lógica de filtragem omitida para brevidade, mas deve ser mantida) ...
-
     cols = st.columns(3)
     for idx, curso in enumerate(cursos_filtrados):
         with cols[idx % 3]:
-            # Chamada para o render com as ações de navegação
             _render_card_curso_professor(curso, usuario)
 
 def _render_card_curso_professor(curso: dict, usuario: dict):
     """Renderiza card de curso para professor (Ajustado para navegação e correção de botões)"""
     
-    # ... (HTML do card mantido, sem botões) ...
     ativo = curso.get('ativo', True)
     pago = curso.get('pago', False)
     modalidade = curso.get('modalidade', 'EAD')
@@ -927,31 +914,148 @@ def _render_card_curso_professor(curso: dict, usuario: dict):
     </div>
     """, unsafe_allow_html=True)
     
-    # Botões funcionais Streamlit (CORRIGIDO: Ações de navegação)
     st.markdown(f'<div style="margin-top: -1rem; margin-bottom: 1rem;">', unsafe_allow_html=True)
     col1, col2 = st.columns(2)
     with col1:
-        # Ação: Navegar para Edição
         if st.button("✏️ Editar", key=f"edit_prof_{curso['id']}", use_container_width=True, type="secondary"):
             navegar_para('edicao', curso)
     
     with col2:
-        # Ação: Navegar para Detalhes/Aulas (Visualização)
         if st.button("👁️ Ver", key=f"view_prof_{curso['id']}", use_container_width=True, type="secondary"):
              navegar_para('detalhe', curso)
     
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ... (Função _professor_dashboard mantida) ...
+def _professor_dashboard(usuario: dict):
+    """Dashboard do professor (CORRIGIDO: Importação do Plotly)"""
+    
+    st.markdown("### 📊 Dashboard do Instrutor")
+    
+    try:
+        cursos = listar_cursos_do_professor(usuario["id"])
+    except:
+        st.error("Erro ao carregar dados.")
+        return
+    
+    if not cursos:
+        st.info("Nenhum curso encontrado para exibir estatísticas.")
+        return
+    
+    # Estatísticas básicas
+    total_cursos = len(cursos)
+    cursos_ativos = sum(1 for c in cursos if c.get('ativo', True))
+    cursos_pagos = sum(1 for c in cursos if c.get('pago', False))
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.markdown(f"""
+        <div class="stats-card-moderno">
+            <div class="stats-value-moderno">{total_cursos}</div>
+            <div class="stats-label-moderno">Total de Cursos</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown(f"""
+        <div class="stats-card-moderno">
+            <div class="stats-value-moderno">{cursos_ativos}</div>
+            <div class="stats-label-moderno">Cursos Ativos</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col3:
+        st.markdown(f"""
+        <div class="stats-card-moderno">
+            <div class="stats-value-moderno">{cursos_pagos}</div>
+            <div class="stats-label-moderno">Cursos Pagos</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Gráfico de distribuição (simplificado)
+    st.markdown("#### 📈 Distribuição por Modalidade")
+    
+    modalidades = {}
+    for curso in cursos:
+        mod = curso.get('modalidade', 'EAD')
+        modalidades[mod] = modalidades.get(mod, 0) + 1
+    
+    if modalidades:
+        df_mod = pd.DataFrame({
+            'Modalidade': list(modalidades.keys()),
+            'Quantidade': list(modalidades.values())
+        })
+        
+        # Gráfico de barras (O `px` agora está importado no topo do arquivo)
+        fig = px.bar(
+            df_mod,
+            x='Modalidade',
+            y='Quantidade',
+            color='Modalidade',
+            color_discrete_sequence=['#078B6C', '#FFD770', '#3B82F6'],
+            text='Quantidade'
+        )
+        
+        fig.update_layout(
+            paper_bgcolor='rgba(0,0,0,0)',
+            plot_bgcolor='rgba(0,0,0,0)',
+            font=dict(color='#FFFFFF'),
+            showlegend=False
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # Lista de cursos recentes
+    st.markdown("#### 📋 Cursos Recentes")
+    
+    min_date = datetime(MINYEAR, 1, 1) 
+    cursos_recentes = sorted(cursos, 
+                            key=lambda x: x.get('criado_em', min_date) if isinstance(x.get('criado_em'), datetime) else min_date, 
+                            reverse=True)[:5]
+    
+    for curso in cursos_recentes:
+        with st.container(border=True):
+            col1, col2, col3 = st.columns([3, 1, 1])
+            
+            with col1:
+                st.markdown(f"**{curso.get('titulo', 'Sem Título')}**")
+                
+                data_criacao = curso.get('criado_em', 'Data não disponível')
+                data_str = data_criacao.strftime("%d/%m/%Y") if isinstance(data_criacao, datetime) else str(data_criacao)
+                
+                st.caption(f"Criado em: {data_str}")
+            
+            with col2:
+                status = "🟢 Ativo" if curso.get('ativo', True) else "🔴 Inativo"
+                st.markdown(f"`{status}`")
+            
+            with col3:
+                if st.button("Ver", key=f"dash_view_prof_{curso.get('id', '')}", type="secondary"):
+                    navegar_para('detalhe', curso)
 
 # ======================================================
 # INTERFACE DO ALUNO (Ajustada)
 # ======================================================
 
+def _interface_aluno_moderna(usuario: dict):
+    tab1, tab2 = st.tabs([
+        "🛒 Cursos Disponíveis",
+        "🎓 Meus Cursos"
+    ])
+    
+    with tab1:
+        _aluno_cursos_disponiveis(usuario)
+    
+    with tab2:
+        _aluno_meus_cursos(usuario)
+
 def _aluno_cursos_disponiveis(usuario: dict):
     """Cursos disponíveis para o aluno (Ajustado para navegação)"""
     
-    # ... (Filtros e busca mantidos) ...
+    st.markdown("### 🎯 Cursos Disponíveis")
+    st.markdown("Escolha um curso para começar sua jornada no Jiu-Jitsu!")
     
     try:
         cursos = listar_cursos_disponiveis_para_usuario(usuario)
@@ -959,8 +1063,8 @@ def _aluno_cursos_disponiveis(usuario: dict):
         st.error(f"Erro ao carregar cursos: {e}")
         cursos = []
     
-    # ... (Lógica de filtragem omitida para brevidade) ...
-    cursos_filtrados = cursos # Simplificando para o demo.
+    # Lógica de filtragem omitida para brevidade
+    cursos_filtrados = cursos 
     
     st.markdown(f"#### 📚 Resultados ({len(cursos_filtrados)} cursos)")
     
@@ -1072,8 +1176,6 @@ def _render_card_curso_aluno(curso: dict, usuario: dict):
 def _aluno_meus_cursos(usuario: dict):
     """Cursos em que o aluno está inscrito (Ajustado para progresso e certificados)"""
     
-    # ... (Lógica de carregamento e separação mantida) ...
-    
     try:
         todos_cursos = listar_cursos_disponiveis_para_usuario(usuario)
         
@@ -1081,11 +1183,10 @@ def _aluno_meus_cursos(usuario: dict):
         for curso in todos_cursos:
             inscricao = obter_inscricao(usuario["id"], curso["id"])
             if inscricao:
-                # CORREÇÃO: Usando .get() para evitar KeyError
-                # Reaplicando o progresso da simulação
+                # O progresso deve ser lido do banco, mas é sobreposto pelo mock de aula para demonstração
                 progresso_real = inscricao.get("progresso", 0) 
                 
-                # Para fins de demonstração da lógica de aulas, se a aula "quiz" for concluída, forçamos 100%
+                # Mock: Se a aula "quiz" for concluída, forçamos 100%
                 if obter_progresso_aula(usuario["id"], curso["id"], f'{curso["id"]}a2-2'):
                     progresso_real = 100
 
@@ -1097,12 +1198,12 @@ def _aluno_meus_cursos(usuario: dict):
         st.error(f"Erro ao carregar cursos: {e}")
         meus_cursos = []
         
-    # ... (Métricas mantidas) ...
-    
     # Separa por status
     cursos_andamento = [c for c in meus_cursos if c['progresso'] < 100]
     cursos_concluidos = [c for c in meus_cursos if c['progresso'] >= 100]
     
+    # ... (Métricas omitidas para brevidade) ...
+
     # Cursos em andamento
     if cursos_andamento:
         st.markdown("---")
@@ -1126,7 +1227,6 @@ def _aluno_meus_cursos(usuario: dict):
                         st.markdown(f"**Valor:** R$ {curso.get('preco', 0):.2f}")
                 
                 with col3:
-                    # Ação: Navegar para Aulas
                     if st.button("Continuar", key=f"cont_aluno_{curso['id']}", use_container_width=True, type="primary"):
                         navegar_para('aulas', curso)
     
@@ -1144,11 +1244,9 @@ def _aluno_meus_cursos(usuario: dict):
                     st.success("✅ Curso concluído com sucesso!")
                 
                 with col2:
-                    # Ação: Emitir Certificado (Implementado Mock)
                     if st.button("📜 Certificado", key=f"cert_aluno_{curso['id']}", use_container_width=True, type="secondary"):
                          st.success("✅ Certificado de Conclusão emitido com sucesso! ")
                 
                 with col3:
-                    # Ação: Revisar (Navegar para Aulas)
                     if st.button("🔁 Revisar", key=f"rev_aluno_{curso['id']}", use_container_width=True, type="secondary"):
                         navegar_para('aulas', curso)
