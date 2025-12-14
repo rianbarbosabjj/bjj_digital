@@ -16,6 +16,10 @@ from database import get_db
 # Importa o módulo completo com alias para chamadas genéricas
 import courses_engine as ce 
 
+# Importa a nova view de gerenciamento de aulas
+# CERTIFIQUE-SE que o arquivo aulas.py está na pasta views ou ajusta a importação
+import views.aulas as aulas_view 
+
 # Importa funções específicas para manter o código limpo
 from courses_engine import (
     criar_curso,
@@ -153,7 +157,7 @@ def aplicar_estilos_cursos():
         transition: width 0.5s ease;
     }
     
-    /* --- NOVO CSS PARA OS DETALHES (SUBSTITUI O JSON) --- */
+    /* --- NOVO CSS PARA OS DETALHES --- */
     .detalhes-grid {
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -211,11 +215,12 @@ def aplicar_estilos_cursos():
         align-items: center;
     }
 
-    /* BOTÕES MODERNOS - Estilo para o Streamlit 'primary' (usado em Inscrever/Criar) */
+    /* BOTÕES MODERNOS */
     .stButton>button[data-testid="stFormSubmitButton"], 
     .stButton>button[kind="primary"],
     .stButton>button[key^="enroll_"],
-    .stButton>button[key^="cont_"] { 
+    .stButton>button[key^="cont_"],
+    .stButton>button[key^="btn_det_add_aulas"] { 
         background: linear-gradient(135deg, #078B6C 0%, #056853 100%) !important;
         color: white !important;
         border: none !important;
@@ -231,21 +236,23 @@ def aplicar_estilos_cursos():
     .stButton>button[data-testid="stFormSubmitButton"]:hover, 
     .stButton>button[kind="primary"]:hover,
     .stButton>button[key^="enroll_"]:hover,
-    .stButton>button[key^="cont_"]:hover {
+    .stButton>button[key^="cont_"]:hover,
+    .stButton>button[key^="btn_det_add_aulas"]:hover {
         background: linear-gradient(135deg, #FFD770 0%, #E6B91E 100%) !important;
         transform: translateY(-2px) !important;
         box-shadow: 0 8px 25px rgba(255, 215, 112, 0.4) !important;
         color: #0e2d26 !important;
     }
 
-    /* Estilo para o Streamlit 'secondary' (usado em Ver/Editar/Acessar/Certificado/Revisar) */
+    /* Estilo secundário */
     .stButton>button[kind="secondary"],
     .stButton>button[key^="edit_"],
     .stButton>button[key^="view_"],
     .stButton>button[key^="access_"],
     .stButton>button[key^="cert_"],
     .stButton>button[key^="rev_"],
-    .stButton>button[key^="btn_voltar_lista_cursos"] {
+    .stButton>button[key^="btn_voltar_"],
+    .stButton>button[key^="btn_det_editar"] {
         background: transparent !important;
         color: #FFD770 !important;
         border: 2px solid #FFD770 !important;
@@ -263,7 +270,8 @@ def aplicar_estilos_cursos():
     .stButton>button[key^="access_"]:hover,
     .stButton>button[key^="cert_"]:hover,
     .stButton>button[key^="rev_"]:hover,
-    .stButton>button[key^="btn_voltar_lista_cursos"]:hover {
+    .stButton>button[key^="btn_voltar_"]:hover,
+    .stButton>button[key^="btn_det_editar"]:hover {
         background: #FFD770 !important;
         color: #0e2d26 !important;
         transform: translateY(-2px);
@@ -393,6 +401,10 @@ def pagina_cursos(usuario: dict):
     elif view == 'edicao' and curso_selecionado and tipo in ["admin", "professor"]:
         _pagina_edicao_curso(curso_selecionado, usuario)
 
+    # --- NOVA ROTA: GERENCIADOR DE CONTEÚDO ---
+    elif view == 'gerenciar_conteudo' and curso_selecionado and tipo in ["admin", "professor"]:
+        aulas_view.gerenciar_conteudo_curso(curso_selecionado, usuario)
+
     else:
         # Fallback para a lista se o estado for inválido
         st.session_state['cursos_view'] = 'lista'
@@ -467,7 +479,7 @@ def _exibir_detalhes_curso(curso: dict, usuario: dict):
                     else:
                         st.caption("Nenhuma aula adicionada a este módulo.")
         else:
-            st.warning("Estrutura de módulos não definida.")
+            st.info("Este curso ainda não possui módulos cadastrados.")
 
     with col_acao:
         is_professor = usuario.get("tipo", "aluno") in ["admin", "professor"]
@@ -477,8 +489,10 @@ def _exibir_detalhes_curso(curso: dict, usuario: dict):
         if is_professor:
              if st.button("✏️ Editar Curso", key="btn_det_editar", use_container_width=True, type="secondary"):
                  navegar_para('edicao', curso)
+             
+             # --- BOTÃO CONECTADO AO GERENCIADOR DE AULAS ---
              if st.button("➕ Adicionar Aulas", key="btn_det_add_aulas", use_container_width=True, type="primary"):
-                 st.info("🎯 Lógica de adição de aulas em desenvolvimento.")
+                 navegar_para('gerenciar_conteudo', curso)
         
         elif ja_inscrito:
             # Se for aluno e já inscrito
@@ -551,16 +565,37 @@ def _pagina_aulas(curso: dict, usuario: dict):
     with col_video:
         st.markdown(f"### ▶️ {aula_atual['titulo']}")
         
-        if aula_atual.get('tipo') == 'video':
-            st.video("https://www.youtube.com/watch?v=kYn8uXg1s10") # Mock de vídeo (substituir por campo do DB)
-            st.markdown("---")
-            st.write(aula_atual.get('conteudo', 'Conteúdo da aula.'))
-        elif aula_atual.get('tipo') == 'quiz':
+        conteudo = aula_atual.get('conteudo', {})
+        tipo = aula_atual.get('tipo')
+
+        if tipo == 'video':
+            url = conteudo.get('url') if isinstance(conteudo, dict) else None
+            if url:
+                st.video(url)
+            else:
+                st.info("Vídeo indisponível.")
+            
+            # Descrição do vídeo (opcional)
+            if isinstance(conteudo, dict) and conteudo.get('descricao'):
+                st.markdown("---")
+                st.write(conteudo.get('descricao'))
+
+        elif tipo == 'texto':
+            texto = conteudo.get('texto') if isinstance(conteudo, dict) else ""
+            st.markdown(texto)
+            
+        elif tipo == 'quiz':
             st.warning("⚠️ Esta é uma avaliação. Para progredir, marque como concluída.")
             st.markdown("---")
-            st.write(aula_atual.get('conteudo', 'Quiz'))
+            if isinstance(conteudo, dict):
+                st.write(conteudo.get('pergunta', 'Pergunta não definida'))
+                # Lógica básica de quiz (apenas visual por enquanto)
+                if 'opcoes' in conteudo:
+                    st.radio("Escolha uma opção:", conteudo['opcoes'], key=f"quiz_{aula_atual['id']}")
         else:
-             st.info("Conteúdo em formato texto/leitura.")
+             st.info("Conteúdo em formato desconhecido.")
+
+        st.markdown("<br>", unsafe_allow_html=True)
 
         # Botão de conclusão
         if not aula_completa:
@@ -721,6 +756,7 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
 
         st.markdown("---")
         
+        # Botão de submit
         col_submit1, col_submit2 = st.columns([1, 3])
         
         with col_submit1:
