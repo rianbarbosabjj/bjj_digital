@@ -327,7 +327,7 @@ def bloquear_por_abandono(uid):
     except: pass
 
 # ==============================================================================
-# 7. MOTOR DE CURSOS E AULAS (MERGE COURSES_ENGINE)
+# 7. MOTOR DE CURSOS E AULAS
 # ==============================================================================
 
 def listar_todos_usuarios_para_selecao():
@@ -338,11 +338,10 @@ def listar_todos_usuarios_para_selecao():
         lista = []
         for u in users:
             dados = u.to_dict()
-            
-            # --- CORREÇÃO AQUI: ACEITAR 'none' E 'aluno' PARA VOCÊ CONSEGUIR TESTAR ---
+            # Normaliza para garantir busca (Aceita Professor, Mestre, Admin, etc)
             tipo_usuario = str(dados.get('tipo', '')).lower().strip()
             
-            # Adicionei 'none' e 'aluno' para que o filtro não barre seus usuários de teste
+            # Tipos permitidos (Incluindo 'none' e 'aluno' para testes)
             tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'teacher', 'none', 'aluno', '']
             
             if tipo_usuario in tipos_permitidos:
@@ -359,12 +358,14 @@ def listar_todos_usuarios_para_selecao():
         print(f"Erro ao listar usuários: {e}")
         return []
 
-def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, duracao_estimada, nivel, editores_ids=[]):
+def criar_curso(professor_id, nome_professor, professor_equipe, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, duracao_estimada, nivel, editores_ids=[]):
+    """Cria um novo curso salvando também a EQUIPE DO PROFESSOR."""
     db = get_db()
     
     novo_curso = {
         "professor_id": professor_id,
         "professor_nome": nome_professor,
+        "professor_equipe": professor_equipe, # <--- NOVO CAMPO SALVO
         "editores_ids": editores_ids,
         "titulo": titulo,
         "descricao": descricao,
