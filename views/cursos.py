@@ -19,15 +19,28 @@ import courses_engine as ce
 # Importa a nova view de gerenciamento de aulas
 import views.aulas as aulas_view 
 
-# Importa funções específicas para manter o código limpo e evitar o NameError
+# Importa funções específicas
 from courses_engine import (
     criar_curso,
     listar_cursos_do_professor,
     listar_cursos_disponiveis_para_usuario,
     inscrever_usuario_em_curso,
     obter_inscricao,
-    listar_modulos_e_aulas
+    listar_modulos_e_aulas,
+    verificar_aula_concluida,    # Adicionado para evitar erro na função wrapper
+    marcar_aula_concluida,       # Adicionado para evitar erro na função wrapper
+    editar_curso                 # Adicionado para garantir funcionamento da edição
 )
+
+# --- 1. CONFIGURAÇÃO DE CORES IGUAL AO APP.PY ---
+try:
+    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+except ImportError:
+    COR_FUNDO = "#0e2d26"
+    COR_TEXTO = "#FFFFFF"
+    COR_DESTAQUE = "#FFD770"
+    COR_BOTAO = "#078B6C" # Verde BJJ Digital
+    COR_HOVER = "#FFD770" # Dourado
 
 # ======================================================
 # LÓGICAS DE CONSULTA DE PROGRESSO (Wrapper para UI)
@@ -39,10 +52,7 @@ def obter_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> bool:
 
 def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
     """Marca a aula como concluída e retorna o novo progresso total."""
-    # 1. Marca a aula como concluída no banco de dados
     ce.marcar_aula_concluida(user_id, aula_id) 
-    
-    # 2. Re-consulta a inscrição para obter o progresso atualizado
     inscricao_atualizada = obter_inscricao(user_id, curso_id)
     
     if inscricao_atualizada:
@@ -51,15 +61,17 @@ def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
         return 0
 
 # ======================================================
-# ESTILOS MODERNOS PARA CURSOS
+# ESTILOS MODERNOS PARA CURSOS (ATUALIZADO)
 # ======================================================
 
 def aplicar_estilos_cursos():
-    """Aplica estilos modernos específicos para cursos"""
-    st.markdown("""
+    """Aplica estilos modernos específicos para cursos, ALINHADO COM APP.PY"""
+    
+    # Usamos f-string para injetar as variáveis de cor corretamente
+    st.markdown(f"""
     <style>
     /* CARDS DE CURSO MODERNOS */
-    .curso-card-moderno {
+    .curso-card-moderno {{
         background: linear-gradient(145deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.95) 100%);
         border: 1px solid rgba(255, 215, 112, 0.15);
         border-radius: 20px;
@@ -70,100 +82,100 @@ def aplicar_estilos_cursos():
         flex-direction: column;
         position: relative;
         overflow: hidden;
-    }
+    }}
     
-    .curso-card-moderno::before {
+    .curso-card-moderno::before {{
         content: '';
         position: absolute;
         top: 0;
         left: 0;
         right: 0;
         height: 4px;
-        background: linear-gradient(90deg, #078B6C 0%, #FFD770 100%);
+        background: linear-gradient(90deg, {COR_BOTAO} 0%, {COR_DESTAQUE} 100%);
         border-radius: 20px 20px 0 0;
-    }
+    }}
     
-    .curso-card-moderno:hover {
-        border-color: #FFD770;
+    .curso-card-moderno:hover {{
+        border-color: {COR_DESTAQUE};
         transform: translateY(-8px);
         box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
-    }
+    }}
     
-    .curso-card-moderno.completed::before {
+    .curso-card-moderno.completed::before {{
         background: linear-gradient(90deg, #10B981 0%, #34D399 100%);
-    }
+    }}
     
-    .curso-card-moderno.in-progress::before {
+    .curso-card-moderno.in-progress::before {{
         background: linear-gradient(90deg, #3B82F6 0%, #60A5FA 100%);
-    }
+    }}
     
-    .curso-icon {
+    .curso-icon {{
         font-size: 2.5rem;
         margin-bottom: 1rem;
         text-align: center;
-        background: linear-gradient(135deg, #078B6C 0%, #FFD770 100%);
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, {COR_DESTAQUE} 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-    }
+    }}
     
-    .curso-badges {
+    .curso-badges {{
         display: flex;
         flex-wrap: wrap;
         gap: 0.5rem;
         margin: 1rem 0;
-    }
+    }}
     
-    .curso-badge {
+    .curso-badge {{
         padding: 0.25rem 0.75rem;
         border-radius: 20px;
         font-size: 0.75rem;
         font-weight: 600;
         background: rgba(255, 255, 255, 0.1);
         border: 1px solid rgba(255, 255, 255, 0.2);
-    }
+    }}
     
-    .curso-badge.gold {
+    .curso-badge.gold {{
         background: rgba(255, 215, 112, 0.15);
         border-color: rgba(255, 215, 112, 0.3);
-        color: #FFD770;
-    }
+        color: {COR_DESTAQUE};
+    }}
     
-    .curso-badge.green {
+    .curso-badge.green {{
         background: rgba(7, 139, 108, 0.15);
         border-color: rgba(7, 139, 108, 0.3);
-        color: #078B6C;
-    }
+        color: {COR_BOTAO};
+    }}
     
-    .curso-badge.blue {
+    .curso-badge.blue {{
         background: rgba(59, 130, 246, 0.15);
         border-color: rgba(59, 130, 246, 0.3);
         color: #60A5FA;
-    }
+    }}
     
     /* PROGRESS BAR MODERNA */
-    .curso-progress {
+    .curso-progress {{
         background: rgba(255, 255, 255, 0.05);
         border-radius: 10px;
         height: 10px;
         overflow: hidden;
         margin: 0.75rem 0;
-    }
+    }}
     
-    .curso-progress-fill {
+    .curso-progress-fill {{
         height: 100%;
-        background: linear-gradient(90deg, #078B6C 0%, #FFD770 100%);
+        background: linear-gradient(90deg, {COR_BOTAO} 0%, {COR_DESTAQUE} 100%);
         border-radius: 10px;
         transition: width 0.5s ease;
-    }
+    }}
     
-    /* --- NOVO CSS PARA OS DETALHES --- */
-    .detalhes-grid {
+    /* DETALHES */
+    .detalhes-grid {{
         display: grid;
         grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
         gap: 1rem;
         margin: 1rem 0 2rem 0;
-    }
-    .detalhe-card {
+    }}
+    .detalhe-card {{
         background: linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
         border: 1px solid rgba(255, 215, 112, 0.15);
         border-radius: 16px;
@@ -172,61 +184,77 @@ def aplicar_estilos_cursos():
         align-items: center;
         backdrop-filter: blur(10px);
         transition: transform 0.3s ease, border-color 0.3s ease;
-    }
-    .detalhe-card:hover {
+    }}
+    .detalhe-card:hover {{
         border-color: rgba(255, 215, 112, 0.4);
         transform: translateY(-3px);
-    }
-    .detalhe-icon {
+    }}
+    .detalhe-icon {{
         font-size: 2.2rem;
         margin-right: 1rem;
-        background: linear-gradient(135deg, #FFD770 0%, #E6B91E 100%);
+        background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #E6B91E 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
-    }
-    .detalhe-info {
+    }}
+    .detalhe-info {{
         display: flex;
         flex-direction: column;
-    }
-    .detalhe-label {
+    }}
+    .detalhe-label {{
         font-size: 0.75rem;
         text-transform: uppercase;
         letter-spacing: 1px;
         opacity: 0.7;
         margin-bottom: 0.2rem;
-    }
-    .detalhe-value {
+    }}
+    .detalhe-value {{
         font-size: 1.1rem;
         font-weight: 700;
         color: white;
-    }
+    }}
 
     /* AULA COMPLETA */
-    .aula-completa {
+    .aula-completa {{
         background-color: rgba(7, 139, 108, 0.1);
-        border-left: 5px solid #078B6C;
+        border-left: 5px solid {COR_BOTAO};
         padding: 0.5rem;
         border-radius: 8px;
         color: #34D399;
         margin-bottom: 0.5rem;
         display: flex;
         align-items: center;
-    }
+    }}
 
-
+    /* --- BOTÕES IDÊNTICOS AO APP.PY --- */
+    /* Botões Primários (Ação Principal) - Agora VERDES */
+    .stButton>button[data-testid="stFormSubmitButton"], 
+    .stButton>button[kind="primary"],
+    .stButton>button[key^="enroll_"],
+    .stButton>button[key^="cont_"],
+    .stButton>button[key^="btn_det_add_aulas"] {{
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important;
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        padding: 0.6em 1.5em !important;
+        font-weight: 600 !important;
+        border-radius: 8px !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    /* Hover dos Botões Primários - Fica DOURADO */
     .stButton>button[data-testid="stFormSubmitButton"]:hover, 
     .stButton>button[kind="primary"]:hover,
     .stButton>button[key^="enroll_"]:hover,
     .stButton>button[key^="cont_"]:hover,
-    .stButton>button[key^="btn_det_add_aulas"]:hover {
-        background: linear-gradient(135deg, #FFD770 0%, #E6B91E 100%) !important;
-        transform: translateY(-2px) !important;
-        box-shadow: 0 8px 25px rgba(255, 215, 112, 0.4) !important;
+    .stButton>button[key^="btn_det_add_aulas"]:hover {{
+        background: {COR_HOVER} !important;
         color: #0e2d26 !important;
-    }
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
+    }}
 
-    /* Estilo secundário */
+    /* Botões Secundários (Outline) - Mantém estilo DOURADO para contraste */
     .stButton>button[kind="secondary"],
     .stButton>button[key^="edit_"],
     .stButton>button[key^="view_"],
@@ -234,17 +262,17 @@ def aplicar_estilos_cursos():
     .stButton>button[key^="cert_"],
     .stButton>button[key^="rev_"],
     .stButton>button[key^="btn_voltar_"],
-    .stButton>button[key^="btn_det_editar"] {
+    .stButton>button[key^="btn_det_editar"] {{
         background: transparent !important;
-        color: #FFD770 !important;
-        border: 2px solid #FFD770 !important;
+        color: {COR_DESTAQUE} !important;
+        border: 2px solid {COR_DESTAQUE} !important;
         border-radius: 12px !important;
         padding: 0.75rem 1.5rem !important;
         font-weight: 600 !important;
         transition: all 0.3s ease !important;
         width: 100%;
         margin-top: auto;
-    }
+    }}
     
     .stButton>button[kind="secondary"]:hover,
     .stButton>button[key^="edit_"]:hover,
@@ -253,67 +281,67 @@ def aplicar_estilos_cursos():
     .stButton>button[key^="cert_"]:hover,
     .stButton>button[key^="rev_"]:hover,
     .stButton>button[key^="btn_voltar_"]:hover,
-    .stButton>button[key^="btn_det_editar"]:hover {
-        background: #FFD770 !important;
+    .stButton>button[key^="btn_det_editar"]:hover {{
+        background: {COR_DESTAQUE} !important;
         color: #0e2d26 !important;
         transform: translateY(-2px);
-    }
+    }}
     
     /* HEADER MODERNO */
-    .curso-header {
+    .curso-header {{
         background: linear-gradient(135deg, rgba(14, 45, 38, 0.8) 0%, rgba(9, 31, 26, 0.9) 100%);
         border-bottom: 1px solid rgba(255, 215, 112, 0.2);
         padding: 1.5rem;
         border-radius: 0 0 20px 20px;
         margin-bottom: 2rem;
-    }
+    }}
     
     /* STATS CARDS */
-    .stats-card-moderno {
+    .stats-card-moderno {{
         background: rgba(255, 255, 255, 0.03);
         border: 1px solid rgba(255, 255, 255, 0.05);
         border-radius: 16px;
         padding: 1.5rem;
         text-align: center;
         transition: all 0.3s ease;
-    }
+    }}
     
-    .stats-card-moderno:hover {
+    .stats-card-moderno:hover {{
         background: rgba(255, 255, 255, 0.05);
-        border-color: #FFD770;
+        border-color: {COR_DESTAQUE};
         transform: translateY(-4px);
-    }
+    }}
     
-    .stats-value-moderno {
+    .stats-value-moderno {{
         font-size: 2.5rem;
         font-weight: 700;
-        background: linear-gradient(135deg, #FFD770 0%, #FFFFFF 100%);
+        background: linear-gradient(135deg, {COR_DESTAQUE} 0%, #FFFFFF 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin: 0.5rem 0;
-    }
+    }}
     
-    .stats-label-moderno {
+    .stats-label-moderno {{
         color: rgba(255, 255, 255, 0.7);
         font-size: 0.9rem;
         text-transform: uppercase;
         letter-spacing: 1px;
-    }
+    }}
     
     /* EMPTY STATE */
-    .empty-state {
+    .empty-state {{
         text-align: center;
         padding: 4rem 2rem;
         border-radius: 20px;
         background: rgba(255,255,255,0.02);
         border: 2px dashed rgba(255,215,112,0.2);
-    }
+    }}
     
-    .empty-state-icon {
+    .empty-state-icon {{
         font-size: 4rem;
         margin-bottom: 1rem;
         opacity: 0.5;
-    }
+    }}
     
     </style>
     """, unsafe_allow_html=True)
@@ -344,7 +372,7 @@ def pagina_cursos(usuario: dict):
     <div class="curso-header">
         <h1 style="margin-bottom: 0.5rem; text-align: center;">🎓 BJJ DIGITAL CURSOS</h1>
         <p style="text-align: center; opacity: 0.8; margin: 0;">
-            Bem-vindo(a), <strong style="color: #FFD770;">{usuario.get('nome','Usuário').split()[0]}</strong> • 
+            Bem-vindo(a), <strong style="color: {COR_DESTAQUE};">{usuario.get('nome','Usuário').split()[0]}</strong> • 
             {usuario.get('tipo', 'aluno').capitalize()}
         </p>
     </div>
@@ -416,7 +444,7 @@ def _exibir_detalhes_curso(curso: dict, usuario: dict):
         nivel = curso.get("nivel", "Todos os Níveis")
         duracao = curso.get("duracao_estimada", "Aberto")
 
-        # HTML corrigido sem recuo para evitar que apareça como código
+        # HTML corrigido
         html_detalhes = f"""<div class="detalhes-grid"><div class="detalhe-card"><div class="detalhe-icon">🥋</div><div class="detalhe-info"><span class="detalhe-label">Professor</span><span class="detalhe-value">{prof}</span></div></div><div class="detalhe-card"><div class="detalhe-icon">📡</div><div class="detalhe-info"><span class="detalhe-label">Modalidade</span><span class="detalhe-value">{mod}</span></div></div><div class="detalhe-card"><div class="detalhe-icon">📈</div><div class="detalhe-info"><span class="detalhe-label">Nível</span><span class="detalhe-value">{nivel}</span></div></div><div class="detalhe-card"><div class="detalhe-icon">⏳</div><div class="detalhe-info"><span class="detalhe-label">Duração Estimada</span><span class="detalhe-value">{duracao}</span></div></div></div>"""
         st.markdown(html_detalhes, unsafe_allow_html=True)
 
@@ -741,8 +769,8 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                 
                 # 2. Validações simples
                 if not titulo.strip() or not descricao.strip():
-                     st.error("⚠️ Título e descrição são obrigatórios.")
-                     return
+                      st.error("⚠️ Título e descrição são obrigatórios.")
+                      return
                 
                 # 3. Chama a função de edição (usando a função real do courses_engine)
                 try:
@@ -930,7 +958,7 @@ def _render_card_curso_professor(curso: dict, usuario: dict):
     if pago:
         preco = curso.get('preco', 0)
         split = curso.get('split_custom', 10)
-        preco_html = f"""<div style="margin: 1rem 0; padding: 0.75rem; background: rgba(255,215,112,0.1); border-radius: 10px;"><div style="font-size: 1.5rem; font-weight: bold; color: #FFD770;">R$ {preco:.2f}</div><div style="font-size: 0.85rem; opacity: 0.8;">Taxa: {split}% • Liq: R$ {preco * (1 - split/100):.2f}</div></div>"""
+        preco_html = f"""<div style="margin: 1rem 0; padding: 0.75rem; background: rgba(255,215,112,0.1); border-radius: 10px;"><div style="font-size: 1.5rem; font-weight: bold; color: {COR_DESTAQUE};">R$ {preco:.2f}</div><div style="font-size: 0.85rem; opacity: 0.8;">Taxa: {split}% • Liq: R$ {preco * (1 - split/100):.2f}</div></div>"""
     else:
         preco_html = """<div style="margin: 1rem 0; padding: 0.75rem; background: rgba(7,139,108,0.1); border-radius: 10px;"><div style="font-size: 1.25rem; font-weight: bold; color: #078B6C;">🎯 Curso Gratuito</div><div style="font-size: 0.85rem; opacity: 0.8;">Sem custos para os alunos</div></div>"""
     
@@ -1045,8 +1073,8 @@ def _professor_dashboard(usuario: dict):
     
     min_date = datetime(MINYEAR, 1, 1) 
     cursos_recentes = sorted(cursos, 
-                            key=lambda x: x.get('criado_em', min_date) if isinstance(x.get('criado_em'), datetime) else min_date, 
-                            reverse=True)[:5]
+                             key=lambda x: x.get('criado_em', min_date) if isinstance(x.get('criado_em'), datetime) else min_date, 
+                             reverse=True)[:5]
     
     for curso in cursos_recentes:
         with st.container(border=True):
@@ -1138,7 +1166,7 @@ def _render_card_curso_aluno(curso: dict, usuario: dict):
     preco_html = ""
     if pago:
         preco = curso.get('preco', 0)
-        preco_html = f"""<div style="margin: 1rem 0; padding: 0.75rem; background: rgba(255,215,112,0.1); border-radius: 10px;"><div style="font-size: 1.5rem; font-weight: bold; color: #FFD770;">R$ {preco:.2f}</div><div style="font-size: 0.85rem; opacity: 0.8;">Acesso vitalício • Certificado inclusivo</div></div>"""
+        preco_html = f"""<div style="margin: 1rem 0; padding: 0.75rem; background: rgba(255,215,112,0.1); border-radius: 10px;"><div style="font-size: 1.5rem; font-weight: bold; color: {COR_DESTAQUE};">R$ {preco:.2f}</div><div style="font-size: 0.85rem; opacity: 0.8;">Acesso vitalício • Certificado inclusivo</div></div>"""
     else:
         preco_html = """<div style="margin: 1rem 0; padding: 0.75rem; background: rgba(7,139,108,0.1); border-radius: 10px;"><div style="font-size: 1.25rem; font-weight: bold; color: #078B6C;">🎯 Gratuito</div><div style="font-size: 0.85rem; opacity: 0.8;">Sem custos • Acesso imediato</div></div>"""
     
