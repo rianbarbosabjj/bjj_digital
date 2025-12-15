@@ -1,6 +1,6 @@
 """
 BJJ Digital - Sistema de Cursos (Versão Modernizada)
-Integração com aulas, design atualizado, Colaboração (CPF) e Uploads.
+Integração com aulas, design atualizado, Colaboração (Busca Avançada) e Uploads.
 """
 
 import streamlit as st
@@ -27,6 +27,99 @@ except ImportError:
     COR_DESTAQUE = "#FFD770"
     COR_BOTAO = "#078B6C" # Verde BJJ Digital
     COR_HOVER = "#FFD770" # Dourado
+
+# ======================================================
+# COMPONENTE DE SELEÇÃO DE EDITORES (NOVA LÓGICA)
+# ======================================================
+def renderizar_seletor_editores(chave_unica, ids_iniciais=[]):
+    """
+    Cria uma interface de Busca -> Adiciona -> Lista para gerenciar editores.
+    Retorna a lista atualizada de IDs selecionados.
+    """
+    # Inicializa o estado da lista para esta chave específica
+    session_key = f"lista_editores_{chave_unica}"
+    if session_key not in st.session_state:
+        st.session_state[session_key] = ids_iniciais.copy()
+
+    # Container visual
+    st.markdown("###### 👥 Gerenciar Editores Colaboradores")
+    with st.container(border=True):
+        # 1. Área de Busca
+        c_busca1, c_busca2 = st.columns([3, 1])
+        with c_busca1:
+            termo_busca = st.text_input("Buscar por Nome ou CPF", placeholder="Digite para buscar...", key=f"search_{chave_unica}")
+        with c_busca2:
+            st.write("") # Espaçamento
+            st.write("") 
+            # Botão de busca apenas para filtrar visualmente (opcional, o filtro pode ser direto)
+        
+        # Carrega todos (cacheado no utils)
+        todos_users = ce.listar_todos_usuarios_para_selecao()
+        
+        # Filtra opções baseado no texto digitado (se houver texto)
+        opcoes_filtradas = []
+        if termo_busca:
+            termo = termo_busca.lower()
+            opcoes_filtradas = [
+                u for u in todos_users 
+                if termo in u['nome'].lower() or termo in str(u.get('cpf',''))
+            ]
+        else:
+            opcoes_filtradas = [] # Não mostra nada até digitar, ou mostre todos se preferir
+
+        # 2. Área de Seleção e Adição
+        if termo_busca and not opcoes_filtradas:
+            st.warning("Nenhum usuário encontrado com esse Nome/CPF.")
+        
+        c_sel1, c_sel2 = st.columns([3, 1])
+        with c_sel1:
+            # Dropdown com os resultados da busca
+            usuario_selecionado = st.selectbox(
+                "Resultados da Busca",
+                options=opcoes_filtradas,
+                format_func=lambda x: f"{x['nome']} (CPF: {x.get('cpf','N/A')})",
+                key=f"select_{chave_unica}",
+                placeholder="Selecione um professor...",
+                index=None
+            )
+        with c_sel2:
+            st.write("")
+            st.write("")
+            # Botão Adicionar
+            if st.button("➕ Adicionar", key=f"btn_add_{chave_unica}", type="primary"):
+                if usuario_selecionado:
+                    # Verifica se já está na lista
+                    if usuario_selecionado['id'] not in st.session_state[session_key]:
+                        st.session_state[session_key].append(usuario_selecionado['id'])
+                        st.rerun()
+                    else:
+                        st.warning("Este usuário já é editor.")
+
+        st.markdown("---")
+        
+        # 3. Lista de Editores Adicionados (Box ao lado/abaixo)
+        st.markdown(f"**Editores Selecionados ({len(st.session_state[session_key])})**")
+        
+        if not st.session_state[session_key]:
+            st.caption("Nenhum editor adicional selecionado.")
+        else:
+            # Cria um mapa ID -> Dados para exibir nomes bonitos
+            mapa_users = {u['id']: u for u in todos_users}
+            
+            for uid in st.session_state[session_key]:
+                dados_user = mapa_users.get(uid, {'nome': 'Usuário Desconhecido', 'cpf': '?'})
+                
+                # Cardzinho do Editor
+                col_info, col_del = st.columns([4, 1])
+                with col_info:
+                    st.info(f"👤 **{dados_user['nome']}**\n\nCPF: {dados_user.get('cpf','N/A')}")
+                with col_del:
+                    st.write("")
+                    if st.button("🗑️", key=f"rem_{uid}_{chave_unica}", help="Remover Editor"):
+                        st.session_state[session_key].remove(uid)
+                        st.rerun()
+
+    return st.session_state[session_key]
 
 # ======================================================
 # LÓGICAS DE CONSULTA (Wrapper)
@@ -137,31 +230,6 @@ def _interface_aluno_moderna(usuario):
     with tab1: _aluno_cursos_disponiveis(usuario)
     with tab2: _aluno_meus_cursos(usuario)
 
-# --- LISTAR COLABORADORES COM DEBUG ---
-def _render_colaboracao_debug():
-    st.markdown("### 👥 Colaboração")
-    
-    # ------------------ DEBUGGER ------------------
-    with st.expander("🕵️ DEBUG: Por que a lista está vazia?"):
-        st.warning("Esta ferramenta mostra o que está no banco para você ajustar o filtro.")
-        try:
-            db = ce.get_db()
-            docs = db.collection('usuarios').limit(5).stream()
-            found = False
-            for d in docs:
-                found = True
-                dd = d.to_dict()
-                st.code(f"Nome: {dd.get('nome')}\nTipo: '{dd.get('tipo')}'\nCPF: {dd.get('cpf')}")
-            if not found: st.error("Coleção 'usuarios' vazia.")
-            else: st.success("Usuários encontrados! Verifique se o 'Tipo' está escrito como 'professor' ou 'admin'.")
-        except Exception as e:
-            st.error(f"Erro ao conectar: {e}")
-    # ----------------------------------------------
-
-    users = ce.listar_todos_usuarios_para_selecao()
-    map_u = {u['id']: f"{u['nome']} (CPF: {u.get('cpf','N/A')})" for u in users}
-    return map_u
-
 # --- CRIAÇÃO DE CURSO ---
 def _pagina_criar_curso(usuario):
     st.markdown("### 🚀 Criar Novo Curso")
@@ -178,9 +246,9 @@ def _pagina_criar_curso(usuario):
             pub = st.selectbox("Público", ["geral", "equipe"], key="new_pub")
             eq = st.text_input("Nome da Equipe", key="new_eq") if pub == "equipe" else None
 
-        # Colaboração com Debug
-        map_u = _render_colaboracao_debug()
-        editores = st.multiselect("Editores", list(map_u.keys()), format_func=lambda x: map_u.get(x,x), key="new_eds")
+        # === NOVO SELETOR DE EDITORES ===
+        editores_selecionados = renderizar_seletor_editores(chave_unica="criar", ids_iniciais=[])
+        # ================================
 
         st.markdown("---")
         st.markdown("#### ⚙️ Configs")
@@ -200,15 +268,25 @@ def _pagina_criar_curso(usuario):
             if usuario.get('tipo')=='admin' and pago: split = st.slider("Taxa %", 0, 100, 10, key="new_sp")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚀 Criar Curso", type="primary", use_container_width=True):
-            if not titulo or not desc: st.error("Preencha título e descrição.")
-            else:
-                ce.criar_curso(usuario['id'], usuario.get('nome',''), titulo, desc, mod, pub, eq, pago, preco, split, cert, dur, niv, editores)
-                st.success("Criado!"); time.sleep(1); navegar_para('lista')
+        
+        c_btn1, c_btn2 = st.columns([1, 3])
+        with c_btn1:
+            if st.button("❌ Limpar", key="btn_clear_create", type="secondary"):
+                # Limpa também a lista de editores
+                if "lista_editores_criar" in st.session_state: del st.session_state["lista_editores_criar"]
+                st.rerun()
+                
+        with c_btn2:
+            if st.button("🚀 Criar Curso", key="btn_create_course", use_container_width=True, type="primary"):
+                if not titulo or not desc: st.error("Preencha título e descrição.")
+                else:
+                    ce.criar_curso(usuario['id'], usuario.get('nome',''), titulo, desc, mod, pub, eq, pago, preco if pago else 0.0, split, cert, dur, niv, editores_selecionados)
+                    st.success("Criado!"); time.sleep(1); navegar_para('lista')
 
 # --- EDIÇÃO DE CURSO ---
 def _pagina_edicao_curso(curso, usuario):
     st.markdown(f"### ✏️ Editando: {curso.get('titulo')}")
+    
     if usuario['id'] in curso.get('editores_ids', []): st.info("ℹ️ Você é um Editor.")
     
     k_pg = f"edt_pg_{curso['id']}"
@@ -224,10 +302,12 @@ def _pagina_edicao_curso(curso, usuario):
             npub = st.selectbox("Público", ["geral", "equipe"], index=0 if curso.get('publico')=='geral' else 1, key=f"ep_{curso['id']}")
             neq = st.text_input("Equipe", value=curso.get('equipe_destino',''), key=f"eeq_{curso['id']}") if npub=='equipe' else None
 
-        # Colaboração com Debug
-        map_u = _render_colaboracao_debug()
-        cur_eds = [u for u in curso.get('editores_ids',[]) if u in map_u]
-        ne = st.multiselect("Editores", list(map_u.keys()), default=cur_eds, format_func=lambda x: map_u.get(x,x), key=f"ee_{curso['id']}")
+        # === NOVO SELETOR DE EDITORES (CARREGA EXISTENTES) ===
+        editores_selecionados = renderizar_seletor_editores(
+            chave_unica=f"editar_{curso['id']}", 
+            ids_iniciais=curso.get('editores_ids', [])
+        )
+        # ====================================================
 
         st.markdown("---")
         cc1, cc2 = st.columns(2)
@@ -246,7 +326,7 @@ def _pagina_edicao_curso(curso, usuario):
         
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("💾 Salvar", type="primary", use_container_width=True, key=f"bs_{curso['id']}"):
-            dados = {"titulo": nt, "descricao": nd, "modalidade": nm, "publico": npub, "equipe_destino": neq, "editores_ids": ne, "pago": npago, "preco": npr, "certificado_automatico": ncert, "ativo": natv, "duracao_estimada": ndur, "nivel": nniv, "atualizado_em": datetime.now()}
+            dados = {"titulo": nt, "descricao": nd, "modalidade": nm, "publico": npub, "equipe_destino": neq, "editores_ids": editores_selecionados, "pago": npago, "preco": npr, "certificado_automatico": ncert, "ativo": natv, "duracao_estimada": ndur, "nivel": nniv, "atualizado_em": datetime.now()}
             ce.editar_curso(curso['id'], dados)
             st.success("Salvo!"); time.sleep(1); navegar_para('detalhe', dados)
 
