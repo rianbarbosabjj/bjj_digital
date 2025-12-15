@@ -274,7 +274,25 @@ def _pagina_edicao_curso(curso, usuario):
         
         # Filtra IDs válidos
         atuais = [uid for uid in curso.get('editores_ids', []) if uid in map_u]
-        
+# --- BLOCO DE DIAGNÓSTICO (Copie e cole antes do st.multiselect) ---
+        with st.expander("🕵️ DEBUG: O que tem no banco de dados?"):
+            try:
+                # Usa a função do utils para pegar o banco
+                db_debug = ce.get_db() 
+                # Lista os primeiros 10 usuários sem filtro
+                all_users = db_debug.collection('usuarios').limit(10).stream()
+                
+                encontrou = False
+                for u in all_users:
+                    encontrou = True
+                    d = u.to_dict()
+                    st.text(f"Nome: {d.get('nome')} | Tipo: '{d.get('tipo')}'")
+                
+                if not encontrou:
+                    st.error("A coleção 'usuarios' está vazia!")
+            except Exception as e:
+                st.error(f"Erro de conexão: {e}")
+        # -------------------------------------------------------------------        
         ne = st.multiselect(
             "Editores", list(map_u.keys()), default=atuais, 
             format_func=lambda x: map_u.get(x,x), key=f"ee_{curso['id']}"
