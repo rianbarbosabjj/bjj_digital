@@ -1,482 +1,56 @@
-# bjj_digital/courses_engine.py
+"""
+courses_engine.py
+Motor de lógica para gerenciamento de cursos, módulos e aulas do BJJ Digital.
+"""
 
-from typing import Optional, Dict, List
+import streamlit as st
+import os
 from datetime import datetime
-from firebase_admin import firestore
-
-# Assumindo que esta função retorna a instância do Firestore DB
 from database import get_db
+import uuid
 
+# ==============================================================================
+# FUNÇÕES DE CURSO (CRUD)
+# ==============================================================================
 
-def _get_db():
-    """Conecta e retorna a instância do Firestore, com tratamento de erro."""
+def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico):
+    """Cria um novo curso no banco de dados."""
     db = get_db()
-    if not db:
-        raise RuntimeError("Não foi possível conectar ao banco de dados.")
-    return db
-
-
-# ======================================================
-# CURSOS (CRUD Principal)
-# ======================================================
-
-def criar_curso(
-    professor_id: str,
-    nome_professor: str,
-    titulo: str,
-    descricao: str,
-    modalidade: str,            # "EAD" ou "Presencial"
-    publico: str,               # "geral" ou "equipe"
-    equipe_destino: Optional[str],
-    pago: bool,
-    preco: Optional[float],
-    split_custom: Optional[float],
-    certificado_automatico: bool
-) -> str:
-    """
-    Cria um curso no Firestore.
-    """
-    db = _get_db()
-
-    doc = {
-        "titulo": (titulo or "").strip(),
-        "descricao": (descricao or "").strip(),
-
-        "modalidade": modalidade,               # "EAD" | "Presencial"
-        "publico": publico,                     # "geral" | "equipe"
-        "equipe_destino": equipe_destino or None,
-
-        "pago": bool(pago),
-        "preco": float(preco) if (pago and preco is not None) else 0.0,
-
-        # NOTE: split_custom pode ser None se não for pago, ou 0-100 se for
-        "split_custom": float(split_custom) if (pago and split_custom is not None) else None,
-        "certificado_automatico": bool(certificado_automatico),
-
+    
+    novo_curso = {
         "professor_id": professor_id,
         "professor_nome": nome_professor,
-        
-        # Campos adicionais que não estavam na criação original, mas foram usados na edição:
-        "duracao_estimada": "", 
-        "nivel": "Todos os Níveis",
-        "max_alunos": 0, 
-
-        # status de publicação
-        "status": "ativo",      # "ativo", "inativo", "rascunho"
+        "titulo": titulo,
+        "descricao": descricao,
+        "modalidade": modalidade,
+        "publico": publico,
+        "equipe_destino": equipe_destino,
+        "pago": pago,
+        "preco": float(preco),
+        "split_custom": split_custom,
+        "certificado_automatico": certificado_automatico,
         "ativo": True,
-
-        "criado_em": firestore.SERVER_TIMESTAMP,
-        "atualizado_em": firestore.SERVER_TIMESTAMP,
+        "criado_em": datetime.now(),
+        "duracao_estimada": "A definir",
+        "nivel": "Todos os Níveis"
     }
-
-    ref = db.collection("courses").document()
-    ref.set(doc)
-    return ref.id
-
-
-def editar_curso(course_id: str, dados_atualizados: Dict) -> bool:
-    """
-    CORREÇÃO: Implementa a função de edição de curso que estava faltando.
-    Atualiza um curso no Firestore.
-    """
-    db = _get_db()
-    ref = db.collection("courses").document(course_id)
     
-    # Prepara os dados para atualização (adiciona timestamp de atualização)
-    dados_atualizados["atualizado_em"] = firestore.SERVER_TIMESTAMP
-    
+    _, doc_ref = db.collection('cursos').add(novo_curso)
+    return doc_ref.id
+
+def editar_curso(curso_id, dados_atualizados):
+    """Atualiza os dados de um curso existente."""
+    db = get_db()
     try:
-        ref.update(dados_atualizados)
+        db.collection('cursos').document(curso_id).update(dados_atualizados)
         return True
     except Exception as e:
-        # Se o documento não existir, pode disparar um erro
-        print(f"Erro ao editar curso {course_id}: {e}")
+        print(f"Erro ao editar curso: {e}")
         return False
-
-
-def listar_cursos_do_professor(professor_id: str) -> List[Dict]:
-    """
-    Lista cursos criados por um professor.
-    """
-    db = _get_db()
-    cursos: List[Dict] = []
-
-    q = db.collection("courses").where("professor_id", "==", professor_id)
-    for snap in q.stream():
-        d = snap.to_dict()
-        d["id"] = snap.id
-        cursos.append(d)
-
-    # Ordena por data de criação (mais recentes primeiro), se houver timestamp
-    def _key(c):
-        dt = c.get("criado_em")
-        # CORREÇÃO: Usando firestore.SERVER_TIMESTAMP pode retornar um FieldValue,
-        # portanto é melhor garantir que é um datetime antes de usar.
-        if isinstance(dt, datetime):
-            return dt
-        return datetime.min
-
-    cursos.sort(key=_key, reverse=True)
-    return cursos
-
-
-def listar_cursos_disponiveis_para_usuario(usuario: Dict) -> List[Dict]:
-    """
-    Lista cursos que o usuário pode ver.
-    """
-    db = _get_db()
-    cursos: List[Dict] = []
-
-    # Busca apenas cursos com status "ativo"
-    q = db.collection("courses").where("status", "==", "ativo")
-    for snap in q.stream():
-        d = snap.to_dict()
-        d["id"] = snap.id
-
-        # LÓGICA DE FILTRAGEM DE EQUIPE (A SER IMPLEMENTADA)
-        if d.get("publico") == "equipe":
-             # Simplificando: Se a regra de equipe for complexa, é melhor
-             # buscar em outra coleção ou usar uma query mais específica.
-             # Por enquanto, passamos todos os ativos e confiamos no filtro do frontend
-             # ou em uma regra simples (e.g., usuário.get('equipe_nome') == d.get('equipe_destino'))
-             pass 
-        
-        cursos.append(d)
-
-    # Ordena por data de criação, se existir
-    def _key(c):
-        dt = c.get("criado_em")
-        if isinstance(dt, datetime):
-            return dt
-        return datetime.min
-
-    cursos.sort(key=_key, reverse=True)
-    return cursos
-
-def obter_curso_por_id(course_id: str) -> Optional[Dict]:
-    """Busca um curso específico pelo ID (necessário para edição/detalhes)."""
-    db = _get_db()
-    ref = db.collection("courses").document(course_id)
-    snap = ref.get()
-    if snap.exists:
-        d = snap.to_dict()
-        d["id"] = snap.id
-        return d
-    return None
-
-
-# ======================================================
-# MATRÍCULAS / INSCRIÇÕES
-# ======================================================
-
-def get_inscricao_id(user_id: str, course_id: str) -> str:
-    """Convenção de ID para matrícula."""
-    return f"{user_id}__{course_id}"
-
-
-def obter_inscricao(user_id: str, course_id: str) -> Optional[Dict]:
-    """
-    Busca a inscrição de um usuário em um curso, se existir.
-    """
-    db = _get_db()
-    doc_id = get_inscricao_id(user_id, course_id)
-    ref = db.collection("enrollments").document(doc_id)
-    snap = ref.get()
-    if not snap.exists:
-        return None
-    d = snap.to_dict()
-    d["id"] = snap.id
-    return d
-
-
-def inscrever_usuario_em_curso(user_id: str, course_id: str) -> str:
-    """
-    Cria a inscrição do usuário em um curso (sem cobrança ainda).
-    Se o curso for pago, isso deve ser feito APÓS a confirmação do pagamento.
-    """
-    db = _get_db()
-    doc_id = get_inscricao_id(user_id, course_id)
-    ref = db.collection("enrollments").document(doc_id)
-
-    if ref.get().exists:
-        # Já inscrito
-        return doc_id
-        
-    # Verifica se o curso é pago. Se for, a inscrição inicial é marcada como não paga.
-    curso = obter_curso_por_id(course_id)
-    pago_status = False
-    if curso and not curso.get("pago", False):
-        pago_status = True # Cursos gratuitos são considerados 'pagos' (acesso liberado) imediatamente
-
-    dados = {
-        "user_id": user_id,
-        "course_id": course_id,
-        "pago": pago_status,    # Atualizado se for gratuito
-        "progresso": 0.0,
-        "certificado_emitido": False,
-        "criado_em": firestore.SERVER_TIMESTAMP,
-    }
-    ref.set(dados)
-    return doc_id
-
-
-# ======================================================
-# PROGRESSO (MANUAL/HOOK)
-# ======================================================
-
-def atualizar_progresso(user_id: str, course_id: str, progresso: float):
-    """
-    Atualiza o progresso do aluno no curso (0–100).
-    (Usado para atualizações manuais ou via cálculo automático)
-    """
-    db = _get_db()
-    doc_id = get_inscricao_id(user_id, course_id)
-    ref = db.collection("enrollments").document(doc_id)
-
-    # Verifica a existência (pode ser redundante se for sempre chamado após inscrever, mas seguro)
-    snap = ref.get()
-    if not snap.exists:
-        return
-
-    progresso = max(0.0, min(100.0, float(progresso)))
-    ref.update({"progresso": progresso, "atualizado_em": firestore.SERVER_TIMESTAMP})
-
-
-def _atualizar_progresso_automatico(user_id: str, lesson_id: str):
-    """
-    Atualiza progresso automaticamente quando aula é concluída.
-    (Lógica interna robusta, mantida do seu original)
-    """
-    db = _get_db()
-    
-    # 1. Encontra o curso desta aula
-    aula_doc = db.collection("course_lessons").document(lesson_id).get()
-    if not aula_doc.exists: return
-    
-    aula = aula_doc.to_dict()
-    module_id = aula.get("module_id")
-    
-    # 2. Encontra o módulo
-    modulo_doc = db.collection("course_modules").document(module_id).get()
-    if not modulo_doc.exists: return
-    
-    modulo = modulo_doc.to_dict()
-    course_id = modulo.get("course_id")
-    
-    # 3. Conta aulas totais do curso
-    total_aulas = 0
-    modulos_curso = listar_modulos_do_curso(course_id)
-    for mod in modulos_curso:
-        # Para evitar re-busca excessiva, idealmente pré-carregaria as aulas
-        aulas_mod = listar_aulas_do_modulo(mod["id"])
-        total_aulas += len(aulas_mod)
-    
-    if total_aulas == 0: return
-    
-    # 4. Conta aulas concluídas pelo usuário neste curso
-    concluidas = 0
-    for mod in modulos_curso:
-        aulas_mod = listar_aulas_do_modulo(mod["id"])
-        for a in aulas_mod:
-            concluida_id = f"{user_id}__{a['id']}"
-            if db.collection("lesson_completions").document(concluida_id).get().exists:
-                concluidas += 1
-    
-    # 5. Calcula novo progresso
-    novo_progresso = (concluidas / total_aulas) * 100 if total_aulas > 0 else 0
-    
-    # 6. Atualiza enrollment
-    enrollment_id = get_inscricao_id(user_id, course_id)
-    enrollment_ref = db.collection("enrollments").document(enrollment_id)
-    
-    if enrollment_ref.get().exists:
-        enrollment_ref.update({"progresso": novo_progresso})
-    else:
-        # Cria enrollment se não existir (para casos de teste)
-        enrollment_ref.set({
-            "user_id": user_id,
-            "course_id": course_id,
-            "progresso": novo_progresso,
-            "pago": False,
-            "criado_em": firestore.SERVER_TIMESTAMP,
-        })
-    
-    # 7. Verifica se curso foi concluído (100%)
-    if novo_progresso >= 100:
-        enrollment_ref.update({"certificado_emitido": True})
-
-
-# ======================================================
-# PAGAMENTO (GANCHO FUTURO)
-# ======================================================
-
-def registrar_pagamento_sucesso(
-    user_id: str,
-    course_id: str,
-    valor: float,
-    metodo: str = "manual"
-):
-    """
-    Hook para ser chamado quando o pagamento for confirmado.
-    """
-    db = _get_db()
-    doc_id = get_inscricao_id(user_id, course_id)
-    ref = db.collection("enrollments").document(doc_id)
-
-    if not ref.get().exists:
-        # Se por algum motivo ainda não tiver inscrição, cria
-        inscrever_usuario_em_curso(user_id, course_id)
-
-    ref.update({
-        "pago": True,
-        "valor_pago": float(valor),
-        "metodo_pagamento": metodo,
-        "data_pagamento": firestore.SERVER_TIMESTAMP,
-    })
-
-# ======================================================
-# MÓDULOS E AULAS
-# ======================================================
-
-def criar_modulo(course_id: str, titulo: str, descricao: str, ordem: int) -> str:
-    """
-    Cria um módulo dentro de um curso.
-    """
-    db = _get_db()
-    
-    doc = {
-        "course_id": course_id,
-        "titulo": titulo.strip(),
-        "descricao": descricao.strip(),
-        "ordem": ordem,
-        "ativo": True,
-        "criado_em": firestore.SERVER_TIMESTAMP,
-    }
-    
-    ref = db.collection("course_modules").document()
-    ref.set(doc)
-    return ref.id
-
-
-def criar_aula(module_id: str, titulo: str, tipo: str, conteudo: Dict, duracao_min: int = 0) -> str:
-    """
-    Cria uma aula dentro de um módulo.
-    Tipos: "video", "texto", "quiz", "arquivo"
-    """
-    db = _get_db()
-    
-    doc = {
-        "module_id": module_id,
-        "titulo": titulo.strip(),
-        "tipo": tipo,    # video, texto, quiz, arquivo
-        "conteudo": conteudo,    # dict com URL, texto, etc
-        "duracao_min": duracao_min,
-        "ativo": True,
-        "criado_em": firestore.SERVER_TIMESTAMP,
-        "ordem": 0,    # será atualizado
-    }
-    
-    # Define ordem automática
-    # NOTE: Para garantir atomicidade e evitar race conditions em produção real,
-    # esta lógica deveria ser uma transação ou função Cloud. Aqui é aceitável.
-    aulas_existentes = list(db.collection("course_lessons")
-                            .where("module_id", "==", module_id)
-                            .stream())
-    doc["ordem"] = len(aulas_existentes) + 1
-    
-    ref = db.collection("course_lessons").document()
-    ref.set(doc)
-    return ref.id
-
-
-def listar_modulos_do_curso(course_id: str) -> List[Dict]:
-    """
-    Lista módulos de um curso, ordenados.
-    """
-    db = _get_db()
-    modulos = []
-    
-    q = db.collection("course_modules").where("course_id", "==", course_id).where("ativo", "==", True)
-    for snap in q.stream():
-        d = snap.to_dict()
-        d["id"] = snap.id
-        modulos.append(d)
-    
-    modulos.sort(key=lambda x: x.get("ordem", 0))
-    return modulos
-
-
-def listar_aulas_do_modulo(module_id: str) -> List[Dict]:
-    """
-    Lista aulas de um módulo, ordenadas.
-    """
-    db = _get_db()
-    aulas = []
-    
-    q = db.collection("course_lessons").where("module_id", "==", module_id).where("ativo", "==", True)
-    for snap in q.stream():
-        d = snap.to_dict()
-        d["id"] = snap.id
-        aulas.append(d)
-    
-    aulas.sort(key=lambda x: x.get("ordem", 0))
-    return aulas
-
-
-def listar_modulos_e_aulas(course_id: str) -> List[Dict]:
-    """
-    CORREÇÃO: Implementa a função agregadora que une módulos e suas aulas.
-    Usada para exibir o conteúdo programático do curso.
-    """
-    modulos = listar_modulos_do_curso(course_id)
-    estrutura_completa = []
-    
-    for modulo in modulos:
-        aulas = listar_aulas_do_modulo(modulo["id"])
-        modulo["aulas"] = aulas
-        estrutura_completa.append(modulo)
-        
-    return estrutura_completa
-
-
-def marcar_aula_concluida(user_id: str, lesson_id: str) -> bool:
-    """
-    Marca uma aula como concluída pelo usuário.
-    """
-    db = _get_db()
-    
-    # Verifica se já foi concluída
-    concluida_id = f"{user_id}__{lesson_id}"
-    ref = db.collection("lesson_completions").document(concluida_id)
-    
-    if ref.get().exists:
-        return True    # Já estava concluída
-    
-    # Marca como concluída
-    ref.set({
-        "user_id": user_id,
-        "lesson_id": lesson_id,
-        "concluido_em": firestore.SERVER_TIMESTAMP,
-    })
-    
-    # Atualiza progresso do curso
-    _atualizar_progresso_automatico(user_id, lesson_id)
-    
-    return True
-
-
-def verificar_aula_concluida(user_id: str, lesson_id: str) -> bool:
-    """
-    Verifica se usuário já concluiu determinada aula.
-    (Função mantida, mas renomeada de 'obter_progresso_aula' para 'verificar_aula_concluida'
-     na tela de cursos para maior clareza).
-    """
-    db = _get_db()
 
 def excluir_curso(curso_id: str) -> bool:
     """
     Exclui um curso e todos os seus dados associados (módulos, aulas, inscrições).
-    Retorna True se conseguir excluir o documento principal do curso.
     """
     db = get_db()
     if not db:
@@ -487,45 +61,277 @@ def excluir_curso(curso_id: str) -> bool:
         print(f"--- Iniciando exclusão do curso ID: {curso_id} ---")
 
         # 1. Excluir Aulas e Módulos
-        # Buscamos módulos vinculados a este curso
         modulos_ref = db.collection('modulos').where('curso_id', '==', curso_id).stream()
         
         for mod in modulos_ref:
             mod_id = mod.id
-            print(f"Excluindo módulo: {mod_id}")
             
-            # Para cada módulo, buscamos e deletamos as aulas
-            # Tenta buscar por 'modulo_id' (padrão)
+            # Deletar aulas associadas ao módulo
             aulas_ref = db.collection('aulas').where('modulo_id', '==', mod_id).stream()
             for aula in aulas_ref:
-                print(f" -> Excluindo aula: {aula.id}")
                 db.collection('aulas').document(aula.id).delete()
             
-            # Tenta buscar por 'module_id' (caso tenha sido salvo em inglês)
-            aulas_ref_en = db.collection('aulas').where('module_id', '==', mod_id).stream()
-            for aula in aulas_ref_en:
-                print(f" -> Excluindo aula (en): {aula.id}")
-                db.collection('aulas').document(aula.id).delete()
-
             # Deleta o módulo
             db.collection('modulos').document(mod_id).delete()
 
         # 2. Excluir Inscrições
-        print("Buscando inscrições...")
         inscricoes_ref = db.collection('inscricoes').where('curso_id', '==', curso_id).stream()
         for insc in inscricoes_ref:
-            print(f" -> Excluindo inscrição: {insc.id}")
             db.collection('inscricoes').document(insc.id).delete()
 
-        # 3. Finalmente, excluir o curso
-        print("Excluindo documento do curso...")
+        # 3. Excluir o curso
         db.collection('cursos').document(curso_id).delete()
         
-        print("--- Exclusão concluída com sucesso ---")
         return True
 
     except Exception as e:
         print(f"❌ ERRO CRÍTICO ao excluir curso: {e}")
-        import traceback
-        traceback.print_exc() # Imprime o erro detalhado no terminal
         return False
+
+def listar_cursos_do_professor(professor_id):
+    """Lista todos os cursos criados por um professor específico."""
+    db = get_db()
+    cursos_ref = db.collection('cursos').where('professor_id', '==', professor_id).stream()
+    
+    lista_cursos = []
+    for doc in cursos_ref:
+        curso = doc.to_dict()
+        curso['id'] = doc.id
+        lista_cursos.append(curso)
+        
+    return lista_cursos
+
+def listar_cursos_disponiveis_para_usuario(usuario):
+    """
+    Lista cursos disponíveis para o aluno (filtra por equipe se necessário).
+    """
+    db = get_db()
+    cursos_ref = db.collection('cursos').where('ativo', '==', True).stream()
+    
+    lista_cursos = []
+    equipe_usuario = usuario.get('equipe', '').lower().strip()
+    
+    for doc in cursos_ref:
+        curso = doc.to_dict()
+        curso['id'] = doc.id
+        
+        # Filtro de visibilidade
+        if curso.get('publico') == 'equipe':
+            equipe_curso = str(curso.get('equipe_destino', '')).lower().strip()
+            if equipe_curso != equipe_usuario and usuario.get('tipo') != 'admin':
+                continue # Pula este curso se não for da equipe do aluno
+                
+        lista_cursos.append(curso)
+        
+    return lista_cursos
+
+# ==============================================================================
+# FUNÇÕES DE MÓDULOS E AULAS
+# ==============================================================================
+
+def listar_modulos_do_curso(curso_id):
+    """Retorna apenas a lista de módulos (sem as aulas detalhadas)."""
+    db = get_db()
+    try:
+        modulos = db.collection('modulos')\
+            .where('curso_id', '==', curso_id)\
+            .order_by('ordem')\
+            .stream()
+        
+        return [{"id": m.id, **m.to_dict()} for m in modulos]
+    except Exception as e:
+        print(f"Erro ao listar módulos: {e}")
+        return []
+
+def listar_modulos_e_aulas(curso_id):
+    """
+    Retorna estrutura completa: Módulos com suas respectivas Aulas aninhadas.
+    """
+    db = get_db()
+    
+    # 1. Buscar Módulos
+    modulos = listar_modulos_do_curso(curso_id)
+    
+    # 2. Buscar Aulas para cada módulo
+    estrutura_completa = []
+    for mod in modulos:
+        aulas_ref = db.collection('aulas')\
+            .where('modulo_id', '==', mod['id'])\
+            .order_by('titulo')\
+            .stream() # Idealmente teria um campo 'ordem' nas aulas também
+            
+        aulas = [{"id": a.id, **a.to_dict()} for a in aulas_ref]
+        
+        mod['aulas'] = aulas
+        estrutura_completa.append(mod)
+        
+    return estrutura_completa
+
+def criar_modulo(curso_id, titulo, descricao, ordem):
+    """Cria um novo módulo dentro de um curso."""
+    db = get_db()
+    db.collection('modulos').add({
+        "curso_id": curso_id,
+        "titulo": titulo,
+        "descricao": descricao,
+        "ordem": ordem,
+        "criado_em": datetime.now()
+    })
+
+def criar_aula(module_id, titulo, tipo, conteudo, duracao_min):
+    """
+    Cria uma nova aula. Lida com salvamento de arquivos (Uploads).
+    """
+    db = get_db()
+    
+    # === LÓGICA DE UPLOAD DE ARQUIVOS ===
+    # Se houver arquivos reais (UploadedFile do Streamlit), precisamos salvar.
+    # Aqui estamos salvando em disco local por simplicidade.
+    # Para produção, substitua por upload para Firebase Storage ou S3.
+    
+    upload_dir = "uploads"
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+
+    # 1. Processar Vídeo Upload
+    if tipo == 'video' and conteudo.get('tipo_video') == 'upload':
+        arquivo = conteudo.get('arquivo_video')
+        if arquivo:
+            # Gera nome único para não sobrescrever
+            ext = arquivo.name.split('.')[-1]
+            nome_final = f"vid_{uuid.uuid4()}.{ext}"
+            caminho_salvo = os.path.join(upload_dir, nome_final)
+            
+            with open(caminho_salvo, "wb") as f:
+                f.write(arquivo.getbuffer())
+            
+            # Atualiza o dicionário para salvar apenas o caminho/URL no banco
+            conteudo['arquivo_video'] = caminho_salvo # ou URL pública
+            # Remove o objeto binário pesado antes de salvar no banco
+            if 'arquivo_video' in conteudo and not isinstance(conteudo['arquivo_video'], str):
+                 del conteudo['arquivo_video'] 
+            conteudo['arquivo_video'] = caminho_salvo # Recoloca como string
+
+    # 2. Processar PDF Upload
+    if 'material_apoio' in conteudo:
+        arquivo_pdf = conteudo.get('material_apoio')
+        if arquivo_pdf:
+            ext = arquivo_pdf.name.split('.')[-1]
+            nome_final = f"pdf_{uuid.uuid4()}.{ext}"
+            caminho_salvo = os.path.join(upload_dir, nome_final)
+            
+            with open(caminho_salvo, "wb") as f:
+                f.write(arquivo_pdf.getbuffer())
+            
+            # Atualiza dicionário
+            conteudo['material_apoio'] = caminho_salvo # ou URL pública
+            
+    # === SALVAR NO BANCO ===
+    db.collection('aulas').add({
+        "modulo_id": module_id,
+        "titulo": titulo,
+        "tipo": tipo,
+        "conteudo": conteudo, # Agora contém caminhos/strings, não bytes
+        "duracao_min": duracao_min,
+        "criado_em": datetime.now()
+    })
+
+# ==============================================================================
+# FUNÇÕES DE INSCRIÇÃO E PROGRESSO
+# ==============================================================================
+
+def obter_inscricao(user_id, curso_id):
+    """Verifica se existe inscrição e retorna os dados."""
+    db = get_db()
+    docs = db.collection('inscricoes')\
+        .where('usuario_id', '==', user_id)\
+        .where('curso_id', '==', curso_id)\
+        .stream()
+        
+    for doc in docs:
+        return doc.to_dict()
+    return None
+
+def inscrever_usuario_em_curso(user_id, curso_id):
+    """Cria o registro de inscrição inicial."""
+    db = get_db()
+    
+    # Verifica se já existe para não duplicar
+    if obter_inscricao(user_id, curso_id):
+        return
+        
+    db.collection('inscricoes').add({
+        "usuario_id": user_id,
+        "curso_id": curso_id,
+        "progresso": 0,
+        "aulas_concluidas": [],
+        "criado_em": datetime.now(),
+        "status": "ativo"
+    })
+
+def verificar_aula_concluida(user_id, aula_id):
+    """Checa se o ID da aula está na lista de concluídas do usuário."""
+    # Como a estrutura de inscrição pode variar, vamos buscar pelo documento de inscrição
+    # que contenha essa aula na lista, ou buscar pelo documento de progresso separado.
+    # Assumindo estrutura simples dentro de 'inscricoes':
+    
+    db = get_db()
+    # Busca todas inscrições do usuário (pode otimizar se tiver curso_id)
+    inscricoes = db.collection('inscricoes').where('usuario_id', '==', user_id).stream()
+    
+    for insc in inscricoes:
+        dados = insc.to_dict()
+        concluidas = dados.get('aulas_concluidas', [])
+        if aula_id in concluidas:
+            return True
+    return False
+
+def marcar_aula_concluida(user_id, aula_id):
+    """Adiciona aula à lista de concluídas e recalcula progresso."""
+    db = get_db()
+    
+    # 1. Encontrar a aula para saber qual o curso dela
+    aula_ref = db.collection('aulas').document(aula_id).get()
+    if not aula_ref.exists:
+        return
+    
+    modulo_id = aula_ref.to_dict().get('modulo_id')
+    mod_ref = db.collection('modulos').document(modulo_id).get()
+    curso_id = mod_ref.to_dict().get('curso_id')
+    
+    # 2. Encontrar a inscrição
+    inscricao_query = db.collection('inscricoes')\
+        .where('usuario_id', '==', user_id)\
+        .where('curso_id', '==', curso_id)\
+        .stream()
+    
+    insc_doc = None
+    for d in inscricao_query:
+        insc_doc = d
+        break
+        
+    if not insc_doc:
+        return # Usuário não inscrito
+        
+    # 3. Atualizar
+    dados_insc = insc_doc.to_dict()
+    concluidas = dados_insc.get('aulas_concluidas', [])
+    
+    if aula_id not in concluidas:
+        concluidas.append(aula_id)
+        
+        # Calcular novo progresso %
+        # Precisamos do total de aulas do curso
+        total_aulas = 0
+        mods = listar_modulos_e_aulas(curso_id)
+        for m in mods:
+            total_aulas += len(m['aulas'])
+            
+        progresso_pct = (len(concluidas) / total_aulas) * 100 if total_aulas > 0 else 0
+        if progresso_pct > 100: progresso_pct = 100
+        
+        db.collection('inscricoes').document(insc_doc.id).update({
+            "aulas_concluidas": concluidas,
+            "progresso": progresso_pct,
+            "ultimo_acesso": datetime.now()
+        })
