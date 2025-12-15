@@ -891,10 +891,10 @@ def _pagina_edicao_curso_new(usuario: dict):
         
         with col1:
             titulo = st.text_input(
-                "Título do Curso *", placeholder="Ex: Fundamentos do Jiu-Jitsu para Iniciantes", key="c_titulo_input"
+                "Título do Curso *", placeholder="Ex: Curso de Regras", key="c_titulo_input"
             )
             descricao = st.text_area(
-                "Descrição Detalhada *", height=120, placeholder="Descreva o que os alunos aprenderão...", key="c_descricao_input"
+                "Descrição Detalhada *", height=120, placeholder="Descreva o conteúdo do curso...", key="c_descricao_input"
             )
         
         with col2:
