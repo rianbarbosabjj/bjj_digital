@@ -134,9 +134,8 @@ def pagina_cursos(usuario: dict):
     # Header
     st.markdown(f"""
     <div class="curso-header">
-        <h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">🎓 BJJ DIGITAL CURSOS</h1>
-        <p style="text-align:center; opacity:0.8;">Bem-vindo(a), <strong>{usuario.get('nome','').split()[0]}</strong></p>
-    </div>
+        <h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">🎓GESTÃO DE CURSOS</h1>
+        </div>
     """, unsafe_allow_html=True)
     
     # Botão Voltar
