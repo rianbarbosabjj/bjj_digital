@@ -225,6 +225,15 @@ def aplicar_estilos_cursos():
         display: flex;
         align-items: center;
     }}
+    
+    /* AREA MATERIAL DE APOIO */
+    .material-apoio-box {{
+        margin-top: 1.5rem;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 12px;
+        border: 1px solid rgba(255, 215, 112, 0.1);
+    }}
 
     /* --- BOTÕES IDÊNTICOS AO APP.PY --- */
     /* Botões Primários (Ação Principal) - Agora VERDES */
@@ -232,7 +241,8 @@ def aplicar_estilos_cursos():
     .stButton>button[kind="primary"],
     .stButton>button[key^="enroll_"],
     .stButton>button[key^="cont_"],
-    .stButton>button[key^="btn_det_add_aulas"] {{
+    .stButton>button[key^="btn_det_add_aulas"],
+    .stButton>button[key^="btn_dl_pdf"] {{
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important;
         color: white !important;
         border: 1px solid rgba(255,255,255,0.1) !important;
@@ -247,14 +257,15 @@ def aplicar_estilos_cursos():
     .stButton>button[kind="primary"]:hover,
     .stButton>button[key^="enroll_"]:hover,
     .stButton>button[key^="cont_"]:hover,
-    .stButton>button[key^="btn_det_add_aulas"]:hover {{
+    .stButton>button[key^="btn_det_add_aulas"]:hover,
+    .stButton>button[key^="btn_dl_pdf"]:hover {{
         background: {COR_HOVER} !important;
         color: #0e2d26 !important;
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-       div.stButton > button, div.stFormSubmitButton > button {{ 
+    div.stButton > button, div.stFormSubmitButton > button {{ 
         background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
         color: white !important; 
         border: 1px solid rgba(255,255,255,0.1) !important; 
@@ -497,7 +508,7 @@ def _exibir_detalhes_curso(curso: dict, usuario: dict):
                     st.error(f"Erro na inscrição: {e}")
 
 def _pagina_aulas(curso: dict, usuario: dict):
-    """Página de consumo do curso, exibe aulas e permite marcar progresso."""
+    """Página de consumo do curso, exibe aulas e permite marcar progresso (ATUALIZADA)."""
     
     st.markdown(f"## 🎬 Aulas: {curso.get('titulo', 'Curso')}")
     st.markdown("---")
@@ -543,12 +554,22 @@ def _pagina_aulas(curso: dict, usuario: dict):
         conteudo = aula_atual.get('conteudo', {})
         tipo = aula_atual.get('tipo')
 
+        # --- LÓGICA DE EXIBIÇÃO DE VÍDEO (LINK OU UPLOAD) ---
         if tipo == 'video':
-            url = conteudo.get('url') if isinstance(conteudo, dict) else None
-            if url:
-                st.video(url)
-            else:
-                st.info("Vídeo indisponível.")
+            tipo_video = conteudo.get('tipo_video', 'link') # default para 'link' se não existir
+            
+            if tipo_video == 'link':
+                url = conteudo.get('url')
+                if url:
+                    st.video(url)
+                else:
+                    st.info("Link de vídeo indisponível.")
+            elif tipo_video == 'upload':
+                arquivo = conteudo.get('arquivo_video')
+                if arquivo:
+                    st.video(arquivo)
+                else:
+                    st.info("Arquivo de vídeo não encontrado.")
             
             # Descrição do vídeo (opcional)
             if isinstance(conteudo, dict) and conteudo.get('descricao'):
@@ -569,6 +590,22 @@ def _pagina_aulas(curso: dict, usuario: dict):
                     st.radio("Escolha uma opção:", conteudo['opcoes'], key=f"quiz_{aula_atual['id']}")
         else:
              st.info("Conteúdo em formato desconhecido.")
+
+        # --- ÁREA DE MATERIAL DE APOIO (PDF) ---
+        material_pdf = conteudo.get('material_apoio')
+        if material_pdf:
+            st.markdown("<div class='material-apoio-box'>", unsafe_allow_html=True)
+            st.markdown("#### 📎 Material de Apoio")
+            nome_pdf = conteudo.get('nome_arquivo_pdf', 'Material de Apoio.pdf')
+            st.download_button(
+                label=f"📥 Baixar {nome_pdf}",
+                data=material_pdf,
+                file_name=nome_pdf,
+                mime="application/pdf",
+                key=f"btn_dl_pdf_{aula_atual['id']}",
+                type="primary"
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
