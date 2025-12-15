@@ -235,13 +235,20 @@ def aplicar_estilos_cursos():
         border: 1px solid rgba(255, 215, 112, 0.1);
     }}
 
-    div.stButton > button, div.stFormSubmitButton > button {{ 
-        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
-        color: white !important; 
-        border: 1px solid rgba(255,255,255,0.1) !important; 
-        padding: 0.6em 1.5em !important; 
+    /* --- BOTÕES IDÊNTICOS AO APP.PY --- */
+    /* Botões Primários (Ação Principal) - Agora VERDES */
+    .stButton>button[data-testid="stFormSubmitButton"], 
+    .stButton>button[kind="primary"],
+    .stButton>button[key^="enroll_"],
+    .stButton>button[key^="cont_"],
+    .stButton>button[key^="btn_det_add_aulas"],
+    .stButton>button[key^="btn_dl_pdf"] {{
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important;
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+        padding: 0.6em 1.5em !important;
         font-weight: 600 !important;
-        border-radius: 8px !important; 
+        border-radius: 8px !important;
         transition: all 0.3s ease !important;
     }}
     
@@ -366,7 +373,18 @@ def pagina_cursos(usuario: dict):
         st.session_state['cursos_view'] = 'lista'
     if 'curso_selecionado' not in st.session_state:
         st.session_state['curso_selecionado'] = None
-  
+
+    # Header moderno
+    st.markdown(f"""
+    <div class="curso-header">
+        <h1 style="margin-bottom: 0.5rem; text-align: center;">🎓 BJJ DIGITAL CURSOS</h1>
+        <p style="text-align: center; opacity: 0.8; margin: 0;">
+            Bem-vindo(a), <strong style="color: {COR_DESTAQUE};">{usuario.get('nome','Usuário').split()[0]}</strong> • 
+            {usuario.get('tipo', 'aluno').capitalize()}
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
     # Botão de voltar
     if st.session_state.get('cursos_view') != 'lista':
         # Botão para voltar da sub-tela para a lista principal
@@ -547,6 +565,7 @@ def _pagina_aulas(curso: dict, usuario: dict):
                 else:
                     st.info("Link de vídeo indisponível.")
             elif tipo_video == 'upload':
+                # Nota: Em produção, 'arquivo_video' deve ser uma URL ou bytes carregados do storage
                 arquivo = conteudo.get('arquivo_video')
                 if arquivo:
                     st.video(arquivo)
@@ -574,20 +593,22 @@ def _pagina_aulas(curso: dict, usuario: dict):
              st.info("Conteúdo em formato desconhecido.")
 
         # --- ÁREA DE MATERIAL DE APOIO (PDF) ---
-        material_pdf = conteudo.get('material_apoio')
-        if material_pdf:
-            st.markdown("<div class='material-apoio-box'>", unsafe_allow_html=True)
-            st.markdown("#### 📎 Material de Apoio")
-            nome_pdf = conteudo.get('nome_arquivo_pdf', 'Material de Apoio.pdf')
-            st.download_button(
-                label=f"📥 Baixar {nome_pdf}",
-                data=material_pdf,
-                file_name=nome_pdf,
-                mime="application/pdf",
-                key=f"btn_dl_pdf_{aula_atual['id']}",
-                type="primary"
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
+        if isinstance(conteudo, dict):
+            material_pdf = conteudo.get('material_apoio')
+            if material_pdf:
+                st.markdown("<div class='material-apoio-box'>", unsafe_allow_html=True)
+                st.markdown("#### 📎 Material de Apoio")
+                nome_pdf = conteudo.get('nome_arquivo_pdf', 'Material_Didatico.pdf')
+                
+                st.download_button(
+                    label=f"📥 Baixar {nome_pdf}",
+                    data=material_pdf,
+                    file_name=nome_pdf,
+                    mime="application/pdf",
+                    key=f"btn_dl_pdf_{aula_atual['id']}",
+                    type="primary"
+                )
+                st.markdown("</div>", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
