@@ -48,13 +48,15 @@ def tela_inicio():
     if tipo in ["admin", "professor"]:
         st.markdown("---")
         st.markdown("<h2 style='color:#FFD770;text-align:center;'>Gestão</h2>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns(3)
+        c1, c2, c3, c4 = st.columns(4)
         with c1: 
             render_card("🧠 Questões", "Crie, edite e visualize o banco de questões.", "Gerenciar", "g1", "Gestão de Questões")
         with c2: 
             render_card("🏛️ Equipes", "Gerencie sua Equipe", "Gerenciar", "g2", "Gestão de Equipes")
         with c3: 
-            render_card("📜 Exames", "Crie, edite e libere exames para seus alunos.", "Gerenciar", "g3", "Gestão de Exame")
+            render_card("📚 Cursos", "Crie, edite seus cursos", "Gerenciar", "g3", "Gestão de Curso")           
+        with c4: 
+            render_card("📜 Exames", "Crie, edite e libere exames para seus alunos.", "Gerenciar", "g4", "Gestão de Exame")
 
 def tela_meu_perfil(usuario_logado):
     if st.button("🏠 Voltar ao Início", key="btn_voltar_perfil"):
