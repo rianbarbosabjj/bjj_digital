@@ -73,7 +73,7 @@ def tela_inicio():
         with c3: 
             # LINK PARA O CURSOS.PY
             # O 'pagina_destino' deve ser exatamente o texto que você verifica no app.py
-            render_card("📚 Cursos", "Crie e edite seus cursos.", "Gerenciar", "g3", "Gestão de Curso")           
+            render_card("📚 Cursos", "Crie e edite seus cursos.", "Gerenciar", "g3", "Cursos")           
         with c4: 
             render_card("📜 Exames", "Libere e gerencie exames de faixa.", "Gerenciar", "g4", "Gestão de Exame")
 
