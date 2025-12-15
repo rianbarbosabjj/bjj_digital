@@ -472,6 +472,40 @@ def verificar_aula_concluida(user_id: str, lesson_id: str) -> bool:
      na tela de cursos para maior clareza).
     """
     db = _get_db()
+
+def excluir_curso(curso_id: str) -> bool:
+    """
+    Exclui um curso e todos os seus dados associados (módulos, aulas, inscrições).
+    """
+    db = get_db()
+    if not db:
+        return False
+
+    try:
+        # 1. Excluir todas as aulas dos módulos deste curso
+        # Primeiro buscamos os módulos
+        modulos_ref = db.collection('modulos').where('curso_id', '==', curso_id).stream()
+        for mod in modulos_ref:
+            # Para cada módulo, buscamos e deletamos as aulas
+            aulas_ref = db.collection('aulas').where('modulo_id', '==', mod.id).stream()
+            for aula in aulas_ref:
+                db.collection('aulas').document(aula.id).delete()
+            
+            # Deleta o módulo
+            db.collection('modulos').document(mod.id).delete()
+
+        # 2. Excluir inscrições associadas a este curso
+        inscricoes_ref = db.collection('inscricoes').where('curso_id', '==', curso_id).stream()
+        for insc in inscricoes_ref:
+            db.collection('inscricoes').document(insc.id).delete()
+
+        # 3. Finalmente, excluir o curso
+        db.collection('cursos').document(curso_id).delete()
+        
+        return True
+    except Exception as e:
+        print(f"Erro ao excluir curso: {e}")
+        return False    
     concluida_id = f"{user_id}__{lesson_id}"
     ref = db.collection("lesson_completions").document(concluida_id)
     return ref.get().exists
