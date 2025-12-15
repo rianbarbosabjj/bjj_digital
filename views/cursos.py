@@ -728,8 +728,8 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
         st.markdown("### 👥 Colaboração")
         todos_users = listar_todos_usuarios_para_selecao()
         
-        # Mapeia ID -> Nome para exibição
-        mapa_users = {u['id']: u['nome'] for u in todos_users}
+        # Mapeia ID -> Nome com CPF
+        mapa_users = {u['id']: f"{u['nome']} (CPF: {u.get('cpf','N/A')})" for u in todos_users}
         ids_opcoes = list(mapa_users.keys())
         
         # Filtra editores atuais que ainda existem
@@ -740,7 +740,8 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
             options=ids_opcoes,
             default=editores_atuais,
             format_func=lambda x: mapa_users.get(x, x),
-            key=f"edit_editores_{curso_original['id']}"
+            key=f"edit_editores_{curso_original['id']}",
+            placeholder="Digite o CPF ou nome..."
         )
         
         st.markdown("---")
@@ -959,14 +960,16 @@ def _pagina_edicao_curso_new(usuario: dict):
         # --- SELEÇÃO DE EDITORES ---
         st.markdown("### 👥 Colaboração")
         todos_users = listar_todos_usuarios_para_selecao()
-        mapa_users = {u['id']: u['nome'] for u in todos_users}
+        # Mapa com Nome + CPF
+        mapa_users = {u['id']: f"{u['nome']} (CPF: {u.get('cpf','N/A')})" for u in todos_users}
         ids_opcoes = list(mapa_users.keys())
         
         editores_selecionados = st.multiselect(
             "Editores Colaboradores (Outros Professores)",
             options=ids_opcoes,
             format_func=lambda x: mapa_users.get(x, x),
-            key="c_editores_select"
+            key="c_editores_select",
+            placeholder="Digite o CPF ou nome..."
         )
 
         st.markdown("---")
