@@ -1,14 +1,15 @@
 """
 BJJ Digital - Sistema de Gerenciamento de Aulas
 Permite aos professores criar módulos, adicionar conteúdo (Vídeo/Texto) e Material de Apoio.
+Integração com utils.py (Motor Unificado).
 """
 
 import streamlit as st
 import time
 from typing import Dict
 
-# Importa a engine para operações de banco de dados
-import courses_engine as ce
+# Importa o motor unificado (utils)
+import utils as ce 
 
 # --- 1. CONFIGURAÇÃO DE CORES (Igual ao app.py e cursos.py) ---
 try:
@@ -137,7 +138,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
     # 2. LISTAGEM E GERENCIAMENTO DE MÓDULOS/AULAS
     # ======================================================
     
-    # Carrega estrutura atualizada
+    # Carrega estrutura atualizada usando o UTILS.PY
     modulos_completos = ce.listar_modulos_e_aulas(curso['id'])
     
     if not modulos_completos:
@@ -159,7 +160,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                     icone = "🎥" if tipo == 'video' else "📝" if tipo == 'texto' else "❓"
                     
                     # Verifica se tem material de apoio
-                    tem_pdf = "📎 PDF" if aula.get('conteudo', {}).get('material_apoio') else ""
+                    tem_pdf = "📎 PDF" if aula.get('conteudo', {}).get('material_apoio_nome') else ""
                     
                     st.markdown(f"""
                     <div class="aula-card-admin">
