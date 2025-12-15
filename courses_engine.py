@@ -332,6 +332,76 @@ def marcar_aula_concluida(user_id, aula_id):
         
         db.collection('inscricoes').document(insc_doc.id).update({
             "aulas_concluidas": concluidas,
+
+# --- ADICIONE ESTA FUNÇÃO NOVA NO INÍCIO OU FIM DO ARQUIVO ---
+def listar_todos_usuarios_para_selecao():
+    """Retorna uma lista simples de usuários para serem escolhidos como editores."""
+    db = get_db()
+    users = db.collection('usuarios').stream()
+    lista = []
+    for u in users:
+        dados = u.to_dict()
+        # Filtra apenas quem é professor ou admin para ser editor
+        if dados.get('tipo') in ['professor', 'admin']:
+            lista.append({'id': u.id, 'nome': dados.get('nome', 'Sem Nome'), 'email': dados.get('email')})
+    return lista
+
+# --- ATUALIZE A FUNÇÃO CRIAR_CURSO (Adicionando o parametro editores_ids) ---
+def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, editores_ids=[]):
+    """Cria um novo curso no banco de dados com lista de editores."""
+    db = get_db()
+    
+    novo_curso = {
+        "professor_id": professor_id,
+        "professor_nome": nome_professor,
+        "editores_ids": editores_ids,  # <--- NOVA LINHA: Lista de IDs que podem editar
+        "titulo": titulo,
+        "descricao": descricao,
+        "modalidade": modalidade,
+        "publico": publico,
+        "equipe_destino": equipe_destino,
+        "pago": pago,
+        "preco": float(preco),
+        "split_custom": split_custom,
+        "certificado_automatico": certificado_automatico,
+        "ativo": True,
+        "criado_em": datetime.now(),
+        "duracao_estimada": "A definir",
+        "nivel": "Todos os Níveis"
+    }
+    
+    _, doc_ref = db.collection('cursos').add(novo_curso)
+    return doc_ref.id
+
+# --- ATUALIZE A FUNÇÃO LISTAR_CURSOS_DO_PROFESSOR ---
+def listar_cursos_do_professor(usuario_id):
+    """Lista cursos onde o usuário é DONO ou EDITOR."""
+    db = get_db()
+    lista_cursos = []
+    
+    # 1. Cursos onde ele é o dono
+    cursos_dono = db.collection('cursos').where('professor_id', '==', usuario_id).stream()
+    for doc in cursos_dono:
+        c = doc.to_dict()
+        c['id'] = doc.id
+        c['papel'] = 'Dono'
+        lista_cursos.append(c)
+        
+    # 2. Cursos onde ele é editor (array-contains)
+    # Nota: Firestore permite buscar se um valor existe dentro de um array
+    cursos_editor = db.collection('cursos').where('editores_ids', 'array_contains', usuario_id).stream()
+    
+    # Evitar duplicatas caso a query traga o mesmo (difícil, mas preventivo)
+    ids_existentes = [c['id'] for c in lista_cursos]
+    
+    for doc in cursos_editor:
+        if doc.id not in ids_existentes:
+            c = doc.to_dict()
+            c['id'] = doc.id
+            c['papel'] = 'Editor' # Marcamos visualmente que ele é editor
+            lista_cursos.append(c)
+            
+    return lista_cursos
             "progresso": progresso_pct,
             "ultimo_acesso": datetime.now()
         })
