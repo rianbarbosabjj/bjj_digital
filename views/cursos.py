@@ -30,7 +30,7 @@ from courses_engine import (
     verificar_aula_concluida,    
     marcar_aula_concluida,       
     editar_curso,
-    excluir_curso # <--- ADICIONADO AQUI
+    excluir_curso # <--- ESTA FUNÇÃO PRECISA EXISTIR NO ENGINE
 )
 
 # --- 1. CONFIGURAÇÃO DE CORES IGUAL AO APP.PY ---
@@ -69,6 +69,7 @@ def aplicar_estilos_cursos():
     """Aplica estilos modernos específicos para cursos, ALINHADO COM APP.PY"""
     
     # Usamos f-string para injetar as variáveis de cor corretamente
+    # ATENÇÃO: Todo CSS aqui dentro deve usar CHAVES DUPLAS {{ }} para abrir e fechar blocos
     st.markdown(f"""
     <style>
     /* CARDS DE CURSO MODERNOS */
@@ -295,12 +296,12 @@ def aplicar_estilos_cursos():
         transform: translateY(-2px);
     }}
     
-    /* Botão de Excluir (Customizado) */
-    .stButton>button[key^="btn_delete_final"]:hover {
+    /* Botão de Excluir (Customizado) - CORRIGIDO AS CHAVES AQUI */
+    .stButton>button[key^="btn_delete_final"]:hover {{
         border-color: #ff4b4b !important;
         color: #ff4b4b !important;
         background: rgba(255, 75, 75, 0.1) !important;
-    }
+    }}
     
     /* HEADER MODERNO */
     .curso-header {{
