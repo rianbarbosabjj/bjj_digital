@@ -358,8 +358,10 @@ def listar_todos_usuarios_para_selecao():
         print(f"Erro ao listar usuários: {e}")
         return []
 
-def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, editores_ids=[]):
+def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, duracao_estimada, nivel, editores_ids=[]):
+    """Cria um novo curso no banco de dados com TODOS os campos."""
     db = get_db()
+    
     novo_curso = {
         "professor_id": professor_id,
         "professor_nome": nome_professor,
@@ -375,9 +377,10 @@ def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, pub
         "certificado_automatico": certificado_automatico,
         "ativo": True,
         "criado_em": datetime.now(),
-        "duracao_estimada": "A definir",
-        "nivel": "Todos os Níveis"
+        "duracao_estimada": duracao_estimada, # Agora recebe do formulário
+        "nivel": nivel # Agora recebe do formulário
     }
+    
     _, doc_ref = db.collection('cursos').add(novo_curso)
     return doc_ref.id
 
