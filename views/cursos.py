@@ -30,7 +30,7 @@ from courses_engine import (
     verificar_aula_concluida,    
     marcar_aula_concluida,       
     editar_curso,
-    excluir_curso # <--- ESTA FUNÇÃO PRECISA EXISTIR NO ENGINE
+    excluir_curso # <--- IMPORTANTE: Certifique-se que esta função existe no courses_engine.py
 )
 
 # --- 1. CONFIGURAÇÃO DE CORES IGUAL AO APP.PY ---
@@ -62,14 +62,14 @@ def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
         return 0
 
 # ======================================================
-# ESTILOS MODERNOS PARA CURSOS (ATUALIZADO)
+# ESTILOS MODERNOS PARA CURSOS (ATUALIZADO E CORRIGIDO)
 # ======================================================
 
 def aplicar_estilos_cursos():
     """Aplica estilos modernos específicos para cursos, ALINHADO COM APP.PY"""
     
-    # Usamos f-string para injetar as variáveis de cor corretamente
-    # ATENÇÃO: Todo CSS aqui dentro deve usar CHAVES DUPLAS {{ }} para abrir e fechar blocos
+    # IMPORTANTE: Usamos f-string, então todo bloco CSS deve usar chaves duplas {{ }} 
+    # para abrir e fechar, exceto as variáveis Python que usam chaves simples { }.
     st.markdown(f"""
     <style>
     /* CARDS DE CURSO MODERNOS */
@@ -296,7 +296,7 @@ def aplicar_estilos_cursos():
         transform: translateY(-2px);
     }}
     
-    /* Botão de Excluir (Customizado) - CORRIGIDO AS CHAVES AQUI */
+    /* Botão de Excluir (Customizado) - CORRIGIDO */
     .stButton>button[key^="btn_delete_final"]:hover {{
         border-color: #ff4b4b !important;
         color: #ff4b4b !important;
@@ -830,9 +830,9 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                     st.error(f"❌ Erro ao salvar curso: {e}")
 
     # ==========================
-    # ZONA DE PERIGO (EXCLUSÃO)
+    # ZONA DE PERIGO (EXCLUSÃO) - AGORA COM VERIFICAÇÃO DE RETORNO
     # ==========================
-st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("### 🗑️ Zona de Perigo")
     st.warning("Ações aqui não podem ser desfeitas.")
     
@@ -844,20 +844,19 @@ st.markdown("<br><br>", unsafe_allow_html=True)
             confirmacao = st.checkbox("Sim, quero excluir permanentemente.", key=f"del_confirm_{curso_original['id']}")
         
         with col_del_btn:
-            # Botão de Excluir
             if st.button("🗑️ Excluir Curso", type="secondary", disabled=not confirmacao, key=f"btn_delete_final_{curso_original['id']}"):
-                with st.spinner("Excluindo curso e dados associados..."):
-                    # AQUI ESTA A CORREÇÃO: Capturamos o retorno (True/False)
+                with st.spinner("Excluindo..."):
+                    # Verificamos se o retorno foi True (sucesso)
                     sucesso = ce.excluir_curso(curso_original['id'])
                     
                     if sucesso:
                         st.success("✅ Curso removido com sucesso!")
                         time.sleep(1)
-                        # Força a limpeza do estado para não carregar o curso velho
+                        # Limpa seleção e volta para lista
                         st.session_state['curso_selecionado'] = None
                         navegar_para('lista')
                     else:
-                        st.error("❌ Falha ao excluir. Verifique o console/logs para detalhes.")
+                        st.error("❌ Falha ao excluir. Verifique o terminal para detalhes.")
 
 
 # ======================================================
