@@ -352,28 +352,35 @@ def listar_todos_usuarios_para_selecao():
         print(f"Erro ao listar usuários: {e}")
         return []
 
-def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, editores_ids=[]):
+def listar_todos_usuarios_para_selecao():
+    """Retorna uma lista de usuários para serem editores (Case Insensitive)."""
     db = get_db()
-    novo_curso = {
-        "professor_id": professor_id,
-        "professor_nome": nome_professor,
-        "editores_ids": editores_ids,
-        "titulo": titulo,
-        "descricao": descricao,
-        "modalidade": modalidade,
-        "publico": publico,
-        "equipe_destino": equipe_destino,
-        "pago": pago,
-        "preco": float(preco),
-        "split_custom": split_custom,
-        "certificado_automatico": certificado_automatico,
-        "ativo": True,
-        "criado_em": datetime.now(),
-        "duracao_estimada": "A definir",
-        "nivel": "Todos os Níveis"
-    }
-    _, doc_ref = db.collection('cursos').add(novo_curso)
-    return doc_ref.id
+    try:
+        users = db.collection('usuarios').stream()
+        lista = []
+        for u in users:
+            dados = u.to_dict()
+            
+            # 1. Pega o tipo e converte para letras minúsculas e remove espaços
+            tipo_bruto = str(dados.get('tipo', '')).lower().strip()
+            
+            # 2. Lista de tipos permitidos (Adicionei variações comuns)
+            tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof']
+            
+            if tipo_bruto in tipos_permitidos:
+                lista.append({
+                    'id': u.id, 
+                    'nome': dados.get('nome', 'Sem Nome'), 
+                    'email': dados.get('email'),
+                    'cpf': dados.get('cpf', 'N/A')
+                })
+                
+        # Ordena alfabeticamente
+        lista.sort(key=lambda x: x['nome'])
+        return lista
+    except Exception as e:
+        print(f"Erro ao listar usuários: {e}")
+        return []
 
 def editar_curso(curso_id, dados_atualizados):
     db = get_db()
