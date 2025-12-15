@@ -832,7 +832,7 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
     # ==========================
     # ZONA DE PERIGO (EXCLUSÃO)
     # ==========================
-    st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("### 🗑️ Zona de Perigo")
     st.warning("Ações aqui não podem ser desfeitas.")
     
@@ -844,15 +844,20 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
             confirmacao = st.checkbox("Sim, quero excluir permanentemente.", key=f"del_confirm_{curso_original['id']}")
         
         with col_del_btn:
+            # Botão de Excluir
             if st.button("🗑️ Excluir Curso", type="secondary", disabled=not confirmacao, key=f"btn_delete_final_{curso_original['id']}"):
-                try:
-                    # Tenta excluir usando a engine
-                    ce.excluir_curso(curso_original['id'])
-                    st.success("Curso removido com sucesso!")
-                    time.sleep(1)
-                    navegar_para('lista')
-                except Exception as e:
-                    st.error(f"Erro ao excluir: {e}")
+                with st.spinner("Excluindo curso e dados associados..."):
+                    # AQUI ESTA A CORREÇÃO: Capturamos o retorno (True/False)
+                    sucesso = ce.excluir_curso(curso_original['id'])
+                    
+                    if sucesso:
+                        st.success("✅ Curso removido com sucesso!")
+                        time.sleep(1)
+                        # Força a limpeza do estado para não carregar o curso velho
+                        st.session_state['curso_selecionado'] = None
+                        navegar_para('lista')
+                    else:
+                        st.error("❌ Falha ao excluir. Verifique o console/logs para detalhes.")
 
 
 # ======================================================
