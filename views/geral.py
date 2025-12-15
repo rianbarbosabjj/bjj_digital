@@ -6,6 +6,7 @@ from datetime import datetime, date
 from database import get_db, OPCOES_SEXO
 
 def render_card(titulo, descricao, texto_botao, chave_botao, pagina_destino):
+    """Renderiza um card estilizado com botão de navegação."""
     with st.container(border=True):
         st.markdown(f"<h3>{titulo}</h3>", unsafe_allow_html=True)
         st.markdown(f"<p style='text-align: center; min-height: 60px;'>{descricao}</p>", unsafe_allow_html=True)
@@ -14,13 +15,15 @@ def render_card(titulo, descricao, texto_botao, chave_botao, pagina_destino):
             st.rerun()
 
 def get_logo_path_geral():
-    if os.path.exists("assets/logo.jpg"): return "assets/logo.jpg"
-    if os.path.exists("logo.jpg"): return "logo.jpg"
-    if os.path.exists("assets/logo.png"): return "assets/logo.png"
-    if os.path.exists("logo.png"): return "logo.png"
+    """Busca o logotipo em locais comuns."""
+    locais = ["assets/logo.jpg", "logo.jpg", "assets/logo.png", "logo.png"]
+    for local in locais:
+        if os.path.exists(local):
+            return local
     return None
 
 def tela_inicio():
+    """Tela inicial (Dashboard) com cards de navegação."""
     logo_path = get_logo_path_geral()
     logo_html = ""
     
@@ -33,32 +36,49 @@ def tela_inicio():
     usuario = st.session_state.get('usuario', {})
     nome_usuario = usuario.get('nome', 'Visitante').title()
     
-    st.markdown(f"<div style='display:flex;flex-direction:column;align-items:center;margin-bottom:30px;'>{logo_html}<h2 style='color:#FFD770;text-align:center;'>Painel BJJ Digital</h2><p style='color:#FFFFFF;text-align:center;'>Bem-vindo(a), {nome_usuario}!</p></div>", unsafe_allow_html=True)
+    # Cabeçalho Centralizado
+    st.markdown(f"""
+        <div style='display:flex;flex-direction:column;align-items:center;margin-bottom:30px;'>
+            {logo_html}
+            <h2 style='color:#FFD770;text-align:center;'>Painel BJJ Digital</h2>
+            <p style='color:#FFFFFF;text-align:center;'>Bem-vindo(a), {nome_usuario}!</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
     st.markdown("---")
     
+    # --- ÁREA DO ALUNO ---
     col1, col2, col3 = st.columns(3)
     with col1: 
         render_card("🤼 Modo Rola", "Responda questões e alcance o topo do ranking.", "Acessar", "n1", "Modo Rola")
     with col2: 
-        render_card("🥋 Exames", "Realize seus exames de faixa e provas dos cursos.", "Acessar", "n2", "Exame de Faixa")
+        # Se for aluno, o texto é "Exames", se for professor é gestão
+        render_card("🥋 Exames", "Realize seus exames de faixa e provas.", "Acessar", "n2", "Exame de Faixa")
     with col3: 
         render_card("🏆 Ranking", "Acompanhe sua colocação no ranking.", "Acessar", "n3", "Ranking")
 
+    # --- ÁREA DE GESTÃO (Professor/Admin) ---
     tipo = str(usuario.get("tipo", "aluno")).lower()
+    
     if tipo in ["admin", "professor"]:
         st.markdown("---")
-        st.markdown("<h2 style='color:#FFD770;text-align:center;'>Gestão</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='color:#FFD770;text-align:center;'>Área de Gestão</h2>", unsafe_allow_html=True)
+        
         c1, c2, c3, c4 = st.columns(4)
+        
         with c1: 
-            render_card("🧠 Questões", "Crie, edite e visualize o banco de questões.", "Gerenciar", "g1", "Gestão de Questões")
+            render_card("🧠 Questões", "Crie e edite o banco de questões.", "Gerenciar", "g1", "Gestão de Questões")
         with c2: 
-            render_card("🏛️ Equipes", "Gerencie sua Equipe", "Gerenciar", "g2", "Gestão de Equipes")
+            render_card("🏛️ Equipes", "Gerencie sua Equipe e alunos.", "Gerenciar", "g2", "Gestão de Equipes")
         with c3: 
-            render_card("📚 Cursos", "Crie, edite seus cursos", "Gerenciar", "g3", "Gestão de Curso")           
+            # LINK PARA O CURSOS.PY
+            # O 'pagina_destino' deve ser exatamente o texto que você verifica no app.py
+            render_card("📚 Cursos", "Crie e edite seus cursos.", "Gerenciar", "g3", "Gestão de Curso")           
         with c4: 
-            render_card("📜 Exames", "Crie, edite e libere exames para seus alunos.", "Gerenciar", "g4", "Gestão de Exame")
+            render_card("📜 Exames", "Libere e gerencie exames de faixa.", "Gerenciar", "g4", "Gestão de Exame")
 
 def tela_meu_perfil(usuario_logado):
+    """Tela de edição de perfil do usuário."""
     if st.button("🏠 Voltar ao Início", key="btn_voltar_perfil"):
         st.session_state.menu_selection = "Início"
         st.rerun()
