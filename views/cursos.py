@@ -1,8 +1,3 @@
-
-#BJJ Digital - Sistema de Cursos (Versão Modernizada)
-#Integração com aulas, design atualizado e Colaboração de Editores.
-
-
 import streamlit as st
 import pandas as pd
 import time
@@ -31,7 +26,7 @@ from courses_engine import (
     marcar_aula_concluida,       
     editar_curso,
     excluir_curso,
-    listar_todos_usuarios_para_selecao # <--- IMPORTANTE: Nova função
+    listar_todos_usuarios_para_selecao
 )
 
 # --- 1. CONFIGURAÇÃO DE CORES IGUAL AO APP.PY ---
@@ -69,6 +64,7 @@ def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
 def aplicar_estilos_cursos():
     """Aplica estilos modernos específicos para cursos, ALINHADO COM APP.PY"""
     
+    # ATENÇÃO: Chaves duplas {{ }} para blocos CSS, chaves simples { } para variáveis Python
     st.markdown(f"""
     <style>
     /* CARDS DE CURSO MODERNOS */
@@ -668,7 +664,7 @@ def _pagina_aulas(curso: dict, usuario: dict):
                         st.rerun()
 
 def _pagina_edicao_curso(curso_original: dict, usuario: dict):
-    """Formulário moderno para editar cursos (COM EDITORES)"""
+    """Formulário moderno para editar cursos (COM EDITORES e INTERATIVO)"""
     
     st.markdown(f"## ✏️ Editando Curso: {curso_original.get('titulo', 'Novo Curso')}")
     st.markdown("---")
@@ -678,11 +674,13 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
     if is_editor:
         st.info("ℹ️ Você está editando este curso como um **Editor Colaborador**.")
     
-    pago_toggle_key = f"edit_pago_toggle_{curso_original['id']}"
-    if pago_toggle_key not in st.session_state:
-        st.session_state[pago_toggle_key] = curso_original.get("pago", False)
+    # Inicializa toggle se não existir
+    toggle_key = f"edit_pago_toggle_{curso_original['id']}"
+    if toggle_key not in st.session_state:
+        st.session_state[toggle_key] = curso_original.get("pago", False)
 
-    with st.form(f"form_editar_curso_moderno_{curso_original['id']}", border=True):
+    # --- SEM ST.FORM PARA PERMITIR INTERATIVIDADE DO PREÇO ---
+    with st.container(border=True):
         
         st.markdown("### 📝 Informações Básicas")
         
@@ -756,7 +754,7 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                 value=curso_original.get("certificado_automatico", True),
                 key=f"edit_certificado_{curso_original['id']}"
             )
-            st.checkbox(
+            ativo = st.checkbox(
                 "Curso Ativo (Disponível para Inscrição)",
                 value=curso_original.get("ativo", True),
                 key=f"edit_ativo_{curso_original['id']}"
@@ -782,19 +780,19 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
         col5, col6, col7 = st.columns([1, 1, 1])
         
         with col5:
-            st.toggle(
+            # TOGGLE REATIVO - Libera o campo imediatamente
+            pago = st.toggle(
                 "Curso Pago?",
-                value=st.session_state[pago_toggle_key],
-                key=pago_toggle_key,
+                key=toggle_key,
             )
         
         with col6:
             preco = st.number_input(
                 "Valor (R$)",
                 min_value=0.0,
-                value=curso_original.get("preco", 0.0),
+                value=float(curso_original.get("preco", 0.0)),
                 step=10.0,
-                disabled=not st.session_state[pago_toggle_key],
+                disabled=not st.session_state[toggle_key],
                 key=f"edit_preco_{curso_original['id']}"
             )
         
@@ -802,7 +800,7 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
             is_admin = usuario.get("tipo") == "admin"
             split_custom = curso_original.get("split_custom", 10)
             
-            if st.session_state[pago_toggle_key]:
+            if st.session_state[toggle_key]:
                 if is_admin:
                     split_custom = st.slider(
                         "Taxa da Plataforma (%)",
@@ -822,14 +820,15 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
         col_submit1, col_submit2 = st.columns([1, 3])
         
         with col_submit1:
-            if st.form_submit_button("❌ Cancelar", use_container_width=True, type="secondary"):
+            if st.button("❌ Cancelar", use_container_width=True, type="secondary", key=f"btn_cancel_{curso_original['id']}"):
                 navegar_para('lista')
         
         with col_submit2:
-            submit = st.form_submit_button(
+            submit = st.button(
                 "💾 Salvar Alterações",
                 type="primary",
-                use_container_width=True
+                use_container_width=True,
+                key=f"btn_save_{curso_original['id']}"
             )
             
             if submit:
@@ -841,32 +840,30 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                     "publico": publico,
                     "equipe_destino": equipe_destino if publico == "equipe" else None,
                     "editores_ids": novos_editores, # SALVANDO EDITORES
-                    "certificado_automatico": st.session_state[f"edit_certificado_{curso_original['id']}"],
-                    "ativo": st.session_state[f"edit_ativo_{curso_original['id']}"],
+                    "certificado_automatico": certificado_auto,
+                    "ativo": ativo,
                     "duracao_estimada": duracao_estimada,
                     "nivel": nivel,
-                    "pago": st.session_state[pago_toggle_key],
-                    "preco": preco if st.session_state[pago_toggle_key] else 0.0,
+                    "pago": pago,
+                    "preco": preco if pago else 0.0,
                     "split_custom": split_custom,
-                    "atualizado_em": datetime.now() # Adiciona timestamp
+                    "atualizado_em": datetime.now() 
                 }
                 
                 # 2. Validações simples
                 if not titulo.strip() or not descricao.strip():
                       st.error("⚠️ Título e descrição são obrigatórios.")
-                      return
-                
-                # 3. Chama a função de edição (usando a função real do courses_engine)
-                try:
-                    if ce.editar_curso(curso_original["id"], dados_atualizados):
-                        st.success("🎉 Curso atualizado com sucesso!")
-                        time.sleep(1)
-                        # Redireciona de volta para os detalhes (ou lista)
-                        navegar_para('detalhe', dados_atualizados) 
-                    else:
-                        st.error("❌ Erro desconhecido ao salvar. Tente novamente.")
-                except Exception as e:
-                    st.error(f"❌ Erro ao salvar curso: {e}")
+                else:
+                    # 3. Chama a função de edição
+                    try:
+                        if ce.editar_curso(curso_original["id"], dados_atualizados):
+                            st.success("🎉 Curso atualizado com sucesso!")
+                            time.sleep(1)
+                            navegar_para('detalhe', dados_atualizados) 
+                        else:
+                            st.error("❌ Erro desconhecido ao salvar. Tente novamente.")
+                    except Exception as e:
+                        st.error(f"❌ Erro ao salvar curso: {e}")
 
     # ==========================
     # ZONA DE PERIGO (EXCLUSÃO)
