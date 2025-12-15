@@ -254,24 +254,20 @@ def aplicar_estilos_cursos():
         box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
 
-    /* Botões Secundários (Outline) - Mantém estilo DOURADO para contraste */
-    .stButton>button[kind="secondary"],
-    .stButton>button[key^="edit_"],
-    .stButton>button[key^="view_"],
-    .stButton>button[key^="access_"],
-    .stButton>button[key^="cert_"],
-    .stButton>button[key^="rev_"],
-    .stButton>button[key^="btn_voltar_"],
-    .stButton>button[key^="btn_det_editar"] {{
-        background: transparent !important;
-        color: {COR_DESTAQUE} !important;
-        border: 2px solid {COR_DESTAQUE} !important;
-        border-radius: 12px !important;
-        padding: 0.75rem 1.5rem !important;
+       div.stButton > button, div.stFormSubmitButton > button {{ 
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
+        color: white !important; 
+        border: 1px solid rgba(255,255,255,0.1) !important; 
+        padding: 0.6em 1.5em !important; 
         font-weight: 600 !important;
+        border-radius: 8px !important; 
         transition: all 0.3s ease !important;
-        width: 100%;
-        margin-top: auto;
+    }}
+    div.stButton > button:hover {{ 
+        background: {COR_HOVER} !important; 
+        color: #0e2d26 !important; 
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
     }}
     
     .stButton>button[kind="secondary"]:hover,
