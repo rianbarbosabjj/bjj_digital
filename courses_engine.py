@@ -1,7 +1,5 @@
-"""
-courses_engine.py
-Motor de lógica para gerenciamento de cursos, módulos e aulas do BJJ Digital.
-"""
+## courses_engine.py
+## Motor de lógica para gerenciamento de cursos, módulos e aulas do BJJ Digital.
 
 import streamlit as st
 import os
@@ -335,7 +333,7 @@ def marcar_aula_concluida(user_id, aula_id):
 
 # --- ADICIONE ESTA FUNÇÃO NOVA NO INÍCIO OU FIM DO ARQUIVO ---
 def listar_todos_usuarios_para_selecao():
-    """Retorna uma lista simples de usuários para serem escolhidos como editores."""
+    ### Retorna uma lista simples de usuários para serem escolhidos como editores.
     db = get_db()
     users = db.collection('usuarios').stream()
     lista = []
