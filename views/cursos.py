@@ -214,24 +214,7 @@ def aplicar_estilos_cursos():
         align-items: center;
     }
 
-    /* BOTÕES MODERNOS */
-    .stButton>button[data-testid="stFormSubmitButton"], 
-    .stButton>button[kind="primary"],
-    .stButton>button[key^="enroll_"],
-    .stButton>button[key^="cont_"],
-    .stButton>button[key^="btn_det_add_aulas"] { 
-        background: linear-gradient(135deg, #078B6C 0%, #056853 100%) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 12px !important;
-        padding: 0.75rem 1.5rem !important;
-        font-weight: 600 !important;
-        transition: all 0.3s ease !important;
-        box-shadow: 0 4px 15px rgba(7, 139, 108, 0.3) !important;
-        width: 100%;
-        margin-top: auto;
-    }
-    
+
     .stButton>button[data-testid="stFormSubmitButton"]:hover, 
     .stButton>button[kind="primary"]:hover,
     .stButton>button[key^="enroll_"]:hover,
