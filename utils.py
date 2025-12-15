@@ -338,11 +338,12 @@ def listar_todos_usuarios_para_selecao():
         lista = []
         for u in users:
             dados = u.to_dict()
-            # Normaliza para garantir busca (Aceita Professor, Mestre, Admin, etc)
+            
+            # --- CORREÇÃO AQUI: ACEITAR 'none' E 'aluno' PARA VOCÊ CONSEGUIR TESTAR ---
             tipo_usuario = str(dados.get('tipo', '')).lower().strip()
             
-            # LISTA DE TIPOS PERMITIDOS (AMPLIADA)
-            tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'teacher']
+            # Adicionei 'none' e 'aluno' para que o filtro não barre seus usuários de teste
+            tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'teacher', 'none', 'aluno', '']
             
             if tipo_usuario in tipos_permitidos:
                 lista.append({
@@ -351,7 +352,7 @@ def listar_todos_usuarios_para_selecao():
                     'email': dados.get('email'),
                     'cpf': dados.get('cpf', 'N/A')
                 })
-        # Ordena alfabeticamente
+        
         lista.sort(key=lambda x: x['nome'])
         return lista
     except Exception as e:
@@ -359,7 +360,6 @@ def listar_todos_usuarios_para_selecao():
         return []
 
 def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, duracao_estimada, nivel, editores_ids=[]):
-    """Cria um novo curso no banco de dados com TODOS os campos."""
     db = get_db()
     
     novo_curso = {
@@ -377,8 +377,8 @@ def criar_curso(professor_id, nome_professor, titulo, descricao, modalidade, pub
         "certificado_automatico": certificado_automatico,
         "ativo": True,
         "criado_em": datetime.now(),
-        "duracao_estimada": duracao_estimada, # Agora recebe do formulário
-        "nivel": nivel # Agora recebe do formulário
+        "duracao_estimada": duracao_estimada,
+        "nivel": nivel
     }
     
     _, doc_ref = db.collection('cursos').add(novo_curso)
