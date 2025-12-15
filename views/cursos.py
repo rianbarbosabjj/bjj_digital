@@ -642,17 +642,23 @@ def _pagina_aulas(curso: dict, usuario: dict):
                         st.session_state['aula_atual'] = aula
                         st.rerun()
 
-def _pagina_edicao_curso(curso_original: dict, usuario: dict):
-    """Formulário moderno para editar cursos"""
+def _pagina_edicao_curso_new(usuario: dict):
+    """Função para Criar Novo Curso (Versão Reativa - Sem st.form bloqueante)"""
     
-    st.markdown(f"## ✏️ Editando Curso: {curso_original.get('titulo', 'Novo Curso')}")
-    st.markdown("---")
+    st.markdown("""
+    <div style="background: rgba(255,255,255,0.05); padding: 1.5rem; border-radius: 20px; margin-bottom: 2rem;">
+        <h3 style="margin: 0 0 0.5rem 0;">🚀 Criar Novo Curso</h3>
+        <p style="opacity: 0.8; margin: 0;">Preencha os detalhes abaixo para criar um curso incrível!</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    pago_toggle_key = f"edit_pago_toggle_{curso_original['id']}"
-    if pago_toggle_key not in st.session_state:
-        st.session_state[pago_toggle_key] = curso_original.get("pago", False)
-
-    with st.form(f"form_editar_curso_moderno_{curso_original['id']}", border=True):
+    # Inicializa o estado do toggle se não existir
+    if "criar_curso_pago_toggle_new" not in st.session_state:
+        st.session_state["criar_curso_pago_toggle_new"] = False
+        
+    # --- REMOVIDO O st.form PARA PERMITIR INTERATIVIDADE IMEDIATA ---
+    # Usamos container para manter o visual agrupado
+    with st.container(border=True):
         
         st.markdown("### 📝 Informações Básicas")
         
@@ -660,72 +666,19 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
         
         with col1:
             titulo = st.text_input(
-                "Título do Curso *",
-                value=curso_original.get("titulo", ""),
-                key=f"edit_titulo_{curso_original['id']}"
+                "Título do Curso *", placeholder="Ex: Fundamentos do Jiu-Jitsu para Iniciantes", key="c_titulo_input"
             )
-            
             descricao = st.text_area(
-                "Descrição Detalhada *",
-                value=curso_original.get("descricao", ""),
-                height=120,
-                key=f"edit_descricao_{curso_original['id']}"
+                "Descrição Detalhada *", height=120, placeholder="Descreva o que os alunos aprenderão...", key="c_descricao_input"
             )
         
         with col2:
-            modalidade = st.selectbox(
-                "Modalidade *",
-                ["EAD", "Presencial", "Híbrido"],
-                index=["EAD", "Presencial", "Híbrido"].index(curso_original.get("modalidade", "EAD")),
-                key=f"edit_modalidade_{curso_original['id']}"
-            )
+            modalidade = st.selectbox("Modalidade *", ["EAD", "Presencial", "Híbrido"], key="c_modalidade_select")
+            publico = st.selectbox("Público Alvo *", ["geral", "equipe"], format_func=lambda v: "🌍 Geral (Público Aberto)" if v == "geral" else "👥 Apenas Minha Equipe", key="c_publico_select")
             
-            publico = st.selectbox(
-                "Público Alvo *",
-                ["geral", "equipe"],
-                format_func=lambda v: "🌍 Geral (Público Aberto)" if v == "geral" else "👥 Apenas Minha Equipe",
-                index=["geral", "equipe"].index(curso_original.get("publico", "geral")),
-                key=f"edit_publico_{curso_original['id']}"
-            )
-            
-            equipe_destino = curso_original.get("equipe_destino")
+            equipe_destino = None
             if publico == "equipe":
-                equipe_destino = st.text_input(
-                    "Nome da Equipe *",
-                    value=equipe_destino or "",
-                    key=f"edit_equipe_{curso_original['id']}"
-                )
-        
-        st.markdown("---")
-        st.markdown("### ⚙️ Configurações")
-        
-        col3, col4 = st.columns(2)
-        
-        with col3:
-            certificado_auto = st.checkbox(
-                "Emitir certificado automaticamente",
-                value=curso_original.get("certificado_automatico", True),
-                key=f"edit_certificado_{curso_original['id']}"
-            )
-            st.checkbox(
-                "Curso Ativo (Disponível para Inscrição)",
-                value=curso_original.get("ativo", True),
-                key=f"edit_ativo_{curso_original['id']}"
-            )
-        
-        with col4:
-            duracao_estimada = st.text_input(
-                "Duração Estimada",
-                value=curso_original.get("duracao_estimada", ""),
-                key=f"edit_duracao_{curso_original['id']}"
-            )
-            
-            nivel = st.selectbox(
-                "Nível do Curso",
-                ["Iniciante", "Intermediário", "Avançado", "Todos os Níveis"],
-                index=["Iniciante", "Intermediário", "Avançado", "Todos os Níveis"].index(curso_original.get("nivel", "Todos os Níveis")),
-                key=f"edit_nivel_{curso_original['id']}"
-            )
+                equipe_destino = st.text_input("Nome da Equipe *", placeholder="Ex: Equipe BJJ Champions", key="c_equipe_input")
         
         st.markdown("---")
         st.markdown("### 💰 Configurações Financeiras")
@@ -733,91 +686,65 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
         col5, col6, col7 = st.columns([1, 1, 1])
         
         with col5:
-            st.toggle(
-                "Curso Pago?",
-                value=st.session_state[pago_toggle_key],
-                key=pago_toggle_key,
-            )
+            # Agora, ao clicar aqui, o Streamlit recarrega e libera o campo PRECO imediatamente
+            pago = st.toggle("Curso Pago?", key="criar_curso_pago_toggle_new")
         
         with col6:
-            preco = st.number_input(
-                "Valor (R$)",
-                min_value=0.0,
-                value=curso_original.get("preco", 0.0),
-                step=10.0,
-                disabled=not st.session_state[pago_toggle_key],
-                key=f"edit_preco_{curso_original['id']}"
-            )
+            # O estado 'disabled' agora reage imediatamente ao toggle acima
+            preco = st.number_input("Valor (R$)", min_value=0.0, value=0.0, step=10.0, disabled=not st.session_state["criar_curso_pago_toggle_new"], key="c_preco_input")
         
         with col7:
             is_admin = usuario.get("tipo") == "admin"
-            split_custom = curso_original.get("split_custom", 10)
-            
-            if st.session_state[pago_toggle_key]:
-                if is_admin:
-                    split_custom = st.slider(
-                        "Taxa da Plataforma (%)",
-                        0, 100,
-                        value=split_custom,
-                        key=f"edit_split_{curso_original['id']}"
-                    )
-                else:
-                    st.caption(f"Taxa da plataforma: {split_custom}%")
-                    st.info("Apenas administradores podem alterar a taxa.")
-            else:
-                split_custom = None 
-
+            split_custom = 10
+            if st.session_state["criar_curso_pago_toggle_new"] and is_admin:
+                split_custom = st.slider("Taxa da Plataforma (%)", 0, 100, value=10, key="c_split_slider")
+            elif st.session_state["criar_curso_pago_toggle_new"]:
+                st.caption(f"Taxa da plataforma: {split_custom}%")
+        
         st.markdown("---")
         
-        # Botão de submit
         col_submit1, col_submit2 = st.columns([1, 3])
         
         with col_submit1:
-            if st.form_submit_button("❌ Cancelar", use_container_width=True, type="secondary"):
-                navegar_para('lista')
+            if st.button("❌ Limpar", use_container_width=True, type="secondary"):
+                 # Resetando inputs por chave
+                 st.session_state["c_titulo_input"] = ""
+                 st.session_state["c_descricao_input"] = ""
+                 # Verificamos se as chaves existem antes de deletar/resetar
+                 if "c_equipe_input" in st.session_state: st.session_state["c_equipe_input"] = ""
+                 st.session_state["c_preco_input"] = 0.0
+                 st.session_state["criar_curso_pago_toggle_new"] = False
+                 st.rerun() 
         
         with col_submit2:
-            submit = st.form_submit_button(
-                "💾 Salvar Alterações",
-                type="primary",
-                use_container_width=True
-            )
+            # Mudamos de form_submit_button para button normal
+            submit = st.button("🚀 Criar Curso Agora", type="primary", use_container_width=True)
             
             if submit:
-                # 1. Monta o payload de dados
-                dados_atualizados = {
-                    "titulo": titulo,
-                    "descricao": descricao,
-                    "modalidade": modalidade,
-                    "publico": publico,
-                    "equipe_destino": equipe_destino if publico == "equipe" else None,
-                    "certificado_automatico": st.session_state[f"edit_certificado_{curso_original['id']}"],
-                    "ativo": st.session_state[f"edit_ativo_{curso_original['id']}"],
-                    "duracao_estimada": duracao_estimada,
-                    "nivel": nivel,
-                    "pago": st.session_state[pago_toggle_key],
-                    "preco": preco if st.session_state[pago_toggle_key] else 0.0,
-                    "split_custom": split_custom,
-                    "atualizado_em": datetime.now() # Adiciona timestamp
-                }
+                # Lógica de criação
+                erros = []
+                if not titulo.strip(): erros.append("⚠️ O título é obrigatório.")
+                if not descricao.strip(): erros.append("⚠️ A descrição é obrigatória.")
+                if publico == "equipe" and (not equipe_destino or not equipe_destino.strip()): erros.append("⚠️ Informe o nome da equipe.")
+                if pago and preco <= 0: erros.append("⚠️ Cursos pagos devem ter valor maior que zero.")
                 
-                # 2. Validações simples
-                if not titulo.strip() or not descricao.strip():
-                      st.error("⚠️ Título e descrição são obrigatórios.")
-                      return
-                
-                # 3. Chama a função de edição (usando a função real do courses_engine)
-                try:
-                    if ce.editar_curso(curso_original["id"], dados_atualizados):
-                        st.success("🎉 Curso atualizado com sucesso!")
+                if erros:
+                    for erro in erros: st.error(erro)
+                else:
+                    try:
+                        # USANDO A FUNÇÃO REAL: criar_curso do courses_engine.py
+                        curso_id = criar_curso(
+                            professor_id=usuario["id"], nome_professor=usuario.get("nome", ""),
+                            titulo=titulo, descricao=descricao, modalidade=modalidade, publico=publico,
+                            equipe_destino=equipe_destino, pago=pago, preco=preco if pago else 0.0,
+                            split_custom=split_custom, certificado_automatico=True, 
+                        )
+                        st.success("🎉 Curso criado com sucesso!")
+                        st.balloons()
                         time.sleep(1)
-                        # Redireciona de volta para os detalhes (ou lista)
-                        navegar_para('detalhe', dados_atualizados) 
-                    else:
-                        st.error("❌ Erro desconhecido ao salvar. Tente novamente.")
-                except Exception as e:
-                    st.error(f"❌ Erro ao salvar curso: {e}")
-
+                        navegar_para('lista') # Volta para a lista de cursos
+                    except Exception as e:
+                        st.error(f"❌ Erro ao criar curso: {e}")
     # ==========================
     # ZONA DE PERIGO (EXCLUSÃO) - AGORA COM VERIFICAÇÃO DE RETORNO
     # ==========================
