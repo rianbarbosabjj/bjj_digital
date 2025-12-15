@@ -1,7 +1,7 @@
-"""
-BJJ Digital - Sistema de Cursos (Versão Modernizada)
-Integração com aulas e design atualizado (Com Funcionalidades Completas)
-"""
+
+#BJJ Digital - Sistema de Cursos (Versão Modernizada)
+#Integração com aulas, design atualizado e Colaboração de Editores.
+
 
 import streamlit as st
 import pandas as pd
@@ -30,7 +30,8 @@ from courses_engine import (
     verificar_aula_concluida,    
     marcar_aula_concluida,       
     editar_curso,
-    excluir_curso 
+    excluir_curso,
+    listar_todos_usuarios_para_selecao # <--- IMPORTANTE: Nova função
 )
 
 # --- 1. CONFIGURAÇÃO DE CORES IGUAL AO APP.PY ---
@@ -68,7 +69,6 @@ def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
 def aplicar_estilos_cursos():
     """Aplica estilos modernos específicos para cursos, ALINHADO COM APP.PY"""
     
-    # ATENÇÃO: Chaves duplas {{ }} para CSS, chaves simples { } para variáveis Python
     st.markdown(f"""
     <style>
     /* CARDS DE CURSO MODERNOS */
@@ -476,11 +476,17 @@ def _exibir_detalhes_curso(curso: dict, usuario: dict):
             st.info("Este curso ainda não possui módulos cadastrados.")
 
     with col_acao:
-        is_professor = usuario.get("tipo", "aluno") in ["admin", "professor"]
+        # Permissões: Dono, Admin ou Editor
+        is_owner = curso.get('professor_id') == usuario['id']
+        is_admin = usuario.get('tipo') == 'admin'
+        is_editor = usuario['id'] in curso.get('editores_ids', [])
+        
+        can_edit = is_owner or is_admin or is_editor
+        
         inscricao = obter_inscricao(usuario["id"], curso["id"])
         ja_inscrito = inscricao is not None
 
-        if is_professor:
+        if can_edit:
              if st.button("✏️ Editar Curso", key="btn_det_editar", use_container_width=True, type="secondary"):
                  navegar_para('edicao', curso)
              
@@ -522,12 +528,21 @@ def _pagina_aulas(curso: dict, usuario: dict):
     st.markdown("---")
     
     inscricao = obter_inscricao(usuario["id"], curso["id"])
-    if not inscricao:
+    
+    # Se for editor/dono, permite ver sem inscrição
+    is_editor_or_owner = (curso.get('professor_id') == usuario['id']) or \
+                         (usuario['id'] in curso.get('editores_ids', [])) or \
+                         (usuario.get('tipo') == 'admin')
+                         
+    if not inscricao and not is_editor_or_owner:
         st.error("Erro: Inscrição não encontrada. Por favor, volte e inscreva-se novamente.")
         return
-        
-    progresso_total = inscricao.get("progresso", 0)
-    st.progress(progresso_total / 100, text=f"Progresso Geral: {progresso_total:.0f}%")
+    
+    progresso_total = inscricao.get("progresso", 0) if inscricao else 0
+    if inscricao:
+        st.progress(progresso_total / 100, text=f"Progresso Geral: {progresso_total:.0f}%")
+    else:
+        st.info("👁️ Modo de Visualização (Professor/Editor)")
 
     col_video, col_modulos = st.columns([3, 1])
 
@@ -621,13 +636,13 @@ def _pagina_aulas(curso: dict, usuario: dict):
         st.markdown("<br>", unsafe_allow_html=True)
 
         # Botão de conclusão
-        if not aula_completa:
+        if not aula_completa and inscricao:
              if st.button(f"✅ Marcar '{aula_atual['titulo']}' como Concluída", key=f"btn_concluir_aula_{aula_atual['id']}", type="primary"):
                  novo_progresso = registrar_progresso_aula(usuario["id"], curso["id"], aula_atual['id'])
                  st.success(f"Aula concluída! Progresso atualizado para {novo_progresso:.0f}%")
                  time.sleep(1)
                  st.rerun()
-        else:
+        elif aula_completa:
             st.markdown('<div class="aula-completa">🎉 Concluído</div>', unsafe_allow_html=True)
             if progresso_total < 100:
                 if st.button("Próxima Aula →", key=f"btn_proxima_{aula_atual['id']}", type="secondary"):
@@ -653,10 +668,15 @@ def _pagina_aulas(curso: dict, usuario: dict):
                         st.rerun()
 
 def _pagina_edicao_curso(curso_original: dict, usuario: dict):
-    """Formulário moderno para editar cursos"""
+    """Formulário moderno para editar cursos (COM EDITORES)"""
     
     st.markdown(f"## ✏️ Editando Curso: {curso_original.get('titulo', 'Novo Curso')}")
     st.markdown("---")
+    
+    # Verifica se é editor (apenas visual)
+    is_editor = usuario['id'] in curso_original.get('editores_ids', [])
+    if is_editor:
+        st.info("ℹ️ Você está editando este curso como um **Editor Colaborador**.")
     
     pago_toggle_key = f"edit_pago_toggle_{curso_original['id']}"
     if pago_toggle_key not in st.session_state:
@@ -705,6 +725,25 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                     value=equipe_destino or "",
                     key=f"edit_equipe_{curso_original['id']}"
                 )
+        
+        # --- SELEÇÃO DE EDITORES ---
+        st.markdown("### 👥 Colaboração")
+        todos_users = listar_todos_usuarios_para_selecao()
+        
+        # Mapeia ID -> Nome para exibição
+        mapa_users = {u['id']: u['nome'] for u in todos_users}
+        ids_opcoes = list(mapa_users.keys())
+        
+        # Filtra editores atuais que ainda existem
+        editores_atuais = [uid for uid in curso_original.get('editores_ids', []) if uid in ids_opcoes]
+        
+        novos_editores = st.multiselect(
+            "Editores Colaboradores (Professores/Admins)",
+            options=ids_opcoes,
+            default=editores_atuais,
+            format_func=lambda x: mapa_users.get(x, x),
+            key=f"edit_editores_{curso_original['id']}"
+        )
         
         st.markdown("---")
         st.markdown("### ⚙️ Configurações")
@@ -801,6 +840,7 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                     "modalidade": modalidade,
                     "publico": publico,
                     "equipe_destino": equipe_destino if publico == "equipe" else None,
+                    "editores_ids": novos_editores, # SALVANDO EDITORES
                     "certificado_automatico": st.session_state[f"edit_certificado_{curso_original['id']}"],
                     "ativo": st.session_state[f"edit_ativo_{curso_original['id']}"],
                     "duracao_estimada": duracao_estimada,
@@ -831,30 +871,35 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
     # ==========================
     # ZONA DE PERIGO (EXCLUSÃO)
     # ==========================
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("### 🗑️ Zona de Perigo")
-    st.warning("Ações aqui não podem ser desfeitas.")
+    # Apenas o DONO ou ADMIN pode excluir, editores NÃO
+    is_owner = curso_original.get('professor_id') == usuario['id']
+    is_admin = usuario.get('tipo') == 'admin'
     
-    with st.expander("Excluir este curso"):
-        st.markdown(f"Tem certeza que deseja excluir o curso **{curso_original.get('titulo')}**? Todas as aulas e inscrições serão perdidas.")
+    if is_owner or is_admin:
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        st.markdown("### 🗑️ Zona de Perigo")
+        st.warning("Ações aqui não podem ser desfeitas.")
         
-        col_del_check, col_del_btn = st.columns([3, 1])
-        with col_del_check:
-            confirmacao = st.checkbox("Sim, quero excluir permanentemente.", key=f"del_confirm_{curso_original['id']}")
-        
-        with col_del_btn:
-            # BOTÃO DE EXCLUIR COM LÓGICA DE VERIFICAÇÃO DE SUCESSO
-            if st.button("🗑️ Excluir Curso", type="secondary", disabled=not confirmacao, key=f"btn_delete_final_{curso_original['id']}"):
-                with st.spinner("Excluindo..."):
-                    sucesso = ce.excluir_curso(curso_original['id'])
-                    
-                    if sucesso:
-                        st.success("✅ Curso removido com sucesso!")
-                        time.sleep(1)
-                        st.session_state['curso_selecionado'] = None
-                        navegar_para('lista')
-                    else:
-                        st.error("❌ Falha ao excluir. Verifique o terminal para detalhes.")
+        with st.expander("Excluir este curso"):
+            st.markdown(f"Tem certeza que deseja excluir o curso **{curso_original.get('titulo')}**? Todas as aulas e inscrições serão perdidas.")
+            
+            col_del_check, col_del_btn = st.columns([3, 1])
+            with col_del_check:
+                confirmacao = st.checkbox("Sim, quero excluir permanentemente.", key=f"del_confirm_{curso_original['id']}")
+            
+            with col_del_btn:
+                # Botão de Excluir
+                if st.button("🗑️ Excluir Curso", type="secondary", disabled=not confirmacao, key=f"btn_delete_final_{curso_original['id']}"):
+                    with st.spinner("Excluindo..."):
+                        sucesso = ce.excluir_curso(curso_original['id'])
+                        
+                        if sucesso:
+                            st.success("✅ Curso removido com sucesso!")
+                            time.sleep(1)
+                            st.session_state['curso_selecionado'] = None
+                            navegar_para('lista')
+                        else:
+                            st.error("❌ Falha ao excluir. Verifique o terminal para detalhes.")
 
 
 # ======================================================
@@ -909,10 +954,24 @@ def _pagina_edicao_curso_new(usuario: dict):
         with col2:
             modalidade = st.selectbox("Modalidade *", ["EAD", "Presencial", "Híbrido"], key="c_modalidade_select")
             publico = st.selectbox("Público Alvo *", ["geral", "equipe"], format_func=lambda v: "🌍 Geral (Público Aberto)" if v == "geral" else "👥 Apenas Minha Equipe", key="c_publico_select")
+            
             equipe_destino = None
             if publico == "equipe":
                 equipe_destino = st.text_input("Nome da Equipe *", placeholder="Ex: Equipe BJJ Champions", key="c_equipe_input")
         
+        # --- SELEÇÃO DE EDITORES ---
+        st.markdown("### 👥 Colaboração")
+        todos_users = listar_todos_usuarios_para_selecao()
+        mapa_users = {u['id']: u['nome'] for u in todos_users}
+        ids_opcoes = list(mapa_users.keys())
+        
+        editores_selecionados = st.multiselect(
+            "Editores Colaboradores (Outros Professores)",
+            options=ids_opcoes,
+            format_func=lambda x: mapa_users.get(x, x),
+            key="c_editores_select"
+        )
+
         st.markdown("---")
         st.markdown("### 💰 Configurações Financeiras")
         
@@ -961,11 +1020,13 @@ def _pagina_edicao_curso_new(usuario: dict):
                     for erro in erros: st.error(erro)
                 else:
                     try:
+                        # USANDO A FUNÇÃO REAL
                         curso_id = criar_curso(
                             professor_id=usuario["id"], nome_professor=usuario.get("nome", ""),
                             titulo=titulo, descricao=descricao, modalidade=modalidade, publico=publico,
                             equipe_destino=equipe_destino, pago=pago, preco=preco if pago else 0.0,
-                            split_custom=split_custom, certificado_automatico=True, 
+                            split_custom=split_custom, certificado_automatico=True,
+                            editores_ids=editores_selecionados # Salva lista de editores
                         )
                         st.success("🎉 Curso criado com sucesso!")
                         st.balloons()
@@ -975,7 +1036,7 @@ def _pagina_edicao_curso_new(usuario: dict):
                         st.error(f"❌ Erro ao criar curso: {e}")
 
 def _professor_listar_cursos(usuario: dict):
-    """Lista cursos do professor com design moderno (Ajustado para navegação)"""
+    """Lista cursos do professor (e onde ele é editor)."""
     
     try:
         cursos = listar_cursos_do_professor(usuario["id"])
@@ -984,7 +1045,7 @@ def _professor_listar_cursos(usuario: dict):
         cursos = []
     
     # Grid de cursos
-    st.markdown("### 🎯 Meus Cursos")
+    st.markdown("### 🎯 Meus Cursos e Colaborações")
     
     if not cursos:
         st.markdown("""
@@ -1015,6 +1076,9 @@ def _render_card_curso_professor(curso: dict, usuario: dict):
     modalidade = curso.get('modalidade', 'EAD')
     publico = curso.get('publico', 'geral')
     
+    # Diferencia visualmente se sou dono ou editor
+    is_editor = curso.get('papel') == 'Editor'
+    
     card_class = "curso-card-moderno"
     if not ativo: card_class += " in-progress"
     
@@ -1024,6 +1088,11 @@ def _render_card_curso_professor(curso: dict, usuario: dict):
     # HTML SEM RECUO para evitar blocos de código
     badges_html = f"""<div class="curso-badges"><span class="curso-badge {'gold' if ativo else ''}">{"🟢 Ativo" if ativo else "🔴 Inativo"}</span><span class="curso-badge green">{modalidade}</span><span class="curso-badge blue">{"👥 Equipe" if publico == 'equipe' else "🌍 Geral"}</span></div>"""
     
+    # Se for editor, adiciona badge extra
+    editor_badge = ""
+    if is_editor:
+        editor_badge = f"""<div style="background: rgba(255, 255, 255, 0.1); padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; margin-bottom: 0.5rem; display: inline-block;">✏️ Você é Editor</div>"""
+
     preco_html = ""
     if pago:
         preco = curso.get('preco', 0)
@@ -1037,6 +1106,7 @@ def _render_card_curso_professor(curso: dict, usuario: dict):
     
     st.markdown(f"""
     <div class="{card_class}">
+        {editor_badge}
         <div class="curso-icon">{icon}</div>
         <h4 style="margin: 0 0 0.5rem 0;">{curso.get('titulo', 'Sem Título')}</h4>
         <p style="opacity: 0.8; margin-bottom: 1rem; flex-grow: 1;">{desc}</p>
