@@ -1,6 +1,6 @@
 """
 BJJ Digital - Sistema de Gerenciamento de Aulas
-Permite aos professores criar módulos e adicionar conteúdo aos cursos.
+Permite aos professores criar módulos, adicionar conteúdo (Vídeo/Texto) e Material de Apoio.
 """
 
 import streamlit as st
@@ -10,48 +10,81 @@ from typing import Dict
 # Importa a engine para operações de banco de dados
 import courses_engine as ce
 
+# --- 1. CONFIGURAÇÃO DE CORES (Igual ao app.py e cursos.py) ---
+try:
+    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+except ImportError:
+    COR_FUNDO = "#0e2d26"
+    COR_TEXTO = "#FFFFFF"
+    COR_DESTAQUE = "#FFD770"
+    COR_BOTAO = "#078B6C" # Verde BJJ Digital
+    COR_HOVER = "#FFD770"
+
 def aplicar_estilos_aulas():
-    """CSS específico para o gerenciador de aulas"""
-    st.markdown("""
+    """CSS específico para o gerenciador de aulas (Atualizado com cores do tema)"""
+    st.markdown(f"""
     <style>
     /* Estilo para os Módulos (Expanders) */
-    .streamlit-expanderHeader {
-        background-color: rgba(14, 45, 38, 0.5);
-        border: 1px solid rgba(255, 215, 112, 0.1);
-        border-radius: 8px;
-        color: #FFD770;
-        font-weight: 600;
-    }
+    .streamlit-expanderHeader {{
+        background-color: rgba(14, 45, 38, 0.5) !important;
+        border: 1px solid rgba(255, 215, 112, 0.1) !important;
+        border-radius: 8px !important;
+        color: {COR_DESTAQUE} !important;
+        font-weight: 600 !important;
+    }}
     
     /* Card de Aula dentro do Módulo */
-    .aula-card-admin {
+    .aula-card-admin {{
         background: rgba(255, 255, 255, 0.02);
-        border-left: 3px solid #078B6C;
+        border-left: 3px solid {COR_BOTAO};
         padding: 1rem;
         margin-bottom: 0.5rem;
         border-radius: 0 8px 8px 0;
         display: flex;
         align-items: center;
-        justify_content: space-between;
-    }
+        justify-content: space-between;
+    }}
     
-    .tipo-badge {
+    .tipo-badge {{
         font-size: 0.7rem;
         padding: 0.2rem 0.5rem;
         border-radius: 4px;
         background: rgba(255,255,255,0.1);
         margin-right: 0.5rem;
         text-transform: uppercase;
-    }
+        color: #ddd;
+    }}
     
-    /* Formulário de Adição */
-    .add-box {
-        background: rgba(7, 139, 108, 0.05);
-        border: 1px dashed rgba(7, 139, 108, 0.3);
-        border-radius: 12px;
-        padding: 1.5rem;
-        margin-top: 1rem;
-    }
+    /* Botões Primários (Salvar/Criar) - VERDES */
+    .stButton>button[kind="primary"] {{
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important;
+        color: white !important;
+        border: none !important;
+    }}
+    .stButton>button[kind="primary"]:hover {{
+        background: {COR_HOVER} !important;
+        color: #0e2d26 !important;
+        transform: translateY(-2px);
+    }}
+
+    /* Botões Secundários (Voltar) */
+    .stButton>button[kind="secondary"] {{
+        border: 1px solid {COR_DESTAQUE} !important;
+        color: {COR_DESTAQUE} !important;
+        background: transparent !important;
+    }}
+    .stButton>button[kind="secondary"]:hover {{
+        background: {COR_DESTAQUE} !important;
+        color: #0e2d26 !important;
+    }}
+
+    /* Upload Box customizada */
+    div[data-testid="stFileUploader"] {{
+        padding: 1rem;
+        border: 1px dashed rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        background: rgba(0,0,0,0.2);
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -64,7 +97,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
     # Header
     col_voltar, col_titulo = st.columns([1, 5])
     with col_voltar:
-        if st.button("← Voltar", use_container_width=True):
+        if st.button("← Voltar", use_container_width=True, type="secondary"):
             # Retorna para a tela de detalhes no cursos.py
             st.session_state['cursos_view'] = 'detalhe'
             st.rerun()
@@ -122,16 +155,21 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
             # --- LISTA DE AULAS EXISTENTES ---
             if modulo['aulas']:
                 for aula in modulo['aulas']:
-                    icone = "🎥" if aula['tipo'] == 'video' else "📝" if aula['tipo'] == 'texto' else "❓"
+                    tipo = aula.get('tipo', 'geral')
+                    icone = "🎥" if tipo == 'video' else "📝" if tipo == 'texto' else "❓"
+                    
+                    # Verifica se tem material de apoio
+                    tem_pdf = "📎 PDF" if aula.get('conteudo', {}).get('material_apoio') else ""
                     
                     st.markdown(f"""
                     <div class="aula-card-admin">
                         <div>
-                            <span class="tipo-badge">{aula['tipo']}</span>
+                            <span class="tipo-badge">{tipo}</span>
                             <strong>{icone} {aula['titulo']}</strong>
                         </div>
-                        <div style="font-size: 0.8rem; opacity: 0.7;">
-                            {aula.get('duracao_min', 0)} min
+                        <div style="font-size: 0.8rem; opacity: 0.7; text-align: right;">
+                            {aula.get('duracao_min', 0)} min <br>
+                            <span style="color: {COR_DESTAQUE}; font-size: 0.7rem;">{tem_pdf}</span>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
@@ -152,10 +190,22 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                     
                     conteudo = {}
                     
+                    # === LÓGICA DE VÍDEO (LINK OU UPLOAD) ===
                     if tipo_aula == "video":
-                        url_video = st.text_input("Link do Vídeo (YouTube/Vimeo)", placeholder="https://...", key=f"v_aula_{modulo['id']}")
-                        conteudo["url"] = url_video
-                        st.caption("ℹ️ O sistema irá incorporar o vídeo automaticamente.")
+                        fonte_video = st.radio("Fonte do Vídeo", ["Link Externo (YouTube/Vimeo)", "Upload de Arquivo"], horizontal=True, key=f"font_v_{modulo['id']}")
+                        
+                        if fonte_video == "Link Externo (YouTube/Vimeo)":
+                            url_video = st.text_input("Cole o Link aqui", placeholder="https://...", key=f"v_aula_{modulo['id']}")
+                            conteudo["url"] = url_video
+                            conteudo["tipo_video"] = "link"
+                        else:
+                            arquivo_video = st.file_uploader("Carregar Vídeo (MP4, MOV)", type=["mp4", "mov", "avi"], key=f"up_v_{modulo['id']}")
+                            if arquivo_video:
+                                # Nota: O engine precisará tratar o upload para storage
+                                conteudo["arquivo_video"] = arquivo_video 
+                                conteudo["tipo_video"] = "upload"
+                                conteudo["nome_arquivo_video"] = arquivo_video.name
+                                st.success(f"Vídeo '{arquivo_video.name}' selecionado.")
                         
                     elif tipo_aula == "texto":
                         texto_conteudo = st.text_area("Conteúdo da Aula (Markdown suportado)", height=200, key=f"txt_aula_{modulo['id']}")
@@ -163,24 +213,45 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                         
                     elif tipo_aula == "quiz":
                         pergunta = st.text_input("Pergunta", key=f"q_perg_{modulo['id']}")
-                        opcoes = st.text_area("Opções (uma por linha)", placeholder="Opção A\nOpção B\nOpção C", key=f"q_ops_{modulo['id']}")
+                        opcoes_txt = st.text_area("Opções (uma por linha)", placeholder="Opção A\nOpção B\nOpção C", key=f"q_ops_{modulo['id']}")
                         correta = st.selectbox("Opção Correta (Índice 1-N)", range(1, 6), key=f"q_corr_{modulo['id']}")
+                        
+                        lista_opcoes = opcoes_txt.split('\n') if opcoes_txt else []
                         conteudo = {
                             "pergunta": pergunta,
-                            "opcoes": options.split('\n') if 'options' in locals() else [], # Placeholder logic
+                            "opcoes": lista_opcoes,
                             "correta": correta
                         }
-                        if opcoes:
-                            conteudo["opcoes"] = opcoes.split('\n')
+
+                    # === MATERIAL DE APOIO (PDF) ===
+                    st.markdown("---")
+                    st.markdown("**📎 Material de Apoio (Opcional)**")
+                    pdf_apoio = st.file_uploader("Adicionar PDF", type=["pdf"], key=f"pdf_{modulo['id']}")
+                    if pdf_apoio:
+                         # Nota: O engine precisará tratar o upload
+                         conteudo["material_apoio"] = pdf_apoio
+                         conteudo["nome_arquivo_pdf"] = pdf_apoio.name
+                         st.info(f"PDF '{pdf_apoio.name}' anexado.")
+
+                    st.markdown("<br>", unsafe_allow_html=True)
 
                     # Botão Salvar Aula
                     if st.button(f"💾 Salvar Aula em '{modulo['titulo']}'", key=f"btn_save_aula_{modulo['id']}", type="primary"):
+                        
+                        # Validações Básicas
+                        erro = None
                         if not titulo_aula:
-                            st.error("O título da aula é obrigatório.")
-                        elif tipo_aula == "video" and not conteudo.get("url"):
-                            st.error("O link do vídeo é obrigatório.")
+                            erro = "O título da aula é obrigatório."
+                        elif tipo_aula == "video":
+                             if conteudo.get("tipo_video") == "link" and not conteudo.get("url"):
+                                 erro = "O link do vídeo é obrigatório."
+                             elif conteudo.get("tipo_video") == "upload" and not conteudo.get("arquivo_video"):
+                                 erro = "Você selecionou upload mas não carregou nenhum vídeo."
                         elif tipo_aula == "texto" and not conteudo.get("texto"):
-                            st.error("O conteúdo de texto é obrigatório.")
+                            erro = "O conteúdo de texto é obrigatório."
+
+                        if erro:
+                            st.error(erro)
                         else:
                             try:
                                 ce.criar_aula(
@@ -196,6 +267,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                             except Exception as e:
                                 st.error(f"Erro ao salvar aula: {e}")
 
-# Função de entrada padrão (caso seja chamado diretamente, embora cursos.py controle)
+# Função de entrada padrão
 def pagina_aulas(usuario: dict):
     st.warning("Este módulo deve ser acessado através do Gerenciador de Cursos.")
