@@ -27,9 +27,10 @@ from courses_engine import (
     inscrever_usuario_em_curso,
     obter_inscricao,
     listar_modulos_e_aulas,
-    verificar_aula_concluida,    # Adicionado para evitar erro na função wrapper
-    marcar_aula_concluida,       # Adicionado para evitar erro na função wrapper
-    editar_curso                 # Adicionado para garantir funcionamento da edição
+    verificar_aula_concluida,    
+    marcar_aula_concluida,       
+    editar_curso,
+    excluir_curso # <--- ADICIONADO AQUI
 )
 
 # --- 1. CONFIGURAÇÃO DE CORES IGUAL AO APP.PY ---
@@ -293,6 +294,13 @@ def aplicar_estilos_cursos():
         color: #0e2d26 !important;
         transform: translateY(-2px);
     }}
+    
+    /* Botão de Excluir (Customizado) */
+    .stButton>button[key^="btn_delete_final"]:hover {
+        border-color: #ff4b4b !important;
+        color: #ff4b4b !important;
+        background: rgba(255, 75, 75, 0.1) !important;
+    }
     
     /* HEADER MODERNO */
     .curso-header {{
@@ -819,6 +827,31 @@ def _pagina_edicao_curso(curso_original: dict, usuario: dict):
                         st.error("❌ Erro desconhecido ao salvar. Tente novamente.")
                 except Exception as e:
                     st.error(f"❌ Erro ao salvar curso: {e}")
+
+    # ==========================
+    # ZONA DE PERIGO (EXCLUSÃO)
+    # ==========================
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("### 🗑️ Zona de Perigo")
+    st.warning("Ações aqui não podem ser desfeitas.")
+    
+    with st.expander("Excluir este curso"):
+        st.markdown(f"Tem certeza que deseja excluir o curso **{curso_original.get('titulo')}**? Todas as aulas e inscrições serão perdidas.")
+        
+        col_del_check, col_del_btn = st.columns([3, 1])
+        with col_del_check:
+            confirmacao = st.checkbox("Sim, quero excluir permanentemente.", key=f"del_confirm_{curso_original['id']}")
+        
+        with col_del_btn:
+            if st.button("🗑️ Excluir Curso", type="secondary", disabled=not confirmacao, key=f"btn_delete_final_{curso_original['id']}"):
+                try:
+                    # Tenta excluir usando a engine
+                    ce.excluir_curso(curso_original['id'])
+                    st.success("Curso removido com sucesso!")
+                    time.sleep(1)
+                    navegar_para('lista')
+                except Exception as e:
+                    st.error(f"Erro ao excluir: {e}")
 
 
 # ======================================================
