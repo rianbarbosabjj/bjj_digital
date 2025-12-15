@@ -366,18 +366,7 @@ def pagina_cursos(usuario: dict):
         st.session_state['cursos_view'] = 'lista'
     if 'curso_selecionado' not in st.session_state:
         st.session_state['curso_selecionado'] = None
-
-    # Header moderno
-    st.markdown(f"""
-    <div class="curso-header">
-        <h1 style="margin-bottom: 0.5rem; text-align: center;">🎓 BJJ DIGITAL CURSOS</h1>
-        <p style="text-align: center; opacity: 0.8; margin: 0;">
-            Bem-vindo(a), <strong style="color: {COR_DESTAQUE};">{usuario.get('nome','Usuário').split()[0]}</strong> • 
-            {usuario.get('tipo', 'aluno').capitalize()}
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
+  
     # Botão de voltar
     if st.session_state.get('cursos_view') != 'lista':
         # Botão para voltar da sub-tela para a lista principal
