@@ -235,20 +235,13 @@ def aplicar_estilos_cursos():
         border: 1px solid rgba(255, 215, 112, 0.1);
     }}
 
-    /* --- BOTÕES IDÊNTICOS AO APP.PY --- */
-    /* Botões Primários (Ação Principal) - Agora VERDES */
-    .stButton>button[data-testid="stFormSubmitButton"], 
-    .stButton>button[kind="primary"],
-    .stButton>button[key^="enroll_"],
-    .stButton>button[key^="cont_"],
-    .stButton>button[key^="btn_det_add_aulas"],
-    .stButton>button[key^="btn_dl_pdf"] {{
-        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important;
-        color: white !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
-        padding: 0.6em 1.5em !important;
+    div.stButton > button, div.stFormSubmitButton > button {{ 
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
+        color: white !important; 
+        border: 1px solid rgba(255,255,255,0.1) !important; 
+        padding: 0.6em 1.5em !important; 
         font-weight: 600 !important;
-        border-radius: 8px !important;
+        border-radius: 8px !important; 
         transition: all 0.3s ease !important;
     }}
     
