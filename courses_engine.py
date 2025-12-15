@@ -476,36 +476,56 @@ def verificar_aula_concluida(user_id: str, lesson_id: str) -> bool:
 def excluir_curso(curso_id: str) -> bool:
     """
     Exclui um curso e todos os seus dados associados (módulos, aulas, inscrições).
+    Retorna True se conseguir excluir o documento principal do curso.
     """
     db = get_db()
     if not db:
+        print("Erro: Sem conexão com banco de dados.")
         return False
 
     try:
-        # 1. Excluir todas as aulas dos módulos deste curso
-        # Primeiro buscamos os módulos
+        print(f"--- Iniciando exclusão do curso ID: {curso_id} ---")
+
+        # 1. Excluir Aulas e Módulos
+        # Buscamos módulos vinculados a este curso
         modulos_ref = db.collection('modulos').where('curso_id', '==', curso_id).stream()
+        
         for mod in modulos_ref:
+            mod_id = mod.id
+            print(f"Excluindo módulo: {mod_id}")
+            
             # Para cada módulo, buscamos e deletamos as aulas
-            aulas_ref = db.collection('aulas').where('modulo_id', '==', mod.id).stream()
+            # Tenta buscar por 'modulo_id' (padrão)
+            aulas_ref = db.collection('aulas').where('modulo_id', '==', mod_id).stream()
             for aula in aulas_ref:
+                print(f" -> Excluindo aula: {aula.id}")
                 db.collection('aulas').document(aula.id).delete()
             
-            # Deleta o módulo
-            db.collection('modulos').document(mod.id).delete()
+            # Tenta buscar por 'module_id' (caso tenha sido salvo em inglês)
+            aulas_ref_en = db.collection('aulas').where('module_id', '==', mod_id).stream()
+            for aula in aulas_ref_en:
+                print(f" -> Excluindo aula (en): {aula.id}")
+                db.collection('aulas').document(aula.id).delete()
 
-        # 2. Excluir inscrições associadas a este curso
+            # Deleta o módulo
+            db.collection('modulos').document(mod_id).delete()
+
+        # 2. Excluir Inscrições
+        print("Buscando inscrições...")
         inscricoes_ref = db.collection('inscricoes').where('curso_id', '==', curso_id).stream()
         for insc in inscricoes_ref:
+            print(f" -> Excluindo inscrição: {insc.id}")
             db.collection('inscricoes').document(insc.id).delete()
 
         # 3. Finalmente, excluir o curso
+        print("Excluindo documento do curso...")
         db.collection('cursos').document(curso_id).delete()
         
+        print("--- Exclusão concluída com sucesso ---")
         return True
+
     except Exception as e:
-        print(f"Erro ao excluir curso: {e}")
-        return False    
-    concluida_id = f"{user_id}__{lesson_id}"
-    ref = db.collection("lesson_completions").document(concluida_id)
-    return ref.get().exists
+        print(f"❌ ERRO CRÍTICO ao excluir curso: {e}")
+        import traceback
+        traceback.print_exc() # Imprime o erro detalhado no terminal
+        return False
