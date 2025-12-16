@@ -1,6 +1,6 @@
 """
 BJJ Digital - Sistema de Cursos (Versão Modernizada & Visual Premium)
-Integração com utils.py, Uploads, Editores (Busca), Design Rico e Detalhes do Professor/Equipe.
+Integração com utils.py, Uploads, Editores, Detalhes Prof/Equipe e Cálculo Líquido.
 """
 
 import streamlit as st
@@ -318,7 +318,14 @@ def _pagina_criar_curso(usuario):
             if st.button("🚀 Criar Curso", key="btn_create_course", use_container_width=True, type="primary"):
                 if not titulo or not desc: st.error("Preencha título e descrição.")
                 else:
-                    ce.criar_curso(usuario['id'], usuario.get('nome',''), titulo, desc, mod, pub, eq, pago, preco if pago else 0.0, split, cert, dur, niv, editores_selecionados)
+                    # Envia a equipe do professor
+                    ce.criar_curso(
+                        usuario['id'], 
+                        usuario.get('nome',''), 
+                        usuario.get('equipe', 'Sem Equipe'),
+                        titulo, desc, mod, pub, eq, 
+                        pago, preco if pago else 0.0, split, cert, dur, niv, editores_selecionados
+                    )
                     st.success("Criado!"); time.sleep(1); navegar_para('lista')
 
 # --- EDIÇÃO DE CURSO ---
@@ -376,7 +383,7 @@ def _pagina_edicao_curso(curso, usuario):
                     st.success("Excluído!"); time.sleep(1); st.session_state['curso_selecionado']=None; navegar_para('lista')
                 else: st.error("Erro ao excluir.")
 
-# --- LISTAGEM PROFESSOR (COM NOME/EQUIPE) ---
+# --- LISTAGEM PROFESSOR (COM PREÇO + EQUIPE) ---
 def _professor_listar_cursos(usuario):
     cursos = ce.listar_cursos_do_professor(usuario['id'])
     if not cursos:
@@ -393,13 +400,21 @@ def _professor_listar_cursos(usuario):
             if pago: icon = "💎" if ativo else "💸"
             role = f"<span class='curso-badge blue'>✏️ Editor</span>" if c.get('papel') == 'Editor' else ""
             
-            # Preço e Info Extra
-            txt_preco = f"💰 R$ {c.get('preco', 0):.2f}" if pago else "🆓 Grátis"
-            cor_preco = "gold" if pago else "green"
+            # Cálculo Líquido
+            if pago:
+                preco_bruto = c.get('preco', 0.0)
+                split = c.get('split_custom', 10)
+                liquido = preco_bruto * (1 - (split / 100))
+                txt_preco = f"💰 R$ {preco_bruto:.2f} • Liq: R$ {liquido:.2f}"
+                cor_preco = "gold"
+            else:
+                txt_preco = "🆓 Grátis"
+                cor_preco = "green"
             
-            prof = c.get('professor_nome', 'Professor').strip()
-            equipe = c.get('equipe_destino')
-            txt_equipe = f" | 🛡️ {equipe}" if equipe else ""
+            # Info Extra (Professor e Equipe)
+            prof = c.get('professor_nome', 'Professor').strip().split()[0]
+            equipe_prof = c.get('professor_equipe', '') 
+            txt_equipe = f" | 🛡️ {equipe_prof}" if equipe_prof else ""
             info_extra = f"<div style='font-size:0.8rem; opacity:0.6; margin-bottom:0.5rem;'>👨‍🏫 {prof}{txt_equipe}</div>"
             
             badges_html = f"""
@@ -439,7 +454,6 @@ def _exibir_detalhes_curso(curso, usuario):
     st.markdown("### Sobre este curso")
     st.write(curso.get('descricao'))
     
-    # Detalhes bonitos
     html_det = f"""
     <div class="detalhes-grid">
         <div class="detalhe-card"><div class="detalhe-icon">🥋</div><div class="detalhe-info"><span class="detalhe-label">Nível</span><span class="detalhe-value">{curso.get('nivel','Geral')}</span></div></div>
@@ -477,7 +491,6 @@ def _pagina_aulas(curso, usuario):
                 for a in m['aulas']:
                     concluida = ce.verificar_aula_concluida(usuario['id'], a['id'])
                     icon = "✅" if concluida else "⚪"
-                    # Highlight aula atual
                     label = a['titulo']
                     if aula and a['id'] == aula['id']: label = f"**▶️ {label}**"
                     if st.button(f"{icon} {a['titulo']}", key=f"nav_{a['id']}", use_container_width=True):
@@ -530,16 +543,16 @@ def _aluno_cursos_disponiveis(usuario):
     cols = st.columns(3)
     for i, c in enumerate(cursos):
         with cols[i%3]:
-            # Lógica do Preço
+            # Lógica Preço
             pago = c.get('pago', False)
             txt_preco = f"💰 R$ {c.get('preco', 0):.2f}" if pago else "🆓 Grátis"
             cor_preco = "gold" if pago else "green"
             icon = "💎" if pago else "🎓"
             
-            # Info Extra (Prof + Equipe)
-            prof = c.get('professor_nome', 'Professor').strip().split()[0] # Só primeiro nome
-            equipe = c.get('equipe_destino')
-            txt_equipe = f" | 🛡️ {equipe}" if equipe else ""
+            # Info Extra (Professor e Equipe)
+            prof = c.get('professor_nome', 'Professor').strip().split()[0]
+            equipe_prof = c.get('professor_equipe', '') 
+            txt_equipe = f" | 🛡️ {equipe_prof}" if equipe_prof else ""
             info_extra = f"<div style='font-size:0.8rem; opacity:0.6; margin-bottom:0.5rem;'>👨‍🏫 {prof}{txt_equipe}</div>"
             
             st.markdown(f"""
