@@ -1,6 +1,6 @@
 """
 BJJ Digital - Sistema de Cursos (Versão Modernizada & Visual Premium)
-Integração com utils.py, Uploads, Editores, Detalhes Prof/Equipe e Cálculo Líquido.
+Integração com utils.py, Uploads, Editores, Detalhes Prof/Equipe e Design Rico.
 """
 
 import streamlit as st
@@ -48,7 +48,7 @@ def aplicar_estilos_cursos():
     <style>
     /* CARDS DE CURSO MODERNOS */
     .curso-card-moderno {{
-        background: linear-gradient(145deg, rgba(14, 45, 38, 0.9) 0%, rgba(9, 31, 26, 0.95) 100%);
+        background: linear-gradient(145deg, rgba(14, 45, 38, 0.95) 0%, rgba(9, 31, 26, 0.98) 100%);
         border: 1px solid rgba(255, 215, 112, 0.15);
         border-radius: 20px;
         padding: 1.5rem;
@@ -58,6 +58,7 @@ def aplicar_estilos_cursos():
         flex-direction: column;
         position: relative;
         overflow: hidden;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }}
     
     .curso-card-moderno::before {{
@@ -74,24 +75,20 @@ def aplicar_estilos_cursos():
     }}
     
     .curso-icon {{
-        font-size: 2.5rem; margin-bottom: 1rem; text-align: center;
-        background: linear-gradient(135deg, {COR_BOTAO} 0%, {COR_DESTAQUE} 100%);
-        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        font-size: 3rem; margin-bottom: 1rem; text-align: center;
+        text-shadow: 0 0 20px rgba(255, 215, 112, 0.3);
     }}
     
     /* BADGES */
-    .curso-badges {{ display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; }}
+    .curso-badges {{ display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; justify-content: center; }}
     .curso-badge {{
         padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
-        background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2);
+        background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(5px);
     }}
-    .curso-badge.gold {{ background: rgba(255, 215, 112, 0.15); border-color: rgba(255, 215, 112, 0.3); color: {COR_DESTAQUE}; }}
-    .curso-badge.green {{ background: rgba(7, 139, 108, 0.15); border-color: rgba(7, 139, 108, 0.3); color: {COR_BOTAO}; }}
-    .curso-badge.blue {{ background: rgba(59, 130, 246, 0.15); border-color: rgba(59, 130, 246, 0.3); color: #60A5FA; }}
-    
-    /* PROGRESSO */
-    .curso-progress {{ background: rgba(255, 255, 255, 0.05); border-radius: 10px; height: 10px; overflow: hidden; margin: 0.75rem 0; }}
-    .curso-progress-fill {{ height: 100%; background: linear-gradient(90deg, {COR_BOTAO} 0%, {COR_DESTAQUE} 100%); border-radius: 10px; }}
+    .curso-badge.gold {{ background: rgba(255, 215, 112, 0.15); border-color: {COR_DESTAQUE}; color: {COR_DESTAQUE}; }}
+    .curso-badge.green {{ background: rgba(7, 139, 108, 0.15); border-color: {COR_BOTAO}; color: #4ADE80; }}
+    .curso-badge.blue {{ background: rgba(59, 130, 246, 0.15); border-color: #3B82F6; color: #60A5FA; }}
     
     /* DETALHES */
     .detalhes-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0 2rem 0; }}
@@ -100,10 +97,10 @@ def aplicar_estilos_cursos():
         border: 1px solid rgba(255, 215, 112, 0.15); border-radius: 16px; padding: 1.2rem;
         display: flex; align-items: center; backdrop-filter: blur(10px); transition: transform 0.3s ease;
     }}
-    .detalhe-card:hover {{ border-color: rgba(255, 215, 112, 0.4); transform: translateY(-3px); }}
-    .detalhe-icon {{ font-size: 2.2rem; margin-right: 1rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3)); }}
+    .detalhe-card:hover {{ border-color: {COR_DESTAQUE}; transform: translateY(-3px); }}
+    .detalhe-icon {{ font-size: 2.2rem; margin-right: 1rem; }}
     .detalhe-info {{ display: flex; flex-direction: column; }}
-    .detalhe-label {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; margin-bottom: 0.2rem; }}
+    .detalhe-label {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }}
     .detalhe-value {{ font-size: 1.1rem; font-weight: 700; color: white; }}
 
     /* MATERIAL APOIO */
@@ -129,14 +126,15 @@ def aplicar_estilos_cursos():
 
     /* HEADER */
     .curso-header {{
-        background: linear-gradient(135deg, rgba(14, 45, 38, 0.8) 0%, rgba(9, 31, 26, 0.9) 100%);
-        border-bottom: 1px solid rgba(255, 215, 112, 0.2); padding: 1.5rem; border-radius: 0 0 20px 20px; margin-bottom: 2rem;
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.95) 0%, rgba(9, 31, 26, 0.98) 100%);
+        border-bottom: 1px solid {COR_DESTAQUE}; padding: 2rem; border-radius: 0 0 30px 30px; margin-bottom: 2rem;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
     }}
     
     /* STATS */
     .stats-card-moderno {{ background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 1.5rem; text-align: center; }}
-    .stats-value-moderno {{ font-size: 2.5rem; font-weight: 700; color: {COR_DESTAQUE}; margin: 0.5rem 0; }}
-    .stats-label-moderno {{ color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; }}
+    .stats-value-moderno {{ font-size: 2.5rem; font-weight: 700; background: linear-gradient(45deg, {COR_DESTAQUE}, #fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0.5rem 0; }}
+    .stats-label-moderno {{ color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; }}
     
     /* EMPTY STATE */
     .empty-state {{ text-align: center; padding: 4rem 2rem; border-radius: 20px; background: rgba(255,255,255,0.02); border: 2px dashed rgba(255,215,112,0.2); }}
@@ -227,8 +225,8 @@ def pagina_cursos(usuario: dict):
         
     st.markdown(f"""
     <div class="curso-header">
-        <h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">🎓 BJJ DIGITAL CURSOS</h1>
-        <p style="text-align:center; opacity:0.8;">Bem-vindo(a), <strong>{usuario.get('nome','').split()[0]}</strong></p>
+        <h1 style="margin:0; text-align:center; color:{COR_DESTAQUE}; letter-spacing: 2px;">🎓 BJJ DIGITAL CURSOS</h1>
+        <p style="text-align:center; opacity:0.8; margin-top: 10px;">Bem-vindo(a), <strong style="color: {COR_DESTAQUE}">{usuario.get('nome','').split()[0]}</strong></p>
     </div>""", unsafe_allow_html=True)
     
     if st.session_state.get('cursos_view') != 'lista':
@@ -383,11 +381,11 @@ def _pagina_edicao_curso(curso, usuario):
                     st.success("Excluído!"); time.sleep(1); st.session_state['curso_selecionado']=None; navegar_para('lista')
                 else: st.error("Erro ao excluir.")
 
-# --- LISTAGEM PROFESSOR (COM PREÇO + EQUIPE) ---
+# --- LISTAGEM PROFESSOR (COM NOME/EQUIPE/ICONES) ---
 def _professor_listar_cursos(usuario):
     cursos = ce.listar_cursos_do_professor(usuario['id'])
     if not cursos:
-        st.markdown("""<div class="empty-state"><h3 style="color:#FFD770;">Nenhum Curso Criado</h3></div>""", unsafe_allow_html=True)
+        st.markdown("""<div class="empty-state"><div class="empty-state-icon">📭</div><h3 style="color:#FFD770;">Nenhum Curso Criado</h3></div>""", unsafe_allow_html=True)
         return
         
     cols = st.columns(3)
@@ -400,22 +398,18 @@ def _professor_listar_cursos(usuario):
             if pago: icon = "💎" if ativo else "💸"
             role = f"<span class='curso-badge blue'>✏️ Editor</span>" if c.get('papel') == 'Editor' else ""
             
-            # Cálculo Líquido
-            if pago:
-                preco_bruto = c.get('preco', 0.0)
-                split = c.get('split_custom', 10)
-                liquido = preco_bruto * (1 - (split / 100))
-                txt_preco = f"💰 R$ {preco_bruto:.2f} • Liq: R$ {liquido:.2f}"
-                cor_preco = "gold"
-            else:
-                txt_preco = "🆓 Grátis"
-                cor_preco = "green"
+            # Preço e Info Extra (Com Equipe do Professor)
+            txt_preco = f"💰 R$ {c.get('preco', 0):.2f}" if pago else "🆓 Grátis"
+            cor_preco = "gold" if pago else "green"
+            if pago: # Liquido
+                liq = c.get('preco',0) * (1 - c.get('split_custom',10)/100)
+                txt_preco += f" • Liq: {liq:.2f}"
             
-            # Info Extra (Professor e Equipe)
             prof = c.get('professor_nome', 'Professor').strip().split()[0]
             equipe_prof = c.get('professor_equipe', '') 
             txt_equipe = f" | 🛡️ {equipe_prof}" if equipe_prof else ""
-            info_extra = f"<div style='font-size:0.8rem; opacity:0.6; margin-bottom:0.5rem;'>👨‍🏫 {prof}{txt_equipe}</div>"
+            
+            info_extra = f"<div style='font-size:0.8rem; opacity:0.7; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:5px;'>👨‍🏫 {prof}{txt_equipe}</div>"
             
             badges_html = f"""
             <div class="curso-badges">
@@ -427,11 +421,13 @@ def _professor_listar_cursos(usuario):
             
             st.markdown(f"""
             <div class="curso-card-moderno">
-                <div style="text-align:right;">{role}</div>
-                <div class="curso-icon">{icon}</div>
-                <h4 style="margin:0 0 0.5rem 0;">{c.get('titulo')}</h4>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="curso-icon" style="margin:0;">{icon}</div>
+                    {role}
+                </div>
+                <h3 style="margin:0.5rem 0; font-size: 1.2rem; color: #fff;">{c.get('titulo')}</h3>
                 {info_extra}
-                <p style="opacity:0.7; font-size:0.9em; flex-grow:1;">{c.get('descricao','')[:80]}...</p>
+                <p style="opacity:0.7; font-size:0.85em; flex-grow:1; line-height: 1.4;">{c.get('descricao','')[:80]}...</p>
                 {badges_html}
             </div>""", unsafe_allow_html=True)
             
@@ -443,7 +439,7 @@ def _professor_listar_cursos(usuario):
 
 # --- DETALHES ---
 def _exibir_detalhes_curso(curso, usuario):
-    st.title(curso.get('titulo'))
+    st.title(f"🥋 {curso.get('titulo')}")
     can_edit = (usuario['id'] == curso.get('professor_id')) or (usuario['id'] in curso.get('editores_ids', [])) or (usuario.get('tipo') == 'admin')
     
     if can_edit:
@@ -454,11 +450,13 @@ def _exibir_detalhes_curso(curso, usuario):
     st.markdown("### Sobre este curso")
     st.write(curso.get('descricao'))
     
+    # Detalhes bonitos
     html_det = f"""
     <div class="detalhes-grid">
         <div class="detalhe-card"><div class="detalhe-icon">🥋</div><div class="detalhe-info"><span class="detalhe-label">Nível</span><span class="detalhe-value">{curso.get('nivel','Geral')}</span></div></div>
         <div class="detalhe-card"><div class="detalhe-icon">⏳</div><div class="detalhe-info"><span class="detalhe-label">Duração</span><span class="detalhe-value">{curso.get('duracao_estimada','-')}</span></div></div>
         <div class="detalhe-card"><div class="detalhe-icon">📜</div><div class="detalhe-info"><span class="detalhe-label">Certificado</span><span class="detalhe-value">{'Sim' if curso.get('certificado_automatico') else 'Não'}</span></div></div>
+        <div class="detalhe-card"><div class="detalhe-icon">👨‍🏫</div><div class="detalhe-info"><span class="detalhe-label">Professor</span><span class="detalhe-value">{curso.get('professor_nome','-').split()[0]}</span></div></div>
     </div>
     """
     st.markdown(html_det, unsafe_allow_html=True)
@@ -491,6 +489,7 @@ def _pagina_aulas(curso, usuario):
                 for a in m['aulas']:
                     concluida = ce.verificar_aula_concluida(usuario['id'], a['id'])
                     icon = "✅" if concluida else "⚪"
+                    # Highlight aula atual
                     label = a['titulo']
                     if aula and a['id'] == aula['id']: label = f"**▶️ {label}**"
                     if st.button(f"{icon} {a['titulo']}", key=f"nav_{a['id']}", use_container_width=True):
@@ -543,7 +542,7 @@ def _aluno_cursos_disponiveis(usuario):
     cols = st.columns(3)
     for i, c in enumerate(cursos):
         with cols[i%3]:
-            # Lógica Preço
+            # Lógica do Preço
             pago = c.get('pago', False)
             txt_preco = f"💰 R$ {c.get('preco', 0):.2f}" if pago else "🆓 Grátis"
             cor_preco = "gold" if pago else "green"
