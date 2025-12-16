@@ -56,28 +56,6 @@ def aplicar_estilos_aulas():
         color: #ddd;
     }}
     
-    /* Botões Primários (Salvar/Criar) - VERDES */
-    .stButton>button[kind="primary"] {{
-        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important;
-        color: white !important;
-        border: none !important;
-    }}
-    .stButton>button[kind="primary"]:hover {{
-        background: {COR_HOVER} !important;
-        color: #0e2d26 !important;
-        transform: translateY(-2px);
-    }}
-
-    /* Botões Secundários (Voltar) */
-    .stButton>button[kind="secondary"] {{
-        border: 1px solid {COR_DESTAQUE} !important;
-        color: {COR_DESTAQUE} !important;
-        background: transparent !important;
-    }}
-    .stButton>button[kind="secondary"]:hover {{
-        background: {COR_DESTAQUE} !important;
-        color: #0e2d26 !important;
-    }}
 
     /* Upload Box customizada */
     div[data-testid="stFileUploader"] {{
