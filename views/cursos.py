@@ -112,7 +112,7 @@ def pagina_cursos(usuario: dict):
     aplicar_estilos_cursos()
     if 'cursos_view' not in st.session_state: st.session_state['cursos_view'] = 'lista'
         
-    st.markdown(f"""<div class="curso-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">🎓 BJJ DIGITAL CURSOS</h1><p style="text-align:center; opacity:0.8;">Bem-vindo(a), <strong>{usuario.get('nome','').split()[0]}</strong></p></div>""", unsafe_allow_html=True)
+    st.markdown(f"""<div class="curso-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">🎓 GERENCIE SEUS CURSOS</h1><p style="text-align:center; opacity:0.8;">
     
     if st.session_state.get('cursos_view') != 'lista':
         if st.button("← Voltar à Lista", key="btn_back_list"): navegar_para('lista')
