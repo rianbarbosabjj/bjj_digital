@@ -389,32 +389,27 @@ def listar_cursos_disponiveis_para_usuario(usuario):
 def listar_modulos_e_aulas(curso_id):
     db = get_db()
     try:
-        # MUDANÇA AQUI: Removi o .order_by('ordem')
-        # Também forcei str(curso_id) para garantir que o tipo bate com o que foi salvo
+        # ATENÇÃO: Sem .order_by aqui para não exigir índice agora
         modulos = db.collection('modulos').where('curso_id', '==', str(curso_id)).stream()
-        
         estrutura = []
         for m in modulos:
             mod_data = m.to_dict()
             mod_data['id'] = m.id
             
-            # Mesma coisa aqui nas aulas: se tiver order_by, pode dar erro sem índice
             aulas_ref = db.collection('aulas').where('modulo_id', '==', m.id).stream()
-            
             aulas = [{"id": a.id, **a.to_dict()} for a in aulas_ref]
             
-            # Ordenamos manualmente no Python para não precisar criar índice agora
-            aulas.sort(key=lambda x: x.get('titulo', '')) 
+            # Ordenação segura das aulas
+            aulas.sort(key=lambda x: x.get('titulo', '') or '') 
             
             mod_data['aulas'] = aulas
             estrutura.append(mod_data)
             
-        # Ordenação manual dos módulos pelo Python
-        estrutura.sort(key=lambda x: x.get('ordem', 0))
+        # Ordenação segura dos módulos
+        estrutura.sort(key=lambda x: int(x.get('ordem', 0) or 0))
         
         return estrutura
     except Exception as e:
-        # Dica: Sempre imprima o erro para ver no terminal do Streamlit
         print(f"Erro ao listar módulos: {e}")
         return []
 
