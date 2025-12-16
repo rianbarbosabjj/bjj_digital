@@ -93,13 +93,9 @@ def normalizar_link_video(url):
     if not url: return None
     try:
         if "shorts/" in url:
-            base = url.split("shorts/")[1]
-            video_id = base.split("?")[0]
-            return f"https://www.youtube.com/watch?v={video_id}"
+            return f"https://www.youtube.com/watch?v={url.split('shorts/')[1].split('?')[0]}"
         elif "youtu.be/" in url:
-            base = url.split("youtu.be/")[1]
-            video_id = base.split("?")[0]
-            return f"https://www.youtube.com/watch?v={video_id}"
+            return f"https://www.youtube.com/watch?v={url.split('youtu.be/')[1].split('?')[0]}"
         return url
     except: return url
 
@@ -258,7 +254,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
 
 # ==============================================================================
-# 6. GESTÃO DE EXAMES (AGORA INCLUÍDO!)
+# 6. GESTÃO DE EXAMES (CORRIGIDO: AGORA ESTÁ AQUI!)
 # ==============================================================================
 def verificar_elegibilidade_exame(dados_usuario):
     status = dados_usuario.get('status_exame', 'pendente')
