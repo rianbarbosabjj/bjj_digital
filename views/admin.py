@@ -263,7 +263,7 @@ def gestao_usuarios_tab():
 # GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes_tab():
-    st.markdown("<h1 style='color:#FFD700;'>📝 Banco de Questões</h1>", unsafe_allow_html=True)
+    st.markdown(f"""<div class="curso-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">📝 Banco de Questões</h1></p></div>""", unsafe_allow_html=True)
     db = get_db()
     user = st.session_state.usuario
     
@@ -574,7 +574,7 @@ def gestao_questoes_tab():
 # GESTÃO DE EXAMES
 # =========================================
 def gestao_exame_de_faixa_route():
-    st.markdown("<h1 style='color:#FFD700;'>⚙️ Montador de Exames</h1>", unsafe_allow_html=True)
+    st.markdown(f"""<div class="curso-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">📝 GERENCIADOR DE EXAMES</h1></p></div>""", unsafe_allow_html=True)
     db = get_db()
     tab1, tab2, tab3 = st.tabs(["📝 Criar/Editar Exames", "👁️ Visualizar Exames", "✅ Autorizar Exames"])
 
