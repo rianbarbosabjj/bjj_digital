@@ -254,7 +254,7 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
 
 # ==============================================================================
-# 6. GESTÃO DE EXAMES (CORRIGIDO: AGORA ESTÁ AQUI!)
+# 6. GESTÃO DE EXAMES
 # ==============================================================================
 def verificar_elegibilidade_exame(dados_usuario):
     status = dados_usuario.get('status_exame', 'pendente')
