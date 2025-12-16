@@ -397,8 +397,14 @@ def listar_modulos_e_aulas(curso_id):
     except: return []
 
 def criar_modulo(curso_id, titulo, descricao, ordem):
-    db = get_db()
-    db.collection('modulos').add({"curso_id": curso_id, "titulo": titulo, "descricao": descricao, "ordem": ordem, "criado_em": datetime.now()})
+    conn = sqlite3.connect('banco.db') # ou sua conexão
+    cursor = conn.cursor()
+    
+    query = "INSERT INTO modulos (curso_id, titulo, descricao, ordem) VALUES (?, ?, ?, ?)"
+    cursor.execute(query, (curso_id, titulo, descricao, ordem))
+    
+    conn.commit()  # <--- ESSE É O COMANDO QUE GRAVA DE VERDADE
+    conn.close()
 
 def criar_aula(module_id, titulo, tipo, conteudo, duracao_min):
     db = get_db()
