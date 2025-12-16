@@ -1,6 +1,5 @@
 """
-BJJ Digital - Sistema de Cursos (Versão Modernizada & Visual Premium)
-Integração com utils.py, Uploads, Editores, Detalhes Prof/Equipe e Design Rico.
+BJJ Digital - Sistema de Cursos (Versão Final e Corrigida)
 """
 
 import streamlit as st
@@ -11,11 +10,7 @@ from typing import Optional, Dict, List
 
 # Importações internas
 from database import get_db
-
-# Importa o módulo completo com alias para chamadas genéricas
 import utils as ce 
-
-# Importa a view de gerenciamento de aulas
 import views.aulas as aulas_view 
 
 # --- 1. CONFIGURAÇÃO DE CORES ---
@@ -40,180 +35,65 @@ def registrar_progresso_aula(user_id: str, curso_id: str, aula_id: str) -> int:
     return inscricao.get("progresso", 0) if inscricao else 0
 
 # ======================================================
-# ESTILOS E NAVEGAÇÃO
+# ESTILOS
 # ======================================================
 def aplicar_estilos_cursos():
-    """Aplica o CSS completo e bonito novamente."""
     st.markdown(f"""
     <style>
-    /* CARDS DE CURSO MODERNOS */
+    /* CARDS */
     .curso-card-moderno {{
         background: linear-gradient(145deg, rgba(14, 45, 38, 0.95) 0%, rgba(9, 31, 26, 0.98) 100%);
         border: 1px solid rgba(255, 215, 112, 0.15);
         border-radius: 20px;
         padding: 1.5rem;
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         height: 100%;
         display: flex;
         flex-direction: column;
         position: relative;
         overflow: hidden;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        transition: transform 0.3s;
     }}
-    
-    .curso-card-moderno::before {{
-        content: '';
-        position: absolute;
-        top: 0; left: 0; right: 0; height: 4px;
-        background: linear-gradient(90deg, {COR_BOTAO} 0%, {COR_DESTAQUE} 100%);
-    }}
-    
     .curso-card-moderno:hover {{
         border-color: {COR_DESTAQUE};
-        transform: translateY(-8px);
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }}
-    
     .curso-icon {{
-        font-size: 3rem; margin-bottom: 1rem; text-align: center;
-        text-shadow: 0 0 20px rgba(255, 215, 112, 0.3);
+        font-size: 2.5rem; text-align: center; margin-bottom: 1rem;
+        background: linear-gradient(135deg, {COR_BOTAO}, {COR_DESTAQUE});
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }}
     
+    /* INFO EXTRA */
+    .info-extra {{
+        font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.8rem;
+        border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;
+    }}
+
     /* BADGES */
-    .curso-badges {{ display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0; justify-content: center; }}
+    .curso-badges {{ display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: auto; }}
     .curso-badge {{
-        padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.75rem; font-weight: 600;
-        background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(5px);
+        padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: bold;
+        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
     }}
-    .curso-badge.gold {{ background: rgba(255, 215, 112, 0.15); border-color: {COR_DESTAQUE}; color: {COR_DESTAQUE}; }}
-    .curso-badge.green {{ background: rgba(7, 139, 108, 0.15); border-color: {COR_BOTAO}; color: #4ADE80; }}
-    .curso-badge.blue {{ background: rgba(59, 130, 246, 0.15); border-color: #3B82F6; color: #60A5FA; }}
+    .curso-badge.gold {{ color: {COR_DESTAQUE}; border-color: {COR_DESTAQUE}; }}
+    .curso-badge.green {{ color: #4ADE80; border-color: #4ADE80; }}
     
-    /* DETALHES */
-    .detalhes-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0 2rem 0; }}
-    .detalhe-card {{
-        background: linear-gradient(145deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%);
-        border: 1px solid rgba(255, 215, 112, 0.15); border-radius: 16px; padding: 1.2rem;
-        display: flex; align-items: center; backdrop-filter: blur(10px); transition: transform 0.3s ease;
-    }}
-    .detalhe-card:hover {{ border-color: {COR_DESTAQUE}; transform: translateY(-3px); }}
-    .detalhe-icon {{ font-size: 2.2rem; margin-right: 1rem; }}
-    .detalhe-info {{ display: flex; flex-direction: column; }}
-    .detalhe-label {{ font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.7; }}
-    .detalhe-value {{ font-size: 1.1rem; font-weight: 700; color: white; }}
-
-    /* MATERIAL APOIO */
-    .material-apoio-box {{
-        margin-top: 1.5rem; padding: 1rem;
-        background: rgba(255, 255, 255, 0.05); border-radius: 12px; border: 1px solid rgba(255, 215, 112, 0.1);
-    }}
-
-    /* BOTÕES CUSTOMIZADOS */
-    div.stButton > button, div.stFormSubmitButton > button {{ 
-        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
-        color: white !important; border: 1px solid rgba(255,255,255,0.1) !important; 
-        padding: 0.6em 1.5em !important; font-weight: 600 !important; border-radius: 8px !important; 
-        transition: all 0.3s ease !important;
-    }}
-    div.stButton > button:hover {{ 
-        background: {COR_HOVER} !important; color: #0e2d26 !important; 
-        transform: translateY(-2px); box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
-    }}
+    /* BOTÕES */
+    .stButton>button[kind="primary"] {{ background: linear-gradient(135deg, {COR_BOTAO}, #056853); color: white; border: none; }}
+    .stButton>button[kind="secondary"] {{ background: transparent; border: 1px solid {COR_DESTAQUE}; color: {COR_DESTAQUE}; }}
     
-    .stButton>button[kind="secondary"]:hover {{ background: {COR_DESTAQUE} !important; color: #0e2d26 !important; transform: translateY(-2px); }}
-    .stButton>button[key^="btn_delete_final"]:hover {{ border-color: #ff4b4b !important; color: #ff4b4b !important; background: rgba(255, 75, 75, 0.1) !important; }}
-
-    /* HEADER */
+    /* Header */
     .curso-header {{
-        background: linear-gradient(135deg, rgba(14, 45, 38, 0.95) 0%, rgba(9, 31, 26, 0.98) 100%);
-        border-bottom: 1px solid {COR_DESTAQUE}; padding: 2rem; border-radius: 0 0 30px 30px; margin-bottom: 2rem;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9), rgba(9, 31, 26, 0.95));
+        border-bottom: 1px solid {COR_DESTAQUE}; padding: 1.5rem; border-radius: 0 0 20px 20px; margin-bottom: 2rem;
     }}
-    
-    /* STATS */
-    .stats-card-moderno {{ background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 16px; padding: 1.5rem; text-align: center; }}
-    .stats-value-moderno {{ font-size: 2.5rem; font-weight: 700; background: linear-gradient(45deg, {COR_DESTAQUE}, #fff); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0.5rem 0; }}
-    .stats-label-moderno {{ color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; }}
-    
-    /* EMPTY STATE */
-    .empty-state {{ text-align: center; padding: 4rem 2rem; border-radius: 20px; background: rgba(255,255,255,0.02); border: 2px dashed rgba(255,215,112,0.2); }}
-    .empty-state-icon {{ font-size: 4rem; margin-bottom: 1rem; opacity: 0.5; }}
     </style>
     """, unsafe_allow_html=True)
 
 # ======================================================
-# COMPONENTE DE SELEÇÃO DE EDITORES
+# LÓGICA DE NAVEGAÇÃO
 # ======================================================
-def renderizar_seletor_editores(chave_unica, ids_iniciais=[]):
-    """Interface Busca -> Adiciona -> Lista para gerenciar editores."""
-    session_key = f"lista_editores_{chave_unica}"
-    if session_key not in st.session_state:
-        st.session_state[session_key] = ids_iniciais.copy()
-
-    st.markdown("###### 👥 Gerenciar Editores Colaboradores")
-    with st.container(border=True):
-        c_busca1, c_busca2 = st.columns([3, 1])
-        with c_busca1:
-            termo_busca = st.text_input("Buscar por Nome ou CPF", placeholder="Digite para buscar...", key=f"search_{chave_unica}")
-        with c_busca2:
-            st.write("") 
-            st.write("") 
-        
-        todos_users = ce.listar_todos_usuarios_para_selecao()
-        
-        opcoes_filtradas = []
-        if termo_busca:
-            termo = termo_busca.lower()
-            opcoes_filtradas = [
-                u for u in todos_users 
-                if termo in u['nome'].lower() or termo in str(u.get('cpf',''))
-            ]
-
-        if termo_busca and not opcoes_filtradas:
-            st.warning("Nenhum usuário encontrado.")
-        
-        c_sel1, c_sel2 = st.columns([3, 1])
-        with c_sel1:
-            usuario_selecionado = st.selectbox(
-                "Resultados da Busca",
-                options=opcoes_filtradas,
-                format_func=lambda x: f"{x['nome']} (CPF: {x.get('cpf','N/A')})",
-                key=f"select_{chave_unica}",
-                placeholder="Selecione um professor...",
-                index=None
-            )
-        with c_sel2:
-            st.write("")
-            st.write("")
-            if st.button("➕ Adicionar", key=f"btn_add_{chave_unica}", type="primary"):
-                if usuario_selecionado:
-                    if usuario_selecionado['id'] not in st.session_state[session_key]:
-                        st.session_state[session_key].append(usuario_selecionado['id'])
-                        st.rerun()
-                    else:
-                        st.warning("Já adicionado.")
-
-        st.markdown("---")
-        st.markdown(f"**Editores Selecionados ({len(st.session_state[session_key])})**")
-        
-        if not st.session_state[session_key]:
-            st.caption("Nenhum editor adicional.")
-        else:
-            mapa_users = {u['id']: u for u in todos_users}
-            for uid in st.session_state[session_key]:
-                dados_user = mapa_users.get(uid, {'nome': 'Usuário Desconhecido', 'cpf': '?'})
-                col_info, col_del = st.columns([4, 1])
-                with col_info:
-                    st.info(f"👤 **{dados_user['nome']}**\n\nCPF: {dados_user.get('cpf','N/A')}")
-                with col_del:
-                    st.write("")
-                    if st.button("🗑️", key=f"rem_{uid}_{chave_unica}"):
-                        st.session_state[session_key].remove(uid)
-                        st.rerun()
-
-    return st.session_state[session_key]
-
 def navegar_para(view: str, curso: Optional[Dict] = None):
     st.session_state['cursos_view'] = view
     st.session_state['curso_selecionado'] = curso
@@ -225,12 +105,12 @@ def pagina_cursos(usuario: dict):
         
     st.markdown(f"""
     <div class="curso-header">
-        <h1 style="margin:0; text-align:center; color:{COR_DESTAQUE}; letter-spacing: 2px;">🎓 BJJ DIGITAL CURSOS</h1>
-        <p style="text-align:center; opacity:0.8; margin-top: 10px;">Bem-vindo(a), <strong style="color: {COR_DESTAQUE}">{usuario.get('nome','').split()[0]}</strong></p>
+        <h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">🎓 BJJ DIGITAL CURSOS</h1>
+        <p style="text-align:center; opacity:0.8;">Bem-vindo(a), <strong>{usuario.get('nome','').split()[0]}</strong></p>
     </div>""", unsafe_allow_html=True)
     
     if st.session_state.get('cursos_view') != 'lista':
-        if st.button("← Voltar à Lista", key="btn_back_list", type="secondary"): navegar_para('lista')
+        if st.button("← Voltar", key="btn_back_list", type="secondary"): navegar_para('lista')
     else:
         if st.button("← Menu Principal", key="btn_back_home"):
             st.session_state.menu_selection = "Início"; st.rerun()
@@ -238,338 +118,260 @@ def pagina_cursos(usuario: dict):
 
     view = st.session_state.get('cursos_view')
     curso = st.session_state.get('curso_selecionado')
-    tipo_user = str(usuario.get("tipo", "aluno")).lower()
-    is_prof_admin = tipo_user in ["admin", "professor"]
+    
+    # Define se é Admin/Professor
+    is_prof = str(usuario.get("tipo", "")).lower() in ["admin", "professor"]
     
     if view == 'lista':
-        _interface_professor_moderna(usuario) if is_prof_admin else _interface_aluno_moderna(usuario)
+        if is_prof: _interface_professor(usuario)
+        else: _interface_aluno(usuario)
     elif view == 'detalhe' and curso:
-        _exibir_detalhes_curso(curso, usuario)
+        _exibir_detalhes(curso, usuario)
     elif view == 'aulas' and curso:
         _pagina_aulas(curso, usuario)
-    elif view == 'edicao' and curso and is_prof_admin:
-        _pagina_edicao_curso(curso, usuario)
-    elif view == 'gerenciar_conteudo' and curso and is_prof_admin:
+    elif view == 'edicao' and curso and is_prof:
+        _pagina_edicao(curso, usuario)
+    elif view == 'gerenciar_conteudo' and curso and is_prof:
         aulas_view.gerenciar_conteudo_curso(curso, usuario)
     else:
         st.session_state['cursos_view'] = 'lista'; st.rerun()
 
 # ======================================================
-# INTERFACES
+# COMPONENTE DE SELEÇÃO DE EDITORES
 # ======================================================
-def _interface_professor_moderna(usuario):
-    tab1, tab2, tab3 = st.tabs(["📘 Meus Cursos", "➕ Criar Novo", "📊 Dashboard"])
-    with tab1: _professor_listar_cursos(usuario)
-    with tab2: _pagina_criar_curso(usuario)
-    with tab3: _professor_dashboard(usuario)
+def renderizar_seletor_editores(chave_unica, ids_iniciais=[]):
+    session_key = f"lista_editores_{chave_unica}"
+    if session_key not in st.session_state: st.session_state[session_key] = ids_iniciais.copy()
 
-def _interface_aluno_moderna(usuario):
-    tab1, tab2 = st.tabs(["🛒 Disponíveis", "🎓 Meus Cursos"])
-    with tab1: _aluno_cursos_disponiveis(usuario)
-    with tab2: _aluno_meus_cursos(usuario)
-
-# --- CRIAÇÃO DE CURSO ---
-def _pagina_criar_curso(usuario):
-    st.markdown("### 🚀 Criar Novo Curso")
-    if "new_pago_toggle" not in st.session_state: st.session_state["new_pago_toggle"] = False
-        
+    st.markdown("###### 👥 Editores Colaboradores")
     with st.container(border=True):
-        st.markdown("#### 📝 Básico")
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            titulo = st.text_input("Título *", key="new_titulo")
-            desc = st.text_area("Descrição *", height=100, key="new_desc")
-        with c2:
-            mod = st.selectbox("Modalidade", ["EAD", "Presencial", "Híbrido"], key="new_mod")
-            pub = st.selectbox("Público", ["geral", "equipe"], key="new_pub")
-            eq = st.text_input("Nome da Equipe", key="new_eq") if pub == "equipe" else None
-
-        # Colaboração
-        editores_selecionados = renderizar_seletor_editores(chave_unica="criar", ids_iniciais=[])
-
-        st.markdown("---")
-        st.markdown("#### ⚙️ Configs")
-        cc1, cc2 = st.columns(2)
-        with cc1: cert = st.checkbox("Certificado Automático", True, key="new_cert")
-        with cc2:
-            dur = st.text_input("Duração", "10h", key="new_dur")
-            niv = st.selectbox("Nível", ["Todos os Níveis", "Iniciante", "Avançado"], key="new_niv")
-
-        st.markdown("---")
-        st.markdown("#### 💰 Financeiro")
-        cf1, cf2, cf3 = st.columns([1,1,1])
-        with cf1: pago = st.toggle("Curso Pago?", key="new_pago_toggle")
-        with cf2: preco = st.number_input("Valor (R$)", 0.0, disabled=not pago, key="new_pr")
-        with cf3: 
-            split = 10
-            if usuario.get('tipo')=='admin' and pago: split = st.slider("Taxa %", 0, 100, 10, key="new_sp")
-
-        st.markdown("<br>", unsafe_allow_html=True)
+        c1, c2 = st.columns([3, 1])
+        termo = c1.text_input("Buscar Nome/CPF", key=f"src_{chave_unica}")
         
-        c_btn1, c_btn2 = st.columns([1, 3])
-        with c_btn1:
-            if st.button("❌ Limpar", key="btn_clear_create", type="secondary"):
-                if "lista_editores_criar" in st.session_state: del st.session_state["lista_editores_criar"]
-                st.rerun()
-                
-        with c_btn2:
-            if st.button("🚀 Criar Curso", key="btn_create_course", use_container_width=True, type="primary"):
-                if not titulo or not desc: st.error("Preencha título e descrição.")
-                else:
-                    # Envia a equipe do professor
-                    ce.criar_curso(
-                        usuario['id'], 
-                        usuario.get('nome',''), 
-                        usuario.get('equipe', 'Sem Equipe'),
-                        titulo, desc, mod, pub, eq, 
-                        pago, preco if pago else 0.0, split, cert, dur, niv, editores_selecionados
-                    )
-                    st.success("Criado!"); time.sleep(1); navegar_para('lista')
+        users = ce.listar_todos_usuarios_para_selecao()
+        filtro = [u for u in users if termo.lower() in u['nome'].lower() or termo in str(u.get('cpf',''))] if termo else []
+        
+        sel = c1.selectbox("Selecione", filtro, format_func=lambda x: f"{x['nome']} (CPF: {x.get('cpf')})", key=f"sel_{chave_unica}", index=None, placeholder="Digite para buscar...")
+        
+        if c2.button("➕ Adicionar", key=f"add_{chave_unica}"):
+            if sel and sel['id'] not in st.session_state[session_key]:
+                st.session_state[session_key].append(sel['id']); st.rerun()
 
-# --- EDIÇÃO DE CURSO ---
-def _pagina_edicao_curso(curso, usuario):
-    st.markdown(f"### ✏️ Editando: {curso.get('titulo')}")
-    if usuario['id'] in curso.get('editores_ids', []): st.info("ℹ️ Você é um Editor.")
+        st.markdown(f"**Selecionados ({len(st.session_state[session_key])})**")
+        if not st.session_state[session_key]: st.caption("Nenhum.")
+        else:
+            mapa = {u['id']: u for u in users}
+            for uid in st.session_state[session_key]:
+                u = mapa.get(uid, {'nome':'?', 'cpf':'?'})
+                xc, yc = st.columns([4,1])
+                xc.info(f"{u['nome']} ({u.get('cpf')})")
+                if yc.button("🗑️", key=f"del_{uid}_{chave_unica}"):
+                    st.session_state[session_key].remove(uid); st.rerun()
+    return st.session_state[session_key]
+
+# ======================================================
+# LISTAGEM DE CURSOS
+# ======================================================
+def render_card_curso(c, mode="professor"):
+    """Renderiza o card visualmente rico sem quebrar o HTML."""
+    ativo = c.get('ativo', True)
+    pago = c.get('pago', False)
     
-    k_pg = f"edt_pg_{curso['id']}"
-    if k_pg not in st.session_state: st.session_state[k_pg] = curso.get('pago', False)
+    # Icone
+    icon = "💎" if pago else "🎓"
+    if not ativo: icon = "⏸️"
+    
+    # Preço e Liquido
+    if pago:
+        bruto = c.get('preco', 0.0)
+        split = c.get('split_custom', 10)
+        liq = bruto * (1 - split/100)
+        txt_price = f"R$ {bruto:.2f}"
+        if mode == "professor": txt_price += f" • Liq: R$ {liq:.2f}"
+        cor_bdg = "gold"
+    else:
+        txt_price = "Grátis"
+        cor_bdg = "green"
 
-    with st.container(border=True):
-        c1, c2 = st.columns([2, 1])
-        with c1:
-            nt = st.text_input("Título", value=curso.get('titulo',''), key=f"et_{curso['id']}")
-            nd = st.text_area("Descrição", value=curso.get('descricao',''), height=100, key=f"ed_{curso['id']}")
-        with c2:
-            nm = st.selectbox("Modalidade", ["EAD", "Presencial", "Híbrido"], index=["EAD","Presencial","Híbrido"].index(curso.get('modalidade','EAD')), key=f"em_{curso['id']}")
-            npub = st.selectbox("Público", ["geral", "equipe"], index=0 if curso.get('publico')=='geral' else 1, key=f"ep_{curso['id']}")
-            neq = st.text_input("Equipe", value=curso.get('equipe_destino',''), key=f"eeq_{curso['id']}") if npub=='equipe' else None
+    # Professor e Equipe
+    prof = c.get('professor_nome', 'Instrutor').split()[0]
+    eq = c.get('professor_equipe', '')
+    txt_eq = f" | 🛡️ {eq}" if eq else ""
+    
+    # Badge Editor
+    role_badge = ""
+    if mode == "professor" and c.get('papel') == 'Editor':
+        role_badge = f"<span class='curso-badge blue' style='margin-left:auto;'>✏️ Editor</span>"
 
-        # Colaboração
-        editores_selecionados = renderizar_seletor_editores(
-            chave_unica=f"editar_{curso['id']}", 
-            ids_iniciais=curso.get('editores_ids', [])
-        )
+    # HTML Seguro
+    html = f"""
+    <div class="curso-card-moderno">
+        <div style="display:flex; justify-content:space-between;">
+            <div class="curso-icon">{icon}</div>
+            {role_badge}
+        </div>
+        <h4 style="margin:0.5rem 0; color:white;">{c.get('titulo')}</h4>
+        <div class="info-extra">👨‍🏫 {prof}{txt_eq}</div>
+        <p style="font-size:0.85em; opacity:0.7; flex-grow:1;">{c.get('descricao','')[:90]}...</p>
+        <div class="curso-badges">
+            <span class="curso-badge green">{c.get('modalidade','EAD')}</span>
+            <span class="curso-badge {cor_bdg}">{txt_price}</span>
+        </div>
+    </div>
+    """
+    st.markdown(html, unsafe_allow_html=True)
 
-        st.markdown("---")
-        cc1, cc2 = st.columns(2)
-        with cc1:
-            ncert = st.checkbox("Certificado", value=curso.get('certificado_automatico', True), key=f"ec_{curso['id']}")
-            natv = st.checkbox("Ativo", value=curso.get('ativo', True), key=f"ea_{curso['id']}")
-        with cc2:
-            ndur = st.text_input("Duração", value=curso.get('duracao_estimada',''), key=f"edur_{curso['id']}")
-            ops_n = ["Todos os Níveis", "Iniciante", "Avançado"]
-            nniv = st.selectbox("Nível", ops_n, index=ops_n.index(curso.get('nivel', "Todos os Níveis")) if curso.get('nivel') in ops_n else 0, key=f"en_{curso['id']}")
+def _interface_professor(usuario):
+    tab1, tab2 = st.tabs(["📘 Meus Cursos", "➕ Criar Novo"])
+    
+    with tab1:
+        cursos = ce.listar_cursos_do_professor(usuario['id'])
+        if not cursos: st.info("Nenhum curso encontrado.")
+        cols = st.columns(3)
+        for i, c in enumerate(cursos):
+            with cols[i%3]:
+                render_card_curso(c, "professor")
+                c1, c2 = st.columns(2)
+                if c1.button("✏️ Editar", key=f"e_{c['id']}", use_container_width=True): navegar_para('edicao', c)
+                if c2.button("👁️ Ver", key=f"v_{c['id']}", use_container_width=True): navegar_para('detalhe', c)
 
-        st.markdown("---")
-        cf1, cf2 = st.columns(2)
-        with cf1: npago = st.toggle("Pago?", key=k_pg)
-        with cf2: npr = st.number_input("Valor", value=float(curso.get('preco',0)), disabled=not npago, key=f"epr_{curso['id']}")
-        
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("💾 Salvar", type="primary", use_container_width=True, key=f"bs_{curso['id']}"):
-            dados = {"titulo": nt, "descricao": nd, "modalidade": nm, "publico": npub, "equipe_destino": neq, "editores_ids": editores_selecionados, "pago": npago, "preco": npr, "certificado_automatico": ncert, "ativo": natv, "duracao_estimada": ndur, "nivel": nniv, "atualizado_em": datetime.now()}
-            ce.editar_curso(curso['id'], dados)
-            st.success("Salvo!"); time.sleep(1); navegar_para('detalhe', dados)
+    with tab2:
+        _pagina_criar(usuario)
 
-    # Zona de Perigo
-    if usuario['id'] == curso.get('professor_id') or usuario.get('tipo') == 'admin':
-        st.markdown("<br>", unsafe_allow_html=True)
-        with st.expander("🗑️ Zona de Perigo"):
-            st.warning("Excluir apaga tudo.")
-            if st.button("Excluir Definitivamente", type="secondary", key=f"bdel_{curso['id']}"):
-                if ce.excluir_curso(curso['id']):
-                    st.success("Excluído!"); time.sleep(1); st.session_state['curso_selecionado']=None; navegar_para('lista')
-                else: st.error("Erro ao excluir.")
-
-# --- LISTAGEM PROFESSOR (COM NOME/EQUIPE/ICONES) ---
-def _professor_listar_cursos(usuario):
-    cursos = ce.listar_cursos_do_professor(usuario['id'])
-    if not cursos:
-        st.markdown("""<div class="empty-state"><div class="empty-state-icon">📭</div><h3 style="color:#FFD770;">Nenhum Curso Criado</h3></div>""", unsafe_allow_html=True)
-        return
-        
+def _interface_aluno(usuario):
+    cursos = ce.listar_cursos_disponiveis_para_usuario(usuario)
+    st.markdown("### 🛒 Cursos Disponíveis")
+    if not cursos: st.info("Nada disponível no momento.")
     cols = st.columns(3)
     for i, c in enumerate(cursos):
         with cols[i%3]:
-            # Dados Card
-            ativo = c.get('ativo', True)
-            pago = c.get('pago', False)
-            icon = "🎓" if ativo else "⏸️"
-            if pago: icon = "💎" if ativo else "💸"
-            role = f"<span class='curso-badge blue'>✏️ Editor</span>" if c.get('papel') == 'Editor' else ""
-            
-            # Preço e Info Extra (Com Equipe do Professor)
-            txt_preco = f"💰 R$ {c.get('preco', 0):.2f}" if pago else "🆓 Grátis"
-            cor_preco = "gold" if pago else "green"
-            if pago: # Liquido
-                liq = c.get('preco',0) * (1 - c.get('split_custom',10)/100)
-                txt_preco += f" • Liq: {liq:.2f}"
-            
-            prof = c.get('professor_nome', 'Professor').strip().split()[0]
-            equipe_prof = c.get('professor_equipe', '') 
-            txt_equipe = f" | 🛡️ {equipe_prof}" if equipe_prof else ""
-            
-            info_extra = f"<div style='font-size:0.8rem; opacity:0.7; margin-bottom:0.8rem; border-bottom:1px solid rgba(255,255,255,0.1); padding-bottom:5px;'>👨‍🏫 {prof}{txt_equipe}</div>"
-            
-            badges_html = f"""
-            <div class="curso-badges">
-                <span class="curso-badge {'gold' if ativo else ''}">{'🟢 Ativo' if ativo else '🔴 Inativo'}</span>
-                <span class="curso-badge green">{c.get('modalidade','EAD')}</span>
-                <span class="curso-badge {cor_preco}">{txt_preco}</span>
-            </div>
-            """
-            
-            st.markdown(f"""
-            <div class="curso-card-moderno">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div class="curso-icon" style="margin:0;">{icon}</div>
-                    {role}
-                </div>
-                <h3 style="margin:0.5rem 0; font-size: 1.2rem; color: #fff;">{c.get('titulo')}</h3>
-                {info_extra}
-                <p style="opacity:0.7; font-size:0.85em; flex-grow:1; line-height: 1.4;">{c.get('descricao','')[:80]}...</p>
-                {badges_html}
-            </div>""", unsafe_allow_html=True)
-            
-            st.markdown(f'<div style="margin-top: -1rem; margin-bottom: 1rem;">', unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            if c1.button("✏️ Editar", key=f"e_{c['id']}", use_container_width=True): navegar_para('edicao', c)
-            if c2.button("👁️ Ver", key=f"v_{c['id']}", use_container_width=True): navegar_para('detalhe', c)
-            st.markdown('</div>', unsafe_allow_html=True)
+            render_card_curso(c, "aluno")
+            if st.button("Ver Detalhes", key=f"vd_{c['id']}", use_container_width=True): navegar_para('detalhe', c)
 
-# --- DETALHES ---
-def _exibir_detalhes_curso(curso, usuario):
-    st.title(f"🥋 {curso.get('titulo')}")
-    can_edit = (usuario['id'] == curso.get('professor_id')) or (usuario['id'] in curso.get('editores_ids', [])) or (usuario.get('tipo') == 'admin')
+# ======================================================
+# TELAS: CRIAR / EDITAR / DETALHES / AULAS
+# ======================================================
+def _pagina_criar(usuario):
+    st.markdown("### 🚀 Criar Curso")
+    if "pg_tgl" not in st.session_state: st.session_state["pg_tgl"] = False
+    
+    with st.container(border=True):
+        c1, c2 = st.columns([2,1])
+        tit = c1.text_input("Título", key="n_t")
+        desc = c1.text_area("Descrição", key="n_d")
+        mod = c2.selectbox("Modalidade", ["EAD","Presencial"], key="n_m")
+        pub = c2.selectbox("Público", ["geral","equipe"], key="n_p")
+        eq_dest = c2.text_input("Equipe Destino", key="n_eq") if pub=="equipe" else None
+        
+        # Editores
+        eds = renderizar_seletor_editores("new")
+        
+        st.markdown("---")
+        cf1, cf2, cf3 = st.columns(3)
+        pago = cf1.toggle("Pago?", key="pg_tgl")
+        pr = cf2.number_input("Preço", 0.0, disabled=not pago, key="n_pr")
+        sp = cf3.slider("Taxa %", 0, 100, 10, key="n_sp") if usuario.get('tipo')=='admin' else 10
+        
+        c_crt, c_dur, c_niv = st.columns(3)
+        cert = c_crt.checkbox("Certificado?", True, key="n_c")
+        dur = c_dur.text_input("Duração", "10h", key="n_dr")
+        niv = c_niv.selectbox("Nível", ["Geral","Iniciante","Avançado"], key="n_nv")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("🚀 Criar", type="primary", use_container_width=True):
+            if not tit: st.error("Título obrigatório.")
+            else:
+                # SALVA A EQUIPE DO PROFESSOR AQUI
+                ce.criar_curso(usuario['id'], usuario.get('nome',''), usuario.get('equipe',''), tit, desc, mod, pub, eq_dest, pago, pr, sp, cert, dur, niv, eds)
+                st.success("Criado!"); time.sleep(1); st.rerun()
+
+def _pagina_edicao(c, u):
+    st.markdown(f"### ✏️ Editando: {c.get('titulo')}")
+    kp = f"ep_{c['id']}"
+    if kp not in st.session_state: st.session_state[kp] = c.get('pago',False)
+    
+    with st.container(border=True):
+        c1, c2 = st.columns([2,1])
+        nt = c1.text_input("Título", c.get('titulo'), key=f"et_{c['id']}")
+        nd = c1.text_area("Descrição", c.get('descricao'), key=f"ed_{c['id']}")
+        nm = c2.selectbox("Modalidade", ["EAD","Presencial"], index=0 if c.get('modalidade')=='EAD' else 1, key=f"em_{c['id']}")
+        
+        eds = renderizar_seletor_editores(f"edt_{c['id']}", c.get('editores_ids',[]))
+        
+        st.markdown("---")
+        cp1, cp2 = st.columns(2)
+        npago = cp1.toggle("Pago?", key=kp)
+        npr = cp2.number_input("Preço", value=float(c.get('preco',0)), disabled=not npago, key=f"epr_{c['id']}")
+        
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("💾 Salvar", type="primary", use_container_width=True, key=f"sv_{c['id']}"):
+            upd = {"titulo":nt, "descricao":nd, "modalidade":nm, "pago":npago, "preco":npr, "editores_ids":eds}
+            ce.editar_curso(c['id'], upd); st.success("Salvo!"); time.sleep(1); navegar_para('detalhe', upd)
+
+    # Delete
+    if u['id'] == c.get('professor_id'):
+        with st.expander("🗑️ Zona de Perigo"):
+            if st.button("Excluir Curso", type="secondary", key=f"del_{c['id']}"):
+                ce.excluir_curso(c['id']); st.success("Excluído!"); time.sleep(1); navegar_para('lista')
+
+def _exibir_detalhes(c, u):
+    st.title(c.get('titulo'))
+    can_edit = (u['id'] == c.get('professor_id')) or (u['id'] in c.get('editores_ids', []))
     
     if can_edit:
         c1, c2 = st.columns(2)
-        if c1.button("✏️ Editar", use_container_width=True): navegar_para('edicao', curso)
-        if c2.button("➕ Aulas", type="primary", use_container_width=True): navegar_para('gerenciar_conteudo', curso)
+        if c1.button("✏️ Editar", use_container_width=True): navegar_para('edicao', c)
+        if c2.button("➕ Aulas", type="primary", use_container_width=True): navegar_para('gerenciar_conteudo', c)
     
-    st.markdown("### Sobre este curso")
-    st.write(curso.get('descricao'))
+    st.write(c.get('descricao'))
     
-    # Detalhes bonitos
-    html_det = f"""
+    # Detalhes visuais
+    st.markdown(f"""
     <div class="detalhes-grid">
-        <div class="detalhe-card"><div class="detalhe-icon">🥋</div><div class="detalhe-info"><span class="detalhe-label">Nível</span><span class="detalhe-value">{curso.get('nivel','Geral')}</span></div></div>
-        <div class="detalhe-card"><div class="detalhe-icon">⏳</div><div class="detalhe-info"><span class="detalhe-label">Duração</span><span class="detalhe-value">{curso.get('duracao_estimada','-')}</span></div></div>
-        <div class="detalhe-card"><div class="detalhe-icon">📜</div><div class="detalhe-info"><span class="detalhe-label">Certificado</span><span class="detalhe-value">{'Sim' if curso.get('certificado_automatico') else 'Não'}</span></div></div>
-        <div class="detalhe-card"><div class="detalhe-icon">👨‍🏫</div><div class="detalhe-info"><span class="detalhe-label">Professor</span><span class="detalhe-value">{curso.get('professor_nome','-').split()[0]}</span></div></div>
-    </div>
-    """
-    st.markdown(html_det, unsafe_allow_html=True)
+        <div class="detalhe-card"><div class="detalhe-icon">👨‍🏫</div><div class="detalhe-info"><span class="detalhe-label">Professor</span><span class="detalhe-value">{c.get('professor_nome','-').split()[0]}</span></div></div>
+        <div class="detalhe-card"><div class="detalhe-icon">🛡️</div><div class="detalhe-info"><span class="detalhe-label">Equipe</span><span class="detalhe-value">{c.get('professor_equipe','Geral')}</span></div></div>
+        <div class="detalhe-card"><div class="detalhe-icon">⏳</div><div class="detalhe-info"><span class="detalhe-label">Duração</span><span class="detalhe-value">{c.get('duracao_estimada','-')}</span></div></div>
+    </div>""", unsafe_allow_html=True)
 
-    insc = ce.obter_inscricao(usuario['id'], curso['id'])
-    
+    insc = ce.obter_inscricao(u['id'], c['id'])
     st.markdown("<br>", unsafe_allow_html=True)
+    
     if insc or can_edit:
-        if st.button("🎬 Acessar Aulas", type="primary", use_container_width=True): navegar_para('aulas', curso)
+        if st.button("🎬 Acessar Aulas", type="primary", use_container_width=True): navegar_para('aulas', c)
     else:
-        lbl = f"Comprar R$ {curso.get('preco')}" if curso.get('pago') else "Inscrever-se Grátis"
+        lbl = f"Comprar R$ {c.get('preco')}" if c.get('pago') else "Inscrever-se Grátis"
         if st.button(lbl, type="primary", use_container_width=True):
-            ce.inscrever_usuario_em_curso(usuario['id'], curso['id'])
-            st.success("Inscrito!"); st.rerun()
+            ce.inscrever_usuario_em_curso(u['id'], c['id']); st.success("Inscrito!"); st.rerun()
 
-# --- PLAYER AULAS ---
-def _pagina_aulas(curso, usuario):
-    st.subheader(f"📺 {curso.get('titulo')}")
-    modulos = ce.listar_modulos_e_aulas(curso['id'])
+def _pagina_aulas(c, u):
+    st.subheader(f"📺 {c.get('titulo')}")
+    modulos = ce.listar_modulos_e_aulas(c['id'])
     if not modulos: st.warning("Sem aulas."); return
     
-    c_vid, c_list = st.columns([3, 1])
-    if 'aula_atual' not in st.session_state and modulos and modulos[0]['aulas']:
-        st.session_state['aula_atual'] = modulos[0]['aulas'][0]
+    cv, cl = st.columns([3, 1])
+    if 'aula_atual' not in st.session_state: st.session_state['aula_atual'] = modulos[0]['aulas'][0] if modulos and modulos[0]['aulas'] else None
     aula = st.session_state.get('aula_atual')
     
-    with c_list:
+    with cl:
         for m in modulos:
             with st.expander(m['titulo'], expanded=True):
                 for a in m['aulas']:
-                    concluida = ce.verificar_aula_concluida(usuario['id'], a['id'])
-                    icon = "✅" if concluida else "⚪"
-                    # Highlight aula atual
-                    label = a['titulo']
-                    if aula and a['id'] == aula['id']: label = f"**▶️ {label}**"
-                    if st.button(f"{icon} {a['titulo']}", key=f"nav_{a['id']}", use_container_width=True):
+                    icon = "✅" if ce.verificar_aula_concluida(u['id'], a['id']) else "⭕"
+                    if st.button(f"{icon} {a['titulo']}", key=f"nv_{a['id']}", use_container_width=True):
                         st.session_state['aula_atual'] = a; st.rerun()
-
-    with c_vid:
+    with cv:
         if aula:
             st.markdown(f"#### {aula['titulo']}")
-            cont = aula.get('conteudo', {})
-            tipo = aula.get('tipo')
+            ct = aula.get('conteudo', {})
+            tp = aula.get('tipo')
+            if tp == 'video':
+                if ct.get('url'): st.video(ct['url'])
+                elif ct.get('arquivo_video'): st.video(ct['arquivo_video'])
+            elif tp == 'texto': st.markdown(ct.get('texto',''))
             
-            if tipo == 'video':
-                tv = cont.get('tipo_video', 'link')
-                if tv == 'link' and cont.get('url'): st.video(cont['url'])
-                elif tv == 'upload' and cont.get('arquivo_video'): st.video(cont['arquivo_video'])
-                else: st.info("Vídeo indisponível.")
-            elif tipo == 'texto': st.markdown(cont.get('texto', ''))
+            if ct.get('material_apoio'):
+                st.download_button("📥 Material", ct['material_apoio'], file_name="doc.pdf")
             
-            if cont.get('material_apoio'):
-                st.markdown("<div class='material-apoio-box'>", unsafe_allow_html=True)
-                st.markdown("#### 📎 Material de Apoio")
-                st.download_button(
-                    label=f"📥 Baixar {cont.get('nome_arquivo_pdf', 'Arquivo')}",
-                    data=cont['material_apoio'],
-                    file_name=cont.get('nome_arquivo_pdf', 'material.pdf'),
-                    mime="application/pdf"
-                )
-                st.markdown("</div>", unsafe_allow_html=True)
-                
             st.markdown("---")
-            if st.button("✅ Concluir Aula", key=f"ok_{aula['id']}", type="primary"):
-                ce.marcar_aula_concluida(usuario['id'], aula['id'])
-                st.success("Concluída!"); time.sleep(0.5); st.rerun()
-
-# --- ALUNO / DASHBOARD ---
-def _professor_dashboard(usuario):
-    st.markdown("### 📊 Dashboard do Instrutor")
-    cursos = ce.listar_cursos_do_professor(usuario["id"])
-    if not cursos: st.info("Sem dados."); return
-    
-    c1, c2, c3 = st.columns(3)
-    c1.markdown(f"<div class='stats-card-moderno'><div class='stats-value-moderno'>{len(cursos)}</div><div class='stats-label-moderno'>Total Cursos</div></div>", unsafe_allow_html=True)
-    c2.markdown(f"<div class='stats-card-moderno'><div class='stats-value-moderno'>{sum(1 for c in cursos if c.get('ativo'))}</div><div class='stats-label-moderno'>Ativos</div></div>", unsafe_allow_html=True)
-    c3.markdown(f"<div class='stats-card-moderno'><div class='stats-value-moderno'>{sum(1 for c in cursos if c.get('pago'))}</div><div class='stats-label-moderno'>Pagos</div></div>", unsafe_allow_html=True)
-
-def _aluno_cursos_disponiveis(usuario):
-    cursos = ce.listar_cursos_disponiveis_para_usuario(usuario)
-    if not cursos: st.info("Nada por aqui."); return
-    
-    cols = st.columns(3)
-    for i, c in enumerate(cursos):
-        with cols[i%3]:
-            # Lógica do Preço
-            pago = c.get('pago', False)
-            txt_preco = f"💰 R$ {c.get('preco', 0):.2f}" if pago else "🆓 Grátis"
-            cor_preco = "gold" if pago else "green"
-            icon = "💎" if pago else "🎓"
-            
-            # Info Extra (Professor e Equipe)
-            prof = c.get('professor_nome', 'Professor').strip().split()[0]
-            equipe_prof = c.get('professor_equipe', '') 
-            txt_equipe = f" | 🛡️ {equipe_prof}" if equipe_prof else ""
-            info_extra = f"<div style='font-size:0.8rem; opacity:0.6; margin-bottom:0.5rem;'>👨‍🏫 {prof}{txt_equipe}</div>"
-            
-            st.markdown(f"""
-            <div class="curso-card-moderno">
-                <div class="curso-icon">{icon}</div>
-                <h4 style="margin:0 0 0.5rem 0;">{c.get('titulo')}</h4>
-                {info_extra}
-                <p style="opacity:0.7; font-size:0.9em; flex-grow:1;">{c.get('descricao','')[:80]}...</p>
-                <div class="curso-badges">
-                    <span class="curso-badge green">{c.get('modalidade','EAD')}</span>
-                    <span class="curso-badge {cor_preco}">{txt_preco}</span>
-                </div>
-            </div>""", unsafe_allow_html=True)
-            
-            st.markdown(f'<div style="margin-top: -1rem; margin-bottom: 1rem;">', unsafe_allow_html=True)
-            if st.button("Ver Detalhes", key=f"vda_{c['id']}", use_container_width=True): navegar_para('detalhe', c)
-            st.markdown('</div>', unsafe_allow_html=True)
-
-def _aluno_meus_cursos(usuario):
-    # Simplificado
-    _aluno_cursos_disponiveis(usuario)
+            if st.button("Concluir", key=f"ok_{aula['id']}", type="primary"):
+                ce.marcar_aula_concluida(u['id'], aula['id']); st.success("Feito!"); st.rerun()
