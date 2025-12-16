@@ -1,5 +1,5 @@
 """
-BJJ Digital - Sistema de Cursos (Versão Final e Corrigida)
+BJJ Digital - Sistema de Cursos (Versão Final e Visual Corrigido)
 """
 
 import streamlit as st
@@ -43,20 +43,12 @@ def aplicar_estilos_cursos():
     /* CARDS */
     .curso-card-moderno {{
         background: linear-gradient(145deg, rgba(14, 45, 38, 0.95) 0%, rgba(9, 31, 26, 0.98) 100%);
-        border: 1px solid rgba(255, 215, 112, 0.15);
-        border-radius: 20px;
-        padding: 1.5rem;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-        overflow: hidden;
+        border: 1px solid rgba(255, 215, 112, 0.15); border-radius: 20px; padding: 1.5rem;
+        height: 100%; display: flex; flex-direction: column; position: relative; overflow: hidden;
         transition: transform 0.3s;
     }}
     .curso-card-moderno:hover {{
-        border-color: {COR_DESTAQUE};
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        border-color: {COR_DESTAQUE}; transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.3);
     }}
     .curso-icon {{
         font-size: 2.5rem; text-align: center; margin-bottom: 1rem;
@@ -110,7 +102,7 @@ def pagina_cursos(usuario: dict):
     </div>""", unsafe_allow_html=True)
     
     if st.session_state.get('cursos_view') != 'lista':
-        if st.button("← Voltar", key="btn_back_list", type="secondary"): navegar_para('lista')
+        if st.button("← Voltar à Lista", key="btn_back_list", type="secondary"): navegar_para('lista')
     else:
         if st.button("← Menu Principal", key="btn_back_home"):
             st.session_state.menu_selection = "Início"; st.rerun()
@@ -203,22 +195,22 @@ def render_card_curso(c, mode="professor"):
     if mode == "professor" and c.get('papel') == 'Editor':
         role_badge = f"<span class='curso-badge blue' style='margin-left:auto;'>✏️ Editor</span>"
 
-    # HTML Seguro
+    # HTML Seguro (Sem indentação)
     html = f"""
-    <div class="curso-card-moderno">
-        <div style="display:flex; justify-content:space-between;">
-            <div class="curso-icon">{icon}</div>
-            {role_badge}
-        </div>
-        <h4 style="margin:0.5rem 0; color:white;">{c.get('titulo')}</h4>
-        <div class="info-extra">👨‍🏫 {prof}{txt_eq}</div>
-        <p style="font-size:0.85em; opacity:0.7; flex-grow:1;">{c.get('descricao','')[:90]}...</p>
-        <div class="curso-badges">
-            <span class="curso-badge green">{c.get('modalidade','EAD')}</span>
-            <span class="curso-badge {cor_bdg}">{txt_price}</span>
-        </div>
+<div class="curso-card-moderno">
+    <div style="display:flex; justify-content:space-between;">
+        <div class="curso-icon">{icon}</div>
+        {role_badge}
     </div>
-    """
+    <h4 style="margin:0.5rem 0; color:white;">{c.get('titulo')}</h4>
+    <div class="info-extra">👨‍🏫 {prof}{txt_eq}</div>
+    <p style="font-size:0.85em; opacity:0.7; flex-grow:1;">{c.get('descricao','')[:90]}...</p>
+    <div class="curso-badges">
+        <span class="curso-badge green">{c.get('modalidade','EAD')}</span>
+        <span class="curso-badge {cor_bdg}">{txt_price}</span>
+    </div>
+</div>
+"""
     st.markdown(html, unsafe_allow_html=True)
 
 def _interface_professor(usuario):
@@ -345,33 +337,4 @@ def _exibir_detalhes(c, u):
 
 def _pagina_aulas(c, u):
     st.subheader(f"📺 {c.get('titulo')}")
-    modulos = ce.listar_modulos_e_aulas(c['id'])
-    if not modulos: st.warning("Sem aulas."); return
-    
-    cv, cl = st.columns([3, 1])
-    if 'aula_atual' not in st.session_state: st.session_state['aula_atual'] = modulos[0]['aulas'][0] if modulos and modulos[0]['aulas'] else None
-    aula = st.session_state.get('aula_atual')
-    
-    with cl:
-        for m in modulos:
-            with st.expander(m['titulo'], expanded=True):
-                for a in m['aulas']:
-                    icon = "✅" if ce.verificar_aula_concluida(u['id'], a['id']) else "⭕"
-                    if st.button(f"{icon} {a['titulo']}", key=f"nv_{a['id']}", use_container_width=True):
-                        st.session_state['aula_atual'] = a; st.rerun()
-    with cv:
-        if aula:
-            st.markdown(f"#### {aula['titulo']}")
-            ct = aula.get('conteudo', {})
-            tp = aula.get('tipo')
-            if tp == 'video':
-                if ct.get('url'): st.video(ct['url'])
-                elif ct.get('arquivo_video'): st.video(ct['arquivo_video'])
-            elif tp == 'texto': st.markdown(ct.get('texto',''))
-            
-            if ct.get('material_apoio'):
-                st.download_button("📥 Material", ct['material_apoio'], file_name="doc.pdf")
-            
-            st.markdown("---")
-            if st.button("Concluir", key=f"ok_{aula['id']}", type="primary"):
-                ce.marcar_aula_concluida(u['id'], aula['id']); st.success("Feito!"); st.rerun()
+    modulos = ce.listar_modulos_e_aulas(c['
