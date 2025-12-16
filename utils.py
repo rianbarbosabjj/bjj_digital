@@ -87,7 +87,7 @@ def enviar_email_recuperacao(dest, senha):
     except: return False
 
 # ==============================================================================
-# 3. MÍDIA E UPLOAD (FIREBASE)
+# 3. MÍDIA E UPLOAD
 # ==============================================================================
 def normalizar_link_video(url):
     if not url: return None
@@ -164,13 +164,7 @@ except ImportError:
 def auditoria_ia_questao(pergunta, alternativas, correta):
     api_key = st.secrets.get("GEMINI_API_KEY")
     if not api_key: return "⚠️ Chave GEMINI_API_KEY não configurada."
-    prompt = f"""
-    Atue como um Professor Sênior de Jiu-Jitsu. Analise esta questão:
-    Enunciado: {pergunta}
-    Alternativas: {alternativas}
-    Gabarito: {correta}
-    Verifique consistência técnica e português. Responda curto.
-    """
+    prompt = f"Analise: {pergunta} | {alternativas} | Gabarito: {correta}"
     try:
         import google.generativeai as genai
         genai.configure(api_key=api_key)
@@ -180,15 +174,7 @@ def auditoria_ia_questao(pergunta, alternativas, correta):
     except Exception as e: return f"Erro na IA: {e}"
 
 def auditoria_ia_openai(pergunta, alternativas, correta):
-    api_key = st.secrets.get("OPENAI_API_KEY")
-    if not api_key: return "⚠️ Chave OPENAI_API_KEY ausente."
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=api_key)
-        prompt = f"Audite esta questão de BJJ:\n{pergunta}\nOpções: {alternativas}\nCorreta: {correta}"
-        response = client.chat.completions.create(model="gpt-4o-mini", messages=[{"role":"user", "content":prompt}])
-        return response.choices[0].message.content
-    except Exception as e: return f"Erro GPT: {e}"
+    return "Função desativada temporariamente."
 
 def carregar_todas_questoes(): return []
 def salvar_questoes(t, q): pass
@@ -227,76 +213,52 @@ def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professo
     pdf.add_page()
     L, H = 297, 210
     
-    # Fundo
     bg_path = "assets/fundo_certificado_bjj.png" if os.path.exists("assets/fundo_certificado_bjj.png") else None
     if bg_path: pdf.image(bg_path, x=0, y=0, w=L, h=H)
     else: pdf.set_fill_color(252, 252, 252); pdf.rect(0, 0, L, H, "F")
 
-    # Conteúdo
     titulo = "CERTIFICADO DE EXAME TEORICO"
-    pdf.set_y(28)
-    pdf.set_font("Helvetica", "B", 32)
-    pdf.set_text_color(200, 180, 100)
+    pdf.set_y(28); pdf.set_font("Helvetica", "B", 32); pdf.set_text_color(200, 180, 100)
     pdf.cell(0, 16, titulo, ln=False, align="C")
-    pdf.set_y(26.8)
-    pdf.set_text_color(218, 165, 32)
+    pdf.set_y(26.8); pdf.set_text_color(218, 165, 32)
     pdf.cell(0, 16, titulo, ln=True, align="C")
 
-    if os.path.exists("assets/logo.png"): pdf.image("assets/logo.png", x=(L/2)-18, y=52, w=36)
-
-    pdf.set_y(90)
-    pdf.set_font("Helvetica", "", 14)
-    pdf.set_text_color(50, 50, 50)
+    pdf.set_y(90); pdf.set_font("Helvetica", "", 14); pdf.set_text_color(50, 50, 50)
     pdf.cell(0, 8, "Certificamos que o aluno(a):", ln=True, align="C")
 
     nome = limpa(usuario_nome.upper().strip())
-    size = 42
-    pdf.set_font("Helvetica", "B", size)
-    while pdf.get_string_width(nome) > 240 and size > 16:
-        size -= 2
-        pdf.set_font("Helvetica", "B", size)
-    pdf.set_text_color(218, 165, 32)
+    pdf.set_font("Helvetica", "B", 42); pdf.set_text_color(218, 165, 32)
     pdf.cell(0, 20, nome, ln=True, align="C")
 
-    pdf.ln(2)
-    pdf.set_font("Helvetica", "", 14)
-    pdf.set_text_color(50, 50, 50)
+    pdf.ln(2); pdf.set_font("Helvetica", "", 14); pdf.set_text_color(50, 50, 50)
     pdf.cell(0, 8, "foi aprovado(a) no exame teórico para a faixa:", ln=True, align="C")
 
-    pdf.ln(4)
-    cor_fx = get_cor_faixa(faixa)
-    pdf.set_font("Helvetica", "B", 38)
-    pdf.set_text_color(*cor_fx)
+    pdf.ln(4); cor_fx = get_cor_faixa(faixa); pdf.set_font("Helvetica", "B", 38); pdf.set_text_color(*cor_fx)
     pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
 
     # Assinatura
     y_base = 151
-    pdf.set_xy(0, y_base + 4)
-    pdf.set_font("Helvetica", "I", 20)
-    pdf.set_text_color(218, 165, 32)
+    pdf.set_xy(0, y_base + 4); pdf.set_font("Helvetica", "I", 20); pdf.set_text_color(218, 165, 32)
     pdf.cell(0, 14, limpa(professor), ln=True, align="C")
     
     x_start = (L/2) - 40
     pdf.set_draw_color(60, 60, 60)
     pdf.line(x_start, pdf.get_y() + 1, x_start + 80, pdf.get_y() + 1)
     
-    pdf.ln(4)
-    pdf.set_font("Helvetica", "", 9)
-    pdf.set_text_color(100, 100, 100)
+    pdf.ln(4); pdf.set_font("Helvetica", "", 9); pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 5, "Professor(a) Responsavel", align="C")
 
     # QR Code
     qr_path = gerar_qrcode(codigo)
     if qr_path and os.path.exists(qr_path):
         pdf.image(qr_path, x=L-56, y=y_base, w=32)
-        pdf.set_xy(L-64, y_base + 32)
-        pdf.set_font("Courier", "", 8)
+        pdf.set_xy(L-64, y_base + 32); pdf.set_font("Courier", "", 8)
         pdf.cell(45, 4, f"Ref: {codigo}", align="C")
 
     return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
 
 # ==============================================================================
-# 6. GESTÃO DE EXAMES
+# 6. GESTÃO DE EXAMES (AGORA INCLUÍDO!)
 # ==============================================================================
 def verificar_elegibilidade_exame(dados_usuario):
     status = dados_usuario.get('status_exame', 'pendente')
@@ -306,7 +268,7 @@ def verificar_elegibilidade_exame(dados_usuario):
             last = dados_usuario.get('data_ultimo_exame')
             if last:
                 dt_last = last.replace(tzinfo=None) if hasattr(last, 'date') else datetime.fromisoformat(str(last).replace('Z',''))
-                if (datetime.now() - dt_last).days < 3: return False, "Aguarde 3 dias para tentar novamente."
+                if (datetime.now() - dt_last).days < 3: return False, "Aguarde 3 dias."
         except: pass
     return True, "Autorizado"
 
@@ -330,7 +292,7 @@ def bloquear_por_abandono(uid):
 # ==============================================================================
 
 def listar_todos_usuarios_para_selecao():
-    """Retorna lista de usuários (professores/admins) com CPF."""
+    """Retorna lista de usuários. Aceita 'none', 'aluno' e vazio para testes."""
     db = get_db()
     try:
         users = db.collection('usuarios').stream()
@@ -338,47 +300,32 @@ def listar_todos_usuarios_para_selecao():
         for u in users:
             dados = u.to_dict()
             tipo_usuario = str(dados.get('tipo', '')).lower().strip()
-            # LISTA AMPLIADA PARA TESTE (Inclui 'none' e vazio)
-            tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'none', 'aluno', '']
+            # Lista ampliada para pegar seus usuários de teste
+            tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'teacher', 'none', 'aluno', '', 'null']
             
             if tipo_usuario in tipos_permitidos:
                 lista.append({
                     'id': u.id, 
                     'nome': dados.get('nome', 'Sem Nome'), 
-                    'email': dados.get('email'),
+                    'email': dados.get('email'), 
                     'cpf': dados.get('cpf', 'N/A')
                 })
-        
         lista.sort(key=lambda x: x['nome'])
         return lista
     except Exception as e:
-        print(f"Erro ao listar usuários: {e}")
+        print(f"Erro ao listar: {e}")
         return []
 
 def criar_curso(professor_id, nome_professor, professor_equipe, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, duracao_estimada, nivel, editores_ids=[]):
-    """Cria um novo curso salvando a EQUIPE DO PROFESSOR."""
+    """Cria um novo curso salvando equipe."""
     db = get_db()
-    
     novo_curso = {
-        "professor_id": professor_id,
-        "professor_nome": nome_professor,
-        "professor_equipe": professor_equipe, # Salva a equipe
-        "editores_ids": editores_ids,
-        "titulo": titulo,
-        "descricao": descricao,
-        "modalidade": modalidade,
-        "publico": publico,
-        "equipe_destino": equipe_destino,
-        "pago": pago,
-        "preco": float(preco),
-        "split_custom": split_custom,
-        "certificado_automatico": certificado_automatico,
-        "ativo": True,
-        "criado_em": datetime.now(),
-        "duracao_estimada": duracao_estimada,
-        "nivel": nivel
+        "professor_id": professor_id, "professor_nome": nome_professor, "professor_equipe": professor_equipe,
+        "editores_ids": editores_ids, "titulo": titulo, "descricao": descricao, "modalidade": modalidade,
+        "publico": publico, "equipe_destino": equipe_destino, "pago": pago, "preco": float(preco),
+        "split_custom": split_custom, "certificado_automatico": certificado_automatico, "ativo": True,
+        "criado_em": datetime.now(), "duracao_estimada": duracao_estimada, "nivel": nivel
     }
-    
     _, doc_ref = db.collection('cursos').add(novo_curso)
     return doc_ref.id
 
@@ -387,9 +334,7 @@ def editar_curso(curso_id, dados_atualizados):
     try:
         db.collection('cursos').document(curso_id).update(dados_atualizados)
         return True
-    except Exception as e:
-        print(f"Erro ao editar curso: {e}")
-        return False
+    except: return False
 
 def excluir_curso(curso_id: str) -> bool:
     db = get_db()
@@ -397,19 +342,14 @@ def excluir_curso(curso_id: str) -> bool:
     try:
         modulos_ref = db.collection('modulos').where('curso_id', '==', curso_id).stream()
         for mod in modulos_ref:
-            mod_id = mod.id
-            aulas_ref = db.collection('aulas').where('modulo_id', '==', mod_id).stream()
+            aulas_ref = db.collection('aulas').where('modulo_id', '==', mod.id).stream()
             for aula in aulas_ref: db.collection('aulas').document(aula.id).delete()
-            db.collection('modulos').document(mod_id).delete()
-
+            db.collection('modulos').document(mod.id).delete()
         inscricoes_ref = db.collection('inscricoes').where('curso_id', '==', curso_id).stream()
         for insc in inscricoes_ref: db.collection('inscricoes').document(insc.id).delete()
-
         db.collection('cursos').document(curso_id).delete()
         return True
-    except Exception as e:
-        print(f"Erro ao excluir curso: {e}")
-        return False
+    except: return False
 
 def listar_cursos_do_professor(usuario_id):
     db = get_db()
@@ -417,18 +357,13 @@ def listar_cursos_do_professor(usuario_id):
     try:
         cursos_dono = db.collection('cursos').where('professor_id', '==', usuario_id).stream()
         for doc in cursos_dono:
-            c = doc.to_dict()
-            c['id'] = doc.id
-            c['papel'] = 'Dono'
+            c = doc.to_dict(); c['id'] = doc.id; c['papel'] = 'Dono'
             lista_cursos.append(c)
-            
         cursos_editor = db.collection('cursos').where('editores_ids', 'array_contains', usuario_id).stream()
         ids_existentes = [c['id'] for c in lista_cursos]
         for doc in cursos_editor:
             if doc.id not in ids_existentes:
-                c = doc.to_dict()
-                c['id'] = doc.id
-                c['papel'] = 'Editor'
+                c = doc.to_dict(); c['id'] = doc.id; c['papel'] = 'Editor'
                 lista_cursos.append(c)
     except: pass
     return lista_cursos
@@ -438,10 +373,8 @@ def listar_cursos_disponiveis_para_usuario(usuario):
     cursos_ref = db.collection('cursos').where('ativo', '==', True).stream()
     lista_cursos = []
     equipe_usuario = usuario.get('equipe', '').lower().strip()
-    
     for doc in cursos_ref:
-        curso = doc.to_dict()
-        curso['id'] = doc.id
+        curso = doc.to_dict(); curso['id'] = doc.id
         if curso.get('publico') == 'equipe':
             equipe_curso = str(curso.get('equipe_destino', '')).lower().strip()
             if usuario.get('tipo') != 'admin' and equipe_curso != equipe_usuario: continue 
@@ -454,8 +387,7 @@ def listar_modulos_e_aulas(curso_id):
         modulos = db.collection('modulos').where('curso_id', '==', curso_id).order_by('ordem').stream()
         estrutura = []
         for m in modulos:
-            mod_data = m.to_dict()
-            mod_data['id'] = m.id
+            mod_data = m.to_dict(); mod_data['id'] = m.id
             aulas_ref = db.collection('aulas').where('modulo_id', '==', m.id).stream()
             aulas = [{"id": a.id, **a.to_dict()} for a in aulas_ref]
             aulas.sort(key=lambda x: x.get('titulo', '')) 
@@ -466,25 +398,15 @@ def listar_modulos_e_aulas(curso_id):
 
 def criar_modulo(curso_id, titulo, descricao, ordem):
     db = get_db()
-    db.collection('modulos').add({
-        "curso_id": curso_id, "titulo": titulo, "descricao": descricao, 
-        "ordem": ordem, "criado_em": datetime.now()
-    })
+    db.collection('modulos').add({"curso_id": curso_id, "titulo": titulo, "descricao": descricao, "ordem": ordem, "criado_em": datetime.now()})
 
 def criar_aula(module_id, titulo, tipo, conteudo, duracao_min):
     db = get_db()
     conteudo_safe = conteudo.copy()
-    if 'arquivo_video' in conteudo_safe:
-        del conteudo_safe['arquivo_video']
-        conteudo_safe['arquivo_video_nome'] = "video_upload.mp4" 
-    if 'material_apoio' in conteudo_safe:
-        del conteudo_safe['material_apoio']
-        conteudo_safe['material_apoio_nome'] = "material.pdf"
-
-    db.collection('aulas').add({
-        "modulo_id": module_id, "titulo": titulo, "tipo": tipo,
-        "conteudo": conteudo_safe, "duracao_min": duracao_min, "criado_em": datetime.now()
-    })
+    # Simulação local (substituir por Cloud Storage)
+    if 'arquivo_video' in conteudo_safe: del conteudo_safe['arquivo_video']; conteudo_safe['arquivo_video_nome'] = "video.mp4" 
+    if 'material_apoio' in conteudo_safe: del conteudo_safe['material_apoio']; conteudo_safe['material_apoio_nome'] = "file.pdf"
+    db.collection('aulas').add({"modulo_id": module_id, "titulo": titulo, "tipo": tipo, "conteudo": conteudo_safe, "duracao_min": duracao_min, "criado_em": datetime.now()})
 
 def obter_inscricao(user_id, curso_id):
     db = get_db()
@@ -494,10 +416,7 @@ def obter_inscricao(user_id, curso_id):
 
 def inscrever_usuario_em_curso(user_id, curso_id):
     if obter_inscricao(user_id, curso_id): return
-    get_db().collection('inscricoes').add({
-        "usuario_id": user_id, "curso_id": curso_id, "progresso": 0,
-        "aulas_concluidas": [], "criado_em": datetime.now(), "status": "ativo"
-    })
+    get_db().collection('inscricoes').add({"usuario_id": user_id, "curso_id": curso_id, "progresso": 0, "aulas_concluidas": [], "criado_em": datetime.now(), "status": "ativo"})
 
 def verificar_aula_concluida(user_id, aula_id):
     db = get_db()
@@ -518,6 +437,4 @@ def marcar_aula_concluida(user_id, aula_id):
         concluidas = insc_doc.to_dict().get('aulas_concluidas', [])
         if aula_id not in concluidas:
             concluidas.append(aula_id)
-            db.collection('inscricoes').document(insc_doc.id).update({
-                "aulas_concluidas": concluidas, "progresso": 100 if concluidas else 0, "ultimo_acesso": datetime.now()
-            })
+            db.collection('inscricoes').document(insc_doc.id).update({"aulas_concluidas": concluidas, "progresso": 100 if concluidas else 0, "ultimo_acesso": datetime.now()})
