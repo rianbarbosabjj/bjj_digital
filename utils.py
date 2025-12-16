@@ -402,21 +402,30 @@ def listar_modulos_e_aulas(curso_id):
     except: return []
 
 def criar_modulo(curso_id, titulo, descricao, ordem):
-    # [CORREÇÃO] Atualizado para usar Firebase/Firestore em vez de SQLite
     db = get_db()
+    # Debug: Vamos ver se o ID e o DB estão vindo certos
+    if not db:
+        raise Exception("Erro crítico: Não foi possível conectar ao banco de dados (get_db retornou vazio).")
+    
     try:
         dados_modulo = {
-            "curso_id": curso_id,
-            "titulo": titulo,
-            "descricao": descricao,
-            "ordem": ordem,
+            "curso_id": str(curso_id), # Forçamos converter para string para evitar erro de tipo
+            "titulo": str(titulo),
+            "descricao": str(descricao),
+            "ordem": int(ordem),
             "criado_em": datetime.now()
         }
+        
+        # Tenta salvar no Firebase
         _, doc_ref = db.collection('modulos').add(dados_modulo)
+        
         return doc_ref.id
+
     except Exception as e:
-        print(f"Erro ao criar módulo: {e}")
-        return None
+        # AQUI ESTAVA O PROBLEMA: Antes ele escondia o erro.
+        # Agora ele vai jogar o erro na sua cara (no bom sentido) para sabermos o que é.
+        print(f"Erro ao criar módulo: {e}") 
+        raise e  # <--- MUDANÇA IMPORTANTE
 
 def criar_aula(module_id, titulo, tipo, conteudo, duracao_min):
     db = get_db()
