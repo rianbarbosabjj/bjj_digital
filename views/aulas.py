@@ -3,6 +3,7 @@ import time
 from typing import Dict
 import utils as ce 
 
+# Configuração de Cores (Fallback seguro)
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
@@ -31,6 +32,7 @@ def aplicar_estilos_aulas():
         background: rgba(255,255,255,0.1); margin-right: 0.5rem;
         text-transform: uppercase; color: #ddd;
     }}
+    /* Ajuste para garantir visibilidade do uploader */
     div[data-testid="stFileUploader"] {{
         padding: 1rem; border: 1px dashed rgba(255, 255, 255, 0.2);
         border-radius: 8px; background: rgba(0,0,0,0.2);
@@ -41,6 +43,7 @@ def aplicar_estilos_aulas():
 def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
     aplicar_estilos_aulas()
     
+    # --- Cabeçalho ---
     c_voltar, c_tit = st.columns([1, 5])
     with c_voltar:
         if st.button("← Voltar", use_container_width=True):
@@ -49,6 +52,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
     with c_tit:
         st.subheader(f"Gerenciar Conteúdo: {curso['titulo']}")
 
+    # --- Criar Novo Módulo ---
     with st.expander("➕ Criar Novo Módulo", expanded=False):
         with st.form("new_mod_form", clear_on_submit=True):
             t_mod = st.text_input("Título do Módulo", placeholder="Ex: Módulo 1 - Guarda Fechada")
@@ -62,6 +66,8 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                     st.error("Título obrigatório.")
 
     st.markdown("---")
+    
+    # --- Listagem de Módulos e Aulas ---
     modulos = ce.listar_modulos_e_aulas(curso['id'])
     
     if not modulos:
@@ -71,9 +77,11 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
     st.markdown("### 📚 Estrutura do Curso")
 
     for i, mod in enumerate(modulos):
-        with st.expander(f"{i+1}. {mod['titulo']} ({len(mod['aulas'])} aulas)", expanded=False):
+        # [CORREÇÃO CRÍTICA]: Adicionada a KEY única baseada no ID do módulo
+        with st.expander(f"{i+1}. {mod['titulo']} ({len(mod['aulas'])} aulas)", expanded=False, key=f"exp_mod_{mod['id']}"):
             st.caption(mod.get('descricao', ''))
             
+            # --- Lista Aulas Existentes ---
             if mod['aulas']:
                 for aula in mod['aulas']:
                     tp = aula.get('tipo', 'geral')
@@ -94,19 +102,23 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
             st.markdown("<br>", unsafe_allow_html=True)
             
+            # --- Formulário de Nova Aula ---
             if st.checkbox(f"➕ Adicionar Aula em '{mod['titulo']}'", key=f"chk_add_{mod['id']}"):
                 with st.container(border=True):
                     st.markdown("#### Nova Aula")
+                    
                     tit_aula = st.text_input("Título", key=f"ta_{mod['id']}")
                     tipo_aula = st.selectbox("Tipo", ["video", "imagem", "texto"], key=f"sa_{mod['id']}")
                     dur_aula = st.number_input("Duração (min)", 1, 120, 10, key=f"na_{mod['id']}")
                     
                     conteudo = {}
                     
+                    # --- Lógica Condicional (O problema estava aqui) ---
                     if tipo_aula == "video":
                         src = st.radio("Origem:", ["Link (YouTube/Vimeo)", "Upload (MP4)"], horizontal=True, key=f"src_v_{mod['id']}")
+                        
                         if "Link" in src:
-                            conteudo["url"] = st.text_input("Cole o Link:", key=f"lnk_v_{mod['id']}")
+                            conteudo["url"] = st.text_input("Cole o Link:", placeholder="https://...", key=f"lnk_v_{mod['id']}")
                             conteudo["tipo_video"] = "link"
                         else:
                             f = st.file_uploader("Arquivo MP4:", type=["mp4","mov"], key=f"up_v_{mod['id']}")
@@ -117,6 +129,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
                     elif tipo_aula == "imagem":
                         src = st.radio("Origem:", ["Link URL", "Upload (JPG/PNG)"], horizontal=True, key=f"src_i_{mod['id']}")
+                        
                         if "Link" in src:
                             conteudo["url"] = st.text_input("URL da Imagem:", key=f"lnk_i_{mod['id']}")
                             conteudo["tipo_imagem"] = "link"
@@ -139,6 +152,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
                     st.markdown("<br>", unsafe_allow_html=True)
                     
+                    # --- Botão Salvar ---
                     if st.button(f"💾 Salvar Aula", key=f"sv_{mod['id']}", type="primary"):
                         err = None
                         if not tit_aula: err = "Título obrigatório."
@@ -146,12 +160,16 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                         elif tipo_aula == "imagem" and not (conteudo.get("url") or conteudo.get("arquivo_imagem")): err = "Imagem obrigatória."
                         elif tipo_aula == "texto" and not conteudo.get("texto"): err = "Texto obrigatório."
                         
-                        if err: st.error(err)
+                        if err: 
+                            st.error(err)
                         else:
                             try:
                                 ce.criar_aula(mod['id'], tit_aula, tipo_aula, conteudo, dur_aula)
-                                st.success("Aula adicionada!"); time.sleep(1); st.rerun()
-                            except Exception as e: st.error(f"Erro: {e}")
+                                st.success("Aula adicionada!")
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e: 
+                                st.error(f"Erro: {e}")
 
 def pagina_aulas(usuario: dict):
     st.warning("Acesse via Gerenciador de Cursos.")
