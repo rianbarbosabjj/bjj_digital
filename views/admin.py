@@ -21,8 +21,8 @@ try:
         fazer_upload_midia, 
         normalizar_link_video, 
         verificar_duplicidade_ia,
-        auditoria_ia_questao,   
-        auditoria_ia_openai,    
+        auditoria_ia_questao,    
+        auditoria_ia_openai,     
         IA_ATIVADA 
     )
 except ImportError:
@@ -35,6 +35,16 @@ except ImportError:
     def auditoria_ia_questao(p, a, c): return "Indisponível"
     def auditoria_ia_openai(p, a, c): return "Indisponível"
 
+# --- CONFIGURAÇÃO DE CORES ---
+try:
+    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+except ImportError:
+    COR_FUNDO = "#0e2d26"
+    COR_TEXTO = "#FFFFFF"
+    COR_DESTAQUE = "#FFD770"
+    COR_BOTAO = "#078B6C" # Verde BJJ Digital
+    COR_HOVER = "#FFD770" # Dourado
+
 # --- CONSTANTES ---
 FAIXAS_COMPLETAS = [
     " ", "Cinza e Branca", "Cinza", "Cinza e Preta",
@@ -46,19 +56,58 @@ FAIXAS_COMPLETAS = [
 NIVEIS_DIFICULDADE = [1, 2, 3, 4]
 MAPA_NIVEIS = {1: "🟢 Fácil", 2: "🔵 Médio", 3: "🟠 Difícil", 4: "🔴 Muito Difícil"}
 
-# Mapeamento para exibição
-TIPO_MAP = {
-    "Aluno(a)": "aluno",
-    "Professor(a)": "professor",
-    "Administrador(a)": "admin"
-}
+TIPO_MAP = {"Aluno(a)": "aluno", "Professor(a)": "professor", "Administrador(a)": "admin"}
 TIPO_MAP_INV = {v: k for k, v in TIPO_MAP.items()}
 LISTA_TIPOS_DISPLAY = list(TIPO_MAP.keys())
 
 def get_badge_nivel(n): return MAPA_NIVEIS.get(n, "⚪ ?")
 
 # =========================================
-# GESTÃO DE USUÁRIOS (CORRIGIDA)
+# ESTILOS VISUAIS
+# =========================================
+def aplicar_estilos_admin():
+    st.markdown(f"""
+    <style>
+    /* CARDS MODERNOS */
+    .admin-card-moderno {{
+        background: linear-gradient(145deg, rgba(14, 45, 38, 0.95) 0%, rgba(9, 31, 26, 0.98) 100%);
+        border: 1px solid rgba(255, 215, 112, 0.15); border-radius: 20px; padding: 1.5rem;
+        min-height: 200px; display: flex; flex-direction: column; justify-content: space-between;
+        position: relative; overflow: hidden; transition: transform 0.3s;
+    }}
+    .admin-card-moderno:hover {{
+        border-color: {COR_DESTAQUE}; transform: translateY(-5px); box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }}
+    .admin-card-moderno::before {{
+        content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+        background: linear-gradient(90deg, {COR_BOTAO} 0%, {COR_DESTAQUE} 100%);
+    }}
+    
+    /* BADGES */
+    .admin-badge {{
+        padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: bold;
+        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+    }}
+    .green {{ color: #4ADE80; border-color: #4ADE80; }}
+    .gold {{ color: {COR_DESTAQUE}; border-color: {COR_DESTAQUE}; }}
+    
+    /* BOTÕES */
+    div.stButton > button, div.stFormSubmitButton > button {{ 
+        width: 100%; border-radius: 8px; font-weight: 600;
+    }}
+    .stButton>button[kind="primary"] {{ background: linear-gradient(135deg, {COR_BOTAO}, #056853); color: white; border: none; }}
+    .stButton>button[kind="secondary"] {{ background: transparent; border: 1px solid {COR_DESTAQUE}; color: {COR_DESTAQUE}; }}
+    
+    /* HEADER */
+    .admin-header {{
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9), rgba(9, 31, 26, 0.95));
+        border-bottom: 1px solid {COR_DESTAQUE}; padding: 1.5rem; border-radius: 0 0 20px 20px; margin-bottom: 2rem;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# =========================================
+# GESTÃO DE USUÁRIOS
 # =========================================
 def gestao_usuarios_tab():
     db = get_db()
@@ -179,7 +228,7 @@ def gestao_usuarios_tab():
             tipo_sel_display = p1.selectbox("Tipo:", LISTA_TIPOS_DISPLAY, index=idx_tipo)
             tipo_sel_valor = TIPO_MAP[tipo_sel_display]
             
-            # Faixa (CORREÇÃO DE ERRO ATTRIBUTE ERROR)
+            # Faixa
             idx_fx = 0
             faixa_banco = str(sel.get('faixa_atual') or 'Branca') # Garante string
             for i, f in enumerate(FAIXAS_COMPLETAS):
@@ -215,7 +264,6 @@ def gestao_usuarios_tab():
             st.markdown("##### 🔒 Segurança")
             pwd = st.text_input("Nova Senha (opcional):", type="password")
             
-            # --- CORREÇÃO: BOTÃO DENTRO DO FORM ---
             submit_btn = st.form_submit_button("💾 Salvar Todas as Alterações", type="primary")
 
         # Lógica de processamento
@@ -263,7 +311,8 @@ def gestao_usuarios_tab():
 # GESTÃO DE QUESTÕES
 # =========================================
 def gestao_questoes_tab():
-    st.markdown(f"""<div class="curso-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">📝 Banco de Questões</h1></p></div>""", unsafe_allow_html=True)
+    aplicar_estilos_admin()
+    st.markdown(f"""<div class="admin-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">📝 Banco de Questões</h1></p></div>""", unsafe_allow_html=True)
     db = get_db()
     user = st.session_state.usuario
     
@@ -571,10 +620,11 @@ def gestao_questoes_tab():
                                 db.collection('questoes').document(doc.id).delete(); st.rerun()
 
 # =========================================
-# GESTÃO DE EXAMES
+# GESTÃO DE EXAMES (CARD ESTILIZADO)
 # =========================================
 def gestao_exame_de_faixa_route():
-    st.markdown(f"""<div class="curso-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">📝 GERENCIADOR DE EXAMES</h1></p></div>""", unsafe_allow_html=True)
+    aplicar_estilos_admin()
+    st.markdown(f"""<div class="admin-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">📝 GERENCIADOR DE EXAMES</h1></p></div>""", unsafe_allow_html=True)
     db = get_db()
     tab1, tab2, tab3 = st.tabs(["📝 Criar/Editar Exames", "👁️ Visualizar Exames", "✅ Autorizar Exames"])
 
@@ -663,31 +713,33 @@ def gestao_exame_de_faixa_route():
                 for j, fx in enumerate(fxs):
                     conf = mapa_configs.get(fx)
                     with cols[j]:
-                        with st.container(border=True):
-                            if conf:
-                                st.markdown(f"**{fx}**")
-                                st.caption(f"✅ {conf.get('qtd_questoes')} questões")
-                                if st.toggle("👁️ Simular", key=f"sim_{conf['id']}"):
-                                    ids = conf.get('questoes_ids', [])
-                                    for q_idx, qid in enumerate(ids): 
-                                        qdoc = db.collection('questoes').document(qid).get()
-                                        if qdoc.exists:
-                                            qd = qdoc.to_dict()
-                                            st.markdown(f"**{q_idx+1}. {qd.get('pergunta')}**")
-                                            if qd.get('url_imagem'): st.image(qd.get('url_imagem'), use_container_width=True)
-                                            if qd.get('url_video'):
-                                                try: st.video(normalizar_link_video(qd.get('url_video')))
-                                                except: pass
-                                            
-                                            alts = qd.get('alternativas', {})
-                                            ops = [f"A) {alts.get('A','')}", f"B) {alts.get('B','')}", f"C) {alts.get('C','')}", f"D) {alts.get('D','')}"]
-                                            # CORREÇÃO DUPLICATE KEY
-                                            st.radio("", ops, key=f"r_{qid}_{conf['id']}", disabled=True, label_visibility="collapsed")
-                                            st.success(f"Gabarito: {qd.get('resposta_correta')}")
-                                if st.button("🗑️", key=f"del_{conf['id']}"):
-                                    db.collection('config_exames').document(conf['id']).delete(); st.rerun()
-                            else:
-                                st.markdown(f"**{fx}**"); st.caption("❌ Pendente")
+                        # --- CARD ESTILIZADO DE EXAME ---
+                        if conf:
+                            html_card = f"""
+                            <div class="admin-card-moderno">
+                                <div style="font-size:2rem;text-align:center;">📜</div>
+                                <h4 style="margin:0; text-align:center; color:white;">{fx}</h4>
+                                <div style="text-align:center; margin-top:10px;">
+                                    <span class="admin-badge green">✅ {conf.get('qtd_questoes')} Questões</span>
+                                    <br><br>
+                                    <span class="admin-badge gold">⏱️ {conf.get('tempo_limite')} min</span>
+                                </div>
+                            </div>
+                            """
+                            st.markdown(html_card, unsafe_allow_html=True)
+                            
+                            st.markdown(f'<div style="margin-top: -1rem;">', unsafe_allow_html=True)
+                            if st.button("🗑️ Deletar", key=f"del_ex_{conf['id']}", use_container_width=True):
+                                db.collection('config_exames').document(conf['id']).delete(); st.rerun()
+                            st.markdown("</div>", unsafe_allow_html=True)
+                        else:
+                            st.markdown(f"""
+                            <div class="admin-card-moderno" style="opacity:0.5; border:1px dashed white;">
+                                <div style="font-size:2rem;text-align:center;">🚫</div>
+                                <h4 style="text-align:center;">{fx}</h4>
+                                <p style="text-align:center;">Não configurado</p>
+                            </div>
+                            """, unsafe_allow_html=True)
 
     with tab3:
         with st.container(border=True):
@@ -772,6 +824,7 @@ def gestao_questoes(): gestao_questoes_tab()
 def gestao_exame_de_faixa(): gestao_exame_de_faixa_route()
 
 def gestao_usuarios(usuario_logado):
+    aplicar_estilos_admin()
     st.markdown(f"<h1 style='color:#FFD700;'>Gestão e Estatísticas</h1>", unsafe_allow_html=True)
     if st.button("🏠 Voltar ao Início", key="btn_back_admin_main"):
         st.session_state.menu_selection = "Início"; st.rerun()
