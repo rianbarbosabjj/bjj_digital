@@ -36,7 +36,7 @@ def get_cor_faixa(nome_faixa):
     return (0, 0, 0) 
 
 # ==============================================================================
-# 2. FUNÇÕES DE UTILIDADE (TEXTO, CPF, CEP, SENHA)
+# 2. FUNÇÕES DE UTILIDADE
 # ==============================================================================
 def normalizar_nome(nome):
     if not nome: return "sem_nome"
@@ -132,7 +132,7 @@ def fazer_upload_midia(arquivo):
         return None
 
 # ==============================================================================
-# 4. INTELIGÊNCIA ARTIFICIAL (ANTI-DUPLICIDADE E AUDITORIA)
+# 4. INTELIGÊNCIA ARTIFICIAL
 # ==============================================================================
 IA_ATIVADA = False 
 try:
@@ -341,7 +341,7 @@ def listar_todos_usuarios_para_selecao():
             # Normaliza para garantir busca (Aceita Professor, Mestre, Admin, etc)
             tipo_usuario = str(dados.get('tipo', '')).lower().strip()
             
-            # Tipos permitidos (Incluindo 'none' e 'aluno' para testes)
+            # --- LISTA AMPLIADA: ACEITA 'none' (STRING) E VAZIO ---
             tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'teacher', 'none', 'aluno', '']
             
             if tipo_usuario in tipos_permitidos:
@@ -359,13 +359,13 @@ def listar_todos_usuarios_para_selecao():
         return []
 
 def criar_curso(professor_id, nome_professor, professor_equipe, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, duracao_estimada, nivel, editores_ids=[]):
-    """Cria um novo curso salvando também a EQUIPE DO PROFESSOR."""
+    """Cria um novo curso salvando a EQUIPE DO PROFESSOR."""
     db = get_db()
     
     novo_curso = {
         "professor_id": professor_id,
         "professor_nome": nome_professor,
-        "professor_equipe": professor_equipe, # <--- NOVO CAMPO SALVO
+        "professor_equipe": professor_equipe, # <--- SALVA EQUIPE
         "editores_ids": editores_ids,
         "titulo": titulo,
         "descricao": descricao,
@@ -477,12 +477,10 @@ def criar_modulo(curso_id, titulo, descricao, ordem):
 def criar_aula(module_id, titulo, tipo, conteudo, duracao_min):
     db = get_db()
     
-    # Tratamento de Uploads para Local (Mudar para Cloud em Prod)
     conteudo_safe = conteudo.copy()
     upload_dir = "uploads"
     if not os.path.exists(upload_dir): os.makedirs(upload_dir)
 
-    # Nota: Em produção, substitua esses 'saves' locais pelo 'fazer_upload_midia' acima
     if 'arquivo_video' in conteudo_safe:
         del conteudo_safe['arquivo_video']
         conteudo_safe['arquivo_video_nome'] = "video_upload.mp4" 
