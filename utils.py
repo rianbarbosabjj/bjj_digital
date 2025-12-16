@@ -93,9 +93,13 @@ def normalizar_link_video(url):
     if not url: return None
     try:
         if "shorts/" in url:
-            return f"https://www.youtube.com/watch?v={url.split('shorts/')[1].split('?')[0]}"
+            base = url.split("shorts/")[1]
+            video_id = base.split("?")[0]
+            return f"https://www.youtube.com/watch?v={video_id}"
         elif "youtu.be/" in url:
-            return f"https://www.youtube.com/watch?v={url.split('youtu.be/')[1].split('?')[0]}"
+            base = url.split("youtu.be/")[1]
+            video_id = base.split("?")[0]
+            return f"https://www.youtube.com/watch?v={video_id}"
         return url
     except: return url
 
@@ -399,9 +403,23 @@ def criar_modulo(curso_id, titulo, descricao, ordem):
 def criar_aula(module_id, titulo, tipo, conteudo, duracao_min):
     db = get_db()
     conteudo_safe = conteudo.copy()
-    # Simulação local (substituir por Cloud Storage)
-    if 'arquivo_video' in conteudo_safe: del conteudo_safe['arquivo_video']; conteudo_safe['arquivo_video_nome'] = "video.mp4" 
-    if 'material_apoio' in conteudo_safe: del conteudo_safe['material_apoio']; conteudo_safe['material_apoio_nome'] = "file.pdf"
+    
+    # Tratamento de uploads no backend (simulação para Cloud Storage)
+    if 'arquivo_video' in conteudo_safe:
+        url = fazer_upload_midia(conteudo_safe['arquivo_video'])
+        del conteudo_safe['arquivo_video']
+        if url: conteudo_safe['arquivo_video'] = url
+        
+    if 'arquivo_imagem' in conteudo_safe:
+        url = fazer_upload_midia(conteudo_safe['arquivo_imagem'])
+        del conteudo_safe['arquivo_imagem']
+        if url: conteudo_safe['arquivo_imagem'] = url
+
+    if 'material_apoio' in conteudo_safe:
+        url = fazer_upload_midia(conteudo_safe['material_apoio'])
+        del conteudo_safe['material_apoio']
+        if url: conteudo_safe['material_apoio'] = url
+
     db.collection('aulas').add({"modulo_id": module_id, "titulo": titulo, "tipo": tipo, "conteudo": conteudo_safe, "duracao_min": duracao_min, "criado_em": datetime.now()})
 
 def obter_inscricao(user_id, curso_id):
