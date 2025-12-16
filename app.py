@@ -306,7 +306,7 @@ def app_principal():
 
     if pg == "Modo Rola": 
         aluno.modo_rola(usuario)
-    elif pg == "Curso":
+    elif pg == "Cursos":
         # 🔹 NOVO: rota para a página de cursos
         cursos.pagina_cursos(usuario)
     elif pg == "Exame de Faixa": 
