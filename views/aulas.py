@@ -1,7 +1,6 @@
 """
 BJJ Digital - Sistema de Gerenciamento de Aulas
-Permite aos professores criar módulos, adicionar conteúdo (Vídeo/Texto) e Material de Apoio.
-Integração com utils.py (Motor Unificado).
+Permite aos professores criar módulos, adicionar conteúdo (Vídeo/Texto/Imagem) e Material de Apoio.
 """
 
 import streamlit as st
@@ -11,18 +10,14 @@ from typing import Dict
 # Importa o motor unificado (utils)
 import utils as ce 
 
-# --- 1. CONFIGURAÇÃO DE CORES (Igual ao app.py e cursos.py) ---
+# --- 1. CONFIGURAÇÃO DE CORES ---
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
-    COR_FUNDO = "#0e2d26"
-    COR_TEXTO = "#FFFFFF"
-    COR_DESTAQUE = "#FFD770"
-    COR_BOTAO = "#078B6C" # Verde BJJ Digital
-    COR_HOVER = "#FFD770"
+    COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER = "#0e2d26", "#FFFFFF", "#FFD770", "#078B6C", "#FFD770"
 
 def aplicar_estilos_aulas():
-    """CSS específico para o gerenciador de aulas (Atualizado com cores do tema)"""
+    """CSS específico para o gerenciador de aulas."""
     st.markdown(f"""
     <style>
     /* Estilo para os Módulos (Expanders) */
@@ -47,205 +42,150 @@ def aplicar_estilos_aulas():
     }}
     
     .tipo-badge {{
-        font-size: 0.7rem;
-        padding: 0.2rem 0.5rem;
-        border-radius: 4px;
-        background: rgba(255,255,255,0.1);
-        margin-right: 0.5rem;
-        text-transform: uppercase;
-        color: #ddd;
+        font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 4px;
+        background: rgba(255,255,255,0.1); margin-right: 0.5rem;
+        text-transform: uppercase; color: #ddd;
     }}
     
-
     /* Upload Box customizada */
     div[data-testid="stFileUploader"] {{
-        padding: 1rem;
-        border: 1px dashed rgba(255, 255, 255, 0.2);
-        border-radius: 8px;
-        background: rgba(0,0,0,0.2);
+        padding: 1rem; border: 1px dashed rgba(255, 255, 255, 0.2);
+        border-radius: 8px; background: rgba(0,0,0,0.2);
     }}
     </style>
     """, unsafe_allow_html=True)
 
 def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
-    """
-    Interface principal para o Professor gerenciar módulos e aulas de um curso.
-    """
+    """Interface principal para gerenciar módulos e aulas."""
     aplicar_estilos_aulas()
     
-    # Header
-    col_voltar, col_titulo = st.columns([1, 5])
-    with col_voltar:
-        if st.button("← Voltar", use_container_width=True, type="secondary"):
-            # Retorna para a tela de detalhes no cursos.py
+    # Header com navegação
+    c_voltar, c_tit = st.columns([1, 5])
+    with c_voltar:
+        if st.button("← Voltar", use_container_width=True):
             st.session_state['cursos_view'] = 'detalhe'
             st.rerun()
-            
-    with col_titulo:
+    with c_tit:
         st.subheader(f"Gerenciar Conteúdo: {curso['titulo']}")
 
     # ======================================================
-    # 1. CRIAÇÃO DE NOVOS MÓDULOS
+    # 1. CRIAÇÃO DE MÓDULOS
     # ======================================================
     with st.expander("➕ Criar Novo Módulo", expanded=False):
-        with st.form("form_novo_modulo", clear_on_submit=True):
-            st.markdown("Defina um novo capítulo ou seção para o seu curso.")
-            titulo_mod = st.text_input("Título do Módulo", placeholder="Ex: Módulo 1 - Fundamentos da Guarda")
-            desc_mod = st.text_area("Descrição (Opcional)", placeholder="O que será abordado neste módulo?")
-            
-            submitted = st.form_submit_button("Criar Módulo", type="primary")
-            if submitted:
-                if not titulo_mod:
-                    st.error("O título do módulo é obrigatório.")
+        with st.form("new_mod_form", clear_on_submit=True):
+            t_mod = st.text_input("Título do Módulo", placeholder="Ex: Módulo 1 - Guarda Fechada")
+            d_mod = st.text_area("Descrição", placeholder="O que será ensinado?")
+            if st.form_submit_button("Criar Módulo", type="primary"):
+                if t_mod:
+                    # Define ordem baseado nos existentes
+                    mods = ce.listar_modulos_e_aulas(curso['id'])
+                    ce.criar_modulo(curso['id'], t_mod, d_mod, len(mods)+1)
+                    st.success("Módulo criado!"); time.sleep(1); st.rerun()
                 else:
-                    try:
-                        # Pega a quantidade atual de módulos para definir a ordem
-                        modulos_existentes = ce.listar_modulos_do_curso(curso['id'])
-                        nova_ordem = len(modulos_existentes) + 1
-                        
-                        ce.criar_modulo(curso['id'], titulo_mod, desc_mod, nova_ordem)
-                        st.success("Módulo criado com sucesso!")
-                        time.sleep(1)
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro ao criar módulo: {e}")
+                    st.error("Título obrigatório.")
 
     st.markdown("---")
 
     # ======================================================
-    # 2. LISTAGEM E GERENCIAMENTO DE MÓDULOS/AULAS
+    # 2. LISTAGEM E ADIÇÃO DE AULAS
     # ======================================================
+    modulos = ce.listar_modulos_e_aulas(curso['id'])
     
-    # Carrega estrutura atualizada usando o UTILS.PY
-    modulos_completos = ce.listar_modulos_e_aulas(curso['id'])
-    
-    if not modulos_completos:
-        st.info("Este curso ainda não possui módulos. Comece criando um acima! 👆")
+    if not modulos:
+        st.info("Nenhum módulo criado ainda.")
         return
 
     st.markdown("### 📚 Estrutura do Curso")
 
-    for index, modulo in enumerate(modulos_completos):
-        # Container do Módulo
-        with st.expander(f"{index + 1}. {modulo['titulo']} ({len(modulo['aulas'])} aulas)", expanded=False):
+    for i, mod in enumerate(modulos):
+        with st.expander(f"{i+1}. {mod['titulo']} ({len(mod['aulas'])} aulas)", expanded=False):
+            st.caption(mod.get('descricao', ''))
             
-            st.caption(modulo.get('descricao', 'Sem descrição.'))
-            
-            # --- LISTA DE AULAS EXISTENTES ---
-            if modulo['aulas']:
-                for aula in modulo['aulas']:
-                    tipo = aula.get('tipo', 'geral')
-                    icone = "🎥" if tipo == 'video' else "📝" if tipo == 'texto' else "❓"
-                    
-                    # Verifica se tem material de apoio
+            # Lista de Aulas Existentes
+            if mod['aulas']:
+                for aula in mod['aulas']:
+                    tp = aula.get('tipo', 'geral')
+                    ic = "🎥" if tp=='video' else "🖼️" if tp=='imagem' else "📝"
                     tem_pdf = "📎 PDF" if aula.get('conteudo', {}).get('material_apoio_nome') else ""
                     
                     st.markdown(f"""
                     <div class="aula-card-admin">
-                        <div>
-                            <span class="tipo-badge">{tipo}</span>
-                            <strong>{icone} {aula['titulo']}</strong>
+                        <div><span class="tipo-badge">{tp}</span><strong>{ic} {aula['titulo']}</strong></div>
+                        <div style="font-size:0.8rem; text-align:right;">
+                            {aula.get('duracao_min',0)} min<br>
+                            <span style="color:{COR_DESTAQUE};">{tem_pdf}</span>
                         </div>
-                        <div style="font-size: 0.8rem; opacity: 0.7; text-align: right;">
-                            {aula.get('duracao_min', 0)} min <br>
-                            <span style="color: {COR_DESTAQUE}; font-size: 0.7rem;">{tem_pdf}</span>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    </div>""", unsafe_allow_html=True)
             else:
-                st.info("Nenhuma aula neste módulo ainda.")
+                st.caption("Sem aulas neste módulo.")
 
-            # --- ADICIONAR NOVA AULA NESTE MÓDULO ---
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.checkbox(f"➕ Adicionar Aula em '{modulo['titulo']}'", key=f"check_add_{modulo['id']}"):
-                
+            
+            # --- ADICIONAR AULA ---
+            if st.checkbox(f"➕ Adicionar Aula em '{mod['titulo']}'", key=f"chk_add_{mod['id']}"):
                 with st.container(border=True):
                     st.markdown("#### Nova Aula")
                     
-                    # Inputs controlados por keys únicas baseadas no ID do módulo
-                    titulo_aula = st.text_input("Título da Aula", key=f"t_aula_{modulo['id']}")
-                    tipo_aula = st.selectbox("Tipo de Conteúdo", ["video", "texto", "quiz"], key=f"s_aula_{modulo['id']}")
-                    duracao = st.number_input("Duração estimada (minutos)", min_value=1, value=10, key=f"n_aula_{modulo['id']}")
+                    # Inputs Básicos
+                    tit_aula = st.text_input("Título", key=f"ta_{mod['id']}")
+                    tipo_aula = st.selectbox("Tipo", ["video", "imagem", "texto"], key=f"sa_{mod['id']}")
+                    dur_aula = st.number_input("Duração (min)", 1, 120, 10, key=f"na_{mod['id']}")
                     
                     conteudo = {}
                     
-                    # === LÓGICA DE VÍDEO (LINK OU UPLOAD) ===
+                    # Lógica por Tipo
                     if tipo_aula == "video":
-                        fonte_video = st.radio("Fonte do Vídeo", ["Link Externo (YouTube/Vimeo)", "Upload de Arquivo"], horizontal=True, key=f"font_v_{modulo['id']}")
-                        
-                        if fonte_video == "Link Externo (YouTube/Vimeo)":
-                            url_video = st.text_input("Cole o Link aqui", placeholder="https://...", key=f"v_aula_{modulo['id']}")
-                            conteudo["url"] = url_video
+                        src = st.radio("Origem:", ["Link (YouTube/Vimeo)", "Upload (MP4)"], horizontal=True, key=f"src_v_{mod['id']}")
+                        if "Link" in src:
+                            conteudo["url"] = st.text_input("Cole o Link:", key=f"lnk_v_{mod['id']}")
                             conteudo["tipo_video"] = "link"
                         else:
-                            arquivo_video = st.file_uploader("Carregar Vídeo (MP4, MOV)", type=["mp4", "mov", "avi"], key=f"up_v_{modulo['id']}")
-                            if arquivo_video:
-                                # Nota: O engine precisará tratar o upload para storage
-                                conteudo["arquivo_video"] = arquivo_video 
+                            f = st.file_uploader("Arquivo MP4:", type=["mp4","mov"], key=f"up_v_{mod['id']}")
+                            if f:
+                                conteudo["arquivo_video"] = f
                                 conteudo["tipo_video"] = "upload"
-                                conteudo["nome_arquivo_video"] = arquivo_video.name
-                                st.success(f"Vídeo '{arquivo_video.name}' selecionado.")
-                        
-                    elif tipo_aula == "texto":
-                        texto_conteudo = st.text_area("Conteúdo da Aula (Markdown suportado)", height=200, key=f"txt_aula_{modulo['id']}")
-                        conteudo["texto"] = texto_conteudo
-                        
-                    elif tipo_aula == "quiz":
-                        pergunta = st.text_input("Pergunta", key=f"q_perg_{modulo['id']}")
-                        opcoes_txt = st.text_area("Opções (uma por linha)", placeholder="Opção A\nOpção B\nOpção C", key=f"q_ops_{modulo['id']}")
-                        correta = st.selectbox("Opção Correta (Índice 1-N)", range(1, 6), key=f"q_corr_{modulo['id']}")
-                        
-                        lista_opcoes = opcoes_txt.split('\n') if opcoes_txt else []
-                        conteudo = {
-                            "pergunta": pergunta,
-                            "opcoes": lista_opcoes,
-                            "correta": correta
-                        }
+                                conteudo["nome_arquivo_video"] = f.name
 
-                    # === MATERIAL DE APOIO (PDF) ===
+                    elif tipo_aula == "imagem":
+                        src = st.radio("Origem:", ["Link URL", "Upload (JPG/PNG)"], horizontal=True, key=f"src_i_{mod['id']}")
+                        if "Link" in src:
+                            conteudo["url"] = st.text_input("URL da Imagem:", key=f"lnk_i_{mod['id']}")
+                            conteudo["tipo_imagem"] = "link"
+                        else:
+                            f = st.file_uploader("Arquivo Imagem:", type=["jpg","png","jpeg"], key=f"up_i_{mod['id']}")
+                            if f:
+                                conteudo["arquivo_imagem"] = f
+                                conteudo["tipo_imagem"] = "upload"
+                                conteudo["nome_arquivo_imagem"] = f.name
+
+                    elif tipo_aula == "texto":
+                        conteudo["texto"] = st.text_area("Conteúdo (Markdown):", height=150, key=f"txt_{mod['id']}")
+
+                    # Material de Apoio (PDF)
                     st.markdown("---")
-                    st.markdown("**📎 Material de Apoio (Opcional)**")
-                    pdf_apoio = st.file_uploader("Adicionar PDF", type=["pdf"], key=f"pdf_{modulo['id']}")
-                    if pdf_apoio:
-                         # Nota: O engine precisará tratar o upload
-                         conteudo["material_apoio"] = pdf_apoio
-                         conteudo["nome_arquivo_pdf"] = pdf_apoio.name
-                         st.info(f"PDF '{pdf_apoio.name}' anexado.")
+                    st.markdown("**📎 Material de Apoio**")
+                    pdf = st.file_uploader("Upload PDF (Opcional):", type=["pdf"], key=f"pdf_{mod['id']}")
+                    if pdf:
+                        conteudo["material_apoio"] = pdf
+                        conteudo["nome_arquivo_pdf"] = pdf.name
 
                     st.markdown("<br>", unsafe_allow_html=True)
-
-                    # Botão Salvar Aula
-                    if st.button(f"💾 Salvar Aula em '{modulo['titulo']}'", key=f"btn_save_aula_{modulo['id']}", type="primary"):
+                    
+                    # Salvar
+                    if st.button(f"💾 Salvar Aula", key=f"sv_{mod['id']}", type="primary"):
+                        err = None
+                        if not tit_aula: err = "Título obrigatório."
+                        elif tipo_aula == "video" and not (conteudo.get("url") or conteudo.get("arquivo_video")): err = "Vídeo obrigatório."
+                        elif tipo_aula == "imagem" and not (conteudo.get("url") or conteudo.get("arquivo_imagem")): err = "Imagem obrigatória."
+                        elif tipo_aula == "texto" and not conteudo.get("texto"): err = "Texto obrigatório."
                         
-                        # Validações Básicas
-                        erro = None
-                        if not titulo_aula:
-                            erro = "O título da aula é obrigatório."
-                        elif tipo_aula == "video":
-                             if conteudo.get("tipo_video") == "link" and not conteudo.get("url"):
-                                 erro = "O link do vídeo é obrigatório."
-                             elif conteudo.get("tipo_video") == "upload" and not conteudo.get("arquivo_video"):
-                                 erro = "Você selecionou upload mas não carregou nenhum vídeo."
-                        elif tipo_aula == "texto" and not conteudo.get("texto"):
-                            erro = "O conteúdo de texto é obrigatório."
-
-                        if erro:
-                            st.error(erro)
+                        if err: st.error(err)
                         else:
                             try:
-                                ce.criar_aula(
-                                    module_id=modulo['id'],
-                                    titulo=titulo_aula,
-                                    tipo=tipo_aula,
-                                    conteudo=conteudo,
-                                    duracao_min=duracao
-                                )
-                                st.success("Aula adicionada com sucesso!")
-                                time.sleep(1)
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao salvar aula: {e}")
+                                ce.criar_aula(mod['id'], tit_aula, tipo_aula, conteudo, dur_aula)
+                                st.success("Aula adicionada!"); time.sleep(1); st.rerun()
+                            except Exception as e: st.error(f"Erro: {e}")
 
-# Função de entrada padrão
+# Função de entrada padrão (caso acessado diretamente, o que não deve ocorrer)
 def pagina_aulas(usuario: dict):
-    st.warning("Este módulo deve ser acessado através do Gerenciador de Cursos.")
+    st.warning("Acesse via Gerenciador de Cursos.")
