@@ -1,279 +1,436 @@
-"""
-BJJ Digital - Sistema de Cursos (Final)
-"""
+import os
+import re
+import requests
 import streamlit as st
-import pandas as pd
-import time
+import smtplib
+import secrets
+import string
+import unicodedata
+import random
+import uuid
+import json
+from urllib.parse import quote
 from datetime import datetime
-from typing import Optional, Dict
-import utils as ce 
-import views.aulas as aulas_view 
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from fpdf import FPDF
+from database import get_db
+from firebase_admin import firestore, storage 
 
+# ==============================================================================
+# 1. CONFIGURAÇÃO GERAL E CORES
+# ==============================================================================
+CORES_FAIXAS = {
+    "CINZA E BRANCA": (150, 150, 150), "CINZA": (128, 128, 128), "CINZA E PRETA": (100, 100, 100), 
+    "AMARELA E BRANCA": (240, 230, 140), "AMARELA": (255, 215, 0), "AMARELA E PRETA": (184, 134, 11),
+    "LARANJA E BRANCA": (255, 160, 122), "LARANJA": (255, 140, 0), "LARANJA E PRETA": (200, 100, 0),
+    "VERDE e BRANCA": (144, 238, 144), "VERDE": (0, 128, 0), "VERDE E PRETA": (0, 100, 0),
+    "AZUL": (0, 0, 205), "ROXA": (128, 0, 128), "MARROM": (139, 69, 19), "PRETA": (0, 0, 0)
+}
+
+def get_cor_faixa(nome_faixa):
+    for chave, cor in CORES_FAIXAS.items():
+        if chave in str(nome_faixa).upper():
+            return cor
+    return (0, 0, 0) 
+
+# ==============================================================================
+# 2. FUNÇÕES DE UTILIDADE
+# ==============================================================================
+def normalizar_nome(nome):
+    if not nome: return "sem_nome"
+    return "_".join(unicodedata.normalize("NFKD", nome).encode("ASCII", "ignore").decode().split()).lower()
+
+def formatar_e_validar_cpf(cpf):
+    if not cpf: return None
+    c = re.sub(r'\D', '', str(cpf))
+    if len(c) != 11 or c == c[0]*11: return None
+    return f"{c[:3]}.{c[3:6]}.{c[6:9]}-{c[9:]}"
+
+def formatar_cep(cep):
+    if not cep: return None
+    c = ''.join(filter(str.isdigit, cep))
+    return c if len(c) == 8 else None
+
+def buscar_cep(cep):
+    c = formatar_cep(cep)
+    if not c: return None
+    try:
+        r = requests.get(f"https://viacep.com.br/ws/{c}/json/", timeout=3)
+        if r.status_code == 200:
+            d = r.json()
+            if "erro" not in d:
+                return {"logradouro": d.get("logradouro","").upper(), "bairro": d.get("bairro","").upper(), "cidade": d.get("localidade","").upper(), "uf": d.get("uf","").upper()}
+    except: pass
+    return None
+
+def gerar_senha_temporaria(t=8):
+    return ''.join(secrets.choice(string.ascii_letters + string.digits) for i in range(t))
+
+def enviar_email_recuperacao(dest, senha):
+    try:
+        s_email = st.secrets.get("EMAIL_SENDER")
+        s_pwd = st.secrets.get("EMAIL_PASSWORD")
+        if not s_email or not s_pwd: return False
+        msg = MIMEMultipart()
+        msg['Subject'] = "Recuperação de Senha - BJJ Digital"
+        msg['From'] = s_email
+        msg['To'] = dest
+        corpo = f"<html><body><h2>Recuperação</h2><p>Senha: <b>{senha}</b></p></body></html>"
+        msg.attach(MIMEText(corpo, 'html'))
+        server = smtplib.SMTP("smtp.zoho.com", 587)
+        server.starttls()
+        server.login(s_email, s_pwd)
+        server.sendmail(s_email, dest, msg.as_string())
+        server.quit()
+        return True
+    except: return False
+
+# ==============================================================================
+# 3. MÍDIA E UPLOAD
+# ==============================================================================
+def normalizar_link_video(url):
+    if not url: return None
+    try:
+        if "shorts/" in url:
+            return f"https://www.youtube.com/watch?v={url.split('shorts/')[1].split('?')[0]}"
+        elif "youtu.be/" in url:
+            return f"https://www.youtube.com/watch?v={url.split('youtu.be/')[1].split('?')[0]}"
+        return url
+    except: return url
+
+def fazer_upload_midia(arquivo):
+    if not arquivo: return None
+    try:
+        bucket = storage.bucket()
+        if not bucket.name:
+            bucket_name = st.secrets.get("firebase", {}).get("storage_bucket")
+            if not bucket_name: bucket_name = st.secrets.get("storage_bucket")
+            if not bucket_name: return None
+        
+        ext = arquivo.name.split('.')[-1]
+        blob_name = f"questoes/{uuid.uuid4()}.{ext}"
+        blob = bucket.blob(blob_name)
+        
+        arquivo.seek(0)
+        blob.upload_from_file(arquivo, content_type=arquivo.type)
+        
+        access_token = str(uuid.uuid4())
+        metadata = {"firebaseStorageDownloadTokens": access_token}
+        blob.metadata = metadata
+        blob.patch()
+
+        blob_path_encoded = quote(blob_name, safe='')
+        return f"https://firebasestorage.googleapis.com/v0/b/{bucket.name}/o/{blob_path_encoded}?alt=media&token={access_token}"
+    except Exception as e:
+        st.error(f"Erro Upload: {e}")
+        return None
+
+# ==============================================================================
+# 4. INTELIGÊNCIA ARTIFICIAL
+# ==============================================================================
+IA_ATIVADA = False 
 try:
-    from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
+    from sentence_transformers import SentenceTransformer
+    from sklearn.metrics.pairwise import cosine_similarity
+    import numpy as np
+    IA_ATIVADA = True
+    @st.cache_resource
+    def carregar_modelo_ia():
+        return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+    def verificar_duplicidade_ia(nova_pergunta, lista_existentes, threshold=0.65):
+        try:
+            if not lista_existentes: return False, None
+            model = carregar_modelo_ia()
+            embedding_novo = model.encode([nova_pergunta])
+            textos_existentes = [str(q.get('pergunta', '')) for q in lista_existentes]
+            if not textos_existentes: return False, None
+            embeddings_existentes = model.encode(textos_existentes)
+            scores = cosine_similarity(embedding_novo, embeddings_existentes)[0]
+            max_score = np.max(scores)
+            idx_max = np.argmax(scores)
+            if max_score >= threshold:
+                return True, f"{textos_existentes[idx_max]} ({max_score*100:.1f}%)"
+            return False, None
+        except: return False, None
 except ImportError:
-    COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER = "#0e2d26", "#FFFFFF", "#FFD770", "#078B6C", "#FFD770"
+    IA_ATIVADA = False
+    def verificar_duplicidade_ia(n, l, t=0.75): return False, "IA não instalada"
 
-# ======================================================
-# ESTILOS
-# ======================================================
-def aplicar_estilos_cursos():
-    st.markdown(f"""
-    <style>
-    /* CARDS */
-    .curso-card-moderno {{
-        background: linear-gradient(145deg, rgba(14, 45, 38, 0.95) 0%, rgba(9, 31, 26, 0.98) 100%);
-        border: 1px solid rgba(255, 215, 112, 0.15); border-radius: 20px; padding: 1.5rem;
-        height: 100%; display: flex; flex-direction: column; position: relative; overflow: hidden;
-        transition: transform 0.3s;
-    }}
-    .curso-card-moderno:hover {{
-        border-color: {COR_DESTAQUE};
-        transform: translateY(-5px);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-    }}
-    .curso-icon {{
-        font-size: 2.5rem; text-align: center; margin-bottom: 1rem;
-    }}
-    /* INFO EXTRA */
-    .info-extra {{
-        font-size: 0.8rem; opacity: 0.8; margin-bottom: 0.8rem;
-        border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 8px;
-    }}
-    /* BADGES */
-    .curso-badges {{ display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: auto; }}
-    .curso-badge {{
-        padding: 2px 8px; border-radius: 10px; font-size: 0.75rem; font-weight: bold;
-        background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
-    }}
-    .green {{ color: #4ADE80; border-color: #4ADE80; }}
-    .gold {{ color: {COR_DESTAQUE}; border-color: {COR_DESTAQUE}; }}
-    .blue {{ color: #60A5FA; border-color: #60A5FA; }}
+def auditoria_ia_questao(pergunta, alternativas, correta):
+    api_key = st.secrets.get("GEMINI_API_KEY")
+    if not api_key: return "⚠️ Chave GEMINI_API_KEY não configurada."
+    prompt = f"Analise: {pergunta} | {alternativas} | Gabarito: {correta}"
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('models/gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e: return f"Erro na IA: {e}"
+
+def auditoria_ia_openai(pergunta, alternativas, correta):
+    return "Função desativada temporariamente."
+
+def carregar_todas_questoes(): return []
+def salvar_questoes(t, q): pass
+
+# ==============================================================================
+# 5. GERAÇÃO DE CERTIFICADOS E QR CODE
+# ==============================================================================
+def gerar_codigo_verificacao():
+    try:
+        db = get_db()
+        aggregate_query = db.collection('resultados').count()
+        snapshots = aggregate_query.get()
+        total = int(snapshots[0][0].value)
+        return f"BJJDIGITAL-{datetime.now().year}-{total+1:04d}"
+    except:
+        return f"BJJDIGITAL-{datetime.now().year}-{random.randint(1000,9999)}"
+
+def gerar_qrcode(codigo):
+    pasta = "qrcodes"
+    os.makedirs(pasta, exist_ok=True)
+    caminho = f"{pasta}/{codigo}.png"
+    url = f"https://bjjdigital.com.br/verificar.html?codigo={codigo}"
+    if not os.path.exists(caminho):
+        img = qrcode.make(url)
+        img.save(caminho)
+    return caminho
+
+@st.cache_data(show_spinner=False)
+def gerar_pdf(usuario_nome, faixa, pontuacao, total, codigo, professor="Professor(a) Responsavel"):
+    def limpa(txt):
+        if not txt: return ""
+        return unicodedata.normalize('NFKD', str(txt)).encode('ASCII', 'ignore').decode('ASCII')
+
+    pdf = FPDF("L", "mm", "A4")
+    pdf.set_auto_page_break(False)
+    pdf.add_page()
+    L, H = 297, 210
     
-    /* HEADER */
-    .curso-header {{
-        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9), rgba(9, 31, 26, 0.95));
-        border-bottom: 1px solid {COR_DESTAQUE}; padding: 1.5rem; border-radius: 0 0 20px 20px; margin-bottom: 2rem;
-    }}
-    </style>
-    """, unsafe_allow_html=True)
+    bg_path = "assets/fundo_certificado_bjj.png" if os.path.exists("assets/fundo_certificado_bjj.png") else None
+    if bg_path: pdf.image(bg_path, x=0, y=0, w=L, h=H)
+    else: pdf.set_fill_color(252, 252, 252); pdf.rect(0, 0, L, H, "F")
 
-# ======================================================
-# COMPONENTE DE SELEÇÃO DE EDITORES
-# ======================================================
-def renderizar_seletor_editores(chave_unica, ids_iniciais=[]):
-    key = f"lista_editores_{chave_unica}"
-    if key not in st.session_state: st.session_state[key] = ids_iniciais.copy()
+    titulo = "CERTIFICADO DE EXAME TEORICO"
+    pdf.set_y(28); pdf.set_font("Helvetica", "B", 32); pdf.set_text_color(200, 180, 100)
+    pdf.cell(0, 16, titulo, ln=False, align="C")
+    pdf.set_y(26.8); pdf.set_text_color(218, 165, 32)
+    pdf.cell(0, 16, titulo, ln=True, align="C")
 
-    st.markdown("###### 👥 Editores Colaboradores")
-    with st.container(border=True):
-        c1, c2 = st.columns([3, 1])
-        termo = c1.text_input("Buscar Nome/CPF", key=f"src_{chave_unica}")
-        
-        users = ce.listar_todos_usuarios_para_selecao()
-        filtro = [u for u in users if termo.lower() in u['nome'].lower() or termo in str(u.get('cpf',''))] if termo else []
-        
-        sel = c1.selectbox("Selecione", filtro, format_func=lambda x: f"{x['nome']} (CPF: {x.get('cpf')})", key=f"sel_{chave_unica}", index=None, placeholder="Digite para buscar...")
-        
-        if c2.button("➕ Adicionar", key=f"add_{chave_unica}"):
-            if sel and sel['id'] not in st.session_state[key]:
-                st.session_state[key].append(sel['id']); st.rerun()
+    pdf.set_y(90); pdf.set_font("Helvetica", "", 14); pdf.set_text_color(50, 50, 50)
+    pdf.cell(0, 8, "Certificamos que o aluno(a):", ln=True, align="C")
 
-        st.markdown(f"**Selecionados ({len(st.session_state[key])})**")
-        if not st.session_state[key]: st.caption("Nenhum.")
-        else:
-            mapa = {u['id']: u for u in users}
-            for uid in st.session_state[key]:
-                u = mapa.get(uid, {'nome':'?', 'cpf':'?'})
-                xc, yc = st.columns([4,1])
-                xc.info(f"{u['nome']} ({u.get('cpf')})")
-                if yc.button("🗑️", key=f"del_{uid}_{chave_unica}"):
-                    st.session_state[key].remove(uid); st.rerun()
-    return st.session_state[key]
+    nome = limpa(usuario_nome.upper().strip())
+    pdf.set_font("Helvetica", "B", 42); pdf.set_text_color(218, 165, 32)
+    pdf.cell(0, 20, nome, ln=True, align="C")
 
-def navegar_para(view: str, curso: Optional[Dict] = None):
-    st.session_state['cursos_view'] = view
-    st.session_state['curso_selecionado'] = curso
-    st.rerun()
+    pdf.ln(2); pdf.set_font("Helvetica", "", 14); pdf.set_text_color(50, 50, 50)
+    pdf.cell(0, 8, "foi aprovado(a) no exame teórico para a faixa:", ln=True, align="C")
 
-def pagina_cursos(usuario: dict):
-    aplicar_estilos_cursos()
-    if 'cursos_view' not in st.session_state: st.session_state['cursos_view'] = 'lista'
-        
-    st.markdown(f"""<div class="curso-header"><h1 style="margin:0; text-align:center; color:{COR_DESTAQUE};">🎓 BJJ DIGITAL CURSOS</h1><p style="text-align:center; opacity:0.8;">Bem-vindo(a), <strong>{usuario.get('nome','').split()[0]}</strong></p></div>""", unsafe_allow_html=True)
+    pdf.ln(4); cor_fx = get_cor_faixa(faixa); pdf.set_font("Helvetica", "B", 38); pdf.set_text_color(*cor_fx)
+    pdf.cell(0, 18, limpa(faixa.upper()), ln=True, align="C")
+
+    # Assinatura
+    y_base = 151
+    pdf.set_xy(0, y_base + 4); pdf.set_font("Helvetica", "I", 20); pdf.set_text_color(218, 165, 32)
+    pdf.cell(0, 14, limpa(professor), ln=True, align="C")
     
-    if st.session_state.get('cursos_view') != 'lista':
-        if st.button("← Voltar à Lista", key="btn_back_list"): navegar_para('lista')
-    else:
-        if st.button("← Menu Principal", key="btn_back_home"):
-            st.session_state.menu_selection = "Início"; st.rerun()
-    st.write("")
-
-    view = st.session_state.get('cursos_view')
-    curso = st.session_state.get('curso_selecionado')
-    is_prof = str(usuario.get("tipo", "")).lower() in ["admin", "professor"]
+    x_start = (L/2) - 40
+    pdf.set_draw_color(60, 60, 60)
+    pdf.line(x_start, pdf.get_y() + 1, x_start + 80, pdf.get_y() + 1)
     
-    if view == 'lista':
-        if is_prof: _interface_professor(usuario)
-        else: _interface_aluno(usuario)
-    elif view == 'detalhe' and curso:
-        _exibir_detalhes(curso, usuario)
-    elif view == 'aulas' and curso:
-        _pagina_aulas(curso, usuario)
-    elif view == 'edicao' and curso and is_prof:
-        _pagina_edicao(curso, usuario)
-    elif view == 'gerenciar_conteudo' and curso and is_prof:
-        aulas_view.gerenciar_conteudo_curso(curso, usuario)
-    else:
-        st.session_state['cursos_view'] = 'lista'; st.rerun()
+    pdf.ln(4); pdf.set_font("Helvetica", "", 9); pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 5, "Professor(a) Responsavel", align="C")
 
-# ======================================================
-# LISTAGEM (Card Seguro)
-# ======================================================
-def render_card_curso(c, mode="professor"):
-    ativo = c.get('ativo', True)
-    pago = c.get('pago', False)
-    icon = "💎" if pago else "🎓"
-    if not ativo: icon = "⏸️"
-    
-    if pago:
-        bruto = c.get('preco', 0.0)
-        split = c.get('split_custom', 10)
-        liq = bruto * (1 - split/100)
-        txt_price = f"R$ {bruto:.2f}"
-        if mode == "professor": txt_price += f" • Liq: R$ {liq:.2f}"
-        cor_bdg = "gold"
-    else:
-        txt_price = "Grátis"
-        cor_bdg = "green"
+    # QR Code
+    qr_path = gerar_qrcode(codigo)
+    if qr_path and os.path.exists(qr_path):
+        pdf.image(qr_path, x=L-56, y=y_base, w=32)
+        pdf.set_xy(L-64, y_base + 32); pdf.set_font("Courier", "", 8)
+        pdf.cell(45, 4, f"Ref: {codigo}", align="C")
 
-    prof = c.get('professor_nome', 'Instrutor').split()[0]
-    eq = c.get('professor_equipe', '')
-    txt_eq = f" | 🛡️ {eq}" if eq else ""
-    role_badge = f"<span class='curso-badge blue' style='float:right;'>✏️ Editor</span>" if mode=="professor" and c.get('papel')=='Editor' else ""
+    return pdf.output(dest="S").encode("latin-1"), f"Certificado_{nome.split()[0]}.pdf"
 
-    # HTML FLATTENED (Sem indentação)
-    html = f"""<div class="curso-card-moderno"><div style="display:flex; justify-content:space-between;"><div class="curso-icon">{icon}</div>{role_badge}</div><h4 style="margin:0.5rem 0; color:white;">{c.get('titulo')}</h4><div class="info-extra">👨‍🏫 {prof}{txt_eq}</div><p style="font-size:0.85em; opacity:0.7; flex-grow:1;">{c.get('descricao','')[:90]}...</p><div class="curso-badges"><span class="curso-badge green">{c.get('modalidade','EAD')}</span><span class="curso-badge {cor_bdg}">{txt_price}</span></div></div>"""
-    st.markdown(html, unsafe_allow_html=True)
+# ==============================================================================
+# 6. GESTÃO DE EXAMES
+# ==============================================================================
+def verificar_elegibilidade_exame(dados_usuario):
+    status = dados_usuario.get('status_exame', 'pendente')
+    if status == 'bloqueado': return False, "Exame bloqueado. Contate o professor."
+    if status == 'reprovado':
+        try:
+            last = dados_usuario.get('data_ultimo_exame')
+            if last:
+                dt_last = last.replace(tzinfo=None) if hasattr(last, 'date') else datetime.fromisoformat(str(last).replace('Z',''))
+                if (datetime.now() - dt_last).days < 3: return False, "Aguarde 3 dias."
+        except: pass
+    return True, "Autorizado"
 
-def _interface_professor(usuario):
-    tab1, tab2 = st.tabs(["📘 Meus Cursos", "➕ Criar Novo"])
-    with tab1:
-        cursos = ce.listar_cursos_do_professor(usuario['id'])
-        if not cursos: st.info("Nenhum curso encontrado.")
-        cols = st.columns(3)
-        for i, c in enumerate(cursos):
-            with cols[i%3]:
-                render_card_curso(c, "professor")
-                c1, c2 = st.columns(2)
-                if c1.button("✏️ Editar", key=f"e_{c['id']}"): navegar_para('edicao', c)
-                if c2.button("👁️ Ver", key=f"v_{c['id']}"): navegar_para('detalhe', c)
-    with tab2: _pagina_criar(usuario)
+def registrar_inicio_exame(uid):
+    try: get_db().collection('usuarios').document(uid).update({"status_exame": "em_andamento", "inicio_exame_temp": datetime.now().isoformat(), "status_exame_em_andamento": True})
+    except: pass
 
-def _interface_aluno(usuario):
-    cursos = ce.listar_cursos_disponiveis_para_usuario(usuario)
-    st.markdown("### 🛒 Cursos Disponíveis")
-    if not cursos: st.info("Nada disponível.")
-    cols = st.columns(3)
-    for i, c in enumerate(cursos):
-        with cols[i%3]:
-            render_card_curso(c, "aluno")
-            if st.button("Ver Detalhes", key=f"vd_{c['id']}"): navegar_para('detalhe', c)
+def registrar_fim_exame(uid, aprovado):
+    try:
+        stt = "aprovado" if aprovado else "reprovado"
+        get_db().collection('usuarios').document(uid).update({"status_exame": stt, "exame_habilitado": False, "data_ultimo_exame": firestore.SERVER_TIMESTAMP, "status_exame_em_andamento": False})
+        return True
+    except: return False
 
-# ======================================================
-# CRUD
-# ======================================================
-def _pagina_criar(usuario):
-    st.markdown("### 🚀 Criar Curso")
-    if "pg_tgl" not in st.session_state: st.session_state["pg_tgl"] = False
-    with st.container(border=True):
-        c1, c2 = st.columns([2,1])
-        tit = c1.text_input("Título", key="n_t")
-        desc = c1.text_area("Descrição", key="n_d")
-        mod = c2.selectbox("Modalidade", ["EAD","Presencial"], key="n_m")
-        pub = c2.selectbox("Público", ["geral","equipe"], key="n_p")
-        eq_dest = c2.text_input("Equipe Destino", key="n_eq") if pub=="equipe" else None
-        eds = renderizar_seletor_editores("new")
-        st.markdown("---")
-        cf1, cf2, cf3 = st.columns(3)
-        pago = cf1.toggle("Pago?", key="pg_tgl")
-        pr = cf2.number_input("Preço", 0.0, disabled=not pago, key="n_pr")
-        sp = cf3.slider("Taxa %", 0, 100, 10, key="n_sp") if usuario.get('tipo')=='admin' else 10
-        c_crt, c_dur, c_niv = st.columns(3)
-        cert = c_crt.checkbox("Certificado?", True, key="n_c")
-        dur = c_dur.text_input("Duração", "10h", key="n_dr")
-        niv = c_niv.selectbox("Nível", ["Geral","Iniciante","Avançado"], key="n_nv")
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("🚀 Criar", type="primary", use_container_width=True):
-            if not tit: st.error("Título obrigatório.")
-            else:
-                ce.criar_curso(usuario['id'], usuario.get('nome',''), usuario.get('equipe',''), tit, desc, mod, pub, eq_dest, pago, pr, sp, cert, dur, niv, eds)
-                st.success("Criado!"); time.sleep(1); st.rerun()
+def bloquear_por_abandono(uid):
+    try: get_db().collection('usuarios').document(uid).update({"status_exame": "bloqueado", "exame_habilitado": False, "status_exame_em_andamento": False})
+    except: pass
 
-def _pagina_edicao(c, u):
-    st.markdown(f"### ✏️ Editando: {c.get('titulo')}")
-    kp = f"ep_{c['id']}"
-    if kp not in st.session_state: st.session_state[kp] = c.get('pago',False)
-    with st.container(border=True):
-        c1, c2 = st.columns([2,1])
-        nt = c1.text_input("Título", c.get('titulo'), key=f"et_{c['id']}")
-        nd = c1.text_area("Descrição", c.get('descricao'), key=f"ed_{c['id']}")
-        nm = c2.selectbox("Modalidade", ["EAD","Presencial"], index=0 if c.get('modalidade')=='EAD' else 1, key=f"em_{c['id']}")
-        eds = renderizar_seletor_editores(f"edt_{c['id']}", c.get('editores_ids',[]))
-        st.markdown("---")
-        cp1, cp2 = st.columns(2)
-        npago = cp1.toggle("Pago?", key=kp)
-        npr = cp2.number_input("Preço", value=float(c.get('preco',0)), disabled=not npago, key=f"epr_{c['id']}")
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("💾 Salvar", type="primary", use_container_width=True, key=f"sv_{c['id']}"):
-            upd = {"titulo":nt, "descricao":nd, "modalidade":nm, "pago":npago, "preco":npr, "editores_ids":eds}
-            ce.editar_curso(c['id'], upd); st.success("Salvo!"); time.sleep(1); navegar_para('detalhe', upd)
-    if u['id'] == c.get('professor_id'):
-        with st.expander("🗑️ Zona de Perigo"):
-            if st.button("Excluir Curso", type="secondary", key=f"del_{c['id']}"):
-                ce.excluir_curso(c['id']); st.success("Excluído!"); time.sleep(1); navegar_para('lista')
+# ==============================================================================
+# 7. MOTOR DE CURSOS E AULAS
+# ==============================================================================
 
-def _exibir_detalhes(c, u):
-    st.title(c.get('titulo'))
-    can_edit = (u['id'] == c.get('professor_id')) or (u['id'] in c.get('editores_ids', []))
-    if can_edit:
-        c1, c2 = st.columns(2)
-        if c1.button("✏️ Editar"): navegar_para('edicao', c)
-        if c2.button("➕ Aulas", type="primary"): navegar_para('gerenciar_conteudo', c)
-    st.write(c.get('descricao'))
-    st.markdown(f"**Professor:** {c.get('professor_nome','-')} | **Equipe:** {c.get('professor_equipe','-')}")
-    insc = ce.obter_inscricao(u['id'], c['id'])
-    st.markdown("<br>", unsafe_allow_html=True)
-    if insc or can_edit:
-        if st.button("🎬 Acessar Aulas", type="primary"): navegar_para('aulas', c)
-    else:
-        lbl = f"Comprar R$ {c.get('preco')}" if c.get('pago') else "Inscrever-se Grátis"
-        if st.button(lbl, type="primary"):
-            ce.inscrever_usuario_em_curso(u['id'], c['id']); st.success("Inscrito!"); st.rerun()
+def listar_todos_usuarios_para_selecao():
+    """Retorna lista de usuários. Aceita 'none', 'aluno' e vazio para testes."""
+    db = get_db()
+    try:
+        users = db.collection('usuarios').stream()
+        lista = []
+        for u in users:
+            dados = u.to_dict()
+            tipo_usuario = str(dados.get('tipo', '')).lower().strip()
+            # Lista ampliada para pegar seus usuários de teste
+            tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'teacher', 'none', 'aluno', '', 'null']
+            
+            if tipo_usuario in tipos_permitidos:
+                lista.append({
+                    'id': u.id, 
+                    'nome': dados.get('nome', 'Sem Nome'), 
+                    'email': dados.get('email'), 
+                    'cpf': dados.get('cpf', 'N/A')
+                })
+        lista.sort(key=lambda x: x['nome'])
+        return lista
+    except Exception as e:
+        print(f"Erro ao listar: {e}")
+        return []
 
-def _pagina_aulas(c, u):
-    st.subheader(f"📺 {c.get('titulo')}")
-    modulos = ce.listar_modulos_e_aulas(c['id'])
-    if not modulos: st.warning("Sem aulas."); return
-    cv, cl = st.columns([3, 1])
-    if 'aula_atual' not in st.session_state: st.session_state['aula_atual'] = modulos[0]['aulas'][0] if modulos and modulos[0]['aulas'] else None
-    aula = st.session_state.get('aula_atual')
-    with cl:
+def criar_curso(professor_id, nome_professor, professor_equipe, titulo, descricao, modalidade, publico, equipe_destino, pago, preco, split_custom, certificado_automatico, duracao_estimada, nivel, editores_ids=[]):
+    """Cria um novo curso salvando equipe."""
+    db = get_db()
+    novo_curso = {
+        "professor_id": professor_id, "professor_nome": nome_professor, "professor_equipe": professor_equipe,
+        "editores_ids": editores_ids, "titulo": titulo, "descricao": descricao, "modalidade": modalidade,
+        "publico": publico, "equipe_destino": equipe_destino, "pago": pago, "preco": float(preco),
+        "split_custom": split_custom, "certificado_automatico": certificado_automatico, "ativo": True,
+        "criado_em": datetime.now(), "duracao_estimada": duracao_estimada, "nivel": nivel
+    }
+    _, doc_ref = db.collection('cursos').add(novo_curso)
+    return doc_ref.id
+
+def editar_curso(curso_id, dados_atualizados):
+    db = get_db()
+    try:
+        db.collection('cursos').document(curso_id).update(dados_atualizados)
+        return True
+    except: return False
+
+def excluir_curso(curso_id: str) -> bool:
+    db = get_db()
+    if not db: return False
+    try:
+        modulos_ref = db.collection('modulos').where('curso_id', '==', curso_id).stream()
+        for mod in modulos_ref:
+            aulas_ref = db.collection('aulas').where('modulo_id', '==', mod.id).stream()
+            for aula in aulas_ref: db.collection('aulas').document(aula.id).delete()
+            db.collection('modulos').document(mod.id).delete()
+        inscricoes_ref = db.collection('inscricoes').where('curso_id', '==', curso_id).stream()
+        for insc in inscricoes_ref: db.collection('inscricoes').document(insc.id).delete()
+        db.collection('cursos').document(curso_id).delete()
+        return True
+    except: return False
+
+def listar_cursos_do_professor(usuario_id):
+    db = get_db()
+    lista_cursos = []
+    try:
+        cursos_dono = db.collection('cursos').where('professor_id', '==', usuario_id).stream()
+        for doc in cursos_dono:
+            c = doc.to_dict(); c['id'] = doc.id; c['papel'] = 'Dono'
+            lista_cursos.append(c)
+        cursos_editor = db.collection('cursos').where('editores_ids', 'array_contains', usuario_id).stream()
+        ids_existentes = [c['id'] for c in lista_cursos]
+        for doc in cursos_editor:
+            if doc.id not in ids_existentes:
+                c = doc.to_dict(); c['id'] = doc.id; c['papel'] = 'Editor'
+                lista_cursos.append(c)
+    except: pass
+    return lista_cursos
+
+def listar_cursos_disponiveis_para_usuario(usuario):
+    db = get_db()
+    cursos_ref = db.collection('cursos').where('ativo', '==', True).stream()
+    lista_cursos = []
+    equipe_usuario = usuario.get('equipe', '').lower().strip()
+    for doc in cursos_ref:
+        curso = doc.to_dict(); curso['id'] = doc.id
+        if curso.get('publico') == 'equipe':
+            equipe_curso = str(curso.get('equipe_destino', '')).lower().strip()
+            if usuario.get('tipo') != 'admin' and equipe_curso != equipe_usuario: continue 
+        lista_cursos.append(curso)
+    return lista_cursos
+
+def listar_modulos_e_aulas(curso_id):
+    db = get_db()
+    try:
+        modulos = db.collection('modulos').where('curso_id', '==', curso_id).order_by('ordem').stream()
+        estrutura = []
         for m in modulos:
-            with st.expander(m['titulo'], expanded=True):
-                for a in m['aulas']:
-                    icon = "✅" if ce.verificar_aula_concluida(u['id'], a['id']) else "⭕"
-                    if st.button(f"{icon} {a['titulo']}", key=f"nv_{a['id']}"):
-                        st.session_state['aula_atual'] = a; st.rerun()
-    with cv:
-        if aula:
-            st.markdown(f"#### {aula['titulo']}")
-            ct = aula.get('conteudo', {})
-            tp = aula.get('tipo')
-            if tp == 'video':
-                if ct.get('url'): st.video(ct['url'])
-                elif ct.get('arquivo_video'): st.video(ct['arquivo_video'])
-            elif tp == 'texto': st.markdown(ct.get('texto',''))
-            st.markdown("---")
-            if st.button("Concluir", key=f"ok_{aula['id']}", type="primary"):
-                ce.marcar_aula_concluida(u['id'], aula['id']); st.success("Feito!"); st.rerun()
+            mod_data = m.to_dict(); mod_data['id'] = m.id
+            aulas_ref = db.collection('aulas').where('modulo_id', '==', m.id).stream()
+            aulas = [{"id": a.id, **a.to_dict()} for a in aulas_ref]
+            aulas.sort(key=lambda x: x.get('titulo', '')) 
+            mod_data['aulas'] = aulas
+            estrutura.append(mod_data)
+        return estrutura
+    except: return []
+
+def criar_modulo(curso_id, titulo, descricao, ordem):
+    db = get_db()
+    db.collection('modulos').add({"curso_id": curso_id, "titulo": titulo, "descricao": descricao, "ordem": ordem, "criado_em": datetime.now()})
+
+def criar_aula(module_id, titulo, tipo, conteudo, duracao_min):
+    db = get_db()
+    conteudo_safe = conteudo.copy()
+    # Simulação local (substituir por Cloud Storage)
+    if 'arquivo_video' in conteudo_safe: del conteudo_safe['arquivo_video']; conteudo_safe['arquivo_video_nome'] = "video.mp4" 
+    if 'material_apoio' in conteudo_safe: del conteudo_safe['material_apoio']; conteudo_safe['material_apoio_nome'] = "file.pdf"
+    db.collection('aulas').add({"modulo_id": module_id, "titulo": titulo, "tipo": tipo, "conteudo": conteudo_safe, "duracao_min": duracao_min, "criado_em": datetime.now()})
+
+def obter_inscricao(user_id, curso_id):
+    db = get_db()
+    docs = db.collection('inscricoes').where('usuario_id', '==', user_id).where('curso_id', '==', curso_id).stream()
+    for doc in docs: return doc.to_dict()
+    return None
+
+def inscrever_usuario_em_curso(user_id, curso_id):
+    if obter_inscricao(user_id, curso_id): return
+    get_db().collection('inscricoes').add({"usuario_id": user_id, "curso_id": curso_id, "progresso": 0, "aulas_concluidas": [], "criado_em": datetime.now(), "status": "ativo"})
+
+def verificar_aula_concluida(user_id, aula_id):
+    db = get_db()
+    inscricoes = db.collection('inscricoes').where('usuario_id', '==', user_id).stream()
+    for insc in inscricoes:
+        if aula_id in insc.to_dict().get('aulas_concluidas', []): return True
+    return False
+
+def marcar_aula_concluida(user_id, aula_id):
+    db = get_db()
+    aula_ref = db.collection('aulas').document(aula_id).get()
+    if not aula_ref.exists: return
+    mod_id = aula_ref.to_dict().get('modulo_id')
+    curso_id = db.collection('modulos').document(mod_id).get().to_dict().get('curso_id')
+    insc_query = db.collection('inscricoes').where('usuario_id', '==', user_id).where('curso_id', '==', curso_id).stream()
+    insc_doc = next(insc_query, None)
+    if insc_doc:
+        concluidas = insc_doc.to_dict().get('aulas_concluidas', [])
+        if aula_id not in concluidas:
+            concluidas.append(aula_id)
+            db.collection('inscricoes').document(insc_doc.id).update({"aulas_concluidas": concluidas, "progresso": 100 if concluidas else 0, "ultimo_acesso": datetime.now()})
