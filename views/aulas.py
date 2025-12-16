@@ -1,12 +1,8 @@
-"""
-BJJ Digital - Sistema de Gerenciamento de Aulas
-"""
 import streamlit as st
 import time
 from typing import Dict
 import utils as ce 
 
-# --- CONFIGURAÇÃO DE CORES ---
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
@@ -45,7 +41,6 @@ def aplicar_estilos_aulas():
 def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
     aplicar_estilos_aulas()
     
-    # Header
     c_voltar, c_tit = st.columns([1, 5])
     with c_voltar:
         if st.button("← Voltar", use_container_width=True):
@@ -54,7 +49,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
     with c_tit:
         st.subheader(f"Gerenciar Conteúdo: {curso['titulo']}")
 
-    # 1. CRIAR MÓDULO
     with st.expander("➕ Criar Novo Módulo", expanded=False):
         with st.form("new_mod_form", clear_on_submit=True):
             t_mod = st.text_input("Título do Módulo", placeholder="Ex: Módulo 1 - Guarda Fechada")
@@ -68,8 +62,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                     st.error("Título obrigatório.")
 
     st.markdown("---")
-
-    # 2. LISTAR AULAS
     modulos = ce.listar_modulos_e_aulas(curso['id'])
     
     if not modulos:
@@ -88,7 +80,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                     ic = "🎥" if tp=='video' else "🖼️" if tp=='imagem' else "📝"
                     tem_pdf = "📎 PDF" if aula.get('conteudo', {}).get('material_apoio_nome') else ""
                     
-                    # HTML simplificado para evitar erro de sintaxe
                     html_aula = f"""
                     <div class="aula-card-admin">
                         <div><span class="tipo-badge">{tp}</span><strong>{ic} {aula['titulo']}</strong></div>
@@ -103,7 +94,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # ADICIONAR AULA
             if st.checkbox(f"➕ Adicionar Aula em '{mod['titulo']}'", key=f"chk_add_{mod['id']}"):
                 with st.container(border=True):
                     st.markdown("#### Nova Aula")
