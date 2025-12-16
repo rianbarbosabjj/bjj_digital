@@ -331,18 +331,18 @@ def bloquear_por_abandono(uid):
 # ==============================================================================
 
 def listar_todos_usuarios_para_selecao():
-    """Retorna lista de usuários (professores/admins) com CPF para seleção segura."""
+    """Retorna lista de usuários (professores/admins) com CPF."""
     db = get_db()
     try:
         users = db.collection('usuarios').stream()
         lista = []
         for u in users:
             dados = u.to_dict()
-            # Normaliza para garantir busca (Aceita Professor, Mestre, Admin, etc)
+            # Normaliza para garantir busca
             tipo_usuario = str(dados.get('tipo', '')).lower().strip()
             
-            # --- LISTA AMPLIADA: ACEITA 'none' (STRING) E VAZIO ---
-            tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'teacher', 'none', 'aluno', '']
+            # --- LISTA AMPLIADA PARA TESTE (Como visto no seu DEBUG, os tipos estão 'None') ---
+            tipos_permitidos = ['professor', 'admin', 'mestre', 'instrutor', 'prof', 'teacher', 'none', 'aluno', '', 'null']
             
             if tipo_usuario in tipos_permitidos:
                 lista.append({
@@ -365,7 +365,7 @@ def criar_curso(professor_id, nome_professor, professor_equipe, titulo, descrica
     novo_curso = {
         "professor_id": professor_id,
         "professor_nome": nome_professor,
-        "professor_equipe": professor_equipe, # <--- SALVA EQUIPE
+        "professor_equipe": professor_equipe, # <--- CAMPO SALVO
         "editores_ids": editores_ids,
         "titulo": titulo,
         "descricao": descricao,
