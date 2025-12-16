@@ -198,8 +198,13 @@ def gerar_qrcode(codigo):
     caminho = f"{pasta}/{codigo}.png"
     url = f"https://bjjdigital.com.br/verificar.html?codigo={codigo}"
     if not os.path.exists(caminho):
-        img = qrcode.make(url)
-        img.save(caminho)
+        # Nota: biblioteca qrcode precisa estar instalada e importada se for usar essa função
+        try:
+            import qrcode
+            img = qrcode.make(url)
+            img.save(caminho)
+        except ImportError:
+            pass
     return caminho
 
 @st.cache_data(show_spinner=False)
@@ -397,20 +402,27 @@ def listar_modulos_e_aulas(curso_id):
     except: return []
 
 def criar_modulo(curso_id, titulo, descricao, ordem):
-    conn = sqlite3.connect('banco.db') # ou sua conexão
-    cursor = conn.cursor()
-    
-    query = "INSERT INTO modulos (curso_id, titulo, descricao, ordem) VALUES (?, ?, ?, ?)"
-    cursor.execute(query, (curso_id, titulo, descricao, ordem))
-    
-    conn.commit()  # <--- ESSE É O COMANDO QUE GRAVA DE VERDADE
-    conn.close()
+    # [CORREÇÃO] Atualizado para usar Firebase/Firestore em vez de SQLite
+    db = get_db()
+    try:
+        dados_modulo = {
+            "curso_id": curso_id,
+            "titulo": titulo,
+            "descricao": descricao,
+            "ordem": ordem,
+            "criado_em": datetime.now()
+        }
+        _, doc_ref = db.collection('modulos').add(dados_modulo)
+        return doc_ref.id
+    except Exception as e:
+        print(f"Erro ao criar módulo: {e}")
+        return None
 
 def criar_aula(module_id, titulo, tipo, conteudo, duracao_min):
     db = get_db()
     conteudo_safe = conteudo.copy()
     
-    # Tratamento de uploads no backend (simulação para Cloud Storage)
+    # Tratamento de uploads no backend
     if 'arquivo_video' in conteudo_safe:
         url = fazer_upload_midia(conteudo_safe['arquivo_video'])
         del conteudo_safe['arquivo_video']
