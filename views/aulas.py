@@ -3,7 +3,7 @@ import time
 from typing import Dict
 import utils as ce 
 
-# Configuração de Cores (Fallback seguro)
+# Configuração de Cores
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
 except ImportError:
@@ -49,7 +49,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
             st.session_state['cursos_view'] = 'detalhe'
             st.rerun()
     with c_tit:
-        # Proteção contra título nulo
         titulo_curso = curso.get('titulo', 'Curso Sem Título')
         st.subheader(f"Gerenciar Conteúdo: {titulo_curso}")
 
@@ -62,7 +61,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
             if st.form_submit_button("Criar Módulo", type="primary"):
                 if t_mod:
                     try:
-                        # Busca módulos existentes para calcular a ordem
                         mods = ce.listar_modulos_e_aulas(curso['id'])
                         qtd_mods = len(mods) if mods else 0
                         
@@ -77,7 +75,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
     st.markdown("---")
     
-    # --- Listagem de Módulos e Aulas (Blindada) ---
+    # --- Listagem de Módulos (Anti-Erro) ---
     try:
         modulos = ce.listar_modulos_e_aulas(curso['id']) or []
     except Exception as e:
@@ -92,20 +90,18 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
     for i, mod in enumerate(modulos):
         try:
-            # --- 1. Tratamento de Dados (Anti-Erro) ---
-            # Garante que temos strings válidas e IDs, mesmo que o banco falhe
+            # Tratamento de dados para evitar erro de NoneType
             mod_id = str(mod.get('id', f'temp_{i}'))
             mod_titulo = str(mod.get('titulo', 'Sem Título'))
             
             lista_aulas = mod.get('aulas')
-            if lista_aulas is None:
-                lista_aulas = []
-                
+            if lista_aulas is None: lista_aulas = []
             qtd_aulas = len(lista_aulas)
+            
             label_expander = f"{i+1}. {mod_titulo} ({qtd_aulas} aulas)"
             
-            # --- 2. Interface do Módulo ---
-            with st.expander(label_expander, expanded=False, key=f"exp_mod_{mod_id}"):
+            # --- CORREÇÃO AQUI: Removido o argumento 'key' que sua versão não aceita ---
+            with st.expander(label_expander, expanded=False):
                 st.caption(str(mod.get('descricao', '')))
                 
                 # Listar Aulas
@@ -133,7 +129,8 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- Formulário Adicionar Aula ---
+                # Formulário Adicionar Aula
+                # Mantemos a KEY aqui no checkbox, pois é vital para o formulário funcionar
                 if st.checkbox(f"➕ Adicionar Aula", key=f"chk_add_{mod_id}"):
                     with st.container(border=True):
                         st.markdown("#### Nova Aula")
@@ -171,7 +168,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                             conteudo["texto"] = st.text_area("Texto:", key=f"txt_{mod_id}")
 
                         st.markdown("---")
-                        # Botão Salvar
                         if st.button(f"💾 Salvar", key=f"sv_{mod_id}", type="primary"):
                              ce.criar_aula(mod_id, tit_aula, tipo_aula, conteudo, dur_aula)
                              st.success("Salvo!")
@@ -180,7 +176,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
         except Exception as e:
             st.error(f"⚠️ Erro ao renderizar módulo {i+1}: {e}")
-            st.write(mod) # Mostra o dado problemático para debug
+            st.write(mod)
 
 def pagina_aulas(usuario: dict):
     st.warning("Acesse via Gerenciador de Cursos.")
