@@ -214,8 +214,7 @@ def app_principal():
         if tipo_code in ["admin", "professor"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel de Professores")
         
-        # Botão removido para alunos, pois agora está dentro do Painel do Aluno
-        if tipo_code == "professor": 
+        if tipo_code != "admin": 
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         
         if tipo_code == "admin":
@@ -230,31 +229,21 @@ def app_principal():
 
     # Rotas Universais
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
-
-    # ========================================================
-    # ROTA EXCLUSIVA DO ALUNO (Nova Arquitetura)
-    # ========================================================
-    if tipo_code == "aluno":
-        # O Aluno agora é gerenciado 100% pelo módulo aluno.py com suas próprias abas
-        aluno.app_aluno(usuario)
-        return
-    # ========================================================
-
-    # Rotas de Admin/Professor
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
     if pg == "Painel de Professores": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # Menu Horizontal para Professor/Admin
+    # --- MENU DE OPÇÕES ---
     ops, icns = [], []
+    
     if tipo_code in ["admin", "professor"]:
         ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
-        # Fallback caso caia aqui
-        ops = ["Início"]
-        icns = ["house"]
+        # 🔹 ALUNO: Adicionamos "Cursos" aqui no meio
+        ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking"]
+        icns = ["house", "people", "book", "journal", "trophy"]
 
     try: idx = ops.index(pg)
     except: idx = 0
@@ -310,10 +299,19 @@ def app_principal():
         st.session_state.menu_selection = menu
         st.rerun()
 
+    # --- ROTEAMENTO ---
     if pg == "Modo Rola": 
         aluno.modo_rola(usuario)
+        
     elif pg == "Cursos":
-        cursos.pagina_cursos(usuario)
+        # Rota Inteligente:
+        if tipo_code == "aluno":
+            # Se for aluno, vai para o Mural/Meus Cursos
+            aluno.app_aluno(usuario)
+        else:
+            # Se for Professor/Admin, vai para Gestão de Cursos
+            cursos.pagina_cursos(usuario)
+            
     elif pg == "Exame de Faixa": 
         aluno.exame_de_faixa(usuario)
     elif pg == "Ranking": 
