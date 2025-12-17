@@ -48,15 +48,17 @@ def tela_inicio():
     st.markdown("---")
     
     # --- ÁREA DO ALUNO ---
-    col1, col2, col3 = st.columns(3)
+    # CORREÇÃO AQUI: Alterado para 4 colunas para caber todos os cards
+    col1, col2, col3, col4 = st.columns(4)
+    
     with col1: 
         render_card("🤼 Modo Rola", "Responda questões e alcance o topo do ranking.", "Acessar", "n1", "Modo Rola")
     with col2: 
-        render_card("🏆 Ranking", "Acompanhe sua colocação no ranking.", "Acessar", "n2", "Ranking")# Se for aluno, o texto é "Exames", se for professor é gestão
+        render_card("🏆 Ranking", "Acompanhe sua colocação no ranking.", "Acessar", "n2", "Ranking")
     with col3: 
-        render_card("📚 Cursos", "Realize seus exames de faixa e provas.", "Acessar", "n3", "Cursos")
+        render_card("📚 Cursos", "Acesse seus cursos e materiais de estudo.", "Acessar", "n3", "Cursos")
     with col4: 
-        render_card("🥋 Exames", "Realize seus exames de faixa e provas.", "Acessar", "n4", "Exame de Faixa")
+        render_card("🥋 Exames", "Realize seus exames de faixa oficiais.", "Acessar", "n4", "Exame de Faixa")
 
     # --- ÁREA DE GESTÃO (Professor/Admin) ---
     tipo = str(usuario.get("tipo", "aluno")).lower()
@@ -72,9 +74,7 @@ def tela_inicio():
         with c2: 
             render_card("🏛️ Equipes", "Gerencie sua Equipe e alunos.", "Gerenciar", "g2", "Gestão de Equipes")
         with c3: 
-            # LINK PARA O CURSOS.PY
-            # O 'pagina_destino' deve ser exatamente o texto que você verifica no app.py
-            render_card("📚 Cursos", "Crie e edite seus cursos.", "Gerenciar", "g3", "Cursos")           
+            render_card("📚 Cursos", "Crie e edite seus cursos.", "Gerenciar", "g3", "Cursos")            
         with c4: 
             render_card("📜 Exames", "Libere e gerencie exames de faixa.", "Gerenciar", "g4", "Gestão de Exame")
 
