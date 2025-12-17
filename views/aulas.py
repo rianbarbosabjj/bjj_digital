@@ -36,13 +36,13 @@ def aplicar_estilos_aulas():
         padding: 1rem; border: 1px dashed rgba(255, 255, 255, 0.2);
         border-radius: 8px; background: rgba(0,0,0,0.2);
     }}
-    /* Estilo para o botão de perigo */
-    .danger-zone {
+    /* CORREÇÃO AQUI: Chaves duplas para o Python não confundir */
+    .danger-zone {{
         border: 1px solid #ff4b4b;
         border-radius: 8px;
         padding: 10px;
         margin-top: 20px;
-    }
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -105,7 +105,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
             
             label_expander = f"{i+1}. {mod_titulo} ({qtd_aulas} aulas)"
             
-            # Expander sem 'key' para compatibilidade
+            # Expander sem 'key' para compatibilidade com sua versão do Streamlit
             with st.expander(label_expander, expanded=False):
                 st.caption(str(mod.get('descricao', '')))
                 
@@ -180,20 +180,24 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                 
                 # --- ZONA DE PERIGO (Exclusão) ---
                 st.markdown("<br>", unsafe_allow_html=True)
-                with st.expander("🗑️ Excluir Módulo", expanded=False):
-                    st.markdown("""
-                    <div style='background-color:rgba(255, 75, 75, 0.1); padding:10px; border-radius:5px; border:1px solid #ff4b4b;'>
-                        <strong style='color:#ff4b4b'>ATENÇÃO:</strong> Isso apagará o módulo e <strong>TODAS</strong> as aulas dele.
-                    </div>
-                    """, unsafe_allow_html=True)
-                    
-                    # Checkbox de segurança para evitar clique acidental
+                # Bloco visual de alerta
+                st.markdown("""
+                <div class="danger-zone">
+                    <strong style='color:#ff4b4b'>ATENÇÃO:</strong> A exclusão é irreversível e apagará todas as aulas deste módulo.
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # Expander separado para esconder o botão
+                with st.expander("🗑️ Opções de Exclusão", expanded=False):
                     if st.checkbox("Confirmar exclusão", key=f"check_del_{mod_id}"):
                         if st.button("Sim, Excluir Módulo", key=f"btn_del_{mod_id}", type="primary"):
-                            ce.excluir_modulo(mod_id)
-                            st.warning("Módulo excluído.")
-                            time.sleep(1)
-                            st.rerun()
+                            sucesso = ce.excluir_modulo(mod_id)
+                            if sucesso:
+                                st.warning("Módulo excluído.")
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error("Erro ao excluir.")
 
         except Exception as e:
             st.error(f"⚠️ Erro no módulo {i+1}: {e}")
