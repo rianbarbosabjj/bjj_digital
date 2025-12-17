@@ -491,3 +491,19 @@ def marcar_aula_concluida(user_id, aula_id):
         if aula_id not in concluidas:
             concluidas.append(aula_id)
             db.collection('inscricoes').document(insc_doc.id).update({"aulas_concluidas": concluidas, "progresso": 100 if concluidas else 0, "ultimo_acesso": datetime.now()})
+
+def excluir_modulo(modulo_id):
+    db = get_db()
+    try:
+        # 1. Primeiro, buscamos e apagamos todas as aulas desse módulo
+        # Isso evita "lixo" no banco de dados
+        aulas_ref = db.collection('aulas').where('modulo_id', '==', modulo_id).stream()
+        for aula in aulas_ref:
+            db.collection('aulas').document(aula.id).delete()
+            
+        # 2. Depois, apagamos o módulo em si
+        db.collection('modulos').document(modulo_id).delete()
+        return True
+    except Exception as e:
+        print(f"Erro ao excluir módulo: {e}")
+        return False
