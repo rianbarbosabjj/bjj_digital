@@ -36,7 +36,7 @@ def listar_cursos(usuario):
     st.subheader("Meus Cursos")
     
     # --- FORMULÁRIO DE CRIAÇÃO ---
-    if usuario.get('tipo') in ['admin', 'professor']:
+    if usuario.get('tipo') in ['admin', 'professor', 'mestre']:
         with st.expander("Novo Curso"):
             with st.form("form_curso"):
                 titulo = st.text_input("Título")
@@ -47,29 +47,48 @@ def listar_cursos(usuario):
                 modalidade = c1.selectbox("Modalidade", ["EAD", "Presencial", "Híbrido"])
                 publico_sel = c2.selectbox("Público Alvo", ["Aberto a Todos", "Restrito à Minha Equipe"])
                 
-                # Lógica: Se for restrito, define a equipe de destino como a equipe do professor
-                publico_val = 'equipe' if "Restrito" in publico_sel else 'todos'
-                equipe_dest = usuario.get('equipe', '') if publico_val == 'equipe' else ''
+                # Seleção de Editores (Outros Professores)
+                st.markdown("---")
+                st.markdown("###### Gestão Compartilhada")
                 
+                # Busca lista de usuários para seleção
+                todos_usuarios = ce.listar_todos_usuarios_para_selecao()
+                # Cria um dicionário {Nome: ID} para facilitar, removendo o próprio usuário da lista
+                mapa_profs = {u['nome']: u['id'] for u in todos_usuarios if u['id'] != usuario['id']}
+                lista_nomes_profs = list(mapa_profs.keys())
+                
+                editores_selecionados = st.multiselect(
+                    "Professores Auxiliares (Editores)", 
+                    options=lista_nomes_profs,
+                    help="Selecione outros professores que poderão editar este curso."
+                )
+                
+                # Converte os nomes selecionados de volta para IDs
+                ids_editores = [mapa_profs[nome] for nome in editores_selecionados]
+                
+                st.markdown("---")
                 preco = st.number_input("Preço (R$)", 0.0, step=10.0)
                 
-                if st.form_submit_button("Criar"):
-                    # Passando os novos parâmetros para a função criar_curso
+                if st.form_submit_button("Criar Curso"):
+                    publico_val = 'equipe' if "Restrito" in publico_sel else 'todos'
+                    equipe_dest = usuario.get('equipe', '') if publico_val == 'equipe' else ''
+                    
                     ce.criar_curso(
                         usuario['id'], 
                         usuario['nome'], 
                         usuario.get('equipe',''), 
                         titulo, 
                         desc, 
-                        modalidade,     # Passando modalidade escolhida
-                        publico_val,    # Passando público (todos/equipe)
-                        equipe_dest,    # Passando nome da equipe se for restrito
+                        modalidade,     
+                        publico_val,    
+                        equipe_dest,    
                         True, 
                         preco, 
                         False, 
                         False, 
                         10, 
-                        'iniciante'
+                        'iniciante',
+                        editores_ids=ids_editores # Passando a lista de editores
                     )
                     st.success("Curso criado com sucesso!")
                     time.sleep(1)
@@ -88,9 +107,13 @@ def listar_cursos(usuario):
         with st.container(border=True):
             col1, col2 = st.columns([4, 1])
             with col1:
-                # Mostra badges de modalidade na lista também
-                mod_badge = f"span style='background:#333; padding:2px 6px; border-radius:4px; font-size:0.7em'>{c.get('modalidade','EAD')}</span>"
-                st.markdown(f"### {c.get('titulo')} <{mod_badge}>", unsafe_allow_html=True)
+                # Mostra badges
+                mod_badge = f"<span style='background:#333; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-right:5px'>{c.get('modalidade','EAD')}</span>"
+                role_badge = ""
+                if c.get('papel') == 'Editor':
+                    role_badge = f"<span style='background:{COR_DESTAQUE}; color:#000; padding:2px 6px; border-radius:4px; font-size:0.7em'>Editor Convidado</span>"
+                
+                st.markdown(f"### {c.get('titulo')} {mod_badge} {role_badge}", unsafe_allow_html=True)
                 st.caption(c.get('descricao', '')[:100] + "...")
             with col2:
                 if st.button("Ver Detalhes", key=f"btn_ver_{c['id']}", use_container_width=True):
@@ -127,10 +150,15 @@ def exibir_detalhes_curso(usuario):
                 st.session_state['editando_curso'] = not st.session_state['editando_curso']
                 st.rerun()
             
-            if st.button("🗑️ Excluir Curso", type="secondary", use_container_width=True):
-                 if ce.excluir_curso(curso['id']):
-                     st.session_state['cursos_view'] = 'lista'
-                     st.rerun()
+            # Botão Excluir (Só o dono pode excluir, editores não)
+            eh_dono = curso.get('professor_id') == usuario['id']
+            if eh_dono:
+                if st.button("🗑️ Excluir Curso", type="secondary", use_container_width=True):
+                     if ce.excluir_curso(curso['id']):
+                         st.session_state['cursos_view'] = 'lista'
+                         st.rerun()
+            else:
+                st.info("Apenas o dono pode excluir o curso.")
 
         with col_info:
             # === MODO DE EDIÇÃO ===
@@ -141,7 +169,6 @@ def exibir_detalhes_curso(usuario):
                         novo_titulo = st.text_input("Título", value=curso.get('titulo', ''))
                         nova_desc = st.text_area("Descrição", value=curso.get('descricao', ''))
                         
-                        # Campos de Edição Recuperados
                         c_ed1, c_ed2 = st.columns(2)
                         
                         # Modalidade
@@ -156,6 +183,24 @@ def exibir_detalhes_curso(usuario):
                         idx_pub = 1 if curso.get('publico') == 'equipe' else 0
                         novo_pub_sel = c_ed2.selectbox("Público", opcoes_pub, index=idx_pub)
                         
+                        # --- Edição de Editores ---
+                        st.markdown("---")
+                        st.markdown("###### Gestão Compartilhada")
+                        todos_usuarios = ce.listar_todos_usuarios_para_selecao()
+                        mapa_profs = {u['nome']: u['id'] for u in todos_usuarios if u['id'] != curso.get('professor_id')} # Exclui o dono da lista
+                        
+                        # Descobre quais nomes já são editores
+                        editores_atuais_ids = curso.get('editores_ids', [])
+                        nomes_pre_selecionados = [nome for nome, uid in mapa_profs.items() if uid in editores_atuais_ids]
+                        
+                        novos_editores_nomes = st.multiselect(
+                            "Professores Auxiliares", 
+                            options=list(mapa_profs.keys()),
+                            default=nomes_pre_selecionados
+                        )
+                        novos_ids_editores = [mapa_profs[nome] for nome in novos_editores_nomes]
+                        
+                        st.markdown("---")
                         novo_preco = st.number_input("Preço (R$)", value=float(curso.get('preco', 0.0)), step=10.0)
                         
                         if st.form_submit_button("💾 Salvar Alterações"):
@@ -165,11 +210,12 @@ def exibir_detalhes_curso(usuario):
                             dados_atualizados = {
                                 "titulo": novo_titulo,
                                 "descricao": nova_desc,
-                                "modalidade": nova_mod,    # Salva modalidade
-                                "publico": novo_pub_val,   # Salva público
+                                "modalidade": nova_mod,
+                                "publico": novo_pub_val,
                                 "equipe_destino": equipe_dest,
                                 "preco": novo_preco,
-                                "pago": novo_preco > 0
+                                "pago": novo_preco > 0,
+                                "editores_ids": novos_ids_editores # Atualiza a lista de editores
                             }
                             
                             sucesso = ce.editar_curso(curso['id'], dados_atualizados)
@@ -188,7 +234,6 @@ def exibir_detalhes_curso(usuario):
                 st.markdown(f"**Descrição:**\n{curso.get('descricao', 'Sem descrição')}")
                 st.markdown("---")
                 
-                # Grid de Informações
                 c1, c2, c3 = st.columns(3)
                 c1.markdown(f"**Professor:** {curso.get('professor_nome', '-')}")
                 c2.markdown(f"**Equipe:** {curso.get('professor_equipe', '-')}")
@@ -196,12 +241,18 @@ def exibir_detalhes_curso(usuario):
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                c4, c5 = st.columns(3)[:2] # Pega apenas 2 colunas
-                # Exibe Modalidade e Público recuperados
+                c4, c5 = st.columns(3)[:2]
                 c4.markdown(f"**Modalidade:** {curso.get('modalidade', 'EAD')}")
-                
                 publico_display = "Restrito à Equipe" if curso.get('publico') == 'equipe' else "Aberto a Todos"
                 c5.markdown(f"**Público:** {publico_display}")
+                
+                # Mostra quem são os editores (se houver)
+                if curso.get('editores_ids'):
+                    st.markdown("---")
+                    st.markdown("**Professores Auxiliares:**")
+                    # Busca os nomes apenas para exibir (opcional, requer query extra ou cache, 
+                    # aqui simplificamos mostrando apenas quantidade ou se tivesse os nomes cacheados)
+                    st.caption(f"{len(curso['editores_ids'])} professor(es) auxiliando neste curso.")
 
     # --- ABA FINANCEIRO ---
     with tab_alunos:
