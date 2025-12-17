@@ -638,5 +638,99 @@ def listar_cursos_disponiveis_para_aluno(usuario):
                 continue
         
         cursos_disponiveis.append(dados)
+
+    # ==============================================================================
+# NOVAS FUNÇÕES PARA O MÓDULO DE CURSOS (ALUNO)
+# Cole isto no final do seu arquivo utils.py
+# ==============================================================================
+
+def listar_cursos_inscritos(usuario_id):
+    """Retorna a lista de cursos em que o aluno está matriculado."""
+    db = get_db()
+    lista_final = []
+    
+    try:
+        # 1. Pega as inscrições do usuário
+        inscricoes = db.collection('inscricoes').where('usuario_id', '==', str(usuario_id)).stream()
+        
+        for insc in inscricoes:
+            dados_insc = insc.to_dict()
+            curso_id = dados_insc.get('curso_id')
+            
+            # 2. Para cada inscrição, busca os detalhes do curso
+            if curso_id:
+                curso_doc = db.collection('cursos').document(curso_id).get()
+                if curso_doc.exists:
+                    dados_curso = curso_doc.to_dict()
+                    dados_curso['id'] = curso_id
+                    # Adiciona dados da inscrição (como progresso) ao objeto do curso
+                    dados_curso['progresso'] = dados_insc.get('progresso', 0)
+                    dados_curso['inscricao_id'] = insc.id
+                    lista_final.append(dados_curso)
+    except Exception as e:
+        print(f"Erro ao listar cursos inscritos: {e}")
+        
+    return lista_final
+
+def listar_cursos_disponiveis_para_aluno(usuario):
+    """
+    Lista cursos ativos que o aluno AINDA NÃO está inscrito e que 
+    são permitidos para a equipe dele (ou públicos).
+    """
+    db = get_db()
+    cursos_disponiveis = []
+    
+    try:
+        # 1. Busca IDs dos cursos que ele JÁ tem para excluir da lista
+        inscricoes = db.collection('inscricoes').where('usuario_id', '==', str(usuario['id'])).stream()
+        ids_ja_inscritos = [i.to_dict().get('curso_id') for i in inscricoes]
+        
+        # 2. Busca todos os cursos ativos no sistema
+        cursos_ref = db.collection('cursos').where('ativo', '==', True).stream()
+        
+        # Normaliza a equipe do aluno para comparação (lowercase)
+        equipe_aluno = str(usuario.get('equipe', '')).strip().lower()
+        
+        for c in cursos_ref:
+            dados = c.to_dict()
+            dados['id'] = c.id
+            
+            # Filtro 1: Se já está inscrito, pula
+            if dados['id'] in ids_ja_inscritos:
+                continue
+                
+            # Filtro 2: Verifica restrição de equipe (Público vs Restrito)
+            publico = dados.get('publico', 'todos')
+            if publico == 'equipe':
+                equipe_curso = str(dados.get('equipe_destino', '')).strip().lower()
+                # Se a equipe do curso for diferente da do aluno, ele não vê o curso
+                if equipe_curso != equipe_aluno:
+                    continue
+            
+            cursos_disponiveis.append(dados)
+            
+    except Exception as e:
+        print(f"Erro ao listar disponiveis: {e}")
+        
+    return cursos_disponiveis
+
+def inscrever_usuario_em_curso(usuario_id, curso_id):
+    """Cria o registro de inscrição no banco de dados."""
+    db = get_db()
+    try:
+        # Cria o documento na coleção 'inscricoes'
+        # Usamos .add() para gerar um ID automático
+        db.collection('inscricoes').add({
+            "usuario_id": str(usuario_id),
+            "curso_id": str(curso_id),
+            "data_inscricao": firestore.SERVER_TIMESTAMP,
+            "progresso": 0,
+            "status": "ativo",
+            "aulas_concluidas": []
+        })
+        return True
+    except Exception as e:
+        print(f"Erro ao inscrever: {e}")
+        return False
         
     return cursos_disponiveis
