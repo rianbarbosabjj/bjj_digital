@@ -52,10 +52,11 @@ def tela_inicio():
     with col1: 
         render_card("🤼 Modo Rola", "Responda questões e alcance o topo do ranking.", "Acessar", "n1", "Modo Rola")
     with col2: 
-        # Se for aluno, o texto é "Exames", se for professor é gestão
-        render_card("🥋 Exames", "Realize seus exames de faixa e provas.", "Acessar", "n2", "Exame de Faixa")
+        render_card("🏆 Ranking", "Acompanhe sua colocação no ranking.", "Acessar", "n2", "Ranking")# Se for aluno, o texto é "Exames", se for professor é gestão
     with col3: 
-        render_card("🏆 Ranking", "Acompanhe sua colocação no ranking.", "Acessar", "n3", "Ranking")
+        render_card("📚 Cursos", "Realize seus exames de faixa e provas.", "Acessar", "n3", "Cursos")
+    with col4: 
+        render_card("🥋 Exames", "Realize seus exames de faixa e provas.", "Acessar", "n4", "Exame de Faixa")
 
     # --- ÁREA DE GESTÃO (Professor/Admin) ---
     tipo = str(usuario.get("tipo", "aluno")).lower()
