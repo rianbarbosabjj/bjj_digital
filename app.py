@@ -136,7 +136,6 @@ if "SECRETS_TOML" in os.environ:
 
 try:
     from streamlit_option_menu import option_menu
-    # 🔹 AQUI: adicionamos cursos mantendo o resto igual
     from views import login, geral, aluno, professor, admin, cursos
 except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
@@ -158,24 +157,19 @@ def tela_troca_senha_obrigatoria():
                 if st.form_submit_button("Atualizar", use_container_width=True):
                     if ns and ns == cs:
                         try:
-                            # 1. Recupera ID de forma segura
                             user_sessao = st.session_state.get('usuario')
                             if not user_sessao or 'id' not in user_sessao:
                                 st.error("Erro de Sessão: Usuário não identificado.")
                                 return
 
                             uid = user_sessao['id']
-                            
-                            # 2. Gera Hash
                             hashed = bcrypt.hashpw(ns.encode(), bcrypt.gensalt()).decode()
                             
-                            # 3. Conecta ao Banco
                             db = get_db()
                             if not db:
                                 st.error("Erro de conexão com o banco.")
                                 return
 
-                            # 4. Atualiza
                             db.collection('usuarios').document(uid).update({
                                 "senha": hashed, 
                                 "precisa_trocar_senha": False
@@ -220,7 +214,8 @@ def app_principal():
         if tipo_code in ["admin", "professor"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel de Professores")
         
-        if tipo_code != "admin":
+        # Botão removido para alunos, pois agora está dentro do Painel do Aluno
+        if tipo_code == "professor": 
             if st.button("🏅 Meus Certificados", use_container_width=True): nav("Meus Certificados")
         
         if tipo_code == "admin":
@@ -233,20 +228,33 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
+    # Rotas Universais
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
+
+    # ========================================================
+    # ROTA EXCLUSIVA DO ALUNO (Nova Arquitetura)
+    # ========================================================
+    if tipo_code == "aluno":
+        # O Aluno agora é gerenciado 100% pelo módulo aluno.py com suas próprias abas
+        aluno.app_aluno(usuario)
+        return
+    # ========================================================
+
+    # Rotas de Admin/Professor
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
     if pg == "Painel de Professores": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
+    # Menu Horizontal para Professor/Admin
     ops, icns = [], []
     if tipo_code in ["admin", "professor"]:
-        # 🔹 AQUI: só inserimos "Cursos" e o ícone "book"
         ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
-        ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking"]
-        icns = ["house", "people", "book", "journal", "trophy"]
+        # Fallback caso caia aqui
+        ops = ["Início"]
+        icns = ["house"]
 
     try: idx = ops.index(pg)
     except: idx = 0
@@ -265,9 +273,9 @@ def app_principal():
                 "border-radius": "12px", 
                 "border": "1px solid rgba(255, 215, 112, 0.15)", 
                 "box-shadow": "0 4px 15px rgba(0,0,0,0.3)",
-                "width": "100%",       
+                "width": "100%",        
                 "max-width": "100%",  
-                "display": "flex",     
+                "display": "flex",      
                 "justify-content": "space-between" 
             },
             "icon": {
@@ -283,8 +291,8 @@ def app_principal():
                 "font-weight": "400",
                 "border-radius": "8px",
                 "transition": "0.3s",
-                "width": "100%",       
-                "flex-grow": "1",     
+                "width": "100%",        
+                "flex-grow": "1",      
                 "display": "flex",
                 "justify-content": "center",
                 "align-items": "center"
@@ -299,15 +307,12 @@ def app_principal():
     )
 
     if menu != pg:
-        if pg == "Meus Certificados" and menu == "Início": pass 
-        else:
-            st.session_state.menu_selection = menu
-            st.rerun()
+        st.session_state.menu_selection = menu
+        st.rerun()
 
     if pg == "Modo Rola": 
         aluno.modo_rola(usuario)
     elif pg == "Cursos":
-        # 🔹 NOVO: rota para a página de cursos
         cursos.pagina_cursos(usuario)
     elif pg == "Exame de Faixa": 
         aluno.exame_de_faixa(usuario)
