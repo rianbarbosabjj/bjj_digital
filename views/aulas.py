@@ -32,7 +32,6 @@ def aplicar_estilos_aulas():
         background: rgba(255,255,255,0.1); margin-right: 0.5rem;
         text-transform: uppercase; color: #ddd;
     }}
-    /* Ajuste para garantir visibilidade do uploader */
     div[data-testid="stFileUploader"] {{
         padding: 1rem; border: 1px dashed rgba(255, 255, 255, 0.2);
         border-radius: 8px; background: rgba(0,0,0,0.2);
@@ -50,18 +49,20 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
             st.session_state['cursos_view'] = 'detalhe'
             st.rerun()
     with c_tit:
-        st.subheader(f"Gerenciar Conteúdo: {curso.get('titulo', 'Curso')}")
+        # Proteção contra título nulo
+        titulo_curso = curso.get('titulo', 'Curso Sem Título')
+        st.subheader(f"Gerenciar Conteúdo: {titulo_curso}")
 
     # --- Criar Novo Módulo ---
     with st.expander("➕ Criar Novo Módulo", expanded=False):
         with st.form("new_mod_form", clear_on_submit=True):
             t_mod = st.text_input("Título do Módulo", placeholder="Ex: Módulo 1 - Guarda Fechada")
             d_mod = st.text_area("Descrição", placeholder="O que será ensinado?")
+            
             if st.form_submit_button("Criar Módulo", type="primary"):
-                # Validação simples
                 if t_mod:
                     try:
-                        # Passamos 0 se der erro na contagem, para não travar
+                        # Busca módulos existentes para calcular a ordem
                         mods = ce.listar_modulos_e_aulas(curso['id'])
                         qtd_mods = len(mods) if mods else 0
                         
@@ -70,55 +71,52 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                         time.sleep(1)
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Erro ao criar: {e}")
+                        st.error(f"Erro ao criar módulo: {e}")
                 else:
                     st.error("Título obrigatório.")
 
     st.markdown("---")
     
-    # --- Listagem de Módulos e Aulas ---
-    # Proteção: Se a função retornar None, usamos lista vazia
-    modulos = ce.listar_modulos_e_aulas(curso['id']) or []
-    
+    # --- Listagem de Módulos e Aulas (Blindada) ---
+    try:
+        modulos = ce.listar_modulos_e_aulas(curso['id']) or []
+    except Exception as e:
+        st.error(f"Erro de conexão ao buscar módulos: {e}")
+        modulos = []
+
     if not modulos:
         st.info("Nenhum módulo criado ainda. Use o formulário acima para começar.")
         return
 
-st.markdown("### 📚 Estrutura do Curso")
+    st.markdown("### 📚 Estrutura do Curso")
 
-    # --- INÍCIO DO BLOCO BLINDADO ---
     for i, mod in enumerate(modulos):
         try:
-            # 1. Defesa: Garante que nada é Nulo (None)
-            # Se não tiver ID, gera um provisório para não travar o key
-            mod_id = str(mod.get('id', f'temp_{i}')) 
+            # --- 1. Tratamento de Dados (Anti-Erro) ---
+            # Garante que temos strings válidas e IDs, mesmo que o banco falhe
+            mod_id = str(mod.get('id', f'temp_{i}'))
             mod_titulo = str(mod.get('titulo', 'Sem Título'))
             
-            # Se a lista de aulas vier None, transforma em lista vazia []
             lista_aulas = mod.get('aulas')
             if lista_aulas is None:
                 lista_aulas = []
                 
             qtd_aulas = len(lista_aulas)
-            
-            # Monta o título do card
             label_expander = f"{i+1}. {mod_titulo} ({qtd_aulas} aulas)"
             
-            # 2. O Expander Seguro
+            # --- 2. Interface do Módulo ---
             with st.expander(label_expander, expanded=False, key=f"exp_mod_{mod_id}"):
                 st.caption(str(mod.get('descricao', '')))
                 
-                # --- Lista Aulas ---
+                # Listar Aulas
                 if lista_aulas:
                     for aula in lista_aulas:
-                        # Proteção extra para as aulas também
                         tp = str(aula.get('tipo', 'geral'))
                         t_aula = str(aula.get('titulo', 'Sem Título'))
                         d_min = aula.get('duracao_min', 0)
-                        
                         ic = "🎥" if tp=='video' else "🖼️" if tp=='imagem' else "📝"
                         
-                        conteudo = aula.get('conteudo', {})
+                        conteudo = aula.get('conteudo', {}) or {}
                         tem_pdf = "📎 PDF" if isinstance(conteudo, dict) and conteudo.get('material_apoio_nome') else ""
                         
                         html_aula = f"""
@@ -135,7 +133,7 @@ st.markdown("### 📚 Estrutura do Curso")
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # --- Formulário de Nova Aula ---
+                # --- Formulário Adicionar Aula ---
                 if st.checkbox(f"➕ Adicionar Aula", key=f"chk_add_{mod_id}"):
                     with st.container(border=True):
                         st.markdown("#### Nova Aula")
@@ -173,6 +171,7 @@ st.markdown("### 📚 Estrutura do Curso")
                             conteudo["texto"] = st.text_area("Texto:", key=f"txt_{mod_id}")
 
                         st.markdown("---")
+                        # Botão Salvar
                         if st.button(f"💾 Salvar", key=f"sv_{mod_id}", type="primary"):
                              ce.criar_aula(mod_id, tit_aula, tipo_aula, conteudo, dur_aula)
                              st.success("Salvo!")
@@ -180,8 +179,8 @@ st.markdown("### 📚 Estrutura do Curso")
                              st.rerun()
 
         except Exception as e:
-            # Se um módulo der erro, ele mostra aqui qual foi, mas carrega o resto!
-            st.error(f"⚠️ Erro ao carregar o módulo {i+1}: {e}")
-            st.write(f"Dados brutos do módulo problemático: {mod}")
+            st.error(f"⚠️ Erro ao renderizar módulo {i+1}: {e}")
+            st.write(mod) # Mostra o dado problemático para debug
+
 def pagina_aulas(usuario: dict):
     st.warning("Acesse via Gerenciador de Cursos.")
