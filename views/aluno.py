@@ -7,7 +7,9 @@ import pandas as pd
 from datetime import datetime, timedelta
 import streamlit.components.v1 as components 
 from database import get_db
-from firebase_admin import firestore # Mantemos a importação
+from firebase_admin import firestore
+import utils as ce # Utils para funções de banco
+import views.aulas as aulas_view # Importação para usar estilos ou lógica compartilhada
 
 # --- IMPORTAÇÃO DIRETA (PARA DIAGNÓSTICO DE ERROS) ---
 from utils import (
@@ -409,3 +411,185 @@ def exame_de_faixa(usuario):
                     time.sleep(3)
                 
                 st.rerun()
+
+# ==============================================================================
+# NOVAS FUNCIONALIDADES (ABAS DE CURSOS)
+# ==============================================================================
+
+def assistir_curso_player(curso, usuario):
+    """
+    Player seguro para o aluno assistir às aulas sem permissão de edição.
+    """
+    st.subheader(f"📺 {curso.get('titulo', 'Curso')}")
+    if st.button("⬅ Voltar ao Painel"):
+        st.session_state['aluno_view'] = 'dashboard'
+        st.rerun()
+        
+    st.markdown("---")
+    
+    try:
+        modulos = ce.listar_modulos_e_aulas(curso['id']) or []
+    except:
+        modulos = []
+        
+    if not modulos:
+        st.info("Este curso ainda não possui conteúdo liberado.")
+        return
+
+    # Barra de Progresso do Curso (Simulada ou Real)
+    # Aqui você poderia calcular quantas aulas o aluno já viu
+    # progresso_total = calcular_progresso(usuario['id'], curso['id']) 
+    # st.progress(progresso_total, text=f"Seu Progresso: {int(progresso_total*100)}%")
+
+    for i, mod in enumerate(modulos):
+        mod_titulo = mod.get('titulo', f'Módulo {i+1}')
+        aulas = mod.get('aulas', [])
+        
+        # Expander padrão (aberto se for o primeiro, fechado os outros)
+        with st.expander(f"📂 {mod_titulo}", expanded=(i==0)):
+            if mod.get('descricao'):
+                st.caption(mod['descricao'])
+                
+            if not aulas:
+                st.caption("Sem aulas disponíveis neste módulo.")
+            else:
+                for aula in aulas:
+                    # Visualização da Aula (Card Simples)
+                    tp = aula.get('tipo', 'texto')
+                    icone = "🎥" if tp == 'video' else "🖼️" if tp == 'imagem' else "📝"
+                    
+                    with st.container(border=True):
+                        st.markdown(f"**{icone} {aula.get('titulo')}**")
+                        
+                        # Conteúdo da Aula
+                        conteudo = aula.get('conteudo', {})
+                        
+                        if tp == 'video':
+                            url = conteudo.get('url') or conteudo.get('arquivo_video')
+                            if url:
+                                st.video(url)
+                            else:
+                                st.warning("Vídeo indisponível.")
+                                
+                        elif tp == 'imagem':
+                            url = conteudo.get('url') or conteudo.get('arquivo_imagem')
+                            if url:
+                                st.image(url, use_container_width=True)
+                                
+                        elif tp == 'texto':
+                            st.markdown(conteudo.get('texto', ''))
+                            
+                        # Material de Apoio
+                        pdf_link = conteudo.get('material_apoio')
+                        if pdf_link:
+                            st.markdown(f"[📎 Baixar Material de Apoio]({pdf_link})")
+                            
+                        # Botão de Concluir Aula (Futuro)
+                        # if st.button("Marcar como Concluída", key=f"conc_{aula['id']}"): ...
+
+def meus_cursos_inscritos(usuario):
+    """Lista os cursos que o aluno já está matriculado."""
+    cursos = ce.listar_cursos_inscritos(usuario['id'])
+    
+    if not cursos:
+        st.info("Você ainda não está inscrito em nenhum curso.")
+        st.markdown("👉 Vá até a aba **Mural de Cursos** para encontrar novidades!")
+        return
+
+    for c in cursos:
+        with st.container(border=True):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.markdown(f"### {c.get('titulo')}")
+                # Barra de progresso (buscando da inscrição)
+                prog = c.get('progresso', 0)
+                st.progress(prog / 100, text=f"Progresso: {prog}%")
+            with col2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("▶ Acessar", key=f"play_{c['id']}", type="primary", use_container_width=True):
+                    st.session_state['curso_ativo'] = c
+                    st.session_state['aluno_view'] = 'assistir'
+                    st.rerun()
+
+def mural_cursos(usuario):
+    """Loja de Cursos disponíveis para inscrição."""
+    cursos_disp = ce.listar_cursos_disponiveis_para_aluno(usuario)
+    
+    if not cursos_disp:
+        st.success("Tudo em dia! Você já possui todos os cursos disponíveis para sua equipe.")
+        return
+
+    for c in cursos_disp:
+        with st.container(border=True):
+            col_txt, col_meta, col_btn = st.columns([3, 1, 1])
+            
+            with col_txt:
+                mod_badge = f"<span style='background:#333; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.7em'>{c.get('modalidade','EAD')}</span>"
+                st.markdown(f"#### {c.get('titulo')} {mod_badge}", unsafe_allow_html=True)
+                st.caption(c.get('descricao', '')[:120] + "...")
+                st.caption(f"👨‍🏫 Prof. {c.get('professor_nome', '-')}")
+            
+            with col_meta:
+                preco = float(c.get('preco', 0))
+                if preco > 0:
+                    st.markdown(f"<h3 style='color:#FFD770'>R$ {preco:.2f}</h3>", unsafe_allow_html=True)
+                else:
+                    st.markdown("<h3 style='color:#4CAF50'>GRÁTIS</h3>", unsafe_allow_html=True)
+
+            with col_btn:
+                st.markdown("<br>", unsafe_allow_html=True)
+                label_btn = "Comprar" if preco > 0 else "Matricular"
+                tipo_btn = "secondary" if preco > 0 else "primary"
+                
+                if st.button(label_btn, key=f"ins_{c['id']}", type=tipo_btn, use_container_width=True):
+                    if preco > 0:
+                        st.toast("Módulo de pagamento em breve!", icon="💳")
+                    else:
+                        ce.inscrever_usuario_em_curso(usuario['id'], c['id'])
+                        st.balloons()
+                        st.success(f"Matrícula realizada em {c.get('titulo')}!")
+                        time.sleep(2)
+                        st.rerun()
+
+# =========================================
+# APP PRINCIPAL DO ALUNO (ORQUESTRADOR)
+# =========================================
+def app_aluno(usuario):
+    if 'aluno_view' not in st.session_state:
+        st.session_state['aluno_view'] = 'dashboard'
+    if 'curso_ativo' not in st.session_state:
+        st.session_state['curso_ativo'] = None
+
+    # Roteamento: Player vs Dashboard
+    if st.session_state['aluno_view'] == 'assistir':
+        if st.session_state['curso_ativo']:
+            assistir_curso_player(st.session_state['curso_ativo'], usuario)
+        else:
+            st.session_state['aluno_view'] = 'dashboard'
+            st.rerun()
+    else:
+        # Dashboard Principal com Abas
+        st.subheader(f"Painel do Aluno: {usuario['nome']}")
+        
+        tab_painel, tab_mural = st.tabs(["🥋 Painel & Meus Cursos", "🔍 Mural de Cursos"])
+        
+        with tab_painel:
+            st.markdown("<br>", unsafe_allow_html=True)
+            # Menu interno do painel
+            menu_opcoes = ["Meus Cursos (Aulas)", "Exame de Faixa", "Meus Certificados", "Ranking"]
+            escolha = st.radio("Navegação Rápida", menu_opcoes, horizontal=True, label_visibility="collapsed")
+            st.markdown("---")
+            
+            if escolha == "Meus Cursos (Aulas)":
+                meus_cursos_inscritos(usuario)
+            elif escolha == "Exame de Faixa":
+                exame_de_faixa(usuario)
+            elif escolha == "Meus Certificados":
+                meus_certificados(usuario)
+            elif escolha == "Ranking":
+                ranking()
+                
+        with tab_mural:
+            st.markdown("<br>", unsafe_allow_html=True)
+            st.markdown("##### 🚀 Novos Cursos Disponíveis")
+            mural_cursos(usuario)
