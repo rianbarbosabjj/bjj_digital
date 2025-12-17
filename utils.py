@@ -507,3 +507,43 @@ def excluir_modulo(modulo_id):
     except Exception as e:
         print(f"Erro ao excluir módulo: {e}")
         return False
+
+def listar_alunos_inscritos(curso_id):
+    """Busca todos os alunos inscritos em um curso específico."""
+    db = get_db()
+    try:
+        # Busca apenas as inscrições deste curso
+        inscricoes = db.collection('inscricoes').where('curso_id', '==', str(curso_id)).stream()
+        
+        lista_alunos = []
+        for i in inscricoes:
+            dados_insc = i.to_dict()
+            uid = dados_insc.get('usuario_id')
+            
+            # Busca os detalhes do aluno (Nome, Email) na coleção de usuários
+            # Nota: Em sistemas com milhares de alunos, isso deveria ser otimizado, 
+            # mas para o BJJ Digital atual funciona perfeitamente.
+            user_doc = db.collection('usuarios').document(uid).get()
+            
+            if user_doc.exists:
+                dados_user = user_doc.to_dict()
+                
+                # Formata a data de inscrição se existir
+                data_raw = dados_insc.get('criado_em')
+                if hasattr(data_raw, 'strftime'):
+                    data_fmt = data_raw.strftime('%d/%m/%Y')
+                else:
+                    data_fmt = "-"
+
+                lista_alunos.append({
+                    "Nome": dados_user.get('nome', 'Sem Nome').upper(),
+                    "Email": dados_user.get('email', '-'),
+                    "Data Inscrição": data_fmt,
+                    "Progresso": f"{dados_insc.get('progresso', 0)}%",
+                    "Status": str(dados_insc.get('status', 'Ativo')).upper()
+                })
+        
+        return lista_alunos
+    except Exception as e:
+        print(f"Erro ao listar inscritos: {e}")
+        return []
