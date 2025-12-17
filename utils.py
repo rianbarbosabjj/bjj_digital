@@ -603,3 +603,40 @@ def obter_nomes_usuarios(lista_ids):
                 resultado.append({'id': uid, 'nome': d.get('nome', 'Sem Nome'), 'cpf': d.get('cpf', '-')})
         except: pass
     return resultado
+
+def listar_cursos_disponiveis_para_aluno(usuario):
+    """
+    Lista cursos ativos que o aluno AINDA NÃO está inscrito e que 
+    são permitidos para a equipe dele (ou públicos).
+    """
+    db = get_db()
+    
+    # 1. Busca IDs dos cursos que ele JÁ tem
+    inscricoes = db.collection('inscricoes').where('usuario_id', '==', usuario['id']).stream()
+    ids_ja_inscritos = [i.to_dict().get('curso_id') for i in inscricoes]
+    
+    # 2. Busca todos os cursos ativos
+    cursos_ref = db.collection('cursos').where('ativo', '==', True).stream()
+    
+    cursos_disponiveis = []
+    equipe_aluno = str(usuario.get('equipe', '')).strip().lower()
+    
+    for c in cursos_ref:
+        dados = c.to_dict()
+        dados['id'] = c.id
+        
+        # Filtro 1: Já está inscrito?
+        if dados['id'] in ids_ja_inscritos:
+            continue
+            
+        # Filtro 2: Restrição de Equipe
+        publico = dados.get('publico', 'todos')
+        if publico == 'equipe':
+            equipe_curso = str(dados.get('equipe_destino', '')).strip().lower()
+            # Se a equipe do curso não bater com a do aluno, pula
+            if equipe_curso != equipe_aluno:
+                continue
+        
+        cursos_disponiveis.append(dados)
+        
+    return cursos_disponiveis
