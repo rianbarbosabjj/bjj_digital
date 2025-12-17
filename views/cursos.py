@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import utils as ce
 import views.aulas as aulas_view 
+import re
 
 try:
     from config import COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER
@@ -42,34 +43,41 @@ def listar_cursos(usuario):
                 titulo = st.text_input("Título")
                 desc = st.text_area("Descrição")
                 
-                # Novas Colunas para Modalidade e Público
                 c1, c2 = st.columns(2)
                 modalidade = c1.selectbox("Modalidade", ["EAD", "Presencial", "Híbrido"])
                 publico_sel = c2.selectbox("Público Alvo", ["Aberto a Todos", "Restrito à Minha Equipe"])
                 
-                # Seleção de Editores (Outros Professores)
+                # --- Gestão Compartilhada por CPF ---
                 st.markdown("---")
-                st.markdown("###### Gestão Compartilhada")
-                
-                # Busca lista de usuários para seleção
-                todos_usuarios = ce.listar_todos_usuarios_para_selecao()
-                # Cria um dicionário {Nome: ID} para facilitar, removendo o próprio usuário da lista
-                mapa_profs = {u['nome']: u['id'] for u in todos_usuarios if u['id'] != usuario['id']}
-                lista_nomes_profs = list(mapa_profs.keys())
-                
-                editores_selecionados = st.multiselect(
-                    "Professores Auxiliares (Editores)", 
-                    options=lista_nomes_profs,
-                    help="Selecione outros professores que poderão editar este curso."
-                )
-                
-                # Converte os nomes selecionados de volta para IDs
-                ids_editores = [mapa_profs[nome] for nome in editores_selecionados]
+                st.markdown("###### Gestão Compartilhada (Opcional)")
+                st.caption("Digite os CPFs dos professores auxiliares (um por linha ou separado por vírgula):")
+                cpfs_input = st.text_area("CPFs dos Editores", height=68, placeholder="Ex: 111.222.333-44\n555.666.777-88")
                 
                 st.markdown("---")
                 preco = st.number_input("Preço (R$)", 0.0, step=10.0)
                 
                 if st.form_submit_button("Criar Curso"):
+                    # Processamento dos CPFs
+                    ids_editores = []
+                    cpfs_nao_encontrados = []
+                    
+                    if cpfs_input:
+                        # Separa por quebra de linha ou vírgula
+                        lista_cpfs_raw = re.split(r'[,\n]', cpfs_input)
+                        for cpf_raw in lista_cpfs_raw:
+                            cpf_limpo = cpf_raw.strip()
+                            if cpf_limpo:
+                                user_encontrado = ce.buscar_usuario_por_cpf(cpf_limpo)
+                                if user_encontrado:
+                                    if user_encontrado['id'] != usuario['id']: # Não adiciona a si mesmo
+                                        ids_editores.append(user_encontrado['id'])
+                                else:
+                                    cpfs_nao_encontrados.append(cpf_limpo)
+                    
+                    if cpfs_nao_encontrados:
+                        st.warning(f"⚠️ Alguns CPFs não foram encontrados e ignorados: {', '.join(cpfs_nao_encontrados)}")
+                    
+                    # Criação
                     publico_val = 'equipe' if "Restrito" in publico_sel else 'todos'
                     equipe_dest = usuario.get('equipe', '') if publico_val == 'equipe' else ''
                     
@@ -88,10 +96,10 @@ def listar_cursos(usuario):
                         False, 
                         10, 
                         'iniciante',
-                        editores_ids=ids_editores # Passando a lista de editores
+                        editores_ids=ids_editores
                     )
                     st.success("Curso criado com sucesso!")
-                    time.sleep(1)
+                    time.sleep(1.5)
                     st.rerun()
     
     st.markdown("---")
@@ -107,7 +115,6 @@ def listar_cursos(usuario):
         with st.container(border=True):
             col1, col2 = st.columns([4, 1])
             with col1:
-                # Mostra badges
                 mod_badge = f"<span style='background:#333; padding:2px 6px; border-radius:4px; font-size:0.7em; margin-right:5px'>{c.get('modalidade','EAD')}</span>"
                 role_badge = ""
                 if c.get('papel') == 'Editor':
@@ -145,12 +152,10 @@ def exibir_detalhes_curso(usuario):
             
             st.markdown("<br>", unsafe_allow_html=True)
             
-            # Botão Editar
             if st.button("✏️ Editar Informações", use_container_width=True):
                 st.session_state['editando_curso'] = not st.session_state['editando_curso']
                 st.rerun()
             
-            # Botão Excluir (Só o dono pode excluir, editores não)
             eh_dono = curso.get('professor_id') == usuario['id']
             if eh_dono:
                 if st.button("🗑️ Excluir Curso", type="secondary", use_container_width=True):
@@ -165,69 +170,87 @@ def exibir_detalhes_curso(usuario):
             if st.session_state['editando_curso']:
                 with st.container(border=True):
                     st.markdown("##### ✏️ Editando Curso")
-                    with st.form("form_editar_curso"):
-                        novo_titulo = st.text_input("Título", value=curso.get('titulo', ''))
-                        nova_desc = st.text_area("Descrição", value=curso.get('descricao', ''))
-                        
-                        c_ed1, c_ed2 = st.columns(2)
-                        
-                        # Modalidade
-                        opcoes_mod = ["EAD", "Presencial", "Híbrido"]
-                        idx_mod = 0
-                        if curso.get('modalidade') in opcoes_mod:
-                            idx_mod = opcoes_mod.index(curso.get('modalidade'))
-                        nova_mod = c_ed1.selectbox("Modalidade", opcoes_mod, index=idx_mod)
-                        
-                        # Público
-                        opcoes_pub = ["Aberto a Todos", "Restrito à Minha Equipe"]
-                        idx_pub = 1 if curso.get('publico') == 'equipe' else 0
-                        novo_pub_sel = c_ed2.selectbox("Público", opcoes_pub, index=idx_pub)
-                        
-                        # --- Edição de Editores ---
-                        st.markdown("---")
-                        st.markdown("###### Gestão Compartilhada")
-                        todos_usuarios = ce.listar_todos_usuarios_para_selecao()
-                        mapa_profs = {u['nome']: u['id'] for u in todos_usuarios if u['id'] != curso.get('professor_id')} # Exclui o dono da lista
-                        
-                        # Descobre quais nomes já são editores
-                        editores_atuais_ids = curso.get('editores_ids', [])
-                        nomes_pre_selecionados = [nome for nome, uid in mapa_profs.items() if uid in editores_atuais_ids]
-                        
-                        novos_editores_nomes = st.multiselect(
-                            "Professores Auxiliares", 
-                            options=list(mapa_profs.keys()),
-                            default=nomes_pre_selecionados
-                        )
-                        novos_ids_editores = [mapa_profs[nome] for nome in novos_editores_nomes]
-                        
-                        st.markdown("---")
-                        novo_preco = st.number_input("Preço (R$)", value=float(curso.get('preco', 0.0)), step=10.0)
-                        
-                        if st.form_submit_button("💾 Salvar Alterações"):
-                            novo_pub_val = 'equipe' if "Restrito" in novo_pub_sel else 'todos'
-                            equipe_dest = usuario.get('equipe', '') if novo_pub_val == 'equipe' else ''
+                    
+                    # Carrega editores atuais se ainda não estiverem no estado
+                    if 'editores_temp_ids' not in st.session_state:
+                        st.session_state['editores_temp_ids'] = curso.get('editores_ids', [])
 
-                            dados_atualizados = {
-                                "titulo": novo_titulo,
-                                "descricao": nova_desc,
-                                "modalidade": nova_mod,
-                                "publico": novo_pub_val,
-                                "equipe_destino": equipe_dest,
-                                "preco": novo_preco,
-                                "pago": novo_preco > 0,
-                                "editores_ids": novos_ids_editores # Atualiza a lista de editores
-                            }
-                            
-                            sucesso = ce.editar_curso(curso['id'], dados_atualizados)
-                            if sucesso:
-                                st.success("Curso atualizado!")
-                                curso.update(dados_atualizados)
-                                st.session_state['curso_selecionado'] = curso
-                                st.session_state['editando_curso'] = False
+                    novo_titulo = st.text_input("Título", value=curso.get('titulo', ''))
+                    nova_desc = st.text_area("Descrição", value=curso.get('descricao', ''))
+                    
+                    c_ed1, c_ed2 = st.columns(2)
+                    opcoes_mod = ["EAD", "Presencial", "Híbrido"]
+                    idx_mod = opcoes_mod.index(curso.get('modalidade')) if curso.get('modalidade') in opcoes_mod else 0
+                    nova_mod = c_ed1.selectbox("Modalidade", opcoes_mod, index=idx_mod)
+                    
+                    opcoes_pub = ["Aberto a Todos", "Restrito à Minha Equipe"]
+                    idx_pub = 1 if curso.get('publico') == 'equipe' else 0
+                    novo_pub_sel = c_ed2.selectbox("Público", opcoes_pub, index=idx_pub)
+                    
+                    novo_preco = st.number_input("Preço (R$)", value=float(curso.get('preco', 0.0)), step=10.0)
+
+                    # --- Gestão de Editores (Interativa) ---
+                    st.markdown("---")
+                    st.markdown("###### Professores Auxiliares")
+                    
+                    # Listar Atuais
+                    lista_detalhada = ce.obter_nomes_usuarios(st.session_state['editores_temp_ids'])
+                    
+                    if lista_detalhada:
+                        for editor in lista_detalhada:
+                            c_ed_nome, c_ed_btn = st.columns([4, 1])
+                            c_ed_nome.text(f"👤 {editor['nome']} ({editor['cpf']})")
+                            if c_ed_btn.button("Remover", key=f"rm_ed_{editor['id']}"):
+                                st.session_state['editores_temp_ids'].remove(editor['id'])
+                                st.rerun()
+                    else:
+                        st.caption("Nenhum professor auxiliar definido.")
+
+                    # Adicionar Novo
+                    c_add_cpf, c_add_btn = st.columns([3, 1])
+                    novo_cpf_editor = c_add_cpf.text_input("Adicionar por CPF", placeholder="Digite o CPF")
+                    if c_add_btn.button("Buscar e Add"):
+                        user_found = ce.buscar_usuario_por_cpf(novo_cpf_editor)
+                        if user_found:
+                            if user_found['id'] not in st.session_state['editores_temp_ids'] and user_found['id'] != usuario['id']:
+                                st.session_state['editores_temp_ids'].append(user_found['id'])
+                                st.success(f"Adicionado: {user_found['nome']}")
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                st.error("Erro ao atualizar.")
+                                st.warning("Usuário já adicionado ou é o dono.")
+                        else:
+                            st.error("CPF não encontrado.")
+                    
+                    st.markdown("---")
+
+                    if st.button("💾 Salvar Todas Alterações", type="primary"):
+                        novo_pub_val = 'equipe' if "Restrito" in novo_pub_sel else 'todos'
+                        equipe_dest = usuario.get('equipe', '') if novo_pub_val == 'equipe' else ''
+
+                        dados_atualizados = {
+                            "titulo": novo_titulo,
+                            "descricao": nova_desc,
+                            "modalidade": nova_mod,
+                            "publico": novo_pub_val,
+                            "equipe_destino": equipe_dest,
+                            "preco": novo_preco,
+                            "pago": novo_preco > 0,
+                            "editores_ids": st.session_state['editores_temp_ids']
+                        }
+                        
+                        sucesso = ce.editar_curso(curso['id'], dados_atualizados)
+                        if sucesso:
+                            st.success("Curso atualizado!")
+                            curso.update(dados_atualizados)
+                            st.session_state['curso_selecionado'] = curso
+                            st.session_state['editando_curso'] = False
+                            # Limpa variável temporária
+                            if 'editores_temp_ids' in st.session_state: del st.session_state['editores_temp_ids']
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error("Erro ao atualizar.")
             
             # === MODO DE VISUALIZAÇÃO ===
             else:
@@ -246,13 +269,13 @@ def exibir_detalhes_curso(usuario):
                 publico_display = "Restrito à Equipe" if curso.get('publico') == 'equipe' else "Aberto a Todos"
                 c5.markdown(f"**Público:** {publico_display}")
                 
-                # Mostra quem são os editores (se houver)
+                # Exibir Editores
                 if curso.get('editores_ids'):
                     st.markdown("---")
                     st.markdown("**Professores Auxiliares:**")
-                    # Busca os nomes apenas para exibir (opcional, requer query extra ou cache, 
-                    # aqui simplificamos mostrando apenas quantidade ou se tivesse os nomes cacheados)
-                    st.caption(f"{len(curso['editores_ids'])} professor(es) auxiliando neste curso.")
+                    nomes_editores = ce.obter_nomes_usuarios(curso['editores_ids'])
+                    for ed in nomes_editores:
+                        st.caption(f"• {ed['nome']}")
 
     # --- ABA FINANCEIRO ---
     with tab_alunos:
