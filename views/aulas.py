@@ -36,6 +36,13 @@ def aplicar_estilos_aulas():
         padding: 1rem; border: 1px dashed rgba(255, 255, 255, 0.2);
         border-radius: 8px; background: rgba(0,0,0,0.2);
     }}
+    /* Estilo para o botão de perigo */
+    .danger-zone {
+        border: 1px solid #ff4b4b;
+        border-radius: 8px;
+        padding: 10px;
+        margin-top: 20px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -63,7 +70,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                     try:
                         mods = ce.listar_modulos_e_aulas(curso['id'])
                         qtd_mods = len(mods) if mods else 0
-                        
                         ce.criar_modulo(curso['id'], t_mod, d_mod, qtd_mods + 1)
                         st.success("Módulo criado!")
                         time.sleep(1)
@@ -75,11 +81,11 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
     st.markdown("---")
     
-    # --- Listagem de Módulos (Anti-Erro) ---
+    # --- Listagem de Módulos ---
     try:
         modulos = ce.listar_modulos_e_aulas(curso['id']) or []
     except Exception as e:
-        st.error(f"Erro de conexão ao buscar módulos: {e}")
+        st.error(f"Erro de conexão: {e}")
         modulos = []
 
     if not modulos:
@@ -90,7 +96,6 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
     for i, mod in enumerate(modulos):
         try:
-            # Tratamento de dados para evitar erro de NoneType
             mod_id = str(mod.get('id', f'temp_{i}'))
             mod_titulo = str(mod.get('titulo', 'Sem Título'))
             
@@ -100,7 +105,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
             
             label_expander = f"{i+1}. {mod_titulo} ({qtd_aulas} aulas)"
             
-            # --- CORREÇÃO AQUI: Removido o argumento 'key' que sua versão não aceita ---
+            # Expander sem 'key' para compatibilidade
             with st.expander(label_expander, expanded=False):
                 st.caption(str(mod.get('descricao', '')))
                 
@@ -129,8 +134,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # Formulário Adicionar Aula
-                # Mantemos a KEY aqui no checkbox, pois é vital para o formulário funcionar
+                # --- Área de Adicionar Aula ---
                 if st.checkbox(f"➕ Adicionar Aula", key=f"chk_add_{mod_id}"):
                     with st.container(border=True):
                         st.markdown("#### Nova Aula")
@@ -168,15 +172,31 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                             conteudo["texto"] = st.text_area("Texto:", key=f"txt_{mod_id}")
 
                         st.markdown("---")
-                        if st.button(f"💾 Salvar", key=f"sv_{mod_id}", type="primary"):
+                        if st.button(f"💾 Salvar Aula", key=f"sv_{mod_id}", type="primary"):
                              ce.criar_aula(mod_id, tit_aula, tipo_aula, conteudo, dur_aula)
                              st.success("Salvo!")
                              time.sleep(1)
                              st.rerun()
+                
+                # --- ZONA DE PERIGO (Exclusão) ---
+                st.markdown("<br>", unsafe_allow_html=True)
+                with st.expander("🗑️ Excluir Módulo", expanded=False):
+                    st.markdown("""
+                    <div style='background-color:rgba(255, 75, 75, 0.1); padding:10px; border-radius:5px; border:1px solid #ff4b4b;'>
+                        <strong style='color:#ff4b4b'>ATENÇÃO:</strong> Isso apagará o módulo e <strong>TODAS</strong> as aulas dele.
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Checkbox de segurança para evitar clique acidental
+                    if st.checkbox("Confirmar exclusão", key=f"check_del_{mod_id}"):
+                        if st.button("Sim, Excluir Módulo", key=f"btn_del_{mod_id}", type="primary"):
+                            ce.excluir_modulo(mod_id)
+                            st.warning("Módulo excluído.")
+                            time.sleep(1)
+                            st.rerun()
 
         except Exception as e:
-            st.error(f"⚠️ Erro ao renderizar módulo {i+1}: {e}")
-            st.write(mod)
+            st.error(f"⚠️ Erro no módulo {i+1}: {e}")
 
 def pagina_aulas(usuario: dict):
     st.warning("Acesse via Gerenciador de Cursos.")
