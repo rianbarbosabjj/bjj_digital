@@ -547,3 +547,59 @@ def listar_alunos_inscritos(curso_id):
     except Exception as e:
         print(f"Erro ao listar inscritos: {e}")
         return []
+
+def buscar_usuario_por_cpf(cpf):
+    """Busca um usuário pelo CPF e retorna seus dados básicos."""
+    if not cpf: return None
+    
+    # Limpa o CPF (deixa apenas números)
+    cpf_limpo = re.sub(r'\D', '', str(cpf))
+    
+    db = get_db()
+    try:
+        # Tenta buscar pelo CPF exato (com formatação) ou limpo, dependendo de como você salva
+        # O ideal é buscar ambos ou garantir padrão. Vamos tentar buscar flexível:
+        
+        # 1. Tenta busca exata (caso esteja salvo como 123.456...)
+        docs = db.collection('usuarios').where('cpf', '==', cpf).stream()
+        for doc in docs:
+            d = doc.to_dict()
+            d['id'] = doc.id
+            return d
+            
+        # 2. Se não achou, tenta pelo CPF limpo (caso seu banco salve apenas números)
+        # Nota: Se o banco mistura formatos, isso ajuda a achar.
+        docs_raw = db.collection('usuarios').stream() 
+        # (Stream em tudo é lento se tiver muitos users, mas para MVP funciona. 
+        # O ideal seria salvar sempre limpo no cadastro).
+        
+        for doc in docs_raw:
+            u_data = doc.to_dict()
+            u_cpf = str(u_data.get('cpf', ''))
+            u_cpf_limpo = re.sub(r'\D', '', u_cpf)
+            
+            if u_cpf_limpo == cpf_limpo and cpf_limpo != "":
+                u_data['id'] = doc.id
+                return u_data
+                
+        return None
+    except Exception as e:
+        print(f"Erro ao buscar CPF: {e}")
+        return None
+
+def obter_nomes_usuarios(lista_ids):
+    """Recebe uma lista de IDs e retorna uma lista de dicionários com nomes."""
+    db = get_db()
+    resultado = []
+    if not lista_ids: return []
+    
+    # Firestore 'in' query suporta até 10 itens. Se tiver mais, precisa fazer loop.
+    # Vamos fazer loop simples para garantir.
+    for uid in lista_ids:
+        try:
+            doc = db.collection('usuarios').document(uid).get()
+            if doc.exists:
+                d = doc.to_dict()
+                resultado.append({'id': uid, 'nome': d.get('nome', 'Sem Nome'), 'cpf': d.get('cpf', '-')})
+        except: pass
+    return resultado
