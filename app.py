@@ -238,10 +238,11 @@ def app_principal():
     ops, icns = [], []
     
     if tipo_code in ["admin", "professor"]:
-        ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-        icns = ["house", "people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
+        # 🔹 ADICIONADO: "Área do Aluno" para eles poderem treinar
+        ops = ["Início", "Modo Rola", "Cursos", "Área do Aluno", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+        icns = ["house", "people", "book", "mortarboard", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
-        # 🔹 ALUNO: Adicionamos "Cursos" aqui no meio
+        # Aluno Normal
         ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking"]
         icns = ["house", "people", "book", "journal", "trophy"]
 
@@ -304,13 +305,16 @@ def app_principal():
         aluno.modo_rola(usuario)
         
     elif pg == "Cursos":
-        # Rota Inteligente:
+        # Se for aluno, vai para o Mural/Meus Cursos
         if tipo_code == "aluno":
-            # Se for aluno, vai para o Mural/Meus Cursos
             aluno.app_aluno(usuario)
         else:
-            # Se for Professor/Admin, vai para Gestão de Cursos
+            # Se for Professor/Admin, o botão "Cursos" leva para a GESTÃO
             cursos.pagina_cursos(usuario)
+            
+    elif pg == "Área do Aluno":
+        # 🔹 ROTA NOVA: Permite que Admin/Prof acesse a visão de aluno
+        aluno.app_aluno(usuario)
             
     elif pg == "Exame de Faixa": 
         aluno.exame_de_faixa(usuario)
