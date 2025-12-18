@@ -551,3 +551,253 @@ def bloquear_por_abandono(uid):
     except: pass
 
 def carregar_todas_questoes(): return [] # Placeholder se necessário
+# ==============================================================================
+# 5B. AULAS V2 (BASE PROFISSIONAL - SEM QUEBRAR LEGADO)
+# ------------------------------------------------------------------------------
+# Objetivo: criar um padrão definitivo de aulas, em coleção separada (aulas_v2),
+# sem mexer na UI atual. A unificação de leitura vem na Fase 2.
+# ==============================================================================
+
+AULAS_V2_COLLECTION = "aulas_v2"
+AULA_SCHEMA_VERSION = 2
+
+def _now_ts():
+    # Timestamp consistente (pode trocar por firestore.SERVER_TIMESTAMP em updates)
+    return datetime.now()
+
+def _validar_tipo_aula(tipo: str) -> str:
+    t = str(tipo or "").lower().strip()
+    if t not in ["misto", "video", "imagem", "texto"]:
+        return "texto"
+    return t
+
+def _normalizar_bloco_v2(bloco: dict, modulo_id: str, idx: int):
+    """
+    Converte blocos recebidos da UI (arquivos/link/texto) para o padrão V2.
+    Aceita:
+      - {"tipo":"texto","conteudo":"..."}
+      - {"tipo":"imagem","arquivo": <UploadedFile>} ou {"tipo":"imagem","url_link":"..."}
+      - {"tipo":"video","arquivo": <UploadedFile>} ou {"tipo":"video","url_link":"..."}
+    Retorna bloco V2:
+      - texto:  {"tipo":"texto","conteudo":"..."}
+      - imagem: {"tipo":"imagem","url":"...","nome":"...","origem":"upload|link"}
+      - video:  {"tipo":"video","url":"...","nome":"...","origem":"upload|link"}
+    """
+    if not isinstance(bloco, dict):
+        return None
+
+    tipo = str(bloco.get("tipo", "")).lower().strip()
+
+    if tipo == "texto":
+        return {
+            "tipo": "texto",
+            "conteudo": str(bloco.get("conteudo", "") or "")
+        }
+
+    if tipo in ["imagem", "video"]:
+        arquivo = bloco.get("arquivo")
+        url_link = bloco.get("url_link") or bloco.get("url")  # compat
+
+        # Upload (preferência se veio arquivo)
+        if arquivo:
+            try:
+                ext = arquivo.name.split(".")[-1]
+            except Exception:
+                ext = "bin"
+
+            nome_arq = f"aulas_v2/{modulo_id}_{int(time.time())}_{idx}.{ext}"
+            url = upload_arquivo_simples(arquivo, nome_arq)
+
+            return {
+                "tipo": tipo,
+                "url": url,
+                "nome": getattr(arquivo, "name", "") or "",
+                "origem": "upload"
+            }
+
+        # Link
+        if url_link:
+            url_norm = str(url_link).strip()
+            if tipo == "video":
+                url_norm = normalizar_link_video(url_norm)
+
+            return {
+                "tipo": tipo,
+                "url": url_norm,
+                "nome": "",
+                "origem": "link"
+            }
+
+        # Se não veio nada útil, ignora
+        return None
+
+    # Tipo desconhecido -> ignora
+    return None
+
+
+def obter_proxima_ordem_aula_v2(modulo_id: str) -> int:
+    """
+    Retorna a próxima ordem sugerida para aula no módulo.
+    Seguro (não depende de agregações).
+    """
+    db = get_db()
+    try:
+        q = (db.collection(AULAS_V2_COLLECTION)
+               .where("modulo_id", "==", str(modulo_id))
+               .where("ativo", "==", True)
+               .stream())
+        ordens = []
+        for d in q:
+            data = d.to_dict() or {}
+            ordens.append(int(data.get("ordem", 0) or 0))
+        return (max(ordens) + 1) if ordens else 1
+    except:
+        return 1
+
+
+def criar_aula_v2(
+    curso_id: str,
+    modulo_id: str,
+    titulo: str,
+    tipo: str,
+    blocos: list,
+    duracao_min: int,
+    ordem: int = None,
+    autor_id: str = None,
+    autor_nome: str = None
+) -> str:
+    """
+    Cria aula no padrão profissional (V2), em coleção separada: aulas_v2.
+
+    - Não mexe no legado.
+    - Já suporta uploads e links nos blocos.
+    - Retorna o ID do documento criado.
+    """
+    db = get_db()
+
+    tipo_ok = _validar_tipo_aula(tipo)
+    titulo_ok = str(titulo or "").strip()
+    if not titulo_ok:
+        raise ValueError("Título da aula é obrigatório.")
+
+    dur = int(duracao_min or 0)
+    if dur < 1:
+        dur = 1
+
+    if ordem is None:
+        ordem = obter_proxima_ordem_aula_v2(modulo_id)
+
+    blocos_processados = []
+    for idx, b in enumerate(blocos or []):
+        nb = _normalizar_bloco_v2(b, str(modulo_id), idx)
+        if nb:
+            # Evita bloco texto vazio demais
+            if nb["tipo"] == "texto" and not str(nb.get("conteudo", "")).strip():
+                continue
+            blocos_processados.append(nb)
+
+    # Se tipo não for misto, ainda assim guardamos em "blocos"
+    # Ex: texto vira 1 bloco texto, video vira 1 bloco video etc.
+    # Isso padroniza o player depois.
+    if tipo_ok != "misto" and not blocos_processados:
+        if tipo_ok == "texto":
+            blocos_processados = [{"tipo": "texto", "conteudo": ""}]
+        elif tipo_ok in ["imagem", "video"]:
+            blocos_processados = [{"tipo": tipo_ok, "url": "", "nome": "", "origem": "link"}]
+
+    doc = {
+        "schema_version": AULA_SCHEMA_VERSION,
+        "curso_id": str(curso_id),
+        "modulo_id": str(modulo_id),
+        "titulo": titulo_ok,
+        "tipo": tipo_ok,
+        "blocos": blocos_processados,
+        "duracao_min": dur,
+        "ordem": int(ordem),
+        "ativo": True,
+        "autor_id": str(autor_id) if autor_id else "",
+        "autor_nome": str(autor_nome) if autor_nome else "",
+        "criado_em": firestore.SERVER_TIMESTAMP,
+        "atualizado_em": firestore.SERVER_TIMESTAMP,
+    }
+
+    _, ref = db.collection(AULAS_V2_COLLECTION).add(doc)
+    return ref.id
+
+
+def listar_aulas_v2_por_modulo(modulo_id: str, incluir_inativas: bool = False) -> list:
+    """
+    Lista aulas V2 do módulo, ordenadas por 'ordem'.
+    Não impacta legado.
+    """
+    db = get_db()
+    try:
+        q = db.collection(AULAS_V2_COLLECTION).where("modulo_id", "==", str(modulo_id))
+        if not incluir_inativas:
+            q = q.where("ativo", "==", True)
+
+        docs = list(q.stream())
+        aulas = []
+        for d in docs:
+            data = d.to_dict() or {}
+            data["id"] = d.id
+            aulas.append(data)
+
+        aulas.sort(key=lambda x: int(x.get("ordem", 0) or 0))
+        return aulas
+    except:
+        return []
+
+
+def editar_aula_v2(aula_id: str, dados_atualizados: dict) -> bool:
+    """
+    Edita uma aula V2 (campos permitidos).
+    Segurança: atualiza 'atualizado_em' automaticamente.
+    """
+    db = get_db()
+    if not aula_id:
+        return False
+
+    allowed = {"titulo", "tipo", "blocos", "duracao_min", "ordem", "ativo"}
+    payload = {}
+
+    for k, v in (dados_atualizados or {}).items():
+        if k in allowed:
+            payload[k] = v
+
+    if not payload:
+        return False
+
+    # Normalizações seguras
+    if "tipo" in payload:
+        payload["tipo"] = _validar_tipo_aula(payload["tipo"])
+
+    if "titulo" in payload:
+        payload["titulo"] = str(payload["titulo"] or "").strip()
+
+    if "duracao_min" in payload:
+        try:
+            payload["duracao_min"] = int(payload["duracao_min"] or 1)
+        except:
+            payload["duracao_min"] = 1
+
+    if "ordem" in payload:
+        try:
+            payload["ordem"] = int(payload["ordem"] or 1)
+        except:
+            payload["ordem"] = 1
+
+    payload["atualizado_em"] = firestore.SERVER_TIMESTAMP
+
+    try:
+        db.collection(AULAS_V2_COLLECTION).document(str(aula_id)).update(payload)
+        return True
+    except:
+        return False
+
+
+def desativar_aula_v2(aula_id: str) -> bool:
+    """
+    Soft delete (profissional): não apaga, só desativa.
+    """
+    return editar_aula_v2(aula_id, {"ativo": False})
