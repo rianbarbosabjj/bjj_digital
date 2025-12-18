@@ -756,6 +756,7 @@ def upload_arquivo_simples(arquivo, caminho_destino):
 def criar_aula_mista(modulo_id, titulo, lista_blocos, duracao_min):
     """
     Cria uma aula do tipo 'misto' salvando a ordem dos blocos.
+    CORREÇÃO: Usa datetime.now() em vez de SERVER_TIMESTAMP para evitar erro no ArrayUnion.
     """
     db = get_db()
     blocos_processados = []
@@ -783,12 +784,13 @@ def criar_aula_mista(modulo_id, titulo, lista_blocos, duracao_min):
     # Cria o objeto da aula
     dados_aula = {
         "titulo": titulo,
-        "tipo": "misto", # Identificador da aula flexível
+        "tipo": "misto", 
         "conteudo": {
             "blocos": blocos_processados
         },
         "duracao_min": duracao_min,
-        "data_criacao": firestore.SERVER_TIMESTAMP
+        # AQUI ESTAVA O ERRO: Mudamos de firestore.SERVER_TIMESTAMP para datetime.now()
+        "data_criacao": datetime.now() 
     }
     
     # Salva no módulo
