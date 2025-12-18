@@ -836,3 +836,102 @@ def obter_aulas_unificadas_por_modulo(modulo_id: str) -> list:
     except:
         return []
 
+# ==============================================================================
+# 6B. PROGRESSO DO ALUNO (BASE PROFISSIONAL)
+# ==============================================================================
+
+PROGRESSO_COLLECTION = "progresso_curso"
+
+def _get_or_create_progresso(usuario_id: str, curso_id: str) -> dict:
+    """
+    Busca o progresso do aluno no curso.
+    Se não existir, cria.
+    """
+    db = get_db()
+    try:
+        q = (
+            db.collection(PROGRESSO_COLLECTION)
+            .where("usuario_id", "==", str(usuario_id))
+            .where("curso_id", "==", str(curso_id))
+            .limit(1)
+            .stream()
+        )
+        for d in q:
+            data = d.to_dict()
+            data["id"] = d.id
+            return data
+    except:
+        pass
+
+    # cria se não existir
+    doc = {
+        "usuario_id": str(usuario_id),
+        "curso_id": str(curso_id),
+        "aulas_concluidas": [],
+        "progresso_percentual": 0,
+        "ultima_aula_id": "",
+        "concluido": False,
+        "criado_em": firestore.SERVER_TIMESTAMP,
+        "atualizado_em": firestore.SERVER_TIMESTAMP,
+    }
+
+    _, ref = db.collection(PROGRESSO_COLLECTION).add(doc)
+    doc["id"] = ref.id
+    return doc
+
+
+def marcar_aula_concluida(usuario_id: str, curso_id: str, aula_id: str):
+    """
+    Marca uma aula como concluída e recalcula o progresso.
+    """
+    db = get_db()
+    prog = _get_or_create_progresso(usuario_id, curso_id)
+
+    aulas_concluidas = set(prog.get("aulas_concluidas", []))
+    aulas_concluidas.add(str(aula_id))
+
+    # total de aulas do curso (V2)
+    total_aulas = contar_total_aulas_curso_v2(curso_id)
+    concluidas = len(aulas_concluidas)
+
+    progresso = int((concluidas / total_aulas) * 100) if total_aulas > 0 else 0
+    concluido = progresso >= 100
+
+    db.collection(PROGRESSO_COLLECTION).document(prog["id"]).update({
+        "aulas_concluidas": list(aulas_concluidas),
+        "progresso_percentual": progresso,
+        "ultima_aula_id": str(aula_id),
+        "concluido": concluido,
+        "atualizado_em": firestore.SERVER_TIMESTAMP,
+    })
+
+    return progresso, concluido
+
+
+def contar_total_aulas_curso_v2(curso_id: str) -> int:
+    """
+    Conta todas as aulas V2 ativas do curso.
+    """
+    db = get_db()
+    try:
+        modulos = db.collection("modulos").where("curso_id", "==", str(curso_id)).stream()
+        total = 0
+        for m in modulos:
+            aulas = listar_aulas_v2_por_modulo(m.id)
+            total += len(aulas)
+        return total
+    except:
+        return 0
+
+
+def obter_progresso_curso(usuario_id: str, curso_id: str) -> dict:
+    """
+    Retorna o progresso atual do aluno no curso.
+    """
+    prog = _get_or_create_progresso(usuario_id, curso_id)
+    return {
+        "progresso_percentual": prog.get("progresso_percentual", 0),
+        "concluido": prog.get("concluido", False),
+        "aulas_concluidas": prog.get("aulas_concluidas", []),
+        "ultima_aula_id": prog.get("ultima_aula_id"),
+    }
