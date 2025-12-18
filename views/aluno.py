@@ -8,8 +8,8 @@ from datetime import datetime, timedelta
 import streamlit.components.v1 as components 
 from database import get_db
 from firebase_admin import firestore
-import utils as ce # Utils para funções de banco
-import views.aulas as aulas_view # Importação para usar estilos ou lógica compartilhada
+import utils as ce 
+import views.aulas as aulas_view 
 
 # --- IMPORTAÇÃO DIRETA (PARA DIAGNÓSTICO DE ERROS) ---
 from utils import (
@@ -98,35 +98,25 @@ def meus_certificados(usuario):
         
         lista_certificados = []
         
-        # --- INÍCIO DA CORREÇÃO DE DATAS E ALINHAMENTO ---
         for doc in docs:
             cert = doc.to_dict()
-            
             data_raw = cert.get('data')
             data_obj = datetime.min 
 
-            # 1. Se for Timestamp do Google (tem método .to_datetime)
             if hasattr(data_raw, 'to_datetime'):
                 data_obj = data_raw.to_datetime()
-            
-            # 2. Se JÁ for um datetime do Python
             elif isinstance(data_raw, datetime):
                 data_obj = data_raw
-            
-            # 3. Se for texto (string)
             elif isinstance(data_raw, str):
                 try: data_obj = datetime.fromisoformat(data_raw.replace('Z', ''))
                 except: pass
             
-            # IMPORTANTE: Remove fuso horário para garantir que a ordenação funcione
             if data_obj.tzinfo is not None:
                 data_obj = data_obj.replace(tzinfo=None)
             
             cert['data_ordenacao'] = data_obj
             lista_certificados.append(cert)
-        # --- FIM DA CORREÇÃO ---
             
-        # 2. Ordena a lista do mais recente para o mais antigo
         lista_certificados.sort(key=lambda x: x.get('data_ordenacao', datetime.min), reverse=True)
         
         if not lista_certificados:
@@ -146,7 +136,6 @@ def meus_certificados(usuario):
 
                 c1.caption(f"Data: {d_str} | Nota: {cert.get('pontuacao', 0):.0f}% | Ref: {cert.get('codigo_verificacao')}")
                 
-                # --- FUNÇÃO DE GERAÇÃO ENCAPSULADA PARA O BOTÃO ---
                 def generate_certificate(cert, user_name):
                     pdf_bytes, pdf_name = gerar_pdf(
                         user_name, cert.get('faixa'), 
@@ -169,12 +158,10 @@ def meus_certificados(usuario):
     except Exception as e: 
         st.error(f"Erro ao carregar lista de certificados: {e}")
 
-#=============================================
-
 def ranking(): st.markdown("## 🏆 Ranking"); st.info("Em breve.")
 
 # =========================================
-# EXAME PRINCIPAL (Inalterado)
+# EXAME PRINCIPAL
 # =========================================
 def exame_de_faixa(usuario):
     st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
@@ -188,18 +175,14 @@ def exame_de_faixa(usuario):
     if not doc.exists: st.error("Erro perfil."); return
     dados = doc.to_dict()
     
-    # === TELA DE RESULTADO ===
     if st.session_state.resultado_prova:
         res = st.session_state.resultado_prova
         st.balloons()
-        
         with st.container(border=True):
             st.success(f"Parabéns você foi aprovado(a)! Sua nota foi {res['nota']:.0f}%.")
-            
             try:
                 with st.spinner("Preparando seu certificado oficial..."):
                     p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
-                
                 if p_b: 
                     st.download_button(
                         label="📥 Baixar Certificado", 
@@ -212,7 +195,6 @@ def exame_de_faixa(usuario):
                     )
                 else:
                     st.error(f"⚠️ {p_n}")
-                    st.caption("Tente novamente na aba 'Meus Certificados'.")
             except Exception as e: 
                 st.error(f"Erro inesperado: {e}")
             
@@ -221,7 +203,6 @@ def exame_de_faixa(usuario):
             st.rerun()
         return
 
-    # CHECAGEM DE ABANDONO
     if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
         is_timeout = False
         try:
@@ -244,7 +225,6 @@ def exame_de_faixa(usuario):
         else:
             bloquear_por_abandono(usuario['id'])
             st.error("🚨 BLOQUEADO! Página recarregada ou saída detectada.")
-            st.caption("Por segurança, o exame foi bloqueado. Contate seu professor.")
             return
 
     if not dados.get('exame_habilitado'):
@@ -261,34 +241,14 @@ def exame_de_faixa(usuario):
     elegivel, motivo = verificar_elegibilidade_exame(dados)
     if not elegivel: st.error(f"🚫 {motivo}"); return
 
-    # CARREGAMENTO
     qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
     qtd = len(qs)
 
-    # === TELA DE INÍCIO ===
     if not st.session_state.exame_iniciado:
         st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
-        
         with st.container(border=True):
-            st.markdown("#### 📜 Instruções para a realização do Exame")
-            st.markdown("""
-* Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
-* Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
-* **Não é permitido** consultar materiais externos de qualquer tipo.
-* Em caso de **reprovação**, você poderá realizar o exame novamente somente após **3 dias**.
-* Realize o exame em um local confortável e silencioso para garantir sua concentração.
-* **Não atualize a página (F5)**, não feche o navegador e não troque de dispositivo durante a prova. Isso **bloqueia** o exame automaticamente.
-* Utilize um dispositivo com bateria suficiente ou mantido na energia.
-* O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
-* Leia cada questão com atenção antes de responder.
-* Se aprovado, você poderá baixar seu certificado na aba *Meus Certificados*.
-
-**Boa prova!** 🥋
-            """)
-            
-            st.markdown("---")
-            
-            # PAINEL DE MÉTRICAS (VISUAL LIMPO)
+            st.markdown("#### 📜 Instruções")
+            st.markdown("* Após clicar em **✅ Iniciar exame**, não será possível pausar.")
             st.markdown(f"""
             <div style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px;">
                 <div style="text-align: left;">
@@ -317,7 +277,6 @@ def exame_de_faixa(usuario):
                 st.rerun()
         else: st.warning("Sem questões disponíveis.")
 
-    # === TELA DA PROVA ===
     else:
         qs = st.session_state.get('questoes_prova', [])
         restante = int(st.session_state.fim_prova_ts - time.time())
@@ -329,7 +288,6 @@ def exame_de_faixa(usuario):
             time.sleep(2)
             st.rerun()
 
-        # Timer Visual
         cor = "#FFD770" if restante > 300 else "#FF4B4B"
         components.html(f"""
         <div style="border:2px solid {cor};border-radius:10px;padding:10px;text-align:center;background:rgba(0,0,0,0.3);font-family:sans-serif;color:white;">
@@ -350,10 +308,7 @@ def exame_de_faixa(usuario):
             resps = {}
             for i, q in enumerate(qs):
                 st.markdown(f"**{i+1}. {q.get('pergunta')}**")
-                
-                if q.get('url_imagem'):
-                    st.image(q.get('url_imagem'), use_container_width=True)
-                
+                if q.get('url_imagem'): st.image(q.get('url_imagem'), use_container_width=True)
                 if q.get('url_video'):
                     vid = normalizar_link_video(q.get('url_video'))
                     try: st.video(vid)
@@ -364,7 +319,6 @@ def exame_de_faixa(usuario):
                     opts = [q['alternativas'].get(k) for k in ["A","B","C","D"]]
                 elif 'opcoes' in q:
                     opts = q['opcoes']
-                
                 resps[i] = st.radio("R:", opts, key=f"q{i}", index=None, label_visibility="collapsed")
                 st.markdown("---")
                 
@@ -374,9 +328,7 @@ def exame_de_faixa(usuario):
                     resp = str(resps.get(i) or "").strip().lower()
                     certa = q.get('resposta_correta', 'A')
                     txt_certo = q.get('alternativas', {}).get(certa, "").strip().lower()
-                    
-                    if resp == txt_certo:
-                        acertos += 1
+                    if resp == txt_certo: acertos += 1
 
                 nota = (acertos/len(qs))*100
                 aprovado = nota >= st.session_state.params_prova['min']
@@ -392,24 +344,16 @@ def exame_de_faixa(usuario):
                         "faixa": dados.get('faixa_exame'), "acertos": acertos, 
                         "total": len(qs), "codigo": cod
                     }
-                    
                     try:
                         db.collection('resultados').add({
-                            "usuario": usuario['nome'],
-                            "faixa": dados.get('faixa_exame'),
-                            "pontuacao": nota,
-                            "acertos": acertos,
-                            "total": len(qs),
-                            "aprovado": aprovado,
-                            "codigo_verificacao": cod,
-                            "data": firestore.SERVER_TIMESTAMP
+                            "usuario": usuario['nome'], "faixa": dados.get('faixa_exame'),
+                            "pontuacao": nota, "acertos": acertos, "total": len(qs),
+                            "aprovado": aprovado, "codigo_verificacao": cod, "data": firestore.SERVER_TIMESTAMP
                         })
                     except: pass
-                
                 else:
                     st.error(f"Reprovado. Nota: {nota:.0f}%")
                     time.sleep(3)
-                
                 st.rerun()
 
 # ==============================================================================
@@ -446,13 +390,35 @@ def assistir_curso_player(curso, usuario):
             else:
                 for aula in aulas:
                     tp = aula.get('tipo', 'texto')
-                    icone = "🎥" if tp == 'video' else "🖼️" if tp == 'imagem' else "📝"
+                    # Ícone especial para aula mista (Flexível)
+                    icone = "✨" if tp == 'misto' else ("🎥" if tp == 'video' else "🖼️" if tp == 'imagem' else "📝")
                     
                     with st.container(border=True):
                         st.markdown(f"**{icone} {aula.get('titulo')}**")
                         conteudo = aula.get('conteudo', {})
                         
-                        if tp == 'video':
+                        # --- EXIBIÇÃO DE AULA MISTA (FLEXÍVEL) ---
+                        if tp == 'misto':
+                            blocos = conteudo.get('blocos', [])
+                            for bloco in blocos:
+                                b_tipo = bloco.get('tipo')
+                                b_url = bloco.get('url')
+                                
+                                if b_tipo == 'texto':
+                                    st.markdown(bloco.get('conteudo', ''))
+                                    
+                                elif b_tipo == 'imagem':
+                                    if b_url: st.image(b_url, use_container_width=True)
+                                    
+                                elif b_tipo == 'video':
+                                    if b_url: 
+                                        try: st.video(b_url)
+                                        except: st.markdown(f"[Assistir Vídeo]({b_url})")
+                                
+                                st.write("") # Espaço entre blocos
+                        # ----------------------------------------
+
+                        elif tp == 'video':
                             url = conteudo.get('url') or conteudo.get('arquivo_video')
                             if url:
                                 st.video(url)
