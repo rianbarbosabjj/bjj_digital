@@ -9,6 +9,8 @@ import unicodedata
 import random
 import uuid
 import json
+import pandas as pd
+import time
 from urllib.parse import quote
 from datetime import datetime
 from email.mime.text import MIMEText
