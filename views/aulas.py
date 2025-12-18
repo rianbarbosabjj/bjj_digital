@@ -266,55 +266,83 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                                 conteudo["nome_arquivo_pdf"] = pdf.name
 
                         # BOTÃO SALVAR GERAL
-if st.button(f"💾 Salvar Aula", type="primary", use_container_width=True, key=f"bt_sv_{mod_id}"):
-    # === SALVAMENTO LEGADO (MANTIDO) ===
-    if tipo_aula == "misto":
-        ce.criar_aula_mista(mod_id, tit_aula, blocos_para_salvar, dur_aula)
-        if key_blocos in st.session_state:
-            del st.session_state[key_blocos]
-    else:
-        ce.criar_aula(mod_id, tit_aula, tipo_aula, conteudo, dur_aula)
+                        if st.button(
+                            f"💾 Salvar Aula",
+                            type="primary",
+                            use_container_width=True,
+                            key=f"bt_sv_{mod_id}"
+                        ):
+                            # === SALVAMENTO LEGADO (MANTIDO) ===
+                            if tipo_aula == "misto":
+                                ce.criar_aula_mista(
+                                    mod_id,
+                                    tit_aula,
+                                    blocos_para_salvar,
+                                    dur_aula
+                                )
+                                if key_blocos in st.session_state:
+                                    del st.session_state[key_blocos]
+                            else:
+                                ce.criar_aula(
+                                    mod_id,
+                                    tit_aula,
+                                    tipo_aula,
+                                    conteudo,
+                                    dur_aula
+                                )
 
-    # === SALVAMENTO V2 (NOVO, PROFISSIONAL) ===
-    try:
-        if tipo_aula == "misto":
-            blocos_v2 = blocos_para_salvar
-        else:
-            # Converte aula simples em blocos
-            blocos_v2 = []
+                            # === SALVAMENTO V2 (NOVO, PROFISSIONAL) ===
+                            try:
+                                if tipo_aula == "misto":
+                                    blocos_v2 = blocos_para_salvar
+                                else:
+                                    blocos_v2 = []
 
-            if tipo_aula == "texto":
-                blocos_v2 = [{"tipo": "texto", "conteudo": conteudo.get("texto", "")}]
+                                    if tipo_aula == "texto":
+                                        blocos_v2 = [{
+                                            "tipo": "texto",
+                                            "conteudo": conteudo.get("texto", "")
+                                        }]
 
-            elif tipo_aula == "video":
-                if conteudo.get("arquivo_video"):
-                    blocos_v2 = [{"tipo": "video", "arquivo": conteudo.get("arquivo_video")}]
-                else:
-                    blocos_v2 = [{"tipo": "video", "url_link": conteudo.get("url")}]
+                                    elif tipo_aula == "video":
+                                        if conteudo.get("arquivo_video"):
+                                            blocos_v2 = [{
+                                                "tipo": "video",
+                                                "arquivo": conteudo.get("arquivo_video")
+                                            }]
+                                        else:
+                                            blocos_v2 = [{
+                                                "tipo": "video",
+                                                "url_link": conteudo.get("url")
+                                            }]
 
-            elif tipo_aula == "imagem":
-                if conteudo.get("arquivo_imagem"):
-                    blocos_v2 = [{"tipo": "imagem", "arquivo": conteudo.get("arquivo_imagem")}]
-                else:
-                    blocos_v2 = [{"tipo": "imagem", "url_link": conteudo.get("url")}]
+                                    elif tipo_aula == "imagem":
+                                        if conteudo.get("arquivo_imagem"):
+                                            blocos_v2 = [{
+                                                "tipo": "imagem",
+                                                "arquivo": conteudo.get("arquivo_imagem")
+                                            }]
+                                        else:
+                                            blocos_v2 = [{
+                                                "tipo": "imagem",
+                                                "url_link": conteudo.get("url")
+                                            }]
 
-        ce.criar_aula_v2(
-            curso_id=curso["id"],
-            modulo_id=mod_id,
-            titulo=tit_aula,
-            tipo=tipo_aula,
-            blocos=blocos_v2,
-            duracao_min=dur_aula,
-            autor_id=usuario.get("id"),
-            autor_nome=usuario.get("nome")
-        )
-    except Exception as e:
-        # Nunca quebra a UX por erro no V2
-        print(f"[AULAS_V2] erro ao salvar: {e}")
+                                ce.criar_aula_v2(
+                                    curso_id=curso["id"],
+                                    modulo_id=mod_id,
+                                    titulo=tit_aula,
+                                    tipo=tipo_aula,
+                                    blocos=blocos_v2,
+                                    duracao_min=dur_aula,
+                                    autor_id=usuario.get("id"),
+                                    autor_nome=usuario.get("nome")
+                                )
+                            except Exception as e:
+                                print(f"[AULAS_V2] erro ao salvar: {e}")
 
-    st.toast("Salvo!", icon="💾")
-    time.sleep(1)
-    st.rerun()
-
+                            st.toast("Salvo!", icon="💾")
+                            time.sleep(1)
+                            st.rerun()
 def pagina_aulas(usuario: dict):
     st.warning("Acesse via Gerenciador de Cursos.")
