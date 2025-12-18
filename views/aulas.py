@@ -29,7 +29,7 @@ def aplicar_estilos_aulas():
         background: rgba(255, 255, 255, 0.03);
         border-left: 4px solid {cor_botao};
         padding: 12px 15px;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         border-radius: 0 6px 6px 0;
         display: flex; align-items: center; justify-content: space-between;
     }}
@@ -60,7 +60,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
     total_aulas = sum(len(m.get("aulas", [])) for m in modulos)
 
-    # Header
+    # ---------------- HEADER ----------------
     c1, c2, c3 = st.columns([1, 4, 2])
     with c1:
         if st.button("⬅ Voltar", use_container_width=True):
@@ -80,9 +80,8 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
         )
 
     st.markdown("---")
-    # ============================
-    # PROGRESSO DO ALUNO (V2)
-    # ============================
+
+    # ---------------- PROGRESSO ----------------
     try:
         prog = ce.obter_progresso_curso(usuario.get("id"), curso.get("id"))
         progresso_pct = prog.get("progresso_percentual", 0)
@@ -90,7 +89,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
         st.caption(f"Progresso no curso: {progresso_pct}%")
     except Exception as e:
         print(f"[PROGRESSO_UI] erro: {e}")
-        
+
     # ======================================================
     # CRIAR MÓDULO
     # ======================================================
@@ -115,7 +114,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
     st.markdown("### 📚 Grade Curricular")
 
     # ======================================================
-    # LISTAGEM DE MÓDULOS
+    # LISTAGEM DE MÓDULOS E AULAS
     # ======================================================
     for i, mod in enumerate(modulos):
         mod_id = str(mod.get("id"))
@@ -148,9 +147,29 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                     unsafe_allow_html=True,
                 )
 
-            # ======================================================
-            # ADICIONAR AULA
-            # ======================================================
+                # -------- MARCAR AULA COMO CONCLUÍDA --------
+                try:
+                    prog = ce.obter_progresso_curso(usuario.get("id"), curso.get("id"))
+                    aulas_done = set(prog.get("aulas_concluidas", []))
+
+                    aula_id = aula.get("id")
+                    concluida = aula_id in aulas_done
+
+                    if st.checkbox(
+                        "Marcar como concluída",
+                        value=concluida,
+                        key=f"done_{usuario.get('id')}_{aula_id}"
+                    ):
+                        ce.marcar_aula_concluida(
+                            usuario_id=usuario.get("id"),
+                            curso_id=curso.get("id"),
+                            aula_id=aula_id
+                        )
+                        st.rerun()
+                except Exception as e:
+                    print(f"[PROGRESSO_AULA] erro: {e}")
+
+            # ---------------- ADICIONAR AULA ----------------
             if st.checkbox(f"➕ Adicionar Aula em '{mod_titulo}'", key=f"chk_{mod_id}"):
                 with st.container(border=True):
                     tit_aula = st.text_input("Título da Aula", key=f"tit_{mod_id}")
@@ -160,17 +179,12 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                         key=f"tipo_{mod_id}",
                     )
                     dur_aula = st.number_input(
-                        "Duração (min)",
-                        1,
-                        180,
-                        10,
-                        key=f"dur_{mod_id}",
+                        "Duração (min)", 1, 180, 10, key=f"dur_{mod_id}"
                     )
 
                     conteudo = {}
                     blocos_para_salvar = []
 
-                    # === MODO MISTO ===
                     if tipo_aula == "misto":
                         key_blocos = f"blocos_{mod_id}"
                         if key_blocos not in st.session_state:
@@ -186,32 +200,25 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
                         for idx, bloco in enumerate(st.session_state[key_blocos]):
                             if bloco["tipo"] == "texto":
-                                txt = st.text_area(
-                                    "Texto",
-                                    key=f"txt_{mod_id}_{idx}",
-                                )
+                                txt = st.text_area("Texto", key=f"txt_{mod_id}_{idx}")
                                 blocos_para_salvar.append(
                                     {"tipo": "texto", "conteudo": txt}
                                 )
                             elif bloco["tipo"] == "imagem":
                                 arq = st.file_uploader(
-                                    "Imagem",
-                                    type=["jpg", "png"],
-                                    key=f"img_{mod_id}_{idx}",
+                                    "Imagem", type=["jpg", "png"], key=f"img_{mod_id}_{idx}"
                                 )
                                 blocos_para_salvar.append(
                                     {"tipo": "imagem", "arquivo": arq}
                                 )
                             elif bloco["tipo"] == "video":
                                 lnk = st.text_input(
-                                    "Link do vídeo",
-                                    key=f"vid_{mod_id}_{idx}",
+                                    "Link do vídeo", key=f"vid_{mod_id}_{idx}"
                                 )
                                 blocos_para_salvar.append(
                                     {"tipo": "video", "url_link": lnk}
                                 )
 
-                    # === MODOS SIMPLES ===
                     elif tipo_aula == "texto":
                         conteudo["texto"] = st.text_area("Texto")
 
@@ -221,28 +228,16 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                     elif tipo_aula == "imagem":
                         conteudo["url"] = st.text_input("Link da imagem")
 
-                    # ======================================================
-                    # SALVAR AULA (LEGADO + V2)
-                    # ======================================================
                     if st.button("💾 Salvar Aula", type="primary", use_container_width=True):
-                        # --- LEGADO ---
                         if tipo_aula == "misto":
                             ce.criar_aula_mista(
-                                mod_id,
-                                tit_aula,
-                                blocos_para_salvar,
-                                dur_aula,
+                                mod_id, tit_aula, blocos_para_salvar, dur_aula
                             )
                         else:
                             ce.criar_aula(
-                                mod_id,
-                                tit_aula,
-                                tipo_aula,
-                                conteudo,
-                                dur_aula,
+                                mod_id, tit_aula, tipo_aula, conteudo, dur_aula
                             )
 
-                        # --- V2 ---
                         try:
                             blocos_v2 = (
                                 blocos_para_salvar
