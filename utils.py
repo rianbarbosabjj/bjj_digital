@@ -755,49 +755,103 @@ def upload_arquivo_simples(arquivo, caminho_destino):
         print(f"Erro upload: {e}")
         return None
 
+import streamlit as st
+import pandas as pd
+import time  # <--- O ERRO ESTAVA NA FALTA DISSO AQUI
+import re
+from datetime import datetime
+from firebase_admin import firestore, storage
+from database import get_db
+
+# ... (Mantenha suas outras funções de login/hash aqui se tiver) ...
+
+def listar_todos_usuarios_para_selecao():
+    """Retorna lista simplificada de usuários para selects."""
+    db = get_db()
+    try:
+        users = db.collection('usuarios').stream()
+        lista = []
+        for doc in users:
+            d = doc.to_dict()
+            lista.append({'id': doc.id, 'nome': d.get('nome', 'Sem Nome')})
+        return lista
+    except: return []
+
+def buscar_usuario_por_cpf(cpf):
+    if not cpf: return None
+    cpf_limpo = re.sub(r'\D', '', str(cpf))
+    db = get_db()
+    try:
+        docs = db.collection('usuarios').where('cpf', '==', cpf).stream()
+        for doc in docs:
+            d = doc.to_dict(); d['id'] = doc.id; return d
+        # Tenta busca flexivel
+        docs_raw = db.collection('usuarios').stream()
+        for doc in docs_raw:
+            u_data = doc.to_dict()
+            if re.sub(r'\D', '', str(u_data.get('cpf',''))) == cpf_limpo and cpf_limpo:
+                u_data['id'] = doc.id; return u_data
+        return None
+    except: return None
+
+def obter_nomes_usuarios(lista_ids):
+    db = get_db()
+    res = []
+    if not lista_ids: return []
+    for uid in lista_ids:
+        try:
+            doc = db.collection('usuarios').document(uid).get()
+            if doc.exists:
+                d = doc.to_dict()
+                res.append({'id': uid, 'nome': d.get('nome','-'), 'cpf': d.get('cpf','-')})
+        except: pass
+    return res
+
+# --- FUNÇÕES DE CURSO ---
+
+def upload_arquivo_simples(arquivo, caminho_destino):
+    if not arquivo: return None
+    try:
+        bucket = storage.bucket()
+        blob = bucket.blob(caminho_destino)
+        blob.upload_from_file(arquivo, content_type=arquivo.type)
+        blob.make_public()
+        return blob.public_url
+    except Exception as e:
+        print(f"Erro upload: {e}")
+        return None
+
 def criar_aula_mista(modulo_id, titulo, lista_blocos, duracao_min):
-    """
-    Cria uma aula do tipo 'misto' salvando a ordem dos blocos.
-    CORREÇÃO: Usa datetime.now() em vez de SERVER_TIMESTAMP para evitar erro no ArrayUnion.
-    """
     db = get_db()
     blocos_processados = []
     
-    # Processa cada bloco (faz upload se tiver arquivo)
     for i, bloco in enumerate(lista_blocos):
         novo_bloco = {"tipo": bloco['tipo']}
-        
         if bloco['tipo'] == 'texto':
             novo_bloco['conteudo'] = bloco.get('conteudo', '')
-            
         elif bloco['tipo'] in ['imagem', 'video']:
             arquivo = bloco.get('arquivo')
             if arquivo:
-                # Nome único para não sobrescrever
                 ext = arquivo.name.split('.')[-1]
+                # AQUI OCORRIA O ERRO 'time is not defined' SE NÃO IMPORTADO
                 nome_arq = f"aulas_mistas/{modulo_id}_{int(time.time())}_{i}.{ext}"
                 url = upload_arquivo_simples(arquivo, nome_arq)
                 novo_bloco['url'] = url
             else:
                 novo_bloco['url'] = bloco.get('url_link', '')
-                
         blocos_processados.append(novo_bloco)
 
-    # Cria o objeto da aula
     dados_aula = {
         "titulo": titulo,
-        "tipo": "misto", 
-        "conteudo": {
-            "blocos": blocos_processados
-        },
+        "tipo": "misto",
+        "conteudo": {"blocos": blocos_processados},
         "duracao_min": duracao_min,
-        # AQUI ESTAVA O ERRO: Mudamos de firestore.SERVER_TIMESTAMP para datetime.now()
-        "data_criacao": datetime.now() 
+        "data_criacao": datetime.now() # Data corrigida
     }
     
-    # Salva no módulo
     mod_ref = db.collection('modulos').document(modulo_id)
-    mod_ref.update({
-        "aulas": firestore.ArrayUnion([dados_aula])
-    })
+    mod_ref.update({"aulas": firestore.ArrayUnion([dados_aula])})
     return True
+
+# --- REPLIQUE AQUI AS OUTRAS FUNÇÕES (criar_curso, listar_cursos, etc) QUE JÁ EXISTIAM ---
+# (Se precisar das funções antigas completas, me avise, mas o foco do erro é a função acima)
