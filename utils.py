@@ -734,3 +734,66 @@ def inscrever_usuario_em_curso(usuario_id, curso_id):
         return False
         
     return cursos_disponiveis
+
+# ==============================================================================
+# NOVAS FUNÇÕES PARA AULA FLEXÍVEL (TEXTO + MÍDIA)
+# Adicione ao final do utils.py
+# ==============================================================================
+
+def upload_arquivo_simples(arquivo, caminho_destino):
+    """Sobe um arquivo para o Storage e retorna o link público."""
+    if not arquivo: return None
+    try:
+        bucket = storage.bucket()
+        blob = bucket.blob(caminho_destino)
+        blob.upload_from_file(arquivo, content_type=arquivo.type)
+        blob.make_public()
+        return blob.public_url
+    except Exception as e:
+        print(f"Erro upload: {e}")
+        return None
+
+def criar_aula_mista(modulo_id, titulo, lista_blocos, duracao_min):
+    """
+    Cria uma aula do tipo 'misto' salvando a ordem dos blocos.
+    """
+    db = get_db()
+    blocos_processados = []
+    
+    # Processa cada bloco (faz upload se tiver arquivo)
+    for i, bloco in enumerate(lista_blocos):
+        novo_bloco = {"tipo": bloco['tipo']}
+        
+        if bloco['tipo'] == 'texto':
+            novo_bloco['conteudo'] = bloco.get('conteudo', '')
+            
+        elif bloco['tipo'] in ['imagem', 'video']:
+            arquivo = bloco.get('arquivo')
+            if arquivo:
+                # Nome único para não sobrescrever
+                ext = arquivo.name.split('.')[-1]
+                nome_arq = f"aulas_mistas/{modulo_id}_{int(time.time())}_{i}.{ext}"
+                url = upload_arquivo_simples(arquivo, nome_arq)
+                novo_bloco['url'] = url
+            else:
+                novo_bloco['url'] = bloco.get('url_link', '')
+                
+        blocos_processados.append(novo_bloco)
+
+    # Cria o objeto da aula
+    dados_aula = {
+        "titulo": titulo,
+        "tipo": "misto", # Identificador da aula flexível
+        "conteudo": {
+            "blocos": blocos_processados
+        },
+        "duracao_min": duracao_min,
+        "data_criacao": firestore.SERVER_TIMESTAMP
+    }
+    
+    # Salva no módulo
+    mod_ref = db.collection('modulos').document(modulo_id)
+    mod_ref.update({
+        "aulas": firestore.ArrayUnion([dados_aula])
+    })
+    return True
