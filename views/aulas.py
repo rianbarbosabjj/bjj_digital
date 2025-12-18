@@ -39,6 +39,7 @@ def aplicar_estilos_aulas():
         font-weight: bold; text-transform: uppercase; margin-right: 10px;
         min-width: 60px; text-align: center; display: inline-block;
     }}
+    .badge-misto {{ background-color: rgba(255, 215, 112, 0.2); color: #FFD770; border: 1px solid #FFD770; }}
     .badge-video {{ background-color: rgba(52, 152, 219, 0.2); color: #3498db; border: 1px solid #3498db; }}
     .badge-imagem {{ background-color: rgba(155, 89, 182, 0.2); color: #9b59b6; border: 1px solid #9b59b6; }}
     .badge-texto {{ background-color: rgba(46, 204, 113, 0.2); color: #2ecc71; border: 1px solid #2ecc71; }}
@@ -129,12 +130,20 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                         titulo_aula = aula.get('titulo', 'Sem Título')
                         duracao = aula.get('duracao_min', 0)
                         
-                        if tp == 'video': icon, css, txt = "🎥", "badge-video", "VÍDEO"
+                        if tp == 'misto': icon, css, txt = "✨", "badge-misto", "FLEX"
+                        elif tp == 'video': icon, css, txt = "🎥", "badge-video", "VÍDEO"
                         elif tp == 'imagem': icon, css, txt = "🖼️", "badge-imagem", "IMG"
                         else: icon, css, txt = "📝", "badge-texto", "TEXTO"
                             
                         conteudo = aula.get('conteudo', {}) or {}
-                        tem_pdf = "📎 Material" if isinstance(conteudo, dict) and conteudo.get('material_apoio_nome') else ""
+                        
+                        # Verifica se tem material de apoio ou múltiplos blocos
+                        extra_info = ""
+                        if tp == 'misto':
+                            qtd_blocos = len(conteudo.get('blocos', []))
+                            extra_info = f"<span style='color:{COR_DESTAQUE}'>{qtd_blocos} Blocos</span>"
+                        elif isinstance(conteudo, dict) and conteudo.get('material_apoio_nome'):
+                            extra_info = f"<span style='color:{COR_DESTAQUE}'>📎 Material</span>"
 
                         html_row = f"""
                         <div class="aula-strip">
@@ -143,7 +152,7 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
                                 <span style="font-weight:500; font-size:1rem;">{titulo_aula}</span>
                             </div>
                             <div style="text-align:right; font-size:0.8rem; color:#aaa;">
-                                ⏱ {duracao} min &nbsp; <span style="color:{COR_DESTAQUE}">{tem_pdf}</span>
+                                ⏱ {duracao} min &nbsp; {extra_info}
                             </div>
                         </div>
                         """
@@ -155,45 +164,118 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
 
                 if st.checkbox(f"➕ Adicionar Conteúdo em '{mod_titulo}'", key=f"chk_{mod_id}"):
                     with st.container(border=True):
-                        c_f1, c_f2 = st.columns([1, 1])
-                        with c_f1:
-                            tit_aula = st.text_input("Título", key=f"ta_{mod_id}")
-                            tipo_aula = st.selectbox("Tipo", ["video", "imagem", "texto"], key=f"sa_{mod_id}")
-                            dur_aula = st.number_input("Minutos", 1, 120, 10, key=f"na_{mod_id}")
-                        with c_f2:
-                            conteudo = {}
-                            if tipo_aula == "video":
-                                src = st.radio("Origem", ["Link", "Upload"], horizontal=True, key=f"src_v_{mod_id}")
-                                if "Link" in src:
-                                    conteudo["url"] = st.text_input("Link", key=f"lnk_v_{mod_id}")
-                                    conteudo["tipo_video"] = "link"
-                                else:
-                                    f = st.file_uploader("MP4", type=["mp4","mov"], key=f"up_v_{mod_id}")
-                                    if f:
-                                        conteudo["arquivo_video"] = f
-                                        conteudo["tipo_video"] = "upload"
-                                        conteudo["nome_arquivo_video"] = f.name
-                            elif tipo_aula == "imagem":
-                                src = st.radio("Origem", ["Link", "Upload"], horizontal=True, key=f"src_i_{mod_id}")
-                                if "Link" in src:
-                                    conteudo["url"] = st.text_input("Link", key=f"lnk_i_{mod_id}")
-                                    conteudo["tipo_imagem"] = "link"
-                                else:
-                                    f = st.file_uploader("JPG/PNG", type=["jpg","png"], key=f"up_i_{mod_id}")
-                                    if f:
-                                        conteudo["arquivo_imagem"] = f
-                                        conteudo["tipo_imagem"] = "upload"
-                                        conteudo["nome_arquivo_imagem"] = f.name
-                            elif tipo_aula == "texto":
-                                conteudo["texto"] = st.text_area("Markdown", height=100, key=f"txt_{mod_id}")
+                        st.markdown("##### Nova Aula")
+                        
+                        c_tit, c_tipo, c_dur = st.columns([2, 1.5, 1])
+                        tit_aula = c_tit.text_input("Título", key=f"ta_{mod_id}")
+                        tipo_aula = c_tipo.selectbox(
+                            "Tipo", 
+                            ["misto", "video", "imagem", "texto"], 
+                            format_func=lambda x: "✨ Texto + Mídia (Flexível)" if x == "misto" else x.title(),
+                            key=f"sa_{mod_id}"
+                        )
+                        dur_aula = c_dur.number_input("Min", 1, 120, 10, key=f"na_{mod_id}")
+                        
+                        conteudo = {}
+                        
+                        # === MODO FLEXÍVEL (TEXTO + MÍDIA) ===
+                        if tipo_aula == "misto":
+                            st.info("Adicione blocos na ordem desejada.")
+                            
+                            key_blocos = f"blocos_temp_{mod_id}"
+                            if key_blocos not in st.session_state:
+                                st.session_state[key_blocos] = []
 
-                        pdf = st.file_uploader("Material PDF (Opcional)", type=["pdf"], key=f"pdf_{mod_id}")
-                        if pdf:
-                            conteudo["material_apoio"] = pdf
-                            conteudo["nome_arquivo_pdf"] = pdf.name
+                            b1, b2, b3, b_limp = st.columns(4)
+                            if b1.button("📝 Texto", key=f"add_txt_{mod_id}"):
+                                st.session_state[key_blocos].append({"tipo": "texto"})
+                            if b2.button("🖼️ Imagem", key=f"add_img_{mod_id}"):
+                                st.session_state[key_blocos].append({"tipo": "imagem"})
+                            if b3.button("🎥 Vídeo", key=f"add_vid_{mod_id}"):
+                                st.session_state[key_blocos].append({"tipo": "video"})
+                            if b_limp.button("🗑️ Limpar", key=f"clr_{mod_id}"):
+                                st.session_state[key_blocos] = []
+                                st.rerun()
 
+                            st.markdown("---")
+                            
+                            # Lista de Blocos para Salvar
+                            blocos_para_salvar = []
+                            
+                            if not st.session_state[key_blocos]:
+                                st.caption("Nenhum bloco adicionado.")
+                            
+                            for idx, bloco in enumerate(st.session_state[key_blocos]):
+                                st.markdown(f"**Bloco {idx+1}: {bloco['tipo'].upper()}**")
+                                if bloco['tipo'] == 'texto':
+                                    txt = st.text_area("Conteúdo", key=f"b_txt_{mod_id}_{idx}")
+                                    blocos_para_salvar.append({"tipo": "texto", "conteudo": txt})
+                                elif bloco['tipo'] == 'imagem':
+                                    src = st.radio("Origem", ["Upload", "Link"], horizontal=True, key=f"b_src_i_{mod_id}_{idx}")
+                                    if src == "Upload":
+                                        arq = st.file_uploader("Arquivo", type=["jpg","png"], key=f"b_up_i_{mod_id}_{idx}")
+                                        blocos_para_salvar.append({"tipo": "imagem", "arquivo": arq})
+                                    else:
+                                        lnk = st.text_input("Link", key=f"b_lnk_i_{mod_id}_{idx}")
+                                        blocos_para_salvar.append({"tipo": "imagem", "url_link": lnk})
+                                elif bloco['tipo'] == 'video':
+                                    src = st.radio("Origem", ["Link (Youtube)", "Upload"], horizontal=True, key=f"b_src_v_{mod_id}_{idx}")
+                                    if src == "Upload":
+                                        arq = st.file_uploader("Arquivo MP4", type=["mp4"], key=f"b_up_v_{mod_id}_{idx}")
+                                        blocos_para_salvar.append({"tipo": "video", "arquivo": arq})
+                                    else:
+                                        lnk = st.text_input("Link", key=f"b_lnk_v_{mod_id}_{idx}")
+                                        blocos_para_salvar.append({"tipo": "video", "url_link": lnk})
+                                st.markdown("<hr style='margin:5px 0'>", unsafe_allow_html=True)
+
+                        # === MODO VÍDEO ===
+                        elif tipo_aula == "video":
+                            src = st.radio("Origem", ["Link", "Upload"], horizontal=True, key=f"src_v_{mod_id}")
+                            if "Link" in src:
+                                conteudo["url"] = st.text_input("Link", key=f"lnk_v_{mod_id}")
+                                conteudo["tipo_video"] = "link"
+                            else:
+                                f = st.file_uploader("MP4", type=["mp4","mov"], key=f"up_v_{mod_id}")
+                                if f:
+                                    conteudo["arquivo_video"] = f
+                                    conteudo["tipo_video"] = "upload"
+                                    conteudo["nome_arquivo_video"] = f.name
+                        
+                        # === MODO IMAGEM ===
+                        elif tipo_aula == "imagem":
+                            src = st.radio("Origem", ["Link", "Upload"], horizontal=True, key=f"src_i_{mod_id}")
+                            if "Link" in src:
+                                conteudo["url"] = st.text_input("Link", key=f"lnk_i_{mod_id}")
+                                conteudo["tipo_imagem"] = "link"
+                            else:
+                                f = st.file_uploader("JPG/PNG", type=["jpg","png"], key=f"up_i_{mod_id}")
+                                if f:
+                                    conteudo["arquivo_imagem"] = f
+                                    conteudo["tipo_imagem"] = "upload"
+                                    conteudo["nome_arquivo_imagem"] = f.name
+                        
+                        # === MODO TEXTO ===
+                        elif tipo_aula == "texto":
+                            conteudo["texto"] = st.text_area("Markdown", height=100, key=f"txt_{mod_id}")
+
+                        # PDF Opcional (apenas para aulas simples, misto não tem pdf anexo no root)
+                        if tipo_aula != "misto":
+                            pdf = st.file_uploader("Material PDF (Opcional)", type=["pdf"], key=f"pdf_{mod_id}")
+                            if pdf:
+                                conteudo["material_apoio"] = pdf
+                                conteudo["nome_arquivo_pdf"] = pdf.name
+
+                        # BOTÃO SALVAR GERAL
                         if st.button(f"💾 Salvar Aula", type="primary", use_container_width=True, key=f"bt_sv_{mod_id}"):
-                             ce.criar_aula(mod_id, tit_aula, tipo_aula, conteudo, dur_aula)
+                             if tipo_aula == "misto":
+                                 # Salva aula flexível
+                                 ce.criar_aula_mista(mod_id, tit_aula, blocos_para_salvar, dur_aula)
+                                 # Limpa lista temporária
+                                 if key_blocos in st.session_state: del st.session_state[key_blocos]
+                             else:
+                                 # Salva aula padrão
+                                 ce.criar_aula(mod_id, tit_aula, tipo_aula, conteudo, dur_aula)
+                             
                              st.toast("Salvo!", icon="💾")
                              time.sleep(1)
                              st.rerun()
