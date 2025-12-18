@@ -333,27 +333,25 @@ def listar_cursos_disponiveis_para_usuario(usuario):
 def listar_modulos_e_aulas(curso_id):
     db = get_db()
     try:
-        modulos = db.collection('modulos').where('curso_id', '==', str(curso_id)).stream()
+        modulos_ref = db.collection('modulos').where('curso_id', '==', str(curso_id)).stream()
         estrutura = []
-        for m in modulos:
-            mod_data = m.to_dict(); mod_data['id'] = m.id
-            # Pega aulas da coleção antiga (legado)
-            aulas_ref = db.collection('aulas').where('modulo_id', '==', m.id).stream()
-            aulas_legacy = [{"id": a.id, **a.to_dict()} for a in aulas_ref]
-            # Pega aulas do array novo (misto)
-            aulas_modern = mod_data.get('aulas', [])
-            
-            todas_aulas = aulas_legacy + aulas_modern
-            todas_aulas.sort(key=lambda x: x.get('titulo', '') or '')
-            
-            mod_data['aulas'] = todas_aulas
+
+        for m in modulos_ref:
+            mod_data = m.to_dict()
+            mod_data['id'] = m.id
+
+            # 🔁 NOVO: leitura unificada
+            aulas = obter_aulas_unificadas_por_modulo(m.id)
+
+            mod_data['aulas'] = aulas
             estrutura.append(mod_data)
-            
+
         estrutura.sort(key=lambda x: int(x.get('ordem', 0) or 0))
         return estrutura
     except Exception as e:
-        print(f"Erro ao listar módulos: {e}")
+        print(f"[LISTAR_MODULOS] erro: {e}")
         return []
+
 
 def criar_modulo(curso_id, titulo, descricao, ordem):
     db = get_db()
@@ -801,3 +799,40 @@ def desativar_aula_v2(aula_id: str) -> bool:
     Soft delete (profissional): não apaga, só desativa.
     """
     return editar_aula_v2(aula_id, {"ativo": False})
+
+# ==============================================================================
+# 5C. LEITURA UNIFICADA DE AULAS (V2 -> LEGADO)
+# ==============================================================================
+
+def obter_aulas_unificadas_por_modulo(modulo_id: str) -> list:
+    """
+    Retorna aulas do módulo priorizando AULAS_V2.
+    Se não houver nenhuma V2, cai para o legado.
+    Sempre retorna no formato esperado pela UI atual.
+    """
+    # 1. Tenta V2
+    aulas_v2 = listar_aulas_v2_por_modulo(modulo_id)
+
+    if aulas_v2:
+        aulas_norm = []
+        for a in aulas_v2:
+            aulas_norm.append({
+                "id": a.get("id"),
+                "titulo": a.get("titulo"),
+                "tipo": a.get("tipo"),
+                "duracao_min": a.get("duracao_min", 0),
+                # UI atual espera 'conteudo'
+                "conteudo": {
+                    "blocos": a.get("blocos", [])
+                }
+            })
+        return aulas_norm
+
+    # 2. Fallback — legado (coleção aulas)
+    db = get_db()
+    try:
+        aulas_legacy = db.collection("aulas").where("modulo_id", "==", modulo_id).stream()
+        return [{"id": d.id, **d.to_dict()} for d in aulas_legacy]
+    except:
+        return []
+
