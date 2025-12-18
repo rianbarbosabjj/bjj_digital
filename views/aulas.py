@@ -80,7 +80,17 @@ def gerenciar_conteudo_curso(curso: Dict, usuario: Dict):
         )
 
     st.markdown("---")
-
+    # ============================
+    # PROGRESSO DO ALUNO (V2)
+    # ============================
+    try:
+        prog = ce.obter_progresso_curso(usuario.get("id"), curso.get("id"))
+        progresso_pct = prog.get("progresso_percentual", 0)
+        st.progress(progresso_pct / 100)
+        st.caption(f"Progresso no curso: {progresso_pct}%")
+    except Exception as e:
+        print(f"[PROGRESSO_UI] erro: {e}")
+        
     # ======================================================
     # CRIAR MÓDULO
     # ======================================================
