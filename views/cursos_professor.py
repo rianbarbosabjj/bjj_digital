@@ -3,7 +3,7 @@ import time
 import pandas as pd
 from datetime import datetime
 import utils as ce
-import views.aulas_professor as aulas_view
+from views import aulas_professor as aulas_view
 import re
 
 try:
