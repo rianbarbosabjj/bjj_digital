@@ -38,44 +38,45 @@ def pagina_aulas_aluno(curso, usuario):
                 st.markdown(f"### {aula.get('titulo', 'Aula')}")
                 st.caption(f"⏱ {aula.get('duracao_min', 0)} min")
 
-                # =========================
-                # RENDERIZAÇÃO DO CONTEÚDO
-                # =========================
+# =========================
+# RENDERIZAÇÃO DO CONTEÚDO
+# =========================
 
-                # --- NOVO FORMATO (V2 / BLOCOS) ---
-                blocos = aula.get("blocos", [])
-                if blocos:
-                    for bloco in blocos:
-                        tipo = bloco.get("tipo")
+conteudo = aula.get("conteudo", {})
+blocos = conteudo.get("blocos", [])
 
-                        if tipo == "texto":
-                            st.markdown(bloco.get("conteudo", ""))
+# --- NOVO FORMATO (V2 / BLOCOS) ---
+if blocos:
+    for bloco in blocos:
+        tipo = bloco.get("tipo")
 
-                        elif tipo == "video":
-                            url = bloco.get("url_link")
-                            if url:
-                                try:
-                                    st.video(url)
-                                except:
-                                    st.markdown(f"[▶ Assistir vídeo]({url})")
+        if tipo == "texto":
+            st.markdown(bloco.get("conteudo", ""))
 
-                        elif tipo == "imagem":
-                            url = bloco.get("url_link")
-                            if url:
-                                st.image(url, use_container_width=True)
+        elif tipo == "video":
+            url = bloco.get("url_link") or bloco.get("url")
+            if url:
+                try:
+                    st.video(url)
+                except:
+                    st.markdown(f"[▶ Assistir vídeo]({url})")
 
-                # --- FORMATO ANTIGO (LEGADO) ---
-                else:
-                    conteudo = aula.get("conteudo", {})
+        elif tipo == "imagem":
+            url = bloco.get("url_link") or bloco.get("url")
+            if url:
+                st.image(url, use_container_width=True)
 
-                    if "texto" in conteudo:
-                        st.markdown(conteudo.get("texto", ""))
+# --- FORMATO ANTIGO (LEGADO) ---
+else:
+    if "texto" in conteudo:
+        st.markdown(conteudo.get("texto", ""))
 
-                    if "url" in conteudo:
-                        try:
-                            st.video(conteudo["url"])
-                        except:
-                            st.markdown(f"[▶ Assistir conteúdo]({conteudo['url']})")
+    if "url" in conteudo:
+        try:
+            st.video(conteudo["url"])
+        except:
+            st.markdown(f"[▶ Assistir conteúdo]({conteudo['url']})")
+
 
                 # =========================
                 # CHECKBOX DE CONCLUSÃO
