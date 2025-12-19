@@ -1,0 +1,38 @@
+import streamlit as st
+import utils as ce
+
+def pagina_aulas_aluno(curso, usuario):
+    st.subheader(curso.get("titulo"))
+
+    # progresso geral
+    prog = ce.obter_progresso_curso(usuario["id"], curso["id"])
+    pct = prog.get("progresso_percentual", 0)
+
+    st.progress(pct / 100)
+    st.caption(f"Progresso no curso: {pct}%")
+
+    st.markdown("---")
+
+    modulos = ce.listar_modulos_e_aulas(curso["id"]) or []
+    aulas_concluidas = set(prog.get("aulas_concluidas", []))
+
+    for mod in modulos:
+        with st.expander(mod.get("titulo")):
+            for aula in mod.get("aulas", []):
+                aula_id = aula.get("id")
+                concluida = aula_id in aulas_concluidas
+
+                st.markdown(f"**{aula.get('titulo')}**")
+                st.caption(f"⏱ {aula.get('duracao_min', 0)} min")
+
+                if st.checkbox(
+                    "Marcar como concluída",
+                    value=concluida,
+                    key=f"done_{usuario['id']}_{aula_id}"
+                ):
+                    ce.marcar_aula_concluida(
+                        usuario_id=usuario["id"],
+                        curso_id=curso["id"],
+                        aula_id=aula_id
+                    )
+                    st.rerun()
