@@ -3,7 +3,6 @@ import time
 import pandas as pd
 from datetime import datetime
 import utils as ce
-from views import aulas_professor as aulas_view
 import re
 
 try:
@@ -35,24 +34,18 @@ def pagina_cursos_professor(usuario):
         curso = st.session_state.get('curso_selecionado')
         if curso:
             try:
-                aulas_view.gerenciar_conteudo_curso(curso, usuario)
+                from views.aulas_professor import gerenciar_conteudo_curso
+                gerenciar_conteudo_curso(curso, usuario)
             except Exception as e:
-                st.error("Erro ao carregar o gerenciador de aulas.")
-                st.caption(str(e))
-                st.session_state['cursos_view'] = 'lista'
-                st.rerun()
+            st.error("Erro ao carregar o gerenciador de aulas.")
+            st.caption(str(e))
+            st.session_state['cursos_view'] = 'lista'
+            st.rerun()
         else:
             st.session_state['cursos_view'] = 'lista'
             st.rerun()
         return
 
-    if view == 'detalhe':
-        if st.session_state.get('curso_selecionado'):
-            exibir_detalhes_curso(usuario)
-        else:
-            st.session_state['cursos_view'] = 'lista'
-            st.rerun()
-        return
 
     # PADRÃO
     listar_cursos(usuario)
