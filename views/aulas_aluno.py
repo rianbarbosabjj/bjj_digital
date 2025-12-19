@@ -65,44 +65,29 @@ def pagina_aulas_aluno(curso, usuario):
                             st.markdown(bloco.get("conteudo", ""))
 
                         elif tipo == "video":
-                            url = bloco.get("url_link") or bloco.get("url")
-                            if url:
-                                try:
-                                    st.video(url)
-                                except Exception:
-                                    st.markdown(f"[▶ Assistir vídeo]({url})")
+    # 1️⃣ URL externa
+    url = bloco.get("url_link") or bloco.get("url")
+    if url:
+        try:
+            st.video(url)
+            return
+        except Exception:
+            st.markdown(f"[▶ Assistir vídeo]({url})")
+            return
 
-                        elif tipo == "imagem":
-                            url = bloco.get("url_link") or bloco.get("url")
-                            if url:
-                                st.image(url, use_container_width=True)
+    # 2️⃣ Arquivo local (upload salvo)
+    file_path = bloco.get("arquivo_video") or bloco.get("file_path")
+    if file_path:
+        try:
+            st.video(file_path)
+            return
+        except Exception:
+            st.warning("Vídeo enviado, mas não foi possível reproduzir.")
 
-                        st.write("")  # espaçamento entre blocos
-
-                # -------- FORMATO ANTIGO (LEGADO) --------
-                else:
-                    if "texto" in conteudo:
-                        st.markdown(conteudo.get("texto", ""))
-
-                    if "url" in conteudo:
-                        try:
-                            st.video(conteudo["url"])
-                        except Exception:
-                            st.markdown(f"[▶ Assistir conteúdo]({conteudo['url']})")
-
-                # =========================
-                # MARCAR COMO CONCLUÍDA
-                # =========================
-                if st.checkbox(
-                    "Marcar como concluída",
-                    value=concluida,
-                    key=f"done_{usuario['id']}_{aula_id}"
-                ):
-                    ce.marcar_aula_concluida(
-                        usuario_id=usuario["id"],
-                        curso_id=curso["id"],
-                        aula_id=aula_id
-                    )
-                    st.rerun()
-
-                st.markdown("---")
+    # 3️⃣ Bytes (fallback – se existir)
+    video_bytes = bloco.get("video_bytes")
+    if video_bytes:
+        try:
+            st.video(video_bytes)
+        except Exception:
+            st.warning("Formato de vídeo não suportado.")
