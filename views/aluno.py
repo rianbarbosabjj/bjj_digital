@@ -186,6 +186,237 @@ def ranking():
 # EXAME PRINCIPAL (INALTERADO)
 # =========================================
 def exame_de_faixa(usuario):
-    # >>> TODO O SEU CÓDIGO DO EXAME PERMANECE EXATAMENTE IGUAL <<<
-    # (mantido conforme enviado por você)
-    pass
+    st.header(f"🥋 Exame de Faixa - {usuario['nome'].split()[0].title()}")
+    
+    if "exame_iniciado" not in st.session_state: st.session_state.exame_iniciado = False
+    if "resultado_prova" not in st.session_state: st.session_state.resultado_prova = None
+
+    db = get_db()
+    doc_ref = db.collection('usuarios').document(usuario['id'])
+    doc = doc_ref.get()
+    if not doc.exists: st.error("Erro perfil."); return
+    dados = doc.to_dict()
+    
+    # === TELA DE RESULTADO ===
+    if st.session_state.resultado_prova:
+        res = st.session_state.resultado_prova
+        st.balloons()
+        
+        with st.container(border=True):
+            st.success(f"Parabéns você foi aprovado(a)! Sua nota foi {res['nota']:.0f}%.")
+            
+            try:
+                with st.spinner("Preparando seu certificado oficial..."):
+                    p_b, p_n = gerar_pdf(usuario['nome'], res['faixa'], res['nota'], res['total'], res['codigo'])
+                
+                if p_b: 
+                    st.download_button(
+                        label="📥 Baixar Certificado", 
+                        data=p_b, 
+                        file_name=p_n, 
+                        mime="application/pdf", 
+                        key="dl_res", 
+                        type="primary", 
+                        use_container_width=True
+                    )
+                else:
+                    st.error(f"⚠️ {p_n}")
+                    st.caption("Tente novamente na aba 'Meus Certificados'.")
+            except Exception as e: 
+                st.error(f"Erro inesperado: {e}")
+            
+        if st.button("Voltar ao Início"):
+            st.session_state.resultado_prova = None
+            st.rerun()
+        return
+
+    # CHECAGEM DE ABANDONO
+    if dados.get("status_exame") == "em_andamento" and not st.session_state.exame_iniciado:
+        is_timeout = False
+        try:
+            start_str = dados.get("inicio_exame_temp")
+            if start_str:
+                if isinstance(start_str, str):
+                    start_dt = datetime.fromisoformat(start_str.replace('Z', ''))
+                else:
+                    start_dt = start_str
+                
+                _, t_lim, _ = carregar_exame_especifico(dados.get('faixa_exame'))
+                limit_dt = start_dt + timedelta(minutes=t_lim)
+                if datetime.utcnow() > limit_dt.replace(tzinfo=None): is_timeout = True
+        except: pass
+
+        if is_timeout:
+            registrar_fim_exame(usuario['id'], False)
+            st.error("⌛ Tempo ESGOTADO!")
+            return
+        else:
+            bloquear_por_abandono(usuario['id'])
+            st.error("🚨 BLOQUEADO! Página recarregada ou saída detectada.")
+            st.caption("Por segurança, o exame foi bloqueado. Contate seu professor.")
+            return
+
+    if not dados.get('exame_habilitado'):
+        status_atual = dados.get('status_exame', 'pendente')
+        if status_atual == 'aprovado':
+             st.success("✅ Você já foi aprovado neste exame!")
+             st.info("Baixe seu certificado na aba 'Meus Certificados'.")
+        elif status_atual == 'bloqueado':
+             st.error("🔒 Exame Bloqueado.")
+        else:
+             st.warning("🔒 Exame não autorizado.")
+        return
+
+    elegivel, motivo = verificar_elegibilidade_exame(dados)
+    if not elegivel: st.error(f"🚫 {motivo}"); return
+
+    # CARREGAMENTO
+    qs, tempo_limite, min_aprovacao = carregar_exame_especifico(dados.get('faixa_exame'))
+    qtd = len(qs)
+
+    # === TELA DE INÍCIO ===
+    if not st.session_state.exame_iniciado:
+        st.markdown(f"### 📋 Exame de Faixa **{dados.get('faixa_exame')}**")
+        
+        with st.container(border=True):
+            st.markdown("#### 📜 Instruções para a realização do Exame")
+            st.markdown("""
+* Após clicar em **✅ Iniciar exame**, não será possível pausar ou interromper o cronômetro.
+* Se o tempo acabar antes de você finalizar, você será considerado **reprovado**.
+* **Não é permitido** consultar materiais externos de qualquer tipo.
+* Em caso de **reprovação**, você poderá realizar o exame novamente somente após **3 dias**.
+* Realize o exame em um local confortável e silencioso para garantir sua concentração.
+* **Não atualize a página (F5)**, não feche o navegador e não troque de dispositivo durante a prova. Isso **bloqueia** o exame automaticamente.
+* Utilize um dispositivo com bateria suficiente ou mantido na energia.
+* O exame é **individual**. Qualquer tentativa de fraude resultará em reprovação imediata.
+* Leia cada questão com atenção antes de responder.
+* Se aprovado, você poderá baixar seu certificado na aba *Meus Certificados*.
+
+**Boa prova!** 🥋
+            """)
+            
+            st.markdown("---")
+            
+            # PAINEL DE MÉTRICAS (VISUAL LIMPO)
+            st.markdown(f"""
+            <div style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(255,255,255,0.05); padding: 15px; border-radius: 10px;">
+                <div style="text-align: left;">
+                    <span style="font-size: 0.9em; color: #aaa;">Questões</span><br>
+                    <span style="font-size: 1.5em; font-weight: bold; color: white;">{qtd}</span>
+                </div>
+                <div style="text-align: center;">
+                    <span style="font-size: 0.9em; color: #aaa;">Tempo</span><br>
+                    <span style="font-size: 1.5em; font-weight: bold; color: white;">{tempo_limite} min</span>
+                </div>
+                <div style="text-align: right;">
+                    <span style="font-size: 0.9em; color: #aaa;">Mínimo</span><br>
+                    <span style="font-size: 1.5em; font-weight: bold; color: white;">{min_aprovacao}%</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            st.write("") 
+        
+        if qtd > 0:
+            if st.button("✅ (estou ciente) INICIAR EXAME", type="primary", use_container_width=True):
+                registrar_inicio_exame(usuario['id'])
+                st.session_state.exame_iniciado = True
+                st.session_state.fim_prova_ts = time.time() + (tempo_limite * 60)
+                st.session_state.questoes_prova = qs
+                st.session_state.params_prova = {"tempo": tempo_limite, "min": min_aprovacao}
+                st.rerun()
+        else: st.warning("Sem questões disponíveis.")
+
+    # === TELA DA PROVA ===
+    else:
+        qs = st.session_state.get('questoes_prova', [])
+        restante = int(st.session_state.fim_prova_ts - time.time())
+        
+        if restante <= 0:
+            st.error("⌛ Tempo ESGOTADO!")
+            registrar_fim_exame(usuario['id'], False)
+            st.session_state.exame_iniciado = False
+            time.sleep(2)
+            st.rerun()
+
+        # Timer Visual
+        cor = "#FFD770" if restante > 300 else "#FF4B4B"
+        components.html(f"""
+        <div style="border:2px solid {cor};border-radius:10px;padding:10px;text-align:center;background:rgba(0,0,0,0.3);font-family:sans-serif;color:white;">
+            TEMPO RESTANTE<br>
+            <span id="t" style="color:{cor};font-size:30px;font-weight:bold;">--:--</span>
+        </div>
+        <script>
+            var t={restante};
+            setInterval(function(){{
+                var m=Math.floor(t/60),s=t%60;
+                document.getElementById('t').innerHTML=m+":"+(s<10?"0"+s:s);
+                if(t--<=0)window.parent.location.reload();
+            }},1000);
+        </script>
+        """, height=100)
+
+        with st.form("prova"):
+            resps = {}
+            for i, q in enumerate(qs):
+                st.markdown(f"**{i+1}. {q.get('pergunta')}**")
+                
+                if q.get('url_imagem'):
+                    st.image(q.get('url_imagem'), use_container_width=True)
+                
+                if q.get('url_video'):
+                    vid = normalizar_link_video(q.get('url_video'))
+                    try: st.video(vid)
+                    except: st.markdown(f"[Ver Vídeo]({vid})")
+
+                opts = []
+                if 'alternativas' in q:
+                    opts = [q['alternativas'].get(k) for k in ["A","B","C","D"]]
+                elif 'opcoes' in q:
+                    opts = q['opcoes']
+                
+                resps[i] = st.radio("R:", opts, key=f"q{i}", index=None, label_visibility="collapsed")
+                st.markdown("---")
+                
+            if st.form_submit_button("Finalizar Exame", type="primary"):
+                acertos = 0
+                for i, q in enumerate(qs):
+                    resp = str(resps.get(i) or "").strip().lower()
+                    certa = q.get('resposta_correta', 'A')
+                    txt_certo = q.get('alternativas', {}).get(certa, "").strip().lower()
+                    
+                    if resp == txt_certo:
+                        acertos += 1
+
+                nota = (acertos/len(qs))*100
+                aprovado = nota >= st.session_state.params_prova['min']
+                
+                registrar_fim_exame(usuario['id'], aprovado)
+                st.session_state.exame_iniciado = False
+                
+                cod = None
+                if aprovado:
+                    cod = gerar_codigo_verificacao()
+                    st.session_state.resultado_prova = {
+                        "nota": nota, "aprovado": True, 
+                        "faixa": dados.get('faixa_exame'), "acertos": acertos, 
+                        "total": len(qs), "codigo": cod
+                    }
+                    
+                    try:
+                        db.collection('resultados').add({
+                            "usuario": usuario['nome'],
+                            "faixa": dados.get('faixa_exame'),
+                            "pontuacao": nota,
+                            "acertos": acertos,
+                            "total": len(qs),
+                            "aprovado": aprovado,
+                            "codigo_verificacao": cod,
+                            "data": firestore.SERVER_TIMESTAMP
+                        })
+                    except: pass
+                
+                else:
+                    st.error(f"Reprovado. Nota: {nota:.0f}%")
+                    time.sleep(3)
+                
+                st.rerun()
