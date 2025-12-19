@@ -3,9 +3,14 @@ import utils as ce
 
 
 def pagina_aulas_aluno(curso, usuario):
+    # =========================
+    # CABEÇALHO
+    # =========================
     st.subheader(curso.get("titulo", "Curso"))
 
-    # ---------------- PROGRESSO ----------------
+    # =========================
+    # PROGRESSO DO CURSO
+    # =========================
     prog = ce.obter_progresso_curso(usuario["id"], curso["id"]) or {}
     pct = prog.get("progresso_percentual", 0)
     aulas_concluidas = set(prog.get("aulas_concluidas", []))
@@ -15,71 +20,78 @@ def pagina_aulas_aluno(curso, usuario):
 
     st.markdown("---")
 
-    # ---------------- CONTEÚDO ----------------
+    # =========================
+    # LISTAGEM DE MÓDULOS
+    # =========================
     modulos = ce.listar_modulos_e_aulas(curso["id"]) or []
 
     if not modulos:
-        st.info("Este curso ainda não possui aulas.")
+        st.info("Este curso ainda não possui conteúdo.")
         return
 
     for mod in modulos:
-        titulo_mod = mod.get("titulo", "Módulo")
-        aulas = mod.get("aulas", [])
+        with st.expander(mod.get("titulo", "Módulo")):
+            aulas = mod.get("aulas", [])
 
-        with st.expander(titulo_mod, expanded=True):
             if not aulas:
-                st.caption("Sem aulas neste módulo.")
+                st.caption("Nenhuma aula disponível neste módulo.")
                 continue
 
             for aula in aulas:
                 aula_id = aula.get("id")
                 concluida = aula_id in aulas_concluidas
 
+                # =========================
+                # CABEÇALHO DA AULA
+                # =========================
                 st.markdown(f"### {aula.get('titulo', 'Aula')}")
                 st.caption(f"⏱ {aula.get('duracao_min', 0)} min")
 
-# =========================
-# RENDERIZAÇÃO DO CONTEÚDO
-# =========================
+                # =========================
+                # RENDERIZAÇÃO DO CONTEÚDO
+                # =========================
 
-conteudo = aula.get("conteudo", {})
-blocos = conteudo.get("blocos", [])
+                # O CONTEÚDO SEMPRE VEM DENTRO DE "conteudo"
+                conteudo = aula.get("conteudo", {})
 
-# --- NOVO FORMATO (V2 / BLOCOS) ---
-if blocos:
-    for bloco in blocos:
-        tipo = bloco.get("tipo")
+                # -------- NOVO FORMATO (AULAS_V2 / BLOCOS) --------
+                blocos = conteudo.get("blocos", [])
 
-        if tipo == "texto":
-            st.markdown(bloco.get("conteudo", ""))
+                if blocos:
+                    for bloco in blocos:
+                        tipo = bloco.get("tipo")
 
-        elif tipo == "video":
-            url = bloco.get("url_link") or bloco.get("url")
-            if url:
-                try:
-                    st.video(url)
-                except:
-                    st.markdown(f"[▶ Assistir vídeo]({url})")
+                        if tipo == "texto":
+                            st.markdown(bloco.get("conteudo", ""))
 
-        elif tipo == "imagem":
-            url = bloco.get("url_link") or bloco.get("url")
-            if url:
-                st.image(url, use_container_width=True)
+                        elif tipo == "video":
+                            url = bloco.get("url_link") or bloco.get("url")
+                            if url:
+                                try:
+                                    st.video(url)
+                                except Exception:
+                                    st.markdown(f"[▶ Assistir vídeo]({url})")
 
-# --- FORMATO ANTIGO (LEGADO) ---
-else:
-    if "texto" in conteudo:
-        st.markdown(conteudo.get("texto", ""))
+                        elif tipo == "imagem":
+                            url = bloco.get("url_link") or bloco.get("url")
+                            if url:
+                                st.image(url, use_container_width=True)
 
-    if "url" in conteudo:
-        try:
-            st.video(conteudo["url"])
-        except:
-            st.markdown(f"[▶ Assistir conteúdo]({conteudo['url']})")
+                        st.write("")  # espaçamento entre blocos
 
+                # -------- FORMATO ANTIGO (LEGADO) --------
+                else:
+                    if "texto" in conteudo:
+                        st.markdown(conteudo.get("texto", ""))
+
+                    if "url" in conteudo:
+                        try:
+                            st.video(conteudo["url"])
+                        except Exception:
+                            st.markdown(f"[▶ Assistir conteúdo]({conteudo['url']})")
 
                 # =========================
-                # CHECKBOX DE CONCLUSÃO
+                # MARCAR COMO CONCLUÍDA
                 # =========================
                 if st.checkbox(
                     "Marcar como concluída",
