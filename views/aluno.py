@@ -420,3 +420,65 @@ def exame_de_faixa(usuario):
                     time.sleep(3)
                 
                 st.rerun()
+# =========================================
+# FLUXO DE CURSOS DO ALUNO (NOVO)
+# =========================================
+
+def meus_cursos_inscritos(usuario):
+    try:
+        cursos = ce.listar_cursos_inscritos(usuario['id'])
+    except Exception as e:
+        st.error(f"Erro ao buscar cursos: {e}")
+        cursos = []
+
+    st.subheader("📚 Meus Cursos")
+
+    if not cursos:
+        st.info("Você ainda não está matriculado em nenhum curso.")
+        return
+
+    for c in cursos:
+        with st.container(border=True):
+            col1, col2 = st.columns([4, 1])
+
+            with col1:
+                st.markdown(f"### {c.get('titulo')}")
+                prog = c.get('progresso', 0)
+                st.progress(prog / 100, text=f"Progresso: {prog}%")
+
+            with col2:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button(
+                    "▶ Acessar",
+                    key=f"curso_{usuario['id']}_{c['id']}",
+                    type="primary",
+                    use_container_width=True
+                ):
+                    st.session_state['curso_ativo'] = c
+                    st.session_state['aluno_view'] = 'aulas'
+                    st.rerun()
+
+
+def app_aluno(usuario):
+    if 'aluno_view' not in st.session_state:
+        st.session_state['aluno_view'] = 'dashboard'
+
+    if 'curso_ativo' not in st.session_state:
+        st.session_state['curso_ativo'] = None
+
+    if st.session_state['aluno_view'] == 'aulas':
+        if st.session_state['curso_ativo']:
+            if st.button("⬅ Voltar aos cursos"):
+                st.session_state['aluno_view'] = 'dashboard'
+                st.session_state['curso_ativo'] = None
+                st.rerun()
+
+            aulas_aluno_view.pagina_aulas_aluno(
+                st.session_state['curso_ativo'],
+                usuario
+            )
+        else:
+            st.session_state['aluno_view'] = 'dashboard'
+            st.rerun()
+    else:
+        meus_cursos_inscritos(usuario)
