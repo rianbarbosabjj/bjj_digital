@@ -27,23 +27,35 @@ def pagina_cursos_professor(usuario):
         st.session_state['editando_curso'] = False
 
     # =========================
-    # ROTEAMENTO DE TELAS
+    # ROTEAMENTO DE TELAS (SEGURO)
     # =========================
-    if st.session_state['cursos_view'] == 'conteudo':
-        if st.session_state['curso_selecionado']:
-            aulas_view.gerenciar_conteudo_curso(
-                st.session_state['curso_selecionado'],
-                usuario
-            )
+    view = st.session_state['cursos_view']
+
+    if view == 'conteudo':
+        curso = st.session_state.get('curso_selecionado')
+        if curso:
+            try:
+                aulas_view.gerenciar_conteudo_curso(curso, usuario)
+            except Exception as e:
+                st.error("Erro ao carregar o gerenciador de aulas.")
+                st.caption(str(e))
+                st.session_state['cursos_view'] = 'lista'
+                st.rerun()
         else:
             st.session_state['cursos_view'] = 'lista'
             st.rerun()
+        return
 
-    elif st.session_state['cursos_view'] == 'detalhe':
-        exibir_detalhes_curso(usuario)
+    if view == 'detalhe':
+        if st.session_state.get('curso_selecionado'):
+            exibir_detalhes_curso(usuario)
+        else:
+            st.session_state['cursos_view'] = 'lista'
+            st.rerun()
+        return
 
-    else:
-        listar_cursos(usuario)
+    # PADRÃO
+    listar_cursos(usuario)
 
 
 def listar_cursos(usuario):
