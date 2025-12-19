@@ -3,7 +3,7 @@ import time
 import pandas as pd
 from datetime import datetime
 import utils as ce
-import views.aulas as aulas_view 
+import views.aulas_professor as aulas_view
 import re
 
 try:
@@ -11,7 +11,7 @@ try:
 except ImportError:
     COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER = "#0e2d26", "#FFFFFF", "#FFD770", "#078B6C", "#FFD770"
 
-def pagina_cursos(usuario):
+def pagina_cursos_professor(usuario):
     if 'cursos_view' not in st.session_state:
         st.session_state['cursos_view'] = 'lista'
     if 'curso_selecionado' not in st.session_state:
