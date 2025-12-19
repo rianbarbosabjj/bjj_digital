@@ -12,17 +12,29 @@ except ImportError:
     COR_FUNDO, COR_TEXTO, COR_DESTAQUE, COR_BOTAO, COR_HOVER = "#0e2d26", "#FFFFFF", "#FFD770", "#078B6C", "#FFD770"
 
 def pagina_cursos_professor(usuario):
+    st.title("📚 Gestão de Cursos (Professor)")
+
+    # =========================
+    # CONTROLE DE ESTADO
+    # =========================
     if 'cursos_view' not in st.session_state:
         st.session_state['cursos_view'] = 'lista'
+
     if 'curso_selecionado' not in st.session_state:
         st.session_state['curso_selecionado'] = None
+
     if 'editando_curso' not in st.session_state:
         st.session_state['editando_curso'] = False
 
-    # Roteamento
+    # =========================
+    # ROTEAMENTO DE TELAS
+    # =========================
     if st.session_state['cursos_view'] == 'conteudo':
         if st.session_state['curso_selecionado']:
-            aulas_view.gerenciar_conteudo_curso(st.session_state['curso_selecionado'], usuario)
+            aulas_view.gerenciar_conteudo_curso(
+                st.session_state['curso_selecionado'],
+                usuario
+            )
         else:
             st.session_state['cursos_view'] = 'lista'
             st.rerun()
@@ -32,6 +44,7 @@ def pagina_cursos_professor(usuario):
 
     else:
         listar_cursos(usuario)
+
 
 def listar_cursos(usuario):
     st.subheader("Meus Cursos")
