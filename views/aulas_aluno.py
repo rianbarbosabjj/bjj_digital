@@ -17,34 +17,63 @@ def pagina_aulas_aluno(curso, usuario):
     # ---------------- CONTEÚDO ----------------
     modulos = ce.listar_modulos_e_aulas(curso["id"]) or []
 
-    if not modulos:
-        st.info("Este curso ainda não possui conteúdo.")
-        return
+for aula in mod.get("aulas", []):
+    aula_id = aula.get("id")
+    concluida = aula_id in aulas_concluidas
 
-    for mod in modulos:
-        titulo_mod = mod.get("titulo", "Módulo")
-        aulas = mod.get("aulas", [])
+    st.markdown(f"**{aula.get('titulo')}**")
+    st.caption(f"⏱ {aula.get('duracao_min', 0)} min")
 
-        with st.expander(titulo_mod, expanded=False):
-            if not aulas:
-                st.caption("Nenhuma aula neste módulo.")
-                continue
+    # =========================
+    # RENDERIZAÇÃO DO CONTEÚDO
+    # =========================
 
-            for aula in aulas:
-                aula_id = aula.get("id")
-                concluida = aula_id in aulas_concluidas
+    # --- NOVO FORMATO (V2 / BLOCOS) ---
+    blocos = aula.get("blocos", [])
+    if blocos:
+        for bloco in blocos:
+            tipo = bloco.get("tipo")
 
-                st.markdown(f"**{aula.get('titulo', 'Aula')}**")
-                st.caption(f"⏱ {aula.get('duracao_min', 0)} min")
+            if tipo == "texto":
+                st.markdown(bloco.get("conteudo", ""))
 
-                if st.checkbox(
-                    "Marcar como concluída",
-                    value=concluida,
-                    key=f"done_{usuario['id']}_{curso['id']}_{aula_id}"
-                ):
-                    ce.marcar_aula_concluida(
-                        usuario_id=usuario["id"],
-                        curso_id=curso["id"],
-                        aula_id=aula_id
-                    )
-                    st.rerun()
+            elif tipo == "video":
+                url = bloco.get("url_link")
+                if url:
+                    try:
+                        st.video(url)
+                    except:
+                        st.markdown(f"[▶ Assistir vídeo]({url})")
+
+            elif tipo == "imagem":
+                url = bloco.get("url_link")
+                if url:
+                    st.image(url, use_container_width=True)
+
+    # --- FORMATO ANTIGO (LEGADO) ---
+    else:
+        conteudo = aula.get("conteudo", {})
+
+        if "texto" in conteudo:
+            st.markdown(conteudo.get("texto", ""))
+
+        if "url" in conteudo:
+            try:
+                st.video(conteudo["url"])
+            except:
+                st.markdown(f"[▶ Assistir conteúdo]({conteudo['url']})")
+
+    # =========================
+    # CHECKBOX DE CONCLUSÃO
+    # =========================
+    if st.checkbox(
+        "Marcar como concluída",
+        value=concluida,
+        key=f"done_{usuario['id']}_{aula_id}"
+    ):
+        ce.marcar_aula_concluida(
+            usuario_id=usuario["id"],
+            curso_id=curso["id"],
+            aula_id=aula_id
+        )
+        st.rerun()
