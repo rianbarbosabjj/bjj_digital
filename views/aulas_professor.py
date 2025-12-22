@@ -44,21 +44,138 @@ def dialog_criar_aula(curso_id, modulos, usuario):
 
 # --- EDITOR DE BLOCOS (SEPARADO) ---
 def editor_de_aula(aula, curso_id):
-    st.markdown(f"#### ✏️ Editando: {aula['titulo']}")
+    st.markdown(f"## ✏️ Editando: {aula['titulo']}")
     
-    # Aqui você carrega os blocos existentes da aula se houver
-    # (Assumindo que você tenha uma função para buscar blocos ou eles venham no objeto aula)
-    
-    st.info("Aqui entraria a interface de 'Drag & Drop' ou adição de blocos isolada.")
-    # Exemplo simplificado de adição rápida:
-    novo_texto = st.text_area("Adicionar bloco de texto rápido")
-    if st.button("Salvar Bloco de Texto"):
-        # Lógica para dar append no array de blocos dessa aula específica no banco
-        st.toast("Bloco adicionado!")
+    # --- 1. INICIALIZAÇÃO DO ESTADO ---
+    # Carrega os blocos existentes apenas na primeira vez que abre o editor
+    if "blocos_temporarios" not in st.session_state:
+        # Tenta pegar do banco, se não existir, inicia lista vazia
+        st.session_state["blocos_temporarios"] = aula.get("blocos", [])
 
-    if st.button("🔙 Voltar para Estrutura"):
-        st.session_state["aula_editando_id"] = None
-        st.rerun()
+    # Atalho para a lista de blocos
+    blocos = st.session_state["blocos_temporarios"]
+
+    col_esq, col_dir = st.columns([2, 1])
+
+    # --- 2. ÁREA DE VISUALIZAÇÃO E EDIÇÃO (LADO ESQUERDO) ---
+    with col_esq:
+        st.info("👇 Esta é a estrutura atual da sua aula:")
+        
+        if not blocos:
+            st.warning("A aula está vazia. Adicione blocos ao lado 👉")
+
+        # Loop para renderizar cada bloco com controles
+        for i, bloco in enumerate(blocos):
+            tipo = bloco.get("tipo")
+            conteudo = bloco.get("conteudo")
+
+            # Cria um container visual (caixa) para cada bloco
+            with st.container(border=True):
+                c_conteudo, c_acoes = st.columns([5, 1])
+
+                with c_conteudo:
+                    # Renderiza o conteúdo real (Preview)
+                    if tipo == "texto":
+                        st.markdown(conteudo)
+                    elif tipo == "imagem":
+                        try:
+                            st.image(conteudo, use_column_width=True)
+                        except:
+                            st.error(f"Erro ao carregar imagem: {conteudo}")
+                    elif tipo == "video":
+                        try:
+                            st.video(conteudo)
+                        except:
+                            st.error(f"Erro ao carregar vídeo: {conteudo}")
+
+                # Botões de controle (Mover e Excluir)
+                with c_acoes:
+                    # Botão SUBIR
+                    if i > 0:
+                        if st.button("⬆️", key=f"up_{i}", help="Mover para cima"):
+                            blocos[i], blocos[i-1] = blocos[i-1], blocos[i]
+                            st.rerun()
+                    
+                    # Botão DESCER
+                    if i < len(blocos) - 1:
+                        if st.button("⬇️", key=f"down_{i}", help="Mover para baixo"):
+                            blocos[i], blocos[i+1] = blocos[i+1], blocos[i]
+                            st.rerun()
+                    
+                    # Botão EXCLUIR
+                    if st.button("🗑️", key=f"del_{i}", type="primary"):
+                        blocos.pop(i)
+                        st.rerun()
+
+    # --- 3. FERRAMENTAS DE ADIÇÃO (LADO DIREITO) ---
+    with col_dir:
+        st.markdown("### ➕ Adicionar Conteúdo")
+        
+        tab_txt, tab_img, tab_vid = st.tabs(["Texto", "Imagem", "Vídeo"])
+
+        # --- Adicionar Texto ---
+        with tab_txt:
+            novo_texto = st.text_area("Escreva aqui (Markdown suportado)", height=150)
+            if st.button("Adicionar Texto"):
+                if novo_texto.strip():
+                    blocos.append({"tipo": "texto", "conteudo": novo_texto})
+                    st.toast("Texto adicionado no final!")
+                    st.rerun()
+
+        # --- Adicionar Imagem ---
+        with tab_img:
+            # Opção A: URL da Imagem
+            url_img = st.text_input("Link da Imagem (URL)")
+            if st.button("Adicionar Imagem por Link"):
+                if url_img:
+                    blocos.append({"tipo": "imagem", "conteudo": url_img})
+                    st.rerun()
+            
+            st.divider()
+            
+            # Opção B: Upload (Simulado)
+            uploaded_img = st.file_uploader("Ou faça upload", type=['png', 'jpg'])
+            if uploaded_img:
+                # AQUI VOCÊ FARIA O UPLOAD PARA O STORAGE (S3/FIREBASE) E PEGARIA A URL
+                # Exemplo simulado:
+                st.warning("Upload requer integração com Storage. Usando placeholder.")
+                # blocos.append({"tipo": "imagem", "conteudo": url_retornada_do_storage})
+
+        # --- Adicionar Vídeo ---
+        with tab_vid:
+            url_video = st.text_input("Link do Vídeo (YouTube/Vimeo/MP4)")
+            if st.button("Adicionar Vídeo"):
+                if url_video:
+                    blocos.append({"tipo": "video", "conteudo": url_video})
+                    st.rerun()
+
+    st.divider()
+
+    # --- 4. BARRA DE SALVAMENTO ---
+    col_save_1, col_save_2 = st.columns([1, 4])
+    
+    with col_save_1:
+        if st.button("← Cancelar"):
+            del st.session_state["blocos_temporarios"]
+            st.session_state["aula_editando_id"] = None
+            st.rerun()
+
+    with col_save_2:
+        if st.button("💾 SALVAR ALTERAÇÕES NA AULA", type="primary", use_container_width=True):
+            # Chamada ao Backend
+            ce.atualizar_aula_blocos(
+                curso_id=curso_id,
+                aula_id=aula['id'],
+                novos_blocos=blocos
+            )
+            
+            # Limpeza
+            del st.session_state["blocos_temporarios"]
+            st.session_state["aula_editando_id"] = None
+            
+            st.success("Aula atualizada com sucesso!")
+            time.sleep(1) # Pausa dramática para o usuário ler
+            st.rerun()
 
 # --- FUNÇÃO PRINCIPAL ---
 
