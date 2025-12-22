@@ -53,7 +53,8 @@ def gerenciar_conteudo_curso(curso, usuario):
             else:
                 ce.criar_modulo(
                 curso['id'],
-                titulo_mod
+                titulo_mod,
+                1  # ordem inicial do módulo
                 )
                 st.success("Módulo criado com sucesso!")
                 st.rerun()
