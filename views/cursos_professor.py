@@ -2,7 +2,6 @@ import streamlit as st
 import time
 import pandas as pd
 import utils as ce
-from views import aulas_professor as aulas_view
 
 # ======================================================
 # PÁGINA PRINCIPAL – PROFESSOR
