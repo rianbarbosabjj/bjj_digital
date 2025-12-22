@@ -10,30 +10,27 @@ from views import aulas_professor as aulas_view
 def pagina_cursos_professor(usuario):
     st.title("📚 Gestão de Cursos (Professor)")
 
-    # ---------------- ESTADO GLOBAL ----------------
-    if "cursos_view" not in st.session_state:
-        st.session_state.cursos_view = "lista"
+    if 'cursos_view' not in st.session_state:
+        st.session_state['cursos_view'] = 'lista'
+    if 'curso_selecionado' not in st.session_state:
+        st.session_state['curso_selecionado'] = None
 
-    if "curso_selecionado" not in st.session_state:
-        st.session_state.curso_selecionado = None
-
-    # ---------------- ROTEAMENTO ÚNICO ----------------
-    view = st.session_state.cursos_view
-
-    if view == "conteudo":
-        if st.session_state.curso_selecionado:
-            aulas_view.gerenciar_conteudo_curso(
-                st.session_state.curso_selecionado,
+    # ===== ROTEAMENTO =====
+    if st.session_state['cursos_view'] == 'conteudo':
+        if st.session_state['curso_selecionado']:
+            from views.aulas_professor import gerenciar_conteudo_curso
+            gerenciar_conteudo_curso(
+                st.session_state['curso_selecionado'],
                 usuario
             )
         else:
-            st.session_state.cursos_view = "lista"
+            st.session_state['cursos_view'] = 'lista'
             st.rerun()
 
-    elif view == "detalhe":
+    elif st.session_state['cursos_view'] == 'detalhe':
         exibir_detalhes_curso(usuario)
 
-    else:  # LISTA
+    else:
         listar_cursos(usuario)
 
 # ======================================================
@@ -97,9 +94,9 @@ def exibir_detalhes_curso(usuario):
 
         st.markdown("---")
 
-        if st.button("📂 Gerenciar Conteúdo", type="primary"):
-            st.session_state.cursos_view = "conteudo"
-            st.rerun()
+    if st.button("📁 Gerenciar Conteúdo", type="primary"):
+        st.session_state['cursos_view'] = 'conteudo'
+        st.rerun()
 
     # ---------- ALUNOS ----------
     with tab2:
