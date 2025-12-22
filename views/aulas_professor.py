@@ -22,7 +22,13 @@ def gerenciar_conteudo_curso(curso, usuario):
     # =========================
     # LISTAGEM DE MÓDULOS
     # =========================
-    modulos = ce.listar_modulos_e_aulas(curso['id']) or []
+    curso_id = curso.get("id")
+
+    if not curso_id:
+        st.error("Erro: curso sem identificador.")
+        return
+
+    modulos = ce.listar_modulos_e_aulas(curso_id) or []
 
     if not modulos:
         st.info("Este curso ainda não possui módulos.")
@@ -51,12 +57,16 @@ def gerenciar_conteudo_curso(curso, usuario):
             if not titulo_mod.strip():
                 st.warning("Informe um título para o módulo.")
             else:
+                # 🔐 ordem automática (sempre segura)
+                ordem = len(modulos) + 1
+
                 ce.criar_modulo(
-                curso_id=curso["id"],
-                titulo=titulo_mod,
-                descricao="",        # descrição opcional por enquanto
-                ordem=1              # ordem inicial do módulo
+                    curso_id=curso_id,
+                    titulo=titulo_mod.strip(),
+                    descricao="",
+                    ordem=ordem
                 )
+
                 st.success("Módulo criado com sucesso!")
                 st.rerun()
 
@@ -71,7 +81,12 @@ def gerenciar_conteudo_curso(curso, usuario):
         st.info("Crie um módulo antes de adicionar aulas.")
         return
 
-    modulos_map = {m['titulo']: m['id'] for m in modulos}
+    # mapa seguro
+    modulos_map = {
+        m.get("titulo"): m.get("id")
+        for m in modulos
+        if m.get("id")
+    }
 
     with st.form("form_nova_aula"):
         titulo_aula = st.text_input("Título da Aula")
@@ -83,11 +98,12 @@ def gerenciar_conteudo_curso(curso, usuario):
                 st.warning("Informe o título da aula.")
             else:
                 ce.criar_aula(
-                    curso_id=curso['id'],
+                    curso_id=curso_id,
                     modulo_id=modulos_map[modulo_sel],
-                    titulo=titulo_aula,
-                    duracao_min=duracao,
+                    titulo=titulo_aula.strip(),
+                    duracao_min=int(duracao),
                     conteudo={}
                 )
+
                 st.success("Aula criada com sucesso!")
                 st.rerun()
