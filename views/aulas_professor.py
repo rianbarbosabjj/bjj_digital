@@ -52,9 +52,10 @@ def gerenciar_conteudo_curso(curso, usuario):
                 st.warning("Informe um título para o módulo.")
             else:
                 ce.criar_modulo(
-                curso['id'],
-                titulo_mod,
-                1  # ordem inicial do módulo
+                curso_id=curso["id"],
+                titulo=titulo_mod,
+                descricao="",        # descrição opcional por enquanto
+                ordem=1              # ordem inicial do módulo
                 )
                 st.success("Módulo criado com sucesso!")
                 st.rerun()
