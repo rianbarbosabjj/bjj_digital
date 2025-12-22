@@ -23,13 +23,12 @@ def gerenciar_conteudo_curso(curso, usuario):
     # VALIDAÇÃO DO CURSO
     # =========================
     curso_id = curso.get("id")
-
     if not curso_id:
         st.error("Erro: curso sem identificador.")
         return
 
     # =========================
-    # LISTAGEM DE MÓDULOS E AULAS
+    # LISTAGEM DE MÓDULOS
     # =========================
     modulos = ce.listar_modulos_e_aulas(curso_id) or []
 
@@ -48,6 +47,8 @@ def gerenciar_conteudo_curso(curso, usuario):
                         st.caption(f"Duração: {aula.get('duracao_min', 0)} min")
                         st.markdown("---")
 
+    st.markdown("---")
+
     # =========================
     # CRIAÇÃO DE NOVO MÓDULO
     # =========================
@@ -55,27 +56,26 @@ def gerenciar_conteudo_curso(curso, usuario):
 
     with st.form("form_novo_modulo"):
         titulo_mod = st.text_input("Título do Módulo")
+        submit_modulo = st.form_submit_button("Criar Módulo")
 
-        if st.form_submit_button("Criar Módulo"):
+        if submit_modulo:
             if not titulo_mod.strip():
                 st.warning("Informe um título para o módulo.")
             else:
                 ordem = len(modulos) + 1
-
                 ce.criar_modulo(
                     curso_id=curso_id,
                     titulo=titulo_mod.strip(),
                     descricao="",
                     ordem=ordem
                 )
-
                 st.success("Módulo criado com sucesso!")
                 st.rerun()
 
     st.markdown("---")
 
     # =========================
-    # CRIAÇÃO DE NOVA AULA (AULA MISTA)
+    # CRIAÇÃO DE NOVA AULA
     # =========================
     st.markdown("## ➕ Nova Aula")
 
@@ -83,40 +83,40 @@ def gerenciar_conteudo_curso(curso, usuario):
         st.info("Crie um módulo antes de adicionar aulas.")
         return
 
-    # mapa seguro: titulo -> id
+    # 🔐 mapa seguro SEMPRE definido antes do form
     modulos_map = {
         m["titulo"]: m["id"]
         for m in modulos
         if m.get("id") and m.get("titulo")
     }
 
-with st.form("form_nova_aula"):
-    titulo_aula = st.text_input("Título da Aula")
-    duracao = st.number_input("Duração (minutos)", min_value=1, step=1)
-    modulo_sel = st.selectbox("Módulo", list(modulos_map.keys()))
+    with st.form("form_nova_aula"):
+        titulo_aula = st.text_input("Título da Aula")
+        duracao = st.number_input("Duração (minutos)", min_value=1, step=1)
+        modulo_sel = st.selectbox("Módulo", list(modulos_map.keys()))
 
-    submit = st.form_submit_button("Criar Aula")
+        submit_aula = st.form_submit_button("Criar Aula")
 
-    if submit:
-        erros = False
+        if submit_aula:
+            erros = False
 
-        if not titulo_aula.strip():
-            st.warning("Informe o título da aula.")
-            erros = True
+            if not titulo_aula.strip():
+                st.warning("Informe o título da aula.")
+                erros = True
 
-        modulo_id = modulos_map.get(modulo_sel)
-        if not modulo_id:
-            st.error("Módulo inválido.")
-            erros = True
+            modulo_id = modulos_map.get(modulo_sel)
+            if not modulo_id:
+                st.error("Módulo inválido.")
+                erros = True
 
-        if not erros:
-            ce.criar_aula(
-                modulo_id=modulo_id,
-                titulo=titulo_aula.strip(),
-                tipo="misto",
-                conteudo={"blocos": []},
-                duracao_min=int(duracao)
-            )
+            if not erros:
+                ce.criar_aula(
+                    modulo_id=modulo_id,
+                    titulo=titulo_aula.strip(),
+                    tipo="misto",                 # 🔥 aula mista
+                    conteudo={"blocos": []},      # 🔥 preparada para editor
+                    duracao_min=int(duracao)
+                )
 
-            st.success("Aula criada com sucesso!")
-            st.rerun()
+                st.success("Aula criada com sucesso!")
+                st.rerun()
