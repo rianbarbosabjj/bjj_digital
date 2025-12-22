@@ -20,7 +20,7 @@ def gerenciar_conteudo_curso(curso, usuario):
     st.markdown("---")
 
     # =========================
-    # LISTAGEM DE MÓDULOS
+    # VALIDAÇÃO DO CURSO
     # =========================
     curso_id = curso.get("id")
 
@@ -28,6 +28,9 @@ def gerenciar_conteudo_curso(curso, usuario):
         st.error("Erro: curso sem identificador.")
         return
 
+    # =========================
+    # LISTAGEM DE MÓDULOS E AULAS
+    # =========================
     modulos = ce.listar_modulos_e_aulas(curso_id) or []
 
     if not modulos:
@@ -57,7 +60,6 @@ def gerenciar_conteudo_curso(curso, usuario):
             if not titulo_mod.strip():
                 st.warning("Informe um título para o módulo.")
             else:
-                # 🔐 ordem automática (sempre segura)
                 ordem = len(modulos) + 1
 
                 ce.criar_modulo(
@@ -73,7 +75,7 @@ def gerenciar_conteudo_curso(curso, usuario):
     st.markdown("---")
 
     # =========================
-    # CRIAÇÃO DE NOVA AULA
+    # CRIAÇÃO DE NOVA AULA (AULA MISTA)
     # =========================
     st.markdown("## ➕ Nova Aula")
 
@@ -81,11 +83,11 @@ def gerenciar_conteudo_curso(curso, usuario):
         st.info("Crie um módulo antes de adicionar aulas.")
         return
 
-    # mapa seguro
+    # mapa seguro: titulo -> id
     modulos_map = {
-        m.get("titulo"): m.get("id")
+        m["titulo"]: m["id"]
         for m in modulos
-        if m.get("id")
+        if m.get("id") and m.get("titulo")
     }
 
     with st.form("form_nova_aula"):
@@ -97,13 +99,20 @@ def gerenciar_conteudo_curso(curso, usuario):
             if not titulo_aula.strip():
                 st.warning("Informe o título da aula.")
             else:
+                modulo_id = modulos_map.get(modulo_sel)
+
+                if not modulo_id:
+                    st.error("Módulo inválido.")
+                    return
+
+                # ✅ aula nasce vazia, pronta para blocos mistos
                 ce.criar_aula(
-                modulo_id=modulo_id,
-                titulo=titulo_aula,
-                tipo="misto",
-                conteudo={"blocos": []},
-                duracao_min=duracao
-            )
+                    modulo_id=modulo_id,
+                    titulo=titulo_aula.strip(),
+                    tipo="misto",
+                    conteudo={"blocos": []},
+                    duracao_min=int(duracao)
+                )
 
                 st.success("Aula criada com sucesso!")
                 st.rerun()
