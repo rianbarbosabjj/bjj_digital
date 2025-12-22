@@ -98,12 +98,12 @@ def gerenciar_conteudo_curso(curso, usuario):
                 st.warning("Informe o título da aula.")
             else:
                 ce.criar_aula(
-                    curso_id=curso_id,
-                    modulo_id=modulos_map[modulo_sel],
-                    titulo=titulo_aula.strip(),
-                    duracao_min=int(duracao),
-                    conteudo={}
-                )
+                modulo_id=modulo_id,
+                titulo=titulo_aula,
+                tipo="misto",
+                conteudo={"blocos": []},
+                duracao_min=duracao
+            )
 
                 st.success("Aula criada com sucesso!")
                 st.rerun()
