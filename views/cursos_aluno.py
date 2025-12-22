@@ -39,7 +39,9 @@ def pagina_cursos_aluno(usuario):
     st.subheader(f"Painel do Aluno: {usuario.get('nome', 'Visitante')}")
     st.markdown("---")
 
-    # Criação das Abas
+    # =========================================================
+    # AQUI ESTÃO AS ABAS QUE VOCÊ PROCURA
+    # =========================================================
     tab_meus, tab_novos = st.tabs(["📚 Meus Cursos", "🔍 Cursos Disponíveis"])
 
     # ----------------------------------------------------
@@ -47,7 +49,6 @@ def pagina_cursos_aluno(usuario):
     # ----------------------------------------------------
     with tab_meus:
         # Busca cursos em que o aluno já está inscrito (com progresso)
-        # Nota: No seu utils.py a função chama 'listar_cursos_inscritos'
         cursos_inscritos = ce.listar_cursos_inscritos(usuario["id"])
 
         if not cursos_inscritos:
