@@ -90,29 +90,33 @@ def gerenciar_conteudo_curso(curso, usuario):
         if m.get("id") and m.get("titulo")
     }
 
-    with st.form("form_nova_aula"):
-        titulo_aula = st.text_input("Título da Aula")
-        duracao = st.number_input("Duração (minutos)", min_value=1, step=1)
-        modulo_sel = st.selectbox("Módulo", list(modulos_map.keys()))
+with st.form("form_nova_aula"):
+    titulo_aula = st.text_input("Título da Aula")
+    duracao = st.number_input("Duração (minutos)", min_value=1, step=1)
+    modulo_sel = st.selectbox("Módulo", list(modulos_map.keys()))
 
-        if st.form_submit_button("Criar Aula"):
-            if not titulo_aula.strip():
-                st.warning("Informe o título da aula.")
-            else:
-                modulo_id = modulos_map.get(modulo_sel)
+    submit = st.form_submit_button("Criar Aula")
 
-                if not modulo_id:
-                    st.error("Módulo inválido.")
-                    return
+    if submit:
+        erros = False
 
-                # ✅ aula nasce vazia, pronta para blocos mistos
-                ce.criar_aula(
-                    modulo_id=modulo_id,
-                    titulo=titulo_aula.strip(),
-                    tipo="misto",
-                    conteudo={"blocos": []},
-                    duracao_min=int(duracao)
-                )
+        if not titulo_aula.strip():
+            st.warning("Informe o título da aula.")
+            erros = True
 
-                st.success("Aula criada com sucesso!")
-                st.rerun()
+        modulo_id = modulos_map.get(modulo_sel)
+        if not modulo_id:
+            st.error("Módulo inválido.")
+            erros = True
+
+        if not erros:
+            ce.criar_aula(
+                modulo_id=modulo_id,
+                titulo=titulo_aula.strip(),
+                tipo="misto",
+                conteudo={"blocos": []},
+                duracao_min=int(duracao)
+            )
+
+            st.success("Aula criada com sucesso!")
+            st.rerun()
