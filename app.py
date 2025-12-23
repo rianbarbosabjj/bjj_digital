@@ -328,7 +328,9 @@ def app_principal():
         if tipo_code == "aluno":
             render_painel_aluno(usuario) 
         else:
-            cursos.pagina_cursos(usuario)
+            # ANTES: cursos.pagina_cursos(usuario)
+            # DEPOIS: Chamamos direto o arquivo do professor
+            pagina_cursos_professor(usuario)
             
     elif pg == "Meus Cursos" or pg == "Área do Aluno": 
         render_painel_aluno(usuario) 
