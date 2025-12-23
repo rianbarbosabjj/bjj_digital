@@ -1,4 +1,4 @@
-# main/app.ý
+# main/app.py
 import streamlit as st
 import os
 import sys
