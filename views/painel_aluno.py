@@ -55,41 +55,68 @@ def aplicar_estilos_cards():
     """, unsafe_allow_html=True)
 
 # ==================================================
-# 💰 DIÁLOGO DE CHECKOUT (Pagamento)
+# 💰 DIÁLOGO DE CHECKOUT (Pagamento REAL com MP)
 # ==================================================
-@st.dialog("🛒 Finalizar Compra")
+@st.dialog("🛒 Checkout Seguro")
 def dialog_pagamento(curso, usuario):
     st.markdown(f"### {curso.get('titulo')}")
-    st.markdown("Confirme os detalhes do seu pedido:")
-    
     valor = float(curso.get('preco', 0))
+    st.markdown(f"## Total: R$ {valor:.2f}")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        st.caption("Valor do Curso")
-        st.markdown(f"## R$ {valor:.2f}")
-    with col2:
-        st.caption("Método")
-        st.markdown("📦 **PIX / Cartão**")
-
     st.divider()
-    
-    st.info("ℹ️ Simulando integração com Gateway de Pagamento...")
-    
-    if st.button("✅ Confirmar Pagamento e Inscrever", type="primary", use_container_width=True):
-        with st.spinner("Processando pagamento..."):
-            time.sleep(2) # Simula tempo do banco
-            
-            # CHAMA A NOVA FUNÇÃO DO UTILS COM SPLIT
-            sucesso, msg = ce.processar_compra_curso(usuario['id'], curso['id'], valor)
-            
-            if sucesso:
-                st.balloons()
-                st.success("Pagamento Aprovado! Você já pode acessar o curso.")
-                time.sleep(2)
-                st.rerun()
+
+    # Estado local para controlar se o link já foi gerado
+    if "mp_preference_id" not in st.session_state:
+        st.session_state.mp_preference_id = None
+        st.session_state.mp_link = None
+
+    # 1. Gerar Link de Pagamento (se ainda não gerou)
+    if not st.session_state.mp_preference_id:
+        with st.spinner("Conectando ao Mercado Pago..."):
+            link, pref_id = ce.gerar_preferencia_pagamento(curso, usuario)
+            if link:
+                st.session_state.mp_link = link
+                st.session_state.mp_preference_id = pref_id
+                st.rerun() # Recarrega para mostrar os botões
             else:
-                st.error(msg)
+                st.error("Erro ao gerar pagamento. Verifique as configurações.")
+                return
+
+    # 2. Exibir Botões de Ação
+    if st.session_state.mp_link:
+        st.success("Pedido criado! Clique abaixo para pagar com PIX ou Cartão.")
+        
+        # Botão que leva para o site do Mercado Pago
+        st.link_button("👉 Pagar no Mercado Pago", st.session_state.mp_link, type="primary", use_container_width=True)
+        
+        st.markdown("---")
+        st.write("Após realizar o pagamento, clique no botão abaixo para liberar seu curso:")
+        
+        # 3. Botão de Verificação (Polling)
+        if st.button("🔄 Já paguei! Liberar Curso", use_container_width=True):
+            with st.spinner("Verificando com o banco..."):
+                time.sleep(1) # UX
+                aprovado, msg = ce.verificar_status_pagamento_mp(st.session_state.mp_preference_id)
+                
+                if aprovado:
+                    # SUCESSO REAL!
+                    # Agora chamamos a função que faz o split e grava no banco
+                    ok_db, msg_db = ce.processar_compra_curso(usuario['id'], curso['id'], valor)
+                    
+                    if ok_db:
+                        st.balloons()
+                        st.success("Pagamento Confirmado! Curso liberado.")
+                        
+                        # Limpa sessão de pagamento
+                        st.session_state.mp_preference_id = None
+                        st.session_state.mp_link = None
+                        
+                        time.sleep(3)
+                        st.rerun()
+                    else:
+                        st.error(f"Erro ao liberar curso: {msg_db}")
+                else:
+                    st.warning(f"O banco retornou: {msg}")
 
 # ==================================================
 # 🧱 COMPONENTE: GRID DE CURSOS
