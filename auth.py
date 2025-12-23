@@ -1,3 +1,4 @@
+# main/auth.py
 import streamlit as st
 import bcrypt
 from database import get_db
