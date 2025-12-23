@@ -51,24 +51,55 @@ def dialog_pagamento(curso, usuario):
     
     st.divider()
 
-    # Inicializa estado local do pagamento se não existir
     if "mp_preference_id" not in st.session_state:
         st.session_state.mp_preference_id = None
         st.session_state.mp_link = None
 
-    # 1. Gerar Link de Pagamento (se ainda não gerou nesta sessão)
     if not st.session_state.mp_preference_id:
         with st.spinner("Conectando ao Mercado Pago..."):
-            # Chama a função do utils que conecta na API
             link, pref_id = ce.gerar_preferencia_pagamento(curso, usuario)
-            
             if link:
                 st.session_state.mp_link = link
                 st.session_state.mp_preference_id = pref_id
-                # REMOVIDO O st.rerun() DAQUI - ISSO RESOLVE O PROBLEMA DO FECHAMENTO
             else:
-                st.error("Erro ao conectar com o banco. Verifique as credenciais no secrets.toml.")
+                st.error("Erro ao conectar com o banco.")
                 return
+
+    if st.session_state.mp_link:
+        st.success("Link de pagamento gerado!")
+        
+        # --- AVISO IMPORTANTE PARA O ALUNO ---
+        st.info("""
+        📝 **Como pagar sem logar:**
+        1. Clique no botão abaixo.
+        2. Na tela do Mercado Pago, escolha a opção **"Pagar como convidado"** ou **"Novo Cartão"** (geralmente no final da tela).
+        3. Você **NÃO** precisa criar conta para pagar com Pix ou Cartão.
+        """)
+        # -------------------------------------
+        
+        st.link_button("👉 Ir para Pagamento (Pix/Cartão)", st.session_state.mp_link, type="primary", use_container_width=True)
+        
+        st.markdown("---")
+        st.write("Após pagar, clique abaixo:")
+        
+        if st.button("🔄 Confirmar Pagamento", use_container_width=True):
+            with st.spinner("Verificando..."):
+                time.sleep(1)
+                aprovado, msg = ce.verificar_status_pagamento_mp(st.session_state.mp_preference_id)
+                
+                if aprovado:
+                    ok_db, msg_db = ce.processar_compra_curso(usuario['id'], curso['id'], valor)
+                    if ok_db:
+                        st.balloons()
+                        st.success("Sucesso! Curso liberado.")
+                        st.session_state.mp_preference_id = None
+                        st.session_state.mp_link = None
+                        time.sleep(3)
+                        st.rerun()
+                    else:
+                        st.error(f"Erro no sistema: {msg_db}")
+                else:
+                    st.warning(f"Status: {msg}")
 
     # 2. Exibir Botões de Ação (Aparece na mesma hora)
     if st.session_state.mp_link:
