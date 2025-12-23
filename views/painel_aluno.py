@@ -114,11 +114,17 @@ def renderizar_grid_cursos(cursos, usuario, tipo_lista="meus"):
                         lbl_btn = f"Comprar (R$ {curso.get('preco')})"
                         
                     if st.button(lbl_btn, key=f"buy_{curso['id']}", type="primary", use_container_width=True):
-                        with st.spinner("Matriculando..."):
-                            ce.inscrever_usuario_em_curso(usuario["id"], curso["id"])
-                            time.sleep(1)
-                            st.toast("Matrícula realizada com sucesso!")
-                            st.rerun()
+                            else:
+                            # Inscrição Gratuita Direta
+                            with st.spinner("Realizando matrícula..."):
+                                ce.inscrever_usuario_em_curso(usuario["id"], curso["id"])
+                                
+                                # AVISA O ALUNO
+                                st.balloons() # Solta balões (opcional, mas legal para celebrar)
+                                st.success(f"Inscrição realizada! O curso '{curso['titulo']}' foi movido para a aba 'Matriculados'.")
+                                
+                                time.sleep(2.5) # Pausa para o aluno ler a mensagem antes de atualizar
+                                st.rerun()
 
 # ==================================================
 # 🚀 FUNÇÃO PRINCIPAL
