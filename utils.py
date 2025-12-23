@@ -11,6 +11,7 @@ import uuid
 import json
 import pandas as pd
 import time  # <--- ADICIONADO: Essencial para upload de fotos/vídeos
+import mercadopago
 from urllib.parse import quote
 from datetime import datetime
 from email.mime.text import MIMEText
@@ -1055,3 +1056,81 @@ def solicitar_saque(professor_id, valor):
         "status": "pendente"
     })
     return True
+# ==============================================================================
+# 9. INTEGRAÇÃO MERCADO PAGO (REAL)
+# ==============================================================================
+
+def inicializar_sdk_mp():
+    # Tenta pegar do secrets.toml, se não tiver, usa string vazia (vai dar erro se tentar pagar)
+    token = st.secrets["mercadopago"]["access_token"] if "mercadopago" in st.secrets else ""
+    return mercadopago.SDK(token)
+
+def gerar_preferencia_pagamento(curso, usuario):
+    """
+    Cria a intenção de pagamento no Mercado Pago e retorna o Link e o ID.
+    """
+    sdk = inicializar_sdk_mp()
+    
+    # Cria os dados da preferência
+    preference_data = {
+        "items": [
+            {
+                "id": str(curso['id']),
+                "title": f"Curso: {curso['titulo']}",
+                "quantity": 1,
+                "currency_id": "BRL",
+                "unit_price": float(curso['preco'])
+            }
+        ],
+        "payer": {
+            "email": usuario['email'],
+            "name": usuario['nome']
+        },
+        "back_urls": {
+            "success": "https://seu-app.streamlit.app/",
+            "failure": "https://seu-app.streamlit.app/",
+            "pending": "https://seu-app.streamlit.app/"
+        },
+        "auto_return": "approved"
+    }
+
+    try:
+        preference_response = sdk.preference().create(preference_data)
+        preference = preference_response["response"]
+        
+        # Retorna o Link de Pagamento (init_point) e o ID da preferência para checagem
+        return preference["init_point"], preference["id"]
+    except Exception as e:
+        print(f"Erro MP: {e}")
+        return None, None
+
+def verificar_status_pagamento_mp(preference_id):
+    """
+    Verifica na API se alguém pagou essa preferência.
+    Nota: Em produção ideal, usaria Webhook. Aqui usamos busca ativa.
+    """
+    sdk = inicializar_sdk_mp()
+    
+    try:
+        # Busca pagamentos associados a essa preferência
+        filters = {"preference_id": preference_id}
+        search_result = sdk.payment().search(filters)
+        
+        results = search_result["response"]["results"]
+        
+        if results:
+            ultimo_pagamento = results[0] # Pega o mais recente
+            status = ultimo_pagamento["status"]
+            status_detail = ultimo_pagamento["status_detail"]
+            
+            if status == "approved":
+                return True, "Pagamento Aprovado!"
+            elif status == "pending":
+                return False, "Pagamento ainda está pendente. Aguarde uns instantes."
+            else:
+                return False, f"Status: {status} - {status_detail}"
+        else:
+            return False, "Nenhum pagamento encontrado ainda para este pedido."
+            
+    except Exception as e:
+        return False, f"Erro ao verificar: {e}"
