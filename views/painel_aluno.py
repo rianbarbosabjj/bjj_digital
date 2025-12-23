@@ -151,7 +151,7 @@ def render_painel_aluno(usuario):
     st.write("") # Espaço
 
     # --- Abas ---
-    tab_meus, tab_novos = st.tabs(["📚 Meus Cursos", "🚀 Explorar Novos"])
+    tab_meus, tab_novos = st.tabs(["📚 Meus Cursos", "🚀 Catálogo de Cursos"])
 
     with tab_meus:
         cursos = ce.listar_cursos_inscritos(usuario["id"])
