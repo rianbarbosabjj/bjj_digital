@@ -1006,3 +1006,52 @@ def processar_compra_curso(usuario_id, curso_id, valor_total):
     except Exception as e:
         print(f"Erro financeiro: {e}")
         return False, f"Erro ao processar: {e}"
+
+def obter_resumo_financeiro(professor_id):
+    """
+    Retorna o saldo total e o histórico de vendas do professor.
+    """
+    db = get_db()
+    try:
+        # Busca apenas as transações deste professor
+        vendas = db.collection('financeiro')\
+                   .where('professor_id', '==', professor_id)\
+                   .order_by('data_venda', direction=firestore.Query.DESCENDING)\
+                   .stream()
+        
+        historico = []
+        saldo_total = 0.0
+        
+        for v in vendas:
+            dado = v.to_dict()
+            # Soma apenas a parte que cabe ao professor (90%)
+            receita = float(dado.get('receita_professor', 0))
+            saldo_total += receita
+            
+            # Formata para exibir na tabela
+            historico.append({
+                "Data": dado.get('data_venda').strftime("%d/%m/%Y %H:%M") if dado.get('data_venda') else "-",
+                "Curso": dado.get('curso_titulo'),
+                "Aluno": dado.get('comprador_id'), # Idealmente buscaria o nome, mas ID serve por enquanto
+                "Valor Venda": f"R$ {dado.get('valor_total', 0):.2f}",
+                "Sua Parte (90%)": f"R$ {receita:.2f}"
+            })
+            
+        return saldo_total, historico
+        
+    except Exception as e:
+        print(f"Erro ao buscar financeiro: {e}")
+        return 0.0, []
+
+def solicitar_saque(professor_id, valor):
+    """
+    Simula uma solicitação de saque (apenas registro)
+    """
+    db = get_db()
+    db.collection('saques').add({
+        "professor_id": professor_id,
+        "valor_solicitado": valor,
+        "data_solicitacao": firestore.SERVER_TIMESTAMP,
+        "status": "pendente"
+    })
+    return True
