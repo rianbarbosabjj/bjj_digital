@@ -1066,8 +1066,12 @@ def inicializar_sdk_mp():
     return mercadopago.SDK(token)
 
 def gerar_preferencia_pagamento(curso, usuario):
+    """
+    Cria a intenção de pagamento no Mercado Pago.
+    """
     sdk = inicializar_sdk_mp()
     
+    # Configurações da Preferência
     preference_data = {
         "items": [
             {
@@ -1079,20 +1083,17 @@ def gerar_preferencia_pagamento(curso, usuario):
                 "unit_price": float(curso['preco'])
             }
         ],
-        "payer": {
-            "email": usuario['email'],
-            "name": usuario['nome'],
-        },
+
         "back_urls": {
             "success": "https://www.google.com", 
             "failure": "https://www.google.com",
             "pending": "https://www.google.com"
         },
         "auto_return": "approved",
-        "binary_mode": True, # IMPORTANTE: Isso ajuda a evitar fluxos pendentes
+        "binary_mode": True, # Força aprovação instantânea
         "payment_methods": {
             "excluded_payment_types": [
-                {"id": "ticket"} # Remove boleto para agilizar
+                {"id": "ticket"} # Remove boleto para focar em Pix/Cartão
             ],
             "installments": 12 
         },
@@ -1103,6 +1104,7 @@ def gerar_preferencia_pagamento(curso, usuario):
     try:
         preference_response = sdk.preference().create(preference_data)
         preference = preference_response["response"]
+        
         return preference["init_point"], preference["id"]
         
     except Exception as e:
