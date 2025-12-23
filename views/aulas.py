@@ -1,3 +1,4 @@
+#/views/aulas.py
 import streamlit as st
 import time
 from typing import Dict
