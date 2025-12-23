@@ -1,3 +1,5 @@
+#/views/painel_aluno.py
+
 import streamlit as st
 import time
 import utils as ce
