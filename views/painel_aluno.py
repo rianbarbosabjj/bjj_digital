@@ -1,67 +1,162 @@
 import streamlit as st
 import time
 import utils as ce
-# Importa o player (aulas_aluno.py)
 import views.aulas_aluno as aulas_view
 
+# ==================================================
+# 🎨 ESTILOS CSS PERSONALIZADOS (MODERNIZAÇÃO)
+# ==================================================
+def aplicar_estilos_cards():
+    st.markdown("""
+    <style>
+        /* Estilo dos Cards de Curso */
+        div[data-testid="stContainer"] {
+            background-color: rgba(14, 45, 38, 0.7); /* Fundo verde translúcido */
+            border: 1px solid rgba(255, 215, 112, 0.2); /* Borda dourada sutil */
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease-in-out;
+        }
+        
+        /* Efeito Hover (Levantar o card) */
+        div[data-testid="stContainer"]:hover {
+            transform: translateY(-5px);
+            border-color: #FFD770;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+            background-color: rgba(14, 45, 38, 0.95);
+        }
+
+        /* Títulos dos Cards */
+        .card-title {
+            color: #FFD770 !important;
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            min-height: 50px; /* Alinhamento */
+        }
+
+        /* Abas mais bonitas */
+        .stTabs [data-baseweb="tab-list"] {
+            gap: 10px;
+            background-color: transparent;
+        }
+        .stTabs [data-baseweb="tab"] {
+            background-color: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            padding: 10px 20px;
+            color: white;
+        }
+        .stTabs [aria-selected="true"] {
+            background-color: #FFD770 !important;
+            color: #0e2d26 !important;
+            font-weight: bold;
+        }
+    </style>
+    """, unsafe_allow_html=True)
+
+# ==================================================
+# 🧱 COMPONENTE: GRID DE CURSOS
+# ==================================================
+def renderizar_grid_cursos(cursos, usuario, tipo_lista="meus"):
+    """
+    Renderiza os cursos em um layout de GRADE (3 colunas)
+    tipo_lista: 'meus' (matriculados) ou 'novos' (disponíveis)
+    """
+    if not cursos:
+        msg = "Você não está inscrito em nenhum curso ainda." if tipo_lista == "meus" else "Nenhum curso novo disponível no momento."
+        st.info(msg)
+        return
+
+    # Cria colunas para o Grid (3 cards por linha)
+    colunas_grid = st.columns(3)
+    
+    for index, curso in enumerate(cursos):
+        coluna_atual = colunas_grid[index % 3] # Distribui: 0, 1, 2, 0, 1, 2...
+        
+        with coluna_atual:
+            with st.container(border=True):
+                # 1. Ícone/Imagem (Placeholder ou Capa)
+                st.markdown(f"<div style='font-size: 2rem; margin-bottom: 10px;'>🥋</div>", unsafe_allow_html=True)
+                
+                # 2. Título e Descrição curta
+                titulo = curso.get('titulo', 'Sem Título')
+                # Corta a descrição se for muito longa
+                desc = curso.get('descricao', '') or ''
+                if len(desc) > 80: desc = desc[:80] + "..."
+                
+                st.markdown(f"<div class='card-title'>{titulo}</div>", unsafe_allow_html=True)
+                st.caption(desc)
+                
+                st.write("") # Espaçamento
+                
+                # 3. Conteúdo Específico por Tipo
+                if tipo_lista == "meus":
+                    # Barra de Progresso
+                    progresso = curso.get('progresso', 0)
+                    st.progress(progresso / 100)
+                    st.caption(f"{progresso}% Concluído")
+                    
+                    if st.button("▶ Continuar", key=f"go_{curso['id']}", use_container_width=True):
+                        st.session_state["curso_aluno_selecionado"] = curso
+                        st.session_state["view_aluno"] = "aulas"
+                        st.rerun()
+                        
+                else: # Novos cursos
+                    # Badges de Info
+                    info = []
+                    if curso.get('duracao_estimada'): info.append(f"⏱ {curso['duracao_estimada']}")
+                    if curso.get('nivel'): info.append(f"📊 {curso['nivel']}")
+                    st.caption(" • ".join(info))
+                    
+                    # Botão de Inscrição
+                    lbl_btn = "Inscrever-se"
+                    if curso.get('pago'):
+                        lbl_btn = f"Comprar (R$ {curso.get('preco')})"
+                        
+                    if st.button(lbl_btn, key=f"buy_{curso['id']}", type="primary", use_container_width=True):
+                        with st.spinner("Matriculando..."):
+                            ce.inscrever_usuario_em_curso(usuario["id"], curso["id"])
+                            time.sleep(1)
+                            st.toast("Matrícula realizada com sucesso!")
+                            st.rerun()
+
+# ==================================================
+# 🚀 FUNÇÃO PRINCIPAL
+# ==================================================
 def render_painel_aluno(usuario):
-    # ====================================================
-    # 1. ROTEAMENTO PARA O PLAYER
-    # ====================================================
+    # Aplica o CSS moderno
+    aplicar_estilos_cards()
+
+    # --- Lógica de Player (Vídeo) ---
     if st.session_state.get("view_aluno") == "aulas" and st.session_state.get("curso_aluno_selecionado"):
-        if st.button("⬅️ Voltar para meus cursos"):
-            st.session_state["view_aluno"] = "lista"
-            st.session_state["curso_aluno_selecionado"] = None
-            st.rerun()
-            
+        c1, c2 = st.columns([1, 5])
+        with c1:
+            if st.button("⬅️ Voltar", use_container_width=True):
+                st.session_state["view_aluno"] = "lista"
+                st.session_state["curso_aluno_selecionado"] = None
+                st.rerun()
+        
         st.divider()
         aulas_view.pagina_aulas_aluno(st.session_state["curso_aluno_selecionado"], usuario)
         return
 
-    # ====================================================
-    # 2. TELA DAS ABAS (CÓDIGO NOVO)
-    # ====================================================
-    st.markdown(f"## 🎓 Painel do Aluno: {usuario.get('nome')}")
+    # --- Cabeçalho Bonito ---
+    st.markdown(f"""
+    <div>
+        <h2 style='text-align: left; color: #FFD770;'>🎓 Área do Aluno</h2>
+        <p style='color: #ccc;'>Bem-vindo de volta, <b>{usuario.get('nome').split()[0]}</b>. Continue sua evolução no Jiu-Jitsu.</p>
+    </div>
+    """, unsafe_allow_html=True)
     
-    # CRIAÇÃO DAS ABAS
-    tab1, tab2 = st.tabs(["📚 Meus Cursos", "🔍 Novos Cursos"])
+    st.write("") # Espaço
 
-    # --- ABA 1: MEUS CURSOS ---
-    with tab1:
+    # --- Abas ---
+    tab_meus, tab_novos = st.tabs(["📚 Meus Cursos", "🚀 Explorar Novos"])
+
+    with tab_meus:
         cursos = ce.listar_cursos_inscritos(usuario["id"])
-        if not cursos:
-            st.info("Você não está inscrito em nenhum curso.")
-        else:
-            for c in cursos:
-                with st.container(border=True):
-                    col_txt, col_btn = st.columns([4, 1])
-                    with col_txt:
-                        st.markdown(f"### {c.get('titulo')}")
-                        st.progress(c.get('progresso', 0) / 100)
-                        st.caption(f"{c.get('progresso', 0)}% Concluído")
-                    with col_btn:
-                        st.write("")
-                        if st.button("Acessar", key=f"btn_old_{c['id']}", use_container_width=True):
-                            st.session_state["curso_aluno_selecionado"] = c
-                            st.session_state["view_aluno"] = "aulas"
-                            st.rerun()
+        renderizar_grid_cursos(cursos, usuario, tipo_lista="meus")
 
-    # --- ABA 2: NOVOS CURSOS ---
-    with tab2:
+    with tab_novos:
         novos = ce.listar_cursos_disponiveis_para_aluno(usuario)
-        if not novos:
-            st.warning("Sem cursos novos para você.")
-        else:
-            for c in novos:
-                with st.container(border=True):
-                    col_txt, col_btn = st.columns([3, 1])
-                    with col_txt:
-                        st.markdown(f"**{c.get('titulo')}**")
-                        st.caption(c.get('descricao'))
-                    with col_btn:
-                        st.write("")
-                        if st.button("Inscrever", key=f"btn_new_{c['id']}", type="primary", use_container_width=True):
-                            ce.inscrever_usuario_em_curso(usuario["id"], c["id"])
-                            st.toast("Inscrito com sucesso!")
-                            time.sleep(1)
-                            st.rerun()
+        renderizar_grid_cursos(novos, usuario, tipo_lista="novos")
