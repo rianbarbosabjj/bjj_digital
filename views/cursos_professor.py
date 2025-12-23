@@ -57,7 +57,7 @@ def pagina_cursos_professor(usuario):
                             dialog_editar_info_curso(curso)
 
     # ------------------------------------------------------
-    # ABA 2: FINANCEIRO (A Lógica de Pagamento Visual)
+    # ABA 2: FINANCEIRO
     # ------------------------------------------------------
     with tab_financeiro:
         st.write("Acompanhe seus ganhos (90% do valor das vendas).")
@@ -107,6 +107,8 @@ def pagina_cursos_professor(usuario):
 # ======================================================
 @st.dialog("Criar Novo Curso")
 def dialog_criar_curso_novo(usuario):
+    st.markdown("Preencha os detalhes do seu novo conteúdo.")
+    
     with st.form("form_create_curso"):
         titulo = st.text_input("Título do Curso")
         desc = st.text_area("Descrição")
@@ -114,8 +116,38 @@ def dialog_criar_curso_novo(usuario):
         preco = c1.number_input("Preço (0 para Gratuito)", min_value=0.0, step=10.0)
         duracao = c2.text_input("Duração (ex: 2h)")
         
-        if st.form_submit_button("Criar Curso"):
-            if titulo:
+        # --- AVISO FINANCEIRO E CHECKBOX ---
+        st.divider()
+        st.markdown("#### 💰 Política de Repasse")
+        
+        # Caixa informativa visual
+        st.info(
+            """
+            **Ao vender este curso na plataforma:**
+            
+            * ✅ **90%** do valor da venda vai para você (Professor).
+            * 🏢 **10%** fica com a BJJ Digital (Taxa de Plataforma).
+            """
+        )
+        
+        # Checkbox de ciência
+        aceite_taxa = st.checkbox("Li, compreendi e concordo com a taxa de 10% sobre as vendas.")
+        
+        st.write("") # Espaço
+        
+        btn_criar = st.form_submit_button("Criar Curso", type="primary", use_container_width=True)
+        
+        if btn_criar:
+            # Validação 1: Título Obrigatório
+            if not titulo:
+                st.warning("⚠️ O título do curso é obrigatório.")
+            
+            # Validação 2: Aceite da Taxa
+            elif not aceite_taxa:
+                st.error("🛑 Você precisa aceitar os termos da taxa (10%) para criar o curso.")
+            
+            else:
+                # Tudo certo, cria o curso
                 ce.criar_curso(
                     professor_id=usuario['id'],
                     nome_professor=usuario['nome'],
@@ -132,7 +164,8 @@ def dialog_criar_curso_novo(usuario):
                     duracao_estimada=duracao,
                     nivel="Geral"
                 )
-                st.success("Curso criado!")
+                st.success("✅ Curso criado com sucesso!")
+                time.sleep(1.5)
                 st.rerun()
 
 @st.dialog("Configurações do Curso")
@@ -141,6 +174,11 @@ def dialog_editar_info_curso(curso):
     with st.form("form_edit_meta"):
         novo_titulo = st.text_input("Título", value=curso.get('titulo',''))
         novo_preco = st.number_input("Preço", value=float(curso.get('preco', 0)))
-        if st.form_submit_button("Salvar"):
+        
+        st.caption("Nota: A alteração de preço mantém a regra de 90% (você) / 10% (plataforma).")
+        
+        if st.form_submit_button("Salvar Alterações"):
             ce.editar_curso(curso['id'], {"titulo": novo_titulo, "preco": novo_preco, "pago": novo_preco > 0})
+            st.success("Atualizado!")
+            time.sleep(1)
             st.rerun()
