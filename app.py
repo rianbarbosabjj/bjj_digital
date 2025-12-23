@@ -213,10 +213,9 @@ def app_principal():
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
 
-        # === NOVO LOCAL: Área do Aluno na Sidebar ===
-        if tipo_code in ["admin", "professor"]:
-             if st.button("🎓 Área do Aluno", use_container_width=True): nav("Área do Aluno")
-        # ============================================
+        # === ATUALIZAÇÃO: Botão visível para TODOS (Aluno, Admin, Professor) ===
+        if st.button("🎓 Área do Aluno", use_container_width=True): nav("Área do Aluno")
+        # =======================================================================
         
         if tipo_code in ["admin", "professor"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel de Professores")
@@ -241,11 +240,10 @@ def app_principal():
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # --- MENU DE OPÇÕES (Horizontal) ---
+    # --- MENU DE OPÇÕES ---
     ops, icns = [], []
     
     if tipo_code in ["admin", "professor"]:
-        # === REMOVIDO "Área do Aluno" DAQUI ===
         ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
         icns = ["house", "people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
@@ -318,7 +316,6 @@ def app_principal():
             cursos.pagina_cursos(usuario)
             
     elif pg == "Área do Aluno":
-        # Rota continua existindo, agora acessada pela Sidebar
         render_painel_aluno(usuario) 
             
     elif pg == "Exame de Faixa": 
