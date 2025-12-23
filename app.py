@@ -213,9 +213,9 @@ def app_principal():
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
 
-        # === ATUALIZAÇÃO: Botão visível para TODOS (Aluno, Admin, Professor) ===
-        if st.button("🎓 Área do Aluno", use_container_width=True): nav("Área do Aluno")
-        # =======================================================================
+        # === ATUALIZAÇÃO: BOTÃO RENOMEADO ===
+        if st.button("📚 Meus Cursos", use_container_width=True): nav("Meus Cursos")
+        # ====================================
         
         if tipo_code in ["admin", "professor"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel de Professores")
@@ -315,8 +315,10 @@ def app_principal():
         else:
             cursos.pagina_cursos(usuario)
             
-    elif pg == "Área do Aluno":
+    # === ROTA ATUALIZADA ===
+    elif pg == "Meus Cursos" or pg == "Área do Aluno": 
         render_painel_aluno(usuario) 
+    # =======================
             
     elif pg == "Exame de Faixa": 
         aluno.exame_de_faixa(usuario)
