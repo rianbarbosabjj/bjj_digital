@@ -232,27 +232,33 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Rotas Universais (não dependem do menu horizontal)
+    # --- Rotas que NÃO mostram o menu horizontal ---
+    if pg == "Início": 
+        geral.tela_inicio()
+        return  # <--- RETORNA AQUI. NÃO DESENHA O MENU ABAIXO.
+
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
     if pg == "Painel de Professores": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     
-    # --- MENU DE OPÇÕES ---
+    # -----------------------------------------------
+
+    # --- MENU DE OPÇÕES (Só desenha se não for Início) ---
     ops, icns = [], []
     
     if tipo_code in ["admin", "professor"]:
-        ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-        icns = ["house", "people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
+        # Removemos "Início" do menu horizontal para não ficar redundante
+        ops = ["Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+        icns = ["people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
-        # Aluno Normal
-        ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking"]
-        icns = ["house", "people", "book", "journal", "trophy"]
+        ops = ["Modo Rola", "Cursos", "Exame de Faixa", "Ranking"]
+        icns = ["people", "book", "journal", "trophy"]
 
-    # Tenta achar o índice da página atual no menu. Se não achar (ex: Meus Cursos), vai pro 0 (Início)
     try: idx = ops.index(pg)
     except: idx = 0
     
+    # Renderiza o menu
     menu = option_menu(
         menu_title=None, 
         options=ops, 
@@ -300,22 +306,20 @@ def app_principal():
         }
     )
 
-    # --- CORREÇÃO DO LOOP DE REDIRECIONAMENTO ---
+    # --- TRAVA DE SEGURANÇA (Páginas Ocultas) ---
     # Páginas que existem mas não estão no menu horizontal
-    paginas_ocultas = ["Meu Perfil", "Meus Cursos", "Painel de Professores", "Meus Certificados", "Gestão e Estatísticas", "Área do Aluno"]
+    paginas_ocultas = ["Meus Cursos", "Área do Aluno", "Início"]
 
     if menu != pg:
-        # Se estamos numa página oculta e o menu retornou a opção padrão (Início/ops[0]),
+        # Se estamos numa página oculta e o menu retornou a opção padrão (agora Modo Rola),
         # ignoramos a atualização para não expulsar o usuário da página.
-        if pg in paginas_ocultas and menu == ops[0]:
+        if pg in paginas_ocultas:
             pass
         else:
             st.session_state.menu_selection = menu
             st.rerun()
 
-    # --- ROTEAMENTO ---
-    if pg == "Início": geral.tela_inicio(); return
-
+    # --- ROTEAMENTO FINAL ---
     if pg == "Modo Rola": 
         aluno.modo_rola(usuario)
         
