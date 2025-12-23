@@ -1,3 +1,5 @@
+#/views/cursos.py
+
 import streamlit as st
 
 def pagina_cursos(usuario):
