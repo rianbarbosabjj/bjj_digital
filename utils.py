@@ -1066,17 +1066,14 @@ def inicializar_sdk_mp():
     return mercadopago.SDK(token)
 
 def gerar_preferencia_pagamento(curso, usuario):
-    """
-    Cria a intenção de pagamento no Mercado Pago e retorna o Link e o ID.
-    """
     sdk = inicializar_sdk_mp()
     
-    # Cria os dados da preferência
     preference_data = {
         "items": [
             {
                 "id": str(curso['id']),
                 "title": f"Curso: {curso['titulo']}",
+                "description": f"Acesso ao curso {curso['titulo']}",
                 "quantity": 1,
                 "currency_id": "BRL",
                 "unit_price": float(curso['preco'])
@@ -1084,22 +1081,30 @@ def gerar_preferencia_pagamento(curso, usuario):
         ],
         "payer": {
             "email": usuario['email'],
-            "name": usuario['nome']
+            "name": usuario['nome'],
         },
         "back_urls": {
-            "success": "https://seu-app.streamlit.app/",
-            "failure": "https://seu-app.streamlit.app/",
-            "pending": "https://seu-app.streamlit.app/"
+            "success": "https://www.google.com", 
+            "failure": "https://www.google.com",
+            "pending": "https://www.google.com"
         },
-        "auto_return": "approved"
+        "auto_return": "approved",
+        "binary_mode": True, # IMPORTANTE: Isso ajuda a evitar fluxos pendentes
+        "payment_methods": {
+            "excluded_payment_types": [
+                {"id": "ticket"} # Remove boleto para agilizar
+            ],
+            "installments": 12 
+        },
+        "statement_descriptor": "BJJ DIGITAL",
+        "expires": False
     }
 
     try:
         preference_response = sdk.preference().create(preference_data)
         preference = preference_response["response"]
-        
-        # Retorna o Link de Pagamento (init_point) e o ID da preferência para checagem
         return preference["init_point"], preference["id"]
+        
     except Exception as e:
         print(f"Erro MP: {e}")
         return None, None
