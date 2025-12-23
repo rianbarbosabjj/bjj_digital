@@ -213,9 +213,8 @@ def app_principal():
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
 
-        # === ATUALIZAÇÃO: BOTÃO RENOMEADO ===
+        # Botão direto para a nova área
         if st.button("📚 Meus Cursos", use_container_width=True): nav("Meus Cursos")
-        # ====================================
         
         if tipo_code in ["admin", "professor"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel de Professores")
@@ -233,13 +232,12 @@ def app_principal():
     if "menu_selection" not in st.session_state: st.session_state.menu_selection = "Início"
     pg = st.session_state.menu_selection
 
-    # Rotas Universais
+    # Rotas Universais (não dependem do menu horizontal)
     if pg == "Meu Perfil": geral.tela_meu_perfil(usuario); return
     if pg == "Gestão e Estatísticas": admin.gestao_usuarios(usuario); return
     if pg == "Painel de Professores": professor.painel_professor(); return
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
-    if pg == "Início": geral.tela_inicio(); return
-
+    
     # --- MENU DE OPÇÕES ---
     ops, icns = [], []
     
@@ -251,6 +249,7 @@ def app_principal():
         ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking"]
         icns = ["house", "people", "book", "journal", "trophy"]
 
+    # Tenta achar o índice da página atual no menu. Se não achar (ex: Meus Cursos), vai pro 0 (Início)
     try: idx = ops.index(pg)
     except: idx = 0
     
@@ -301,11 +300,22 @@ def app_principal():
         }
     )
 
+    # --- CORREÇÃO DO LOOP DE REDIRECIONAMENTO ---
+    # Páginas que existem mas não estão no menu horizontal
+    paginas_ocultas = ["Meu Perfil", "Meus Cursos", "Painel de Professores", "Meus Certificados", "Gestão e Estatísticas", "Área do Aluno"]
+
     if menu != pg:
-        st.session_state.menu_selection = menu
-        st.rerun()
+        # Se estamos numa página oculta e o menu retornou a opção padrão (Início/ops[0]),
+        # ignoramos a atualização para não expulsar o usuário da página.
+        if pg in paginas_ocultas and menu == ops[0]:
+            pass
+        else:
+            st.session_state.menu_selection = menu
+            st.rerun()
 
     # --- ROTEAMENTO ---
+    if pg == "Início": geral.tela_inicio(); return
+
     if pg == "Modo Rola": 
         aluno.modo_rola(usuario)
         
@@ -315,10 +325,8 @@ def app_principal():
         else:
             cursos.pagina_cursos(usuario)
             
-    # === ROTA ATUALIZADA ===
     elif pg == "Meus Cursos" or pg == "Área do Aluno": 
         render_painel_aluno(usuario) 
-    # =======================
             
     elif pg == "Exame de Faixa": 
         aluno.exame_de_faixa(usuario)
