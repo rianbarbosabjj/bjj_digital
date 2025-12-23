@@ -140,15 +140,24 @@ def render_painel_aluno(usuario):
         aulas_view.pagina_aulas_aluno(st.session_state["curso_aluno_selecionado"], usuario)
         return
 
-    # --- Cabeçalho Bonito ---
-    st.markdown(f"""
-    <div>
-        <h2 style='text-align: left; color: #FFD770;'>🎓 Área do Aluno</h2>
-        <p style='color: #ccc;'>Bem-vindo de volta, <b>{usuario.get('nome').split()[0]}</b>. Continue sua evolução no Jiu-Jitsu.</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # --- Cabeçalho com Título e Botão Voltar ---
+    col_texto, col_botao = st.columns([4, 1])
     
-    st.write("") # Espaço
+    with col_texto:
+        st.markdown(f"""
+        <div>
+            <h2 style='text-align: left; color: #FFD770; margin-bottom: 0;'>🎓 Área do Aluno</h2>
+            <p style='color: #ccc; margin-top: 5px;'>Bem-vindo de volta, <b>{usuario.get('nome').split()[0]}</b>.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col_botao:
+        st.write("") # Espaçamento superior para alinhar verticalmente
+        if st.button("🏠 Voltar ao Início", use_container_width=True):
+            st.session_state.menu_selection = "Início"
+            st.rerun()
+    
+    st.write("") # Espaço extra antes das abas
 
     # --- Abas ---
     tab_meus, tab_novos = st.tabs(["📚 Meus Cursos", "🚀 Catálogo de Cursos"])
