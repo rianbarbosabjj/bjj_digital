@@ -1,3 +1,4 @@
+#/views/aulas_aluno.py
 import streamlit as st
 import utils as ce
 
