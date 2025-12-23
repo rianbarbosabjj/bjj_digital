@@ -9,7 +9,6 @@ import views.aulas_aluno as aulas_view
 def aplicar_estilos_cards():
     st.markdown("""
     <style>
-        /* Estilo dos Cards */
         div[data-testid="stContainer"] {
             background-color: rgba(14, 45, 38, 0.7);
             border: 1px solid rgba(255, 215, 112, 0.2);
@@ -42,7 +41,7 @@ def aplicar_estilos_cards():
     """, unsafe_allow_html=True)
 
 # ==================================================
-# 💰 DIÁLOGO DE CHECKOUT (MERCADO PAGO REAL)
+# 💰 DIÁLOGO DE CHECKOUT (CORRIGIDO)
 # ==================================================
 @st.dialog("🛒 Checkout Seguro")
 def dialog_pagamento(curso, usuario):
@@ -66,12 +65,12 @@ def dialog_pagamento(curso, usuario):
             if link:
                 st.session_state.mp_link = link
                 st.session_state.mp_preference_id = pref_id
-                st.rerun() # Recarrega para mostrar os botões
+                # REMOVIDO O st.rerun() DAQUI - ISSO RESOLVE O PROBLEMA DO FECHAMENTO
             else:
                 st.error("Erro ao conectar com o banco. Verifique as credenciais no secrets.toml.")
                 return
 
-    # 2. Exibir Botões de Ação (Só aparece se o link foi gerado)
+    # 2. Exibir Botões de Ação (Aparece na mesma hora)
     if st.session_state.mp_link:
         st.success("Pedido criado! Clique abaixo para pagar.")
         
@@ -97,7 +96,7 @@ def dialog_pagamento(curso, usuario):
                         st.balloons()
                         st.success("Pagamento Confirmado! Curso liberado.")
                         
-                        # Limpa sessão de pagamento para não travar o próximo
+                        # Limpa sessão de pagamento
                         st.session_state.mp_preference_id = None
                         st.session_state.mp_link = None
                         
@@ -159,7 +158,7 @@ def renderizar_grid_cursos(cursos, usuario, tipo_lista="meus"):
                         
                     if st.button(lbl_btn, key=f"buy_{curso['id']}", type="primary", use_container_width=True):
                         if pago and preco > 0:
-                            # LIMPEZA DE SEGURANÇA: Garante que não tenha link velho na memória
+                            # LIMPEZA DE SEGURANÇA
                             if "mp_preference_id" in st.session_state:
                                 del st.session_state["mp_preference_id"]
                             if "mp_link" in st.session_state:
