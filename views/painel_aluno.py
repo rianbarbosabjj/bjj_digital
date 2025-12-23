@@ -100,44 +100,6 @@ def dialog_pagamento(curso, usuario):
                         st.error(f"Erro no sistema: {msg_db}")
                 else:
                     st.warning(f"Status: {msg}")
-
-    # 2. Exibir Botões de Ação (Aparece na mesma hora)
-    if st.session_state.mp_link:
-        st.success("Pedido criado! Clique abaixo para pagar.")
-        
-        # Botão que leva para o site do Mercado Pago
-        st.link_button("👉 Pagar no Mercado Pago (Pix/Cartão)", st.session_state.mp_link, type="primary", use_container_width=True)
-        
-        st.markdown("---")
-        st.write("Já realizou o pagamento no site do banco?")
-        
-        # 3. Botão de Verificação (Polling)
-        if st.button("🔄 Confirmar Pagamento e Liberar Curso", use_container_width=True):
-            with st.spinner("Verificando status..."):
-                time.sleep(1) # UX
-                
-                # Verifica na API se o pagamento foi aprovado
-                aprovado, msg = ce.verificar_status_pagamento_mp(st.session_state.mp_preference_id)
-                
-                if aprovado:
-                    # SUCESSO REAL: Grava no banco e faz o split
-                    ok_db, msg_db = ce.processar_compra_curso(usuario['id'], curso['id'], valor)
-                    
-                    if ok_db:
-                        st.balloons()
-                        st.success("Pagamento Confirmado! Curso liberado.")
-                        
-                        # Limpa sessão de pagamento
-                        st.session_state.mp_preference_id = None
-                        st.session_state.mp_link = None
-                        
-                        time.sleep(3)
-                        st.rerun()
-                    else:
-                        st.error(f"Erro ao gravar inscrição: {msg_db}")
-                else:
-                    st.warning(f"Status do Banco: {msg}")
-
 # ==================================================
 # 🧱 GRID DE CURSOS
 # ==================================================
