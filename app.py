@@ -137,6 +137,8 @@ if "SECRETS_TOML" in os.environ:
 try:
     from streamlit_option_menu import option_menu
     from views import login, geral, aluno, professor, admin, cursos
+    from views.painel_aluno import render_painel_aluno 
+
 except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
     st.stop()
@@ -210,6 +212,11 @@ def app_principal():
         st.markdown("---")
         
         if st.button("👤 Meu Perfil", use_container_width=True): nav("Meu Perfil")
+
+        # === NOVO LOCAL: Área do Aluno na Sidebar ===
+        if tipo_code in ["admin", "professor"]:
+             if st.button("🎓 Área do Aluno", use_container_width=True): nav("Área do Aluno")
+        # ============================================
         
         if tipo_code in ["admin", "professor"]:
             if st.button("🥋 Painel Prof.", use_container_width=True): nav("Painel de Professores")
@@ -234,13 +241,13 @@ def app_principal():
     if pg == "Meus Certificados": aluno.meus_certificados(usuario); return 
     if pg == "Início": geral.tela_inicio(); return
 
-    # --- MENU DE OPÇÕES ---
+    # --- MENU DE OPÇÕES (Horizontal) ---
     ops, icns = [], []
     
     if tipo_code in ["admin", "professor"]:
-        # 🔹 ADICIONADO: "Área do Aluno" para eles poderem treinar
-        ops = ["Início", "Modo Rola", "Cursos", "Área do Aluno", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
-        icns = ["house", "people", "book", "mortarboard", "journal", "trophy", "list-task", "building", "file-earmark"]
+        # === REMOVIDO "Área do Aluno" DAQUI ===
+        ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking", "Gestão de Questões", "Gestão de Equipes", "Gestão de Exame"]
+        icns = ["house", "people", "book", "journal", "trophy", "list-task", "building", "file-earmark"]
     else:
         # Aluno Normal
         ops = ["Início", "Modo Rola", "Cursos", "Exame de Faixa", "Ranking"]
@@ -265,7 +272,7 @@ def app_principal():
                 "box-shadow": "0 4px 15px rgba(0,0,0,0.3)",
                 "width": "100%",        
                 "max-width": "100%",  
-                "display": "flex",      
+                "display": "flex",       
                 "justify-content": "space-between" 
             },
             "icon": {
@@ -282,7 +289,7 @@ def app_principal():
                 "border-radius": "8px",
                 "transition": "0.3s",
                 "width": "100%",        
-                "flex-grow": "1",      
+                "flex-grow": "1",       
                 "display": "flex",
                 "justify-content": "center",
                 "align-items": "center"
@@ -305,16 +312,14 @@ def app_principal():
         aluno.modo_rola(usuario)
         
     elif pg == "Cursos":
-        # Se for aluno, vai para o Mural/Meus Cursos
         if tipo_code == "aluno":
-            aluno.app_aluno(usuario)
+            render_painel_aluno(usuario) 
         else:
-            # Se for Professor/Admin, o botão "Cursos" leva para a GESTÃO
             cursos.pagina_cursos(usuario)
             
     elif pg == "Área do Aluno":
-        # 🔹 ROTA NOVA: Permite que Admin/Prof acesse a visão de aluno
-        aluno.app_aluno(usuario)
+        # Rota continua existindo, agora acessada pela Sidebar
+        render_painel_aluno(usuario) 
             
     elif pg == "Exame de Faixa": 
         aluno.exame_de_faixa(usuario)
