@@ -1,3 +1,4 @@
+#/views/aluno.py
 import streamlit as st
 import time
 import random
