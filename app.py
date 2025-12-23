@@ -137,8 +137,11 @@ if "SECRETS_TOML" in os.environ:
 
 try:
     from streamlit_option_menu import option_menu
-    from views import login, geral, aluno, professor, admin, cursos
+    # --- CORREÇÃO AQUI: Removemos 'cursos' da lista ---
+    from views import login, geral, aluno, professor, admin
     from views.painel_aluno import render_painel_aluno 
+    # --- CORREÇÃO AQUI: Adicionamos o import que faltava ---
+    from views.cursos_professor import pagina_cursos_professor
 
 except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
@@ -328,8 +331,7 @@ def app_principal():
         if tipo_code == "aluno":
             render_painel_aluno(usuario) 
         else:
-            # ANTES: cursos.pagina_cursos(usuario)
-            # DEPOIS: Chamamos direto o arquivo do professor
+            # Chama a função que importamos agora corretamente
             pagina_cursos_professor(usuario)
             
     elif pg == "Meus Cursos" or pg == "Área do Aluno": 
