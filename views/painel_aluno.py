@@ -55,6 +55,43 @@ def aplicar_estilos_cards():
     """, unsafe_allow_html=True)
 
 # ==================================================
+# 💰 DIÁLOGO DE CHECKOUT (Pagamento)
+# ==================================================
+@st.dialog("🛒 Finalizar Compra")
+def dialog_pagamento(curso, usuario):
+    st.markdown(f"### {curso.get('titulo')}")
+    st.markdown("Confirme os detalhes do seu pedido:")
+    
+    valor = float(curso.get('preco', 0))
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.caption("Valor do Curso")
+        st.markdown(f"## R$ {valor:.2f}")
+    with col2:
+        st.caption("Método")
+        st.markdown("📦 **PIX / Cartão**")
+
+    st.divider()
+    
+    st.info("ℹ️ Simulando integração com Gateway de Pagamento...")
+    
+    if st.button("✅ Confirmar Pagamento e Inscrever", type="primary", use_container_width=True):
+        with st.spinner("Processando pagamento..."):
+            time.sleep(2) # Simula tempo do banco
+            
+            # CHAMA A NOVA FUNÇÃO DO UTILS COM SPLIT
+            sucesso, msg = ce.processar_compra_curso(usuario['id'], curso['id'], valor)
+            
+            if sucesso:
+                st.balloons()
+                st.success("Pagamento Aprovado! Você já pode acessar o curso.")
+                time.sleep(2)
+                st.rerun()
+            else:
+                st.error(msg)
+
+# ==================================================
 # 🧱 COMPONENTE: GRID DE CURSOS
 # ==================================================
 def renderizar_grid_cursos(cursos, usuario, tipo_lista="meus"):
@@ -108,22 +145,29 @@ def renderizar_grid_cursos(cursos, usuario, tipo_lista="meus"):
                     if curso.get('nivel'): info.append(f"📊 {curso['nivel']}")
                     st.caption(" • ".join(info))
                     
+                    # Verifica Pagamento
+                    pago = curso.get('pago', False)
+                    preco = float(curso.get('preco', 0))
+
                     # Botão de Inscrição
                     lbl_btn = "Inscrever-se"
-                    if curso.get('pago'):
-                        lbl_btn = f"Comprar (R$ {curso.get('preco')})"
+                    if pago and preco > 0:
+                        lbl_btn = f"Comprar (R$ {preco:.2f})"
                         
                     if st.button(lbl_btn, key=f"buy_{curso['id']}", type="primary", use_container_width=True):
-                            else:
-                            # Inscrição Gratuita Direta
+                        # Se for pago e tiver preço
+                        if pago and preco > 0:
+                            dialog_pagamento(curso, usuario)
+                        else:
+                            # Inscrição Gratuita Direta (AQUI ESTAVA O ERRO)
                             with st.spinner("Realizando matrícula..."):
                                 ce.inscrever_usuario_em_curso(usuario["id"], curso["id"])
                                 
                                 # AVISA O ALUNO
-                                st.balloons() # Solta balões (opcional, mas legal para celebrar)
+                                st.balloons() 
                                 st.success(f"Inscrição realizada! O curso '{curso['titulo']}' foi movido para a aba 'Matriculados'.")
                                 
-                                time.sleep(2.5) # Pausa para o aluno ler a mensagem antes de atualizar
+                                time.sleep(2.5) 
                                 st.rerun()
 
 # ==================================================
@@ -152,7 +196,7 @@ def render_painel_aluno(usuario):
     with col_texto:
         st.markdown(f"""
         <div>
-            <h2 style='text-align: left; color: #FFD770; margin-bottom: 0;'>🎓 Área do Aluno</h2>
+            <h2 style='text-align: left; color: #FFD770; margin-bottom: 0;'>📚 Meus Cursos</h2>
             <p style='color: #ccc; margin-top: 5px;'>Bem-vindo de volta, <b>{usuario.get('nome').split()[0]}</b>.</p>
         </div>
         """, unsafe_allow_html=True)
