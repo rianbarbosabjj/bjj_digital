@@ -127,6 +127,7 @@ st.markdown(f"""
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
     header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
+
     /* ============== ÁREA DE CURSOS MODERNA ============== */
     
     /* GRID DE CURSOS RESPONSIVO */
@@ -453,98 +454,135 @@ st.markdown(f"""
         margin-top: 25px;
         border: 1px solid rgba(255,255,255,0.1);
     }}
-
+    
     /* TABS ESPECÍFICAS PARA CURSOS */
-div[data-testid="stTabs"] {
-    background: transparent;
-}
+    div[data-testid="stTabs"] {{
+        background: transparent;
+    }}
+    
+    div[data-testid="stTabs"] > div > div {{
+        overflow: visible;
+    }}
+    
+    /* ANIMAÇÃO DE ENTRADA */
+    @keyframes fadeInUp {{
+        from {{
+            opacity: 0;
+            transform: translateY(20px);
+        }}
+        to {{
+            opacity: 1;
+            transform: translateY(0);
+        }}
+    }}
+    
+    .curso-card-moderno {{
+        animation: fadeInUp 0.6s ease-out;
+    }}
+    
+    /* LOADING SKELETON */
+    .skeleton {{
+        background: linear-gradient(90deg, 
+            rgba(255,255,255,0.05) 25%, 
+            rgba(255,255,255,0.1) 50%, 
+            rgba(255,255,255,0.05) 75%);
+        background-size: 200% 100%;
+        animation: loading 1.5s infinite;
+        border-radius: 12px;
+    }}
+    
+    @keyframes loading {{
+        0% {{ background-position: 200% 0; }}
+        100% {{ background-position: -200% 0; }}
+    }}
+    
+    /* TOOLTIPS */
+    .tooltip {{
+        position: relative;
+        display: inline-block;
+    }}
+    
+    .tooltip .tooltiptext {{
+        visibility: hidden;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        text-align: center;
+        padding: 8px 12px;
+        border-radius: 8px;
+        position: absolute;
+        z-index: 1000;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        white-space: nowrap;
+    }}
+    
+    .tooltip:hover .tooltiptext {{
+        visibility: visible;
+    }}
+    
+    /* BOTÃO FLUTUANTE */
+    .floating-btn {{
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #FFD770, #FFC107);
+        color: #0e2d26;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        box-shadow: 0 8px 25px rgba(255, 215, 112, 0.4);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s;
+    }}
+    
+    .floating-btn:hover {{
+        transform: scale(1.1);
+        box-shadow: 0 12px 30px rgba(255, 215, 112, 0.6);
+    }}
 
-div[data-testid="stTabs"] > div > div {
-    overflow: visible;
-}
+    /* ESTILOS ESPECÍFICOS PARA BOTÕES SECUNDÁRIOS */
+    div.stButton > button[data-testid="baseButton-secondary"] {{
+        background: transparent;
+        border: 2px solid {COR_DESTAQUE};
+        color: {COR_DESTAQUE};
+    }}
+    
+    div.stButton > button[data-testid="baseButton-secondary"]:hover {{
+        background: {COR_DESTAQUE};
+        color: #0e2d26;
+    }}
+    
+    /* METRICS MODERNAS */
+    div[data-testid="stMetric"] {{
+        background: rgba(255,255,255,0.05);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 15px;
+        padding: 20px;
+    }}
+    
+    div[data-testid="stMetric"] > div {{
+        color: {COR_DESTAQUE} !important;
+    }}
+    
+    div[data-testid="stMetric"] > div[data-testid="stMetricValue"] {{
+        font-size: 2rem !important;
+        font-weight: 700;
+    }}
+    
+    /* HERO SECTION SIMPLES */
+    .hero-cursos-simples {{
+        text-align: center;
+        padding: 40px 20px;
+        margin-bottom: 30px;
+    }}
 
-/* ANIMAÇÃO DE ENTRADA */
-@keyframes fadeInUp {
-    from {
-        opacity: 0;
-        transform: translateY(20px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.curso-card-moderno {
-    animation: fadeInUp 0.6s ease-out;
-}
-
-/* LOADING SKELETON */
-.skeleton {
-    background: linear-gradient(90deg, 
-        rgba(255,255,255,0.05) 25%, 
-        rgba(255,255,255,0.1) 50%, 
-        rgba(255,255,255,0.05) 75%);
-    background-size: 200% 100%;
-    animation: loading 1.5s infinite;
-    border-radius: 12px;
-}
-
-@keyframes loading {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
-}
-
-/* TOOLTIPS */
-.tooltip {
-    position: relative;
-    display: inline-block;
-}
-
-.tooltip .tooltiptext {
-    visibility: hidden;
-    background: rgba(0,0,0,0.8);
-    color: white;
-    text-align: center;
-    padding: 8px 12px;
-    border-radius: 8px;
-    position: absolute;
-    z-index: 1000;
-    bottom: 125%;
-    left: 50%;
-    transform: translateX(-50%);
-    white-space: nowrap;
-}
-
-.tooltip:hover .tooltiptext {
-    visibility: visible;
-}
-
-/* BOTÃO FLUTUANTE */
-.floating-btn {
-    position: fixed;
-    bottom: 30px;
-    right: 30px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #FFD770, #FFC107);
-    color: #0e2d26;
-    border: none;
-    font-size: 24px;
-    cursor: pointer;
-    box-shadow: 0 8px 25px rgba(255, 215, 112, 0.4);
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s;
-}
-
-.floating-btn:hover {
-    transform: scale(1.1);
-    box-shadow: 0 12px 30px rgba(255, 215, 112, 0.6);
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -554,35 +592,13 @@ if "SECRETS_TOML" in os.environ:
 
 try:
     from streamlit_option_menu import option_menu
-    # --- CORREÇÃO AQUI: Removemos 'cursos' da lista ---
     from views import login, geral, aluno, professor, admin
     from views.painel_aluno import render_painel_aluno 
-    # --- CORREÇÃO AQUI: Adicionamos o import que faltava ---
     from views.cursos_professor import pagina_cursos_professor
 
 except ImportError as e:
     st.error(f"❌ Erro crítico nas importações: {e}")
     st.stop()
-
-def handle_javascript_events():
-    """Processa eventos enviados do JavaScript"""
-    
-    # Criar componente para receber mensagens
-    js_receiver = """
-    <script>
-    // Enviar mensagem quando a página carregar
-    window.onload = function() {
-        window.parent.postMessage({
-            type: 'STREAMLIT_READY',
-            data: { ready: true }
-        }, '*');
-    };
-    
-    // Handler para mensagens do Streamlit
-    window.addEventListener('message', function(event) {
-        if (event.data.type === 'STREAMLIT_COMMAND') {
-            // Processar comandos do Streamlit
-            console.log('Streamlit command:', event.data.data);
 
 def tela_troca_senha_obrigatoria():
     c1, c2, c3 = st.columns([1, 2, 1])
