@@ -31,106 +31,220 @@ except ImportError:
     COR_BOTAO = "#078B6C"
     COR_HOVER = "#FFD770"
 
+# No app.py, no st.markdown CSS, ADICIONE:
+
 st.markdown(f"""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap');
-
-    html, body, [class*="css"], .stMarkdown, p, label, .stCaption, span {{
-        font-family: 'Poppins', sans-serif;
-        color: {COR_TEXTO} !important;
-    }}
-
-    .stApp {{
-        background-color: {COR_FUNDO} !important;
-        background-image: radial-gradient(circle at 50% 0%, #164036 0%, #0e2d26 70%) !important;
-    }}
+    /* ===== NOVOS ESTILOS MODERNOS ===== */
     
-    hr {{
-        margin: 2em 0 !important;
-        border: 0 !important;
-        height: 1px !important;
-        background-image: linear-gradient(to right, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0)) !important;
-    }}
-
-    div.stRadio > div[role="radiogroup"] > label > div:first-child {{
-        border-color: {COR_DESTAQUE} !important;
-        background-color: transparent !important;
-    }}
-    div.stRadio > div[role="radiogroup"] > label > div:first-child > div {{
-        background-color: {COR_DESTAQUE} !important;
-    }}
-
-    h1, h2, h3, h4, h5, h6 {{ 
-        color: {COR_DESTAQUE} !important; 
-        text-align: center !important; 
-        font-weight: 700 !important; 
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }}
-
-    section[data-testid="stSidebar"] {{
-        background-color: #091f1a !important; 
-        border-right: 1px solid rgba(255, 215, 112, 0.15);
-        box-shadow: 5px 0 15px rgba(0,0,0,0.3);
-    }}
-    section[data-testid="stSidebar"] svg, [data-testid="collapsedControl"] svg {{
-        fill: {COR_DESTAQUE} !important;
-        color: {COR_DESTAQUE} !important;
-    }}
-
-    div[data-testid="stVerticalBlock"] > div[data-testid="stContainer"], 
-    div[data-testid="stForm"] {{
-        background-color: rgba(0, 0, 0, 0.3) !important; 
-        border: 1px solid rgba(255, 215, 112, 0.2) !important; 
-        border-radius: 12px; 
-        padding: 20px;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.2); 
+    /* 1. CARDS DE CURSO MODERNOS */
+    .curso-card {{
+        background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255, 215, 112, 0.15);
+        border-radius: 16px;
+        padding: 24px;
         margin-bottom: 20px;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        overflow: hidden;
     }}
     
-    .streamlit-expanderHeader {{
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        color: {COR_DESTAQUE} !important;
-        border: 1px solid {COR_DESTAQUE} !important;
+    .curso-card:hover {{
+        transform: translateY(-5px);
+        border-color: {COR_DESTAQUE};
+        box-shadow: 0 20px 40px rgba(0,0,0,0.3), 
+                    0 0 0 1px rgba(255, 215, 112, 0.1);
+    }}
+    
+    .curso-card::before {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 4px;
+        background: linear-gradient(90deg, {COR_BOTAO}, {COR_HOVER});
+        border-radius: 16px 16px 0 0;
+    }}
+    
+    /* 2. BADGES MODERNOS */
+    .badge {{
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        margin-right: 8px;
+        margin-bottom: 8px;
+    }}
+    
+    .badge-free {{
+        background: linear-gradient(135deg, #078B6C, #056853);
+        color: white;
+    }}
+    
+    .badge-premium {{
+        background: linear-gradient(135deg, #FFD770, #FFC107);
+        color: #0e2d26;
+    }}
+    
+    .badge-progress {{
+        background: rgba(255, 215, 112, 0.1);
+        color: #FFD770;
+        border: 1px solid rgba(255, 215, 112, 0.3);
+    }}
+    
+    /* 3. BOTÕES MODERNOS */
+    .btn-modern {{
+        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%);
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }}
+    
+    .btn-modern:hover {{
+        background: linear-gradient(135deg, {COR_HOVER} 0%, #FFC107 100%);
+        transform: scale(1.05);
+        box-shadow: 0 10px 20px rgba(255, 215, 112, 0.2);
+    }}
+    
+    .btn-outline {{
+        background: transparent;
+        color: {COR_DESTAQUE};
+        border: 2px solid {COR_DESTAQUE};
+    }}
+    
+    .btn-outline:hover {{
+        background: {COR_DESTAQUE};
+        color: #0e2d26;
+    }}
+    
+    /* 4. PROGRESS BAR MODERNO */
+    .progress-container {{
+        height: 8px;
+        background: rgba(255,255,255,0.1);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 15px 0;
+    }}
+    
+    .progress-bar {{
+        height: 100%;
+        background: linear-gradient(90deg, {COR_BOTAO}, {COR_HOVER});
+        border-radius: 10px;
+        transition: width 1s ease-in-out;
+        position: relative;
+    }}
+    
+    .progress-bar::after {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255,255,255,0.4),
+            transparent
+        );
+        animation: shimmer 2s infinite;
+    }}
+    
+    @keyframes shimmer {{
+        0% {{ transform: translateX(-100%); }}
+        100% {{ transform: translateX(100%); }}
+    }}
+    
+    /* 5. CARDS DE MÓDULO */
+    .modulo-card {{
+        background: rgba(255,255,255,0.03);
+        border-left: 4px solid {COR_DESTAQUE};
+        border-radius: 0 12px 12px 0;
+        padding: 20px;
+        margin: 15px 0;
+    }}
+    
+    .aula-item {{
+        padding: 12px;
+        margin: 8px 0;
+        background: rgba(255,255,255,0.02);
         border-radius: 8px;
+        border: 1px solid rgba(255,255,255,0.05);
+        transition: all 0.2s;
     }}
-    .streamlit-expanderHeader svg {{
-        fill: {COR_TEXTO} !important; 
-        color: {COR_TEXTO} !important;
-    }}
-
-    div.stButton > button, div.stFormSubmitButton > button {{ 
-        background: linear-gradient(135deg, {COR_BOTAO} 0%, #056853 100%) !important; 
-        color: white !important; 
-        border: 1px solid rgba(255,255,255,0.1) !important; 
-        padding: 0.6em 1.5em !important; 
-        font-weight: 600 !important;
-        border-radius: 8px !important; 
-        transition: all 0.3s ease !important;
-    }}
-    div.stButton > button:hover {{ 
-        background: {COR_HOVER} !important; 
-        color: #0e2d26 !important; 
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
-    }}
-
-    input, textarea, select, div[data-testid="stSelectbox"] > div {{ 
-        background-color: rgba(255, 255, 255, 0.05) !important;
-        color: white !important;
-        border: 1px solid rgba(255, 255, 255, 0.2) !important; 
-        border-radius: 8px !important;
-    }}
-    .stTextInput input, .stTextArea textarea {{ color: white !important; }}
     
-    #MainMenu {{visibility: hidden;}}
-    footer {{visibility: hidden;}}
-    [data-testid="stDecoration"] {{display: none;}}
-    header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
-
+    .aula-item:hover {{
+        background: rgba(255,215,112,0.05);
+        border-color: rgba(255,215,112,0.2);
+    }}
+    
+    /* 6. NOVO LAYOUT DE GRID */
+    .grid-container {{
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 24px;
+        margin: 30px 0;
+    }}
+    
+    /* 7. TYPOGRAPHY MODERNA */
+    .curso-title {{
+        font-size: 1.5rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #FFF, {COR_DESTAQUE});
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 10px;
+    }}
+    
+    .curso-desc {{
+        color: rgba(255,255,255,0.7);
+        line-height: 1.6;
+        font-size: 0.95rem;
+    }}
+    
+    /* 8. HERO SECTION */
+    .hero-section {{
+        background: linear-gradient(135deg, rgba(7, 139, 108, 0.2), rgba(5, 104, 83, 0.1));
+        border-radius: 20px;
+        padding: 40px;
+        margin-bottom: 40px;
+        text-align: center;
+        border: 1px solid rgba(255, 215, 112, 0.1);
+    }}
+    
+    /* 9. ICONES ANIMADOS */
+    .icon-spin {{
+        animation: spin 2s linear infinite;
+    }}
+    
+    @keyframes spin {{
+        0% {{ transform: rotate(0deg); }}
+        100% {{ transform: rotate(360deg); }}
+    }}
+    
+    /* 10. RESPONSIVIDADE */
+    @media (max-width: 768px) {{
+        .grid-container {{
+            grid-template-columns: 1fr;
+        }}
+        
+        .curso-card {{
+            padding: 16px;
+        }}
+    }}
 </style>
 """, unsafe_allow_html=True)
-
 if "SECRETS_TOML" in os.environ:
     if not os.path.exists(".streamlit"): os.makedirs(".streamlit")
     with open(".streamlit/secrets.toml", "w") as f: f.write(os.environ["SECRETS_TOML"])
