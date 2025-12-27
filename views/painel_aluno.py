@@ -6,259 +6,151 @@ from datetime import datetime
 import utils as ce
 
 # ==================================================
-# 🎨 ESTILOS CSS PERSONALIZADOS
+# 🎨 ESTILOS CSS SIMPLES
 # ==================================================
-def aplicar_estilos_cards():
+def aplicar_estilos():
     st.markdown("""
     <style>
-        /* Estilos gerais */
-        .main .block-container {
-            padding-top: 2rem;
-            padding-bottom: 2rem;
-        }
-        
-        /* Hero section */
-        .hero-section {
-            background: linear-gradient(135deg, rgba(14, 45, 38, 0.9), rgba(5, 104, 83, 0.7));
-            border-radius: 20px;
-            padding: 40px 20px;
-            margin-bottom: 30px;
-            border: 1px solid rgba(255, 215, 112, 0.3);
-            text-align: center;
-        }
-        
-        .hero-title {
-            color: #FFD770;
-            font-size: 2.5rem;
-            font-weight: 800;
-            margin-bottom: 15px;
-        }
-        
-        .hero-subtitle {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 1.2rem;
-            max-width: 800px;
-            margin: 0 auto 20px auto;
-        }
-        
-        /* Cards de cursos */
-        .curso-card {
-            background: linear-gradient(135deg, rgba(14, 45, 38, 0.9), rgba(5, 104, 83, 0.8));
-            border: 1px solid rgba(255, 215, 112, 0.2);
-            border-radius: 16px;
-            padding: 20px;
-            height: 100%;
-            transition: all 0.3s ease;
-        }
-        
-        .curso-card:hover {
-            transform: translateY(-5px);
-            border-color: #FFD770;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-        }
-        
-        .badge-curso {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: 700;
-            margin-right: 8px;
-            margin-bottom: 10px;
-        }
-        
-        .badge-premium {
-            background: linear-gradient(135deg, #FFD770, #FF9800);
-            color: #0e2d26;
-        }
-        
-        .badge-gratuito {
-            background: linear-gradient(135deg, #4CAF50, #2E7D32);
-            color: white;
-        }
-        
-        .badge-andamento {
-            background: linear-gradient(135deg, #2196F3, #0D47A1);
-            color: white;
-        }
-        
-        .titulo-card {
-            color: #FFD770;
-            font-size: 1.2rem;
-            font-weight: 800;
-            margin-bottom: 12px;
-            line-height: 1.3;
-        }
-        
-        .descricao-card {
-            color: rgba(255, 255, 255, 0.8);
-            font-size: 0.9rem;
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-        
-        /* Progresso */
-        .progresso-container {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 10px;
-            height: 10px;
-            margin-bottom: 15px;
-            overflow: hidden;
-        }
-        
-        .progresso-bar {
-            background: linear-gradient(90deg, #4CAF50, #8BC34A);
-            height: 100%;
-            border-radius: 10px;
-            transition: width 0.5s ease;
-        }
-        
-        /* Tabs */
-        .stTabs [data-baseweb="tab-list"] {
-            gap: 10px;
-            background-color: transparent;
-        }
-        
-        .stTabs [data-baseweb="tab"] {
-            background-color: rgba(255, 255, 255, 0.05);
-            border-radius: 12px 12px 0 0;
-            padding: 15px 25px;
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-bottom: none;
-        }
-        
-        .stTabs [aria-selected="true"] {
-            background-color: #FFD770 !important;
-            color: #0e2d26 !important;
-            font-weight: bold;
-            border-color: #FFD770;
-        }
-        
-        /* Empty state */
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            background: rgba(14, 45, 38, 0.3);
-            border-radius: 20px;
-            border: 2px dashed rgba(255, 215, 112, 0.3);
-            margin: 20px 0;
-        }
-        
-        /* Grid de cursos */
-        .curso-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 25px;
-            margin-top: 20px;
-        }
-        
-        /* Responsividade */
-        @media (max-width: 1200px) {
-            .curso-grid {
-                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .curso-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .hero-title {
-                font-size: 2rem;
-            }
-            
-            .hero-subtitle {
-                font-size: 1rem;
-            }
-        }
+    /* Melhorar visualização dos cards */
+    div[data-testid="stHorizontalBlock"] > div {
+        padding: 5px;
+    }
+    
+    /* Cards com gradiente */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background: linear-gradient(135deg, rgba(14, 45, 38, 0.9), rgba(5, 104, 83, 0.8));
+        border: 1px solid rgba(255, 215, 112, 0.2);
+        border-radius: 15px;
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+    
+    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+        border-color: #FFD770;
+        box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+    }
+    
+    /* Badges */
+    .badge-pago {
+        background: linear-gradient(135deg, #FFD770, #FF9800);
+        color: #0e2d26;
+        padding: 3px 10px;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-right: 8px;
+    }
+    
+    .badge-gratuito {
+        background: linear-gradient(135deg, #4CAF50, #2E7D32);
+        color: white;
+        padding: 3px 10px;
+        border-radius: 15px;
+        font-size: 0.8rem;
+        font-weight: bold;
+        display: inline-block;
+        margin-right: 8px;
+    }
+    
+    /* Tabs mais bonitas */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 10px;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background-color: rgba(255, 255, 255, 0.05);
+        border-radius: 8px;
+        padding: 10px 20px;
+        color: white;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background-color: #FFD770 !important;
+        color: #0e2d26 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # ==================================================
-# 🎴 FUNÇÕES DE RENDERIZAÇÃO DE COMPONENTES
+# 🎴 COMPONENTES DE UI
 # ==================================================
-def render_hero_section(usuario):
-    """Renderiza seção hero"""
+def render_hero(usuario):
+    """Renderiza cabeçalho do painel"""
     
-    # Saudação
+    # Saudação personalizada
     saudacao = ""
     if usuario.get('nome'):
         primeiro_nome = usuario['nome'].split()[0] if len(usuario['nome'].split()) > 0 else usuario['nome']
         saudacao = f", {primeiro_nome}"
     
-    # Data atual
-    data_atual = datetime.now().strftime("%d/%m/%Y")
+    # Layout do cabeçalho
+    col1, col2, col3 = st.columns([1, 3, 1])
     
-    # Hero section usando Streamlit nativo
-    st.markdown('<div class="hero-section">', unsafe_allow_html=True)
+    with col1:
+        st.markdown('<div style="font-size: 3.5rem; text-align: center;">🥋</div>', unsafe_allow_html=True)
     
-    col_icon, col_content = st.columns([1, 4])
-    with col_icon:
-        st.markdown('<div style="font-size: 4rem; text-align: center;">🥋</div>', unsafe_allow_html=True)
-    
-    with col_content:
-        st.markdown('<div class="hero-title">Academia Digital BJJ</div>', unsafe_allow_html=True)
-        st.markdown('<div class="hero-subtitle">Domine as técnicas, evolua nas faixas, transforme seu jogo.</div>', unsafe_allow_html=True)
+    with col2:
+        st.markdown('<h1 style="color: #FFD770; text-align: center; margin-bottom: 10px;">Academia Digital BJJ</h1>', unsafe_allow_html=True)
+        st.markdown('<p style="text-align: center; color: rgba(255, 255, 255, 0.9); font-size: 1.1rem; margin-bottom: 5px;">Domine as técnicas, evolua nas faixas, transforme seu jogo.</p>', unsafe_allow_html=True)
         
-        # Informações extras
-        col1, col2 = st.columns(2)
-        with col1:
-            st.caption(f"📅 {data_atual}")
-        with col2:
-            st.caption(f"🎯 Continue sua jornada{saudacao}")
+        # Informações do usuário
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            st.caption(f"📅 {datetime.now().strftime('%d/%m/%Y')}")
+        with col_info2:
+            st.caption(f"👤 Continue sua jornada{saudacao}")
     
-    st.markdown('</div>', unsafe_allow_html=True)
+    with col3:
+        # Estatística rápida
+        cursos = ce.listar_cursos_inscritos(usuario["id"])
+        progresso_geral = sum(c.get('progresso', 0) for c in cursos) / len(cursos) if cursos else 0
+        st.metric("🎯 Progresso Geral", f"{progresso_geral:.0f}%")
+    
+    st.divider()
 
-def render_card_curso_simples(curso, tipo="meus"):
-    """Renderiza card de curso simplificado"""
+def render_card_curso(curso, usuario, tipo="meus"):
+    """Renderiza um card de curso usando Streamlit nativo"""
     
     with st.container():
-        # Badges
-        col_badges = st.columns([4, 1])
+        # Badges no topo
+        col_badges = st.columns([3, 1])
         with col_badges[0]:
-            if curso.get('pago', False):
-                st.markdown('<span class="badge-curso badge-premium">💰 PREMIUM</span>', unsafe_allow_html=True)
-            else:
-                st.markdown('<span class="badge-curso badge-gratuito">🎯 GRATUITO</span>', unsafe_allow_html=True)
-            
             if tipo == "meus":
-                st.markdown('<span class="badge-curso badge-andamento">📚 EM ANDAMENTO</span>', unsafe_allow_html=True)
+                st.markdown('<span class="badge-gratuito">📚 EM ANDAMENTO</span>', unsafe_allow_html=True)
+            else:
+                if curso.get('pago', False):
+                    st.markdown('<span class="badge-pago">💰 PAGO</span>', unsafe_allow_html=True)
+                else:
+                    st.markdown('<span class="badge-gratuito">🎯 GRATUITO</span>', unsafe_allow_html=True)
         
-        # Título
-        st.markdown(f'<div class="titulo-card">{curso.get("titulo", "Curso")}</div>', unsafe_allow_html=True)
+        # Título do curso
+        titulo = curso.get('titulo', 'Curso sem título')
+        st.markdown(f'**{titulo}**')
         
-        # Descrição
+        # Descrição (limitada)
         descricao = curso.get('descricao', 'Descrição do curso em desenvolvimento...')
-        if len(descricao) > 120:
-            descricao = descricao[:120] + "..."
-        st.markdown(f'<div class="descricao-card">{descricao}</div>', unsafe_allow_html=True)
+        if len(descricao) > 100:
+            descricao = descricao[:100] + "..."
+        st.caption(descricao)
         
         # Metadados
         metadados = []
         if curso.get('duracao_estimada'):
-            metadados.append(f'⏱ {curso.get("duracao_estimada")}')
+            metadados.append(f"⏱ {curso['duracao_estimada']}")
         if curso.get('nivel'):
-            metadados.append(f'📊 {curso.get("nivel")}')
+            metadados.append(f"📊 {curso['nivel']}")
         if curso.get('professor_nome'):
-            metadados.append(f'👤 {curso.get("professor_nome")}')
+            metadados.append(f"👤 {curso['professor_nome']}")
         
         if metadados:
-            st.caption(" • ".join(metadados))
+            st.write(" • ".join(metadados))
         
         # Progresso (para cursos meus)
         if tipo == "meus":
             progresso = curso.get('progresso', 0)
-            st.markdown(f"""
-            <div class="progresso-container">
-                <div class="progresso-bar" style="width: {progresso}%"></div>
-            </div>
-            <div style="display: flex; justify-content: space-between; margin-top: 5px;">
-                <span style="color: rgba(255,255,255,0.7); font-size: 0.9rem;">Progresso</span>
-                <span style="color: #FFD770; font-weight: 700; font-size: 0.9rem;">{progresso}%</span>
-            </div>
-            """, unsafe_allow_html=True)
+            st.progress(progresso / 100)
+            st.caption(f"Progresso: {progresso}%")
         
         # Botões
         if tipo == "meus":
@@ -267,12 +159,21 @@ def render_card_curso_simples(curso, tipo="meus"):
                 st.session_state["view_aluno"] = "aulas"
                 st.rerun()
         else:
-            preco = curso.get('preco', 0)
+            preco = float(curso.get('preco', 0))
             if preco > 0:
-                if st.button(f"💰 Comprar - R$ {preco:.2f}", key=f"buy_{curso['id']}", type="primary", use_container_width=True):
-                    st.session_state.curso_para_compra = curso
-                    st.session_state.show_pagamento_modal = True
-                    st.rerun()
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    if st.button(f"💰 R$ {preco:.2f}", key=f"buy_{curso['id']}", use_container_width=True, type="primary"):
+                        st.session_state.curso_para_compra = curso
+                        st.session_state.show_pagamento_modal = True
+                        st.rerun()
+                with col_btn2:
+                    if st.button("📋 Detalhes", key=f"det_{curso['id']}", use_container_width=True):
+                        with st.expander("📋 Detalhes do Curso", expanded=True):
+                            st.write(curso.get('descricao', ''))
+                            st.write(f"**Professor:** {curso.get('professor_nome', 'Não informado')}")
+                            st.write(f"**Duração:** {curso.get('duracao_estimada', 'Não informada')}")
+                            st.write(f"**Nível:** {curso.get('nivel', 'Não informado')}")
             else:
                 if st.button("🎯 Inscrever-se Gratuitamente", key=f"join_{curso['id']}", use_container_width=True):
                     with st.spinner("Realizando matrícula..."):
@@ -282,6 +183,8 @@ def render_card_curso_simples(curso, tipo="meus"):
                             st.success("Inscrição realizada com sucesso!")
                             time.sleep(1.5)
                             st.rerun()
+                        else:
+                            st.error("Erro ao realizar inscrição. Tente novamente.")
 
 # ==================================================
 # 💰 MODAL DE PAGAMENTO
@@ -364,7 +267,7 @@ def mostrar_modal_pagamento(curso, usuario):
                 st.rerun()
 
 # ==================================================
-# 🧱 RENDERIZAÇÃO DAS ABAS
+# 🧱 ABAS PRINCIPAIS
 # ==================================================
 def render_tab_meus_cursos(usuario):
     """Renderiza aba 'Meus Cursos'"""
@@ -372,38 +275,36 @@ def render_tab_meus_cursos(usuario):
     cursos = ce.listar_cursos_inscritos(usuario["id"])
     
     if not cursos:
-        st.markdown("""
-        <div class="empty-state">
-            <div style="font-size: 4rem; margin-bottom: 20px; opacity: 0.5;">📖</div>
-            <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 10px;">Nenhum curso em andamento</h3>
-            <p style="color: rgba(255,255,255,0.6);">Explore nossos cursos disponíveis e comece sua jornada!</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        # Estatísticas
-        col_stats1, col_stats2, col_stats3 = st.columns(3)
-        with col_stats1:
-            st.metric("📚 Cursos", len(cursos))
-        with col_stats2:
-            progresso_medio = sum(c.get('progresso', 0) for c in cursos) / len(cursos) if cursos else 0
-            st.metric("📈 Progresso Médio", f"{progresso_medio:.0f}%")
-        with col_stats3:
-            horas_estudo = sum(int(c.get('duracao_estimada', '0h').replace('h', '')) 
-                            for c in cursos if c.get('duracao_estimada') and 'h' in str(c.get('duracao_estimada')))
-            st.metric("⏱ Tempo Total", f"{horas_estudo}h")
-        
-        # Grid de cursos
-        st.markdown('<div class="curso-grid">', unsafe_allow_html=True)
-        
-        cols = st.columns(3)
-        for idx, curso in enumerate(cursos):
-            with cols[idx % 3]:
-                with st.container():
-                    st.markdown('<div class="curso-card">', unsafe_allow_html=True)
-                    render_card_curso_simples(curso, tipo="meus")
-                    st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.info("📖 Você ainda não está inscrito em nenhum curso.")
+        st.write("Explore nossos cursos disponíveis na aba **'Descobrir Novos'**!")
+        return
+    
+    # Estatísticas
+    col_stats1, col_stats2, col_stats3 = st.columns(3)
+    with col_stats1:
+        st.metric("📚 Cursos", len(cursos))
+    with col_stats2:
+        progresso_medio = sum(c.get('progresso', 0) for c in cursos) / len(cursos) if cursos else 0
+        st.metric("📈 Progresso Médio", f"{progresso_medio:.0f}%")
+    with col_stats3:
+        horas_estudo = 0
+        for c in cursos:
+            if c.get('duracao_estimada'):
+                try:
+                    horas = int(c['duracao_estimada'].replace('h', '').strip())
+                    horas_estudo += horas
+                except:
+                    pass
+        st.metric("⏱ Tempo Total", f"{horas_estudo}h")
+    
+    st.divider()
+    st.markdown("### 🎯 Meus Cursos em Andamento")
+    
+    # Grid de cursos (3 colunas)
+    cols = st.columns(3)
+    for idx, curso in enumerate(cursos):
+        with cols[idx % 3]:
+            render_card_curso(curso, usuario, tipo="meus")
 
 def render_tab_novos_cursos(usuario):
     """Renderiza aba 'Novos Cursos'"""
@@ -413,100 +314,88 @@ def render_tab_novos_cursos(usuario):
         st.markdown("### 🔍 Filtros")
         col_f1, col_f2, col_f3 = st.columns(3)
         with col_f1:
-            filtro_preco = st.selectbox("💰 Preço", ["Todos", "Gratuitos", "Premium"], key="filtro_preco_novos")
+            filtro_preco = st.selectbox("💰 Tipo", ["Todos", "Gratuitos", "Pagos"], key="filtro_preco")
         with col_f2:
-            filtro_nivel = st.selectbox("📊 Nível", ["Todos", "Iniciante", "Intermediário", "Avançado"], key="filtro_nivel_novos")
+            filtro_nivel = st.selectbox("📊 Nível", ["Todos", "Iniciante", "Intermediário", "Avançado"], key="filtro_nivel")
         with col_f3:
-            filtro_duracao = st.selectbox("⏱ Duração", ["Todos", "Curto (<2h)", "Médio (2-5h)", "Longo (>5h)"], key="filtro_duracao_novos")
+            filtro_duracao = st.selectbox("⏱ Duração", ["Todos", "Curto (<2h)", "Médio (2-5h)", "Longo (>5h)"], key="filtro_duracao")
     
     # Buscar cursos disponíveis
     novos = ce.listar_cursos_disponiveis_para_aluno(usuario)
     
     if not novos:
-        st.markdown("""
-        <div class="empty-state">
-            <div style="font-size: 4rem; margin-bottom: 20px; opacity: 0.5;">🎯</div>
-            <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 10px;">Todos os cursos já estão no seu radar!</h3>
-            <p style="color: rgba(255,255,255,0.6);">Continue focando nos seus estudos atuais ou fale com seu professor sobre novos conteúdos.</p>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        # Aplicar filtros
-        cursos_filtrados = []
-        for curso in novos:
-            # Filtro de preço
-            if filtro_preco == "Gratuitos" and curso.get('pago', False):
+        st.info("🎯 Parabéns! Você já está inscrito em todos os cursos disponíveis.")
+        return
+    
+    # Aplicar filtros
+    cursos_filtrados = []
+    for curso in novos:
+        # Filtro de preço
+        if filtro_preco == "Gratuitos" and curso.get('pago', False):
+            continue
+        if filtro_preco == "Pagos" and not curso.get('pago', False):
+            continue
+        
+        # Filtro de nível
+        if filtro_nivel != "Todos":
+            nivel_curso = curso.get('nivel', '').lower()
+            nivel_filtro = filtro_nivel.lower()
+            if nivel_filtro not in nivel_curso:
                 continue
-            if filtro_preco == "Premium" and not curso.get('pago', False):
-                continue
-            
-            # Filtro de nível
-            if filtro_nivel != "Todos":
-                nivel_curso = curso.get('nivel', '').lower()
-                nivel_filtro = filtro_nivel.lower()
-                if nivel_filtro not in nivel_curso:
-                    continue
-            
-            cursos_filtrados.append(curso)
         
-        if not cursos_filtrados:
-            st.info("Nenhum curso encontrado com os filtros selecionados.")
-            return
-        
-        # Grid de cursos
-        st.markdown(f"### 🚀 Cursos Disponíveis ({len(cursos_filtrados)})")
-        st.markdown('<div class="curso-grid">', unsafe_allow_html=True)
-        
-        cols = st.columns(3)
-        for idx, curso in enumerate(cursos_filtrados):
-            with cols[idx % 3]:
-                with st.container():
-                    st.markdown('<div class="curso-card">', unsafe_allow_html=True)
-                    render_card_curso_simples(curso, tipo="novos")
-                    st.markdown('</div>', unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+        cursos_filtrados.append(curso)
+    
+    if not cursos_filtrados:
+        st.info("Nenhum curso encontrado com os filtros selecionados.")
+        return
+    
+    # Grid de cursos
+    st.markdown(f"### 🚀 Cursos Disponíveis ({len(cursos_filtrados)})")
+    
+    cols = st.columns(3)
+    for idx, curso in enumerate(cursos_filtrados):
+        with cols[idx % 3]:
+            render_card_curso(curso, usuario, tipo="novos")
 
 def render_tab_concluidos(usuario):
     """Renderiza aba 'Cursos Concluídos'"""
     
-    # Usar a mesma função de listar cursos inscritos e filtrar por progresso 100%
+    # Buscar cursos inscritos e filtrar por progresso 100%
     cursos_inscritos = ce.listar_cursos_inscritos(usuario["id"])
     cursos_concluidos = [curso for curso in cursos_inscritos if curso.get('progresso', 0) >= 100]
     
     if not cursos_concluidos:
-        st.markdown("""
-        <div class="empty-state">
-            <div style="font-size: 4rem; margin-bottom: 20px; opacity: 0.5;">🏆</div>
-            <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 10px;">Nenhum curso concluído ainda</h3>
-            <p style="color: rgba(255,255,255,0.6);">Continue estudando! Seus primeiros certificados estão chegando.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.info("🏆 Você ainda não concluiu nenhum curso.")
+        st.write("Continue estudando! Complete 100% de um curso para vê-lo aqui.")
         
-        with st.expander("🎓 Como obter certificados", expanded=False):
+        with st.expander("🎓 Como obter certificados"):
             st.info("""
             1. Complete 100% do progresso do curso
             2. Realize todas as atividades práticas
             3. Obtenha aprovação do seu professor
-            4. Baixe seu certificado digital na aba 'Meus Certificados'
+            4. Baixe seu certificado digital
             """)
-    else:
-        st.markdown(f"### 🏆 Cursos Concluídos ({len(cursos_concluidos)})")
-        
-        for curso in cursos_concluidos:
-            with st.container(border=True):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown(f"#### {curso.get('titulo')}")
-                    st.caption(f"Concluído em: {datetime.now().strftime('%d/%m/%Y')}")
-                    st.progress(100)
-                with col2:
-                    if st.button("📄 Certificado", key=f"cert_{curso['id']}", use_container_width=True):
-                        st.info("Funcionalidade de certificado em desenvolvimento...")
-                    if st.button("🔁 Revisar", key=f"rev_{curso['id']}", use_container_width=True):
-                        st.session_state["curso_aluno_selecionado"] = curso
-                        st.session_state["view_aluno"] = "aulas"
-                        st.rerun()
+        return
+    
+    # Lista de cursos concluídos
+    st.markdown(f"### 🏆 Cursos Concluídos ({len(cursos_concluidos)})")
+    
+    for curso in cursos_concluidos:
+        with st.container(border=True):
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                st.markdown(f"#### {curso.get('titulo')}")
+                st.caption(f"Professor: {curso.get('professor_nome', 'Não informado')}")
+                st.caption(f"Concluído em: {datetime.now().strftime('%d/%m/%Y')}")
+                st.progress(100)
+            with col2:
+                if st.button("📄 Certificado", key=f"cert_{curso['id']}", use_container_width=True):
+                    st.info("Funcionalidade de certificado em desenvolvimento...")
+            with col3:
+                if st.button("🔁 Revisar", key=f"rev_{curso['id']}", use_container_width=True):
+                    st.session_state["curso_aluno_selecionado"] = curso
+                    st.session_state["view_aluno"] = "aulas"
+                    st.rerun()
 
 # ==================================================
 # 🚀 FUNÇÃO PRINCIPAL
@@ -515,7 +404,7 @@ def render_painel_aluno(usuario):
     """Renderiza a área de cursos do aluno"""
     
     # Aplicar estilos CSS
-    aplicar_estilos_cards()
+    aplicar_estilos()
     
     # Verificar modal de pagamento
     if st.session_state.get("show_pagamento_modal", False) and st.session_state.get("curso_para_compra"):
@@ -527,57 +416,50 @@ def render_painel_aluno(usuario):
         # Renderizar player simplificado
         curso = st.session_state["curso_aluno_selecionado"]
         
-        st.markdown(f"## 🎥 {curso.get('titulo')}")
-        st.markdown(f"📚 **Curso:** {curso.get('titulo')}")
+        st.markdown(f"## 🎥 Aula do Curso: {curso.get('titulo')}")
         st.divider()
         
-        # Player de vídeo placeholder
-        col_video, col_info = st.columns([2, 1])
-        
-        with col_video:
-            st.markdown("### 📹 Aula em Vídeo")
-            st.video("https://www.w3schools.com/html/mov_bbb.mp4")  # Vídeo de exemplo
-            
-            # Controles
-            col_controls1, col_controls2 = st.columns(2)
-            with col_controls1:
-                if st.button("✅ Marcar como Concluída", use_container_width=True, type="primary"):
-                    st.success("Aula marcada como concluída!")
-                    time.sleep(1)
-                    st.session_state["view_aluno"] = "lista"
-                    st.session_state["curso_aluno_selecionado"] = None
-                    st.rerun()
-            
-            with col_controls2:
-                if st.button("📝 Próxima Aula", use_container_width=True):
-                    st.info("Próxima aula em desenvolvimento...")
-        
-        with col_info:
-            st.markdown("### 📋 Conteúdo da Aula")
-            st.markdown("""
-            - Introdução às técnicas básicas
-            - Posicionamento inicial
-            - Controle do adversário
-            - Finalização básica
-            - Exercícios práticos
-            """)
-            
-            st.divider()
-            
-            st.markdown("### 📊 Progresso do Curso")
+        # Informações do curso
+        col_info1, col_info2 = st.columns(2)
+        with col_info1:
+            st.markdown(f"**Professor:** {curso.get('professor_nome', 'Não informado')}")
+            st.markdown(f"**Nível:** {curso.get('nivel', 'Não informado')}")
+        with col_info2:
             progresso = curso.get('progresso', 0)
-            st.progress(progresso / 100)
-            st.caption(f"{progresso}% concluído")
+            st.metric("📊 Seu Progresso", f"{progresso}%")
+        
+        st.divider()
+        
+        # Player de vídeo
+        st.markdown("### 📹 Vídeo da Aula")
+        
+        # Placeholder para o vídeo
+        col_video, col_controles = st.columns([3, 1])
+        with col_video:
+            # Vídeo de exemplo (poderia ser substituído por URL real)
+            st.video("https://www.w3schools.com/html/mov_bbb.mp4")
+        
+        with col_controles:
+            if st.button("✅ Marcar como Concluída", type="primary", use_container_width=True):
+                st.success("Aula marcada como concluída!")
+                time.sleep(1)
+                st.session_state["view_aluno"] = "lista"
+                st.session_state["curso_aluno_selecionado"] = None
+                st.rerun()
             
-            st.divider()
-            
-            st.markdown("### 🎯 Próximos Passos")
-            st.markdown("""
-            1. Pratique as técnicas demonstradas
-            2. Faça os exercícios propostos
-            3. Grave um vídeo praticando
-            4. Envie para avaliação do professor
-            """)
+            if st.button("📝 Próxima Aula", use_container_width=True):
+                st.info("Próxima aula em desenvolvimento...")
+        
+        # Conteúdo da aula
+        st.divider()
+        st.markdown("### 📋 Conteúdo da Aula")
+        st.markdown("""
+        - Introdução às técnicas apresentadas
+        - Demonstração prática
+        - Pontos importantes a observar
+        - Exercícios recomendados
+        - Dicas de segurança
+        """)
         
         # Botão de voltar
         st.divider()
@@ -591,9 +473,9 @@ def render_painel_aluno(usuario):
     # ============= LAYOUT PRINCIPAL =============
     
     # Hero Section
-    render_hero_section(usuario)
+    render_hero(usuario)
     
-    # Tabs
+    # Tabs principais
     tab_meus, tab_novos, tab_concluidos = st.tabs([
         "🎯 **Meus Cursos**", 
         "🚀 **Descobrir Novos**", 
@@ -610,17 +492,20 @@ def render_painel_aluno(usuario):
         render_tab_concluidos(usuario)
     
     # Footer
-    st.markdown("---")
+    st.divider()
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.caption("🥋 **BJJ Digital**")
+        st.markdown("**🥋 BJJ Digital**")
         st.caption("Sua evolução começa aqui")
     with col2:
-        st.caption("📞 Suporte")
+        st.markdown("**📞 Suporte**")
         st.caption("suporte@bjjdigital.com.br")
     with col3:
+        st.markdown("**🎯 Suas Metas**")
         # Calcular progresso geral
         cursos = ce.listar_cursos_inscritos(usuario["id"])
-        progresso_geral = sum(c.get('progresso', 0) for c in cursos) / len(cursos) if cursos else 0
-        st.caption("🎯 Metas")
-        st.caption(f"Progresso geral: {progresso_geral:.0f}%")
+        if cursos:
+            progresso_geral = sum(c.get('progresso', 0) for c in cursos) / len(cursos)
+            st.caption(f"Progresso geral: {progresso_geral:.0f}%")
+        else:
+            st.caption("Comece seus estudos!")
