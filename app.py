@@ -127,7 +127,332 @@ st.markdown(f"""
     footer {{visibility: hidden;}}
     [data-testid="stDecoration"] {{display: none;}}
     header[data-testid="stHeader"] {{ background-color: transparent !important; z-index: 1; }}
-
+    /* ============== ÁREA DE CURSOS MODERNA ============== */
+    
+    /* GRID DE CURSOS RESPONSIVO */
+    .cursos-grid {{
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+        gap: 24px;
+        margin: 30px 0;
+    }}
+    
+    /* CARD MODERNO */
+    .curso-card-moderno {{
+        background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.02));
+        border: 1px solid rgba(255, 215, 112, 0.15);
+        border-radius: 20px;
+        padding: 25px;
+        position: relative;
+        overflow: hidden;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(10px);
+    }}
+    
+    .curso-card-moderno:hover {{
+        transform: translateY(-8px);
+        border-color: {COR_DESTAQUE};
+        box-shadow: 0 25px 50px rgba(0,0,0,0.4),
+                    inset 0 1px 0 rgba(255,255,255,0.1);
+    }}
+    
+    .curso-card-moderno::before {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 5px;
+        background: linear-gradient(90deg, {COR_BOTAO}, {COR_HOVER});
+        border-radius: 20px 20px 0 0;
+    }}
+    
+    /* BADGES */
+    .badge-curso {{
+        display: inline-block;
+        padding: 6px 14px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin-right: 8px;
+        margin-bottom: 12px;
+        letter-spacing: 0.5px;
+    }}
+    
+    .badge-gratuito {{
+        background: linear-gradient(135deg, #078B6C, #056853);
+        color: white;
+        box-shadow: 0 4px 12px rgba(7, 139, 108, 0.3);
+    }}
+    
+    .badge-premium {{
+        background: linear-gradient(135deg, #FFD770, #FFC107);
+        color: #0e2d26;
+        box-shadow: 0 4px 12px rgba(255, 215, 112, 0.3);
+    }}
+    
+    .badge-andamento {{
+        background: rgba(255, 215, 112, 0.15);
+        color: #FFD770;
+        border: 1px solid rgba(255, 215, 112, 0.3);
+    }}
+    
+    /* TÍTULO E DESCRIÇÃO */
+    .titulo-curso {{
+        font-size: 1.4rem;
+        font-weight: 700;
+        background: linear-gradient(135deg, #FFF, {COR_DESTAQUE});
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 15px 0 10px 0;
+        line-height: 1.3;
+    }}
+    
+    .descricao-curso {{
+        color: rgba(255,255,255,0.7);
+        font-size: 0.95rem;
+        line-height: 1.6;
+        margin-bottom: 20px;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }}
+    
+    /* PROGRESS BAR ANIMADO */
+    .progresso-container {{
+        height: 10px;
+        background: rgba(255,255,255,0.08);
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 20px 0;
+        position: relative;
+    }}
+    
+    .progresso-bar {{
+        height: 100%;
+        background: linear-gradient(90deg, {COR_BOTAO}, {COR_HOVER});
+        border-radius: 10px;
+        position: relative;
+        transition: width 1s ease-out;
+    }}
+    
+    .progresso-bar::after {{
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255,255,255,0.4),
+            transparent
+        );
+        animation: shimmer 2.5s infinite;
+    }}
+    
+    @keyframes shimmer {{
+        0% {{ transform: translateX(-100%); }}
+        100% {{ transform: translateX(100%); }}
+    }}
+    
+    /* METADADOS */
+    .metadados-curso {{
+        display: flex;
+        justify-content: space-between;
+        color: rgba(255,255,255,0.6);
+        font-size: 0.85rem;
+        margin-top: 15px;
+    }}
+    
+    .metadado-item {{
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }}
+    
+    /* BOTÕES MODERNOS */
+    .btn-curso {{
+        width: 100%;
+        padding: 14px;
+        border-radius: 12px;
+        border: none;
+        font-weight: 700;
+        font-size: 1rem;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-top: 15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+    }}
+    
+    .btn-continuar {{
+        background: linear-gradient(135deg, {COR_BOTAO}, #056853);
+        color: white;
+    }}
+    
+    .btn-continuar:hover {{
+        background: linear-gradient(135deg, {COR_HOVER}, #FFC107);
+        transform: scale(1.02);
+        box-shadow: 0 10px 20px rgba(255, 215, 112, 0.3);
+    }}
+    
+    .btn-comprar {{
+        background: linear-gradient(135deg, #FFD770, #FFC107);
+        color: #0e2d26;
+        font-weight: 800;
+    }}
+    
+    .btn-comprar:hover {{
+        transform: scale(1.05);
+        box-shadow: 0 12px 24px rgba(255, 215, 112, 0.4);
+    }}
+    
+    /* HERO SECTION */
+    .hero-cursos {{
+        background: linear-gradient(135deg, 
+            rgba(7, 139, 108, 0.25), 
+            rgba(5, 104, 83, 0.15));
+        border-radius: 24px;
+        padding: 50px 40px;
+        margin-bottom: 40px;
+        text-align: center;
+        border: 1px solid rgba(255, 215, 112, 0.2);
+        position: relative;
+        overflow: hidden;
+    }}
+    
+    .hero-cursos::before {{
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(
+            circle,
+            rgba(255, 215, 112, 0.1) 0%,
+            transparent 70%
+        );
+        z-index: -1;
+    }}
+    
+    /* TABS MODERNAS */
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 10px;
+        background: transparent;
+        border-bottom: 2px solid rgba(255,255,255,0.1);
+    }}
+    
+    .stTabs [data-baseweb="tab"] {{
+        background: rgba(255,255,255,0.05);
+        border-radius: 12px 12px 0 0;
+        padding: 14px 28px;
+        color: rgba(255,255,255,0.8);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-bottom: none;
+        font-weight: 500;
+        transition: all 0.3s;
+    }}
+    
+    .stTabs [data-baseweb="tab"]:hover {{
+        background: rgba(255, 215, 112, 0.1);
+        color: {COR_DESTAQUE};
+    }}
+    
+    .stTabs [aria-selected="true"] {{
+        background: linear-gradient(135deg, {COR_BOTAO}, #056853) !important;
+        color: white !important;
+        font-weight: 700;
+        border-color: {COR_BOTAO} !important;
+        position: relative;
+    }}
+    
+    .stTabs [aria-selected="true"]::after {{
+        content: '';
+        position: absolute;
+        bottom: -2px;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: {COR_HOVER};
+    }}
+    
+    /* ESTADO VAZIO */
+    .empty-state {{
+        text-align: center;
+        padding: 60px 20px;
+        background: rgba(255,255,255,0.02);
+        border-radius: 20px;
+        border: 2px dashed rgba(255,255,255,0.1);
+        margin: 40px 0;
+    }}
+    
+    .empty-state-icon {{
+        font-size: 4rem;
+        opacity: 0.3;
+        margin-bottom: 20px;
+    }}
+    
+    /* FILTROS MODERNOS */
+    .filtros-container {{
+        background: rgba(255,255,255,0.03);
+        border-radius: 16px;
+        padding: 20px;
+        margin: 20px 0;
+        border: 1px solid rgba(255,255,255,0.1);
+    }}
+    
+    /* RESPONSIVIDADE */
+    @media (max-width: 768px) {{
+        .cursos-grid {{
+            grid-template-columns: 1fr;
+            gap: 20px;
+        }}
+        
+        .curso-card-moderno {{
+            padding: 20px;
+        }}
+        
+        .hero-cursos {{
+            padding: 30px 20px;
+        }}
+    }}
+    
+    /* PLAYER DE AULA MODERNO */
+    .player-container {{
+        background: linear-gradient(145deg, rgba(14,45,38,0.95), rgba(7,139,108,0.15));
+        border-radius: 20px;
+        border: 1px solid rgba(255,215,112,0.2);
+        padding: 30px;
+        margin-bottom: 30px;
+        position: relative;
+    }}
+    
+    .player-header {{
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 25px;
+    }}
+    
+    .player-title {{
+        font-size: 1.8rem;
+        color: {COR_DESTAQUE};
+        font-weight: 700;
+    }}
+    
+    .conteudo-aula {{
+        background: rgba(255,255,255,0.03);
+        border-radius: 15px;
+        padding: 25px;
+        margin-top: 25px;
+        border: 1px solid rgba(255,255,255,0.1);
+    }}
 </style>
 """, unsafe_allow_html=True)
 
