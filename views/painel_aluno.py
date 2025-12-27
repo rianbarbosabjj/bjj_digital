@@ -154,10 +154,17 @@ def render_card_curso(curso, usuario, tipo="meus"):
         
         # Botões
         if tipo == "meus":
-            if st.button("▶ Continuar Estudando", key=f"cont_{curso['id']}", use_container_width=True):
-                st.session_state["curso_aluno_selecionado"] = curso
-                st.session_state["view_aluno"] = "aulas"
-                st.rerun()
+            col_btn1, col_btn2 = st.columns(2)
+            with col_btn1:
+                if st.button("▶ Continuar", key=f"cont_{curso['id']}", use_container_width=True):
+                    st.session_state["curso_aluno_selecionado"] = curso
+                    st.session_state["view_aluno"] = "aulas"
+                    st.rerun()
+            with col_btn2:
+                if st.button("📋 Ver Aulas", key=f"ver_{curso['id']}", use_container_width=True):
+                    st.session_state["curso_aluno_selecionado"] = curso
+                    st.session_state["view_aluno"] = "modulos"
+                    st.rerun()
         else:
             preco = float(curso.get('preco', 0))
             if preco > 0:
@@ -267,6 +274,155 @@ def mostrar_modal_pagamento(curso, usuario):
                 st.rerun()
 
 # ==================================================
+# 📚 VISUALIZAÇÃO DE MÓDULOS E AULAS
+# ==================================================
+def render_modulos_aulas(curso):
+    """Renderiza a lista de módulos e aulas do curso"""
+    
+    st.markdown(f"## 📚 {curso.get('titulo')}")
+    st.markdown(f"**Professor:** {curso.get('professor_nome', 'Não informado')}")
+    st.divider()
+    
+    # Buscar módulos e aulas do curso
+    modulos = ce.listar_modulos_e_aulas(curso['id'])
+    
+    if not modulos:
+        st.info("📝 Este curso ainda não tem módulos ou aulas cadastradas.")
+        st.button("← Voltar aos Cursos", key="voltar_modulos", on_click=lambda: st.session_state.update({"view_aluno": "lista", "curso_aluno_selecionado": None}), use_container_width=True)
+        return
+    
+    # Exibir módulos
+    for i, modulo in enumerate(modulos, 1):
+        with st.expander(f"📂 Módulo {i}: {modulo.get('titulo', 'Módulo sem título')}", expanded=(i == 1)):
+            st.markdown(f"**Descrição:** {modulo.get('descricao', 'Sem descrição.')}")
+            st.divider()
+            
+            # Exibir aulas do módulo
+            aulas = modulo.get('aulas', [])
+            if not aulas:
+                st.info("📝 Este módulo ainda não tem aulas cadastradas.")
+            else:
+                for j, aula in enumerate(aulas, 1):
+                    col_aula1, col_aula2, col_aula3 = st.columns([3, 1, 1])
+                    
+                    with col_aula1:
+                        st.markdown(f"**Aula {j}: {aula.get('titulo', 'Aula sem título')}**")
+                        st.caption(f"Duração: {aula.get('duracao', 'Não informada')}")
+                    
+                    with col_aula2:
+                        # Verificar se aula tem conteúdo
+                        tem_conteudo = aula.get('conteudo') and len(aula.get('conteudo', {}).get('blocos', [])) > 0
+                        if tem_conteudo:
+                            st.markdown("✅ Disponível")
+                        else:
+                            st.markdown("⏳ Em preparação")
+                    
+                    with col_aula3:
+                        if tem_conteudo:
+                            if st.button("▶ Assistir", key=f"assistir_{aula['id']}", use_container_width=True):
+                                st.session_state["aula_selecionada"] = aula
+                                st.session_state["view_aluno"] = "player"
+                                st.rerun()
+                        else:
+                            st.button("🔒 Em breve", key=f"bloqueado_{aula['id']}", disabled=True, use_container_width=True)
+                    
+                    if j < len(aulas):
+                        st.divider()
+    
+    # Botão para voltar
+    st.divider()
+    col_voltar1, col_voltar2 = st.columns([1, 1])
+    with col_voltar1:
+        if st.button("← Voltar aos Cursos", use_container_width=True, type="secondary"):
+            st.session_state["view_aluno"] = "lista"
+            st.session_state["curso_aluno_selecionado"] = None
+            st.rerun()
+    with col_voltar2:
+        if st.button("📊 Meu Progresso", use_container_width=True):
+            # Aqui poderia ir uma visualização de progresso
+            st.info("Funcionalidade de progresso detalhado em desenvolvimento...")
+
+# ==================================================
+# 🎥 PLAYER DE AULA REAL
+# ==================================================
+def render_player_aula_real(aula, curso):
+    """Renderiza o player com o conteúdo real da aula"""
+    
+    st.markdown(f"## 🎥 {aula.get('titulo', 'Aula')}")
+    st.markdown(f"**Curso:** {curso.get('titulo')}")
+    st.divider()
+    
+    # Obter conteúdo da aula
+    conteudo = aula.get('conteudo', {})
+    blocos = conteudo.get('blocos', [])
+    
+    if not blocos:
+        st.info("📝 Esta aula ainda não tem conteúdo disponível.")
+        st.button("← Voltar às Aulas", key="voltar_sem_conteudo", on_click=lambda: st.session_state.update({"view_aluno": "modulos", "aula_selecionada": None}), use_container_width=True)
+        return
+    
+    # Renderizar cada bloco de conteúdo
+    for bloco in blocos:
+        tipo = bloco.get('tipo')
+        conteudo_bloco = bloco.get('conteudo', '')
+        
+        if tipo == 'texto':
+            st.markdown("### 📝 Texto da Aula")
+            st.markdown(conteudo_bloco)
+            st.divider()
+        
+        elif tipo == 'imagem':
+            st.markdown("### 🖼️ Imagem")
+            if bloco.get('url'):
+                st.image(bloco['url'], caption=conteudo_bloco if conteudo_bloco else "Imagem da aula")
+            else:
+                st.info("Imagem não disponível")
+            st.divider()
+        
+        elif tipo == 'video':
+            st.markdown("### 🎥 Vídeo")
+            if bloco.get('url'):
+                st.video(bloco['url'])
+                if conteudo_bloco:
+                    st.markdown(f"**Descrição:** {conteudo_bloco}")
+            else:
+                st.info("Vídeo não disponível")
+            st.divider()
+        
+        elif tipo == 'arquivo':
+            st.markdown("### 📎 Arquivo para Download")
+            if bloco.get('url'):
+                st.markdown(f"[📥 Baixar arquivo: {conteudo_bloco}]({bloco['url']})")
+            else:
+                st.info("Arquivo não disponível")
+            st.divider()
+    
+    # Controles da aula
+    st.markdown("### 🎯 Controles da Aula")
+    col_controles1, col_controles2 = st.columns(2)
+    
+    with col_controles1:
+        if st.button("✅ Marcar como Concluída", type="primary", use_container_width=True):
+            # Aqui seria a lógica para marcar a aula como concluída
+            # ce.marcar_aula_concluida(usuario_id, aula_id)
+            st.success("Aula marcada como concluída!")
+            time.sleep(1)
+            st.session_state["view_aluno"] = "modulos"
+            st.session_state["aula_selecionada"] = None
+            st.rerun()
+    
+    with col_controles2:
+        if st.button("📝 Próxima Aula", use_container_width=True):
+            st.info("Navegação para próxima aula em desenvolvimento...")
+    
+    # Botão para voltar
+    st.divider()
+    if st.button("← Voltar às Aulas do Curso", use_container_width=True, type="secondary"):
+        st.session_state["view_aluno"] = "modulos"
+        st.session_state["aula_selecionada"] = None
+        st.rerun()
+
+# ==================================================
 # 🧱 ABAS PRINCIPAIS
 # ==================================================
 def render_tab_meus_cursos(usuario):
@@ -291,8 +447,12 @@ def render_tab_meus_cursos(usuario):
         for c in cursos:
             if c.get('duracao_estimada'):
                 try:
-                    horas = int(c['duracao_estimada'].replace('h', '').strip())
-                    horas_estudo += horas
+                    # Tenta extrair horas da string (ex: "2h 30min" ou "2h")
+                    partes = c['duracao_estimada'].split()
+                    for parte in partes:
+                        if 'h' in parte.lower():
+                            horas = int(''.join(filter(str.isdigit, parte)))
+                            horas_estudo += horas
                 except:
                     pass
         st.metric("⏱ Tempo Total", f"{horas_estudo}h")
@@ -394,7 +554,7 @@ def render_tab_concluidos(usuario):
             with col3:
                 if st.button("🔁 Revisar", key=f"rev_{curso['id']}", use_container_width=True):
                     st.session_state["curso_aluno_selecionado"] = curso
-                    st.session_state["view_aluno"] = "aulas"
+                    st.session_state["view_aluno"] = "modulos"
                     st.rerun()
 
 # ==================================================
@@ -411,63 +571,14 @@ def render_painel_aluno(usuario):
         mostrar_modal_pagamento(st.session_state.curso_para_compra, usuario)
         return
     
-    # Verificar se estamos no player de aula
-    if st.session_state.get("view_aluno") == "aulas" and st.session_state.get("curso_aluno_selecionado"):
-        # Renderizar player simplificado
-        curso = st.session_state["curso_aluno_selecionado"]
-        
-        st.markdown(f"## 🎥 Aula do Curso: {curso.get('titulo')}")
-        st.divider()
-        
-        # Informações do curso
-        col_info1, col_info2 = st.columns(2)
-        with col_info1:
-            st.markdown(f"**Professor:** {curso.get('professor_nome', 'Não informado')}")
-            st.markdown(f"**Nível:** {curso.get('nivel', 'Não informado')}")
-        with col_info2:
-            progresso = curso.get('progresso', 0)
-            st.metric("📊 Seu Progresso", f"{progresso}%")
-        
-        st.divider()
-        
-        # Player de vídeo
-        st.markdown("### 📹 Vídeo da Aula")
-        
-        # Placeholder para o vídeo
-        col_video, col_controles = st.columns([3, 1])
-        with col_video:
-            # Vídeo de exemplo (poderia ser substituído por URL real)
-            st.video("https://www.w3schools.com/html/mov_bbb.mp4")
-        
-        with col_controles:
-            if st.button("✅ Marcar como Concluída", type="primary", use_container_width=True):
-                st.success("Aula marcada como concluída!")
-                time.sleep(1)
-                st.session_state["view_aluno"] = "lista"
-                st.session_state["curso_aluno_selecionado"] = None
-                st.rerun()
-            
-            if st.button("📝 Próxima Aula", use_container_width=True):
-                st.info("Próxima aula em desenvolvimento...")
-        
-        # Conteúdo da aula
-        st.divider()
-        st.markdown("### 📋 Conteúdo da Aula")
-        st.markdown("""
-        - Introdução às técnicas apresentadas
-        - Demonstração prática
-        - Pontos importantes a observar
-        - Exercícios recomendados
-        - Dicas de segurança
-        """)
-        
-        # Botão de voltar
-        st.divider()
-        if st.button("← Voltar aos Meus Cursos", use_container_width=True, type="secondary"):
-            st.session_state["view_aluno"] = "lista"
-            st.session_state["curso_aluno_selecionado"] = None
-            st.rerun()
-        
+    # Verificar se estamos na view de módulos
+    if st.session_state.get("view_aluno") == "modulos" and st.session_state.get("curso_aluno_selecionado"):
+        render_modulos_aulas(st.session_state["curso_aluno_selecionado"])
+        return
+    
+    # Verificar se estamos no player de aula real
+    if st.session_state.get("view_aluno") == "player" and st.session_state.get("aula_selecionada") and st.session_state.get("curso_aluno_selecionado"):
+        render_player_aula_real(st.session_state["aula_selecionada"], st.session_state["curso_aluno_selecionado"])
         return
     
     # ============= LAYOUT PRINCIPAL =============
