@@ -229,7 +229,10 @@ def aplicar_estilos_cards():
 # ==================================================
 def render_hero_section(titulo, subtitulo, usuario_nome=""):
     """Renderiza seção hero moderna"""
+    from datetime import datetime
+    
     saudacao = f", {usuario_nome}" if usuario_nome else ""
+    data_atual = datetime.now().strftime("%d/%m/%Y")
     
     hero_html = f"""
     <div class="hero-cursos">
@@ -241,7 +244,7 @@ def render_hero_section(titulo, subtitulo, usuario_nome=""):
             {subtitulo}
         </p>
         <div style="margin-top: 25px; color: rgba(255,255,255,0.6);">
-            📅 {datetime.now().strftime("%d/%m/%Y")} | 🎯 Continue sua jornada{saudacao}
+            📅 {data_atual} | 🎯 Continue sua jornada{saudacao}
         </div>
     </div>
     """
@@ -434,10 +437,10 @@ def render_player_aula(aula, curso):
     return player_html
 
 # ==================================================
-# 💰 MODAL DE PAGAMENTO (STREAMLIT 1.32+)
+# 💰 MODAL DE PAGAMENTO
 # ==================================================
 def mostrar_modal_pagamento(curso, usuario):
-    """Mostra modal de pagamento usando st.modal"""
+    """Mostra modal de pagamento"""
     
     with st.container():
         st.markdown(f"### 🛒 Checkout: {curso.get('titulo')}")
@@ -541,8 +544,6 @@ def render_tab_meus_cursos(usuario):
             st.metric("⏱ Tempo Total", f"{horas_estudo}h")
         
         # Grid de cursos
-        st.markdown('<div class="cursos-grid">', unsafe_allow_html=True)
-        
         cols = st.columns(3)
         for idx, curso in enumerate(cursos):
             with cols[idx % 3]:
@@ -561,13 +562,14 @@ def render_tab_meus_cursos(usuario):
                     if st.button("📊 Detalhes", key=f"det_{curso['id']}", use_container_width=True):
                         with st.expander("📋 Detalhes do Curso", expanded=True):
                             st.write(curso.get('descricao', ''))
-                            st.write(f"**Professor:** {curso.get('professor_nome')}")
-                            st.write(f"**Duração:** {curso.get('duracao_estimada')}")
-                            st.write(f"**Nível:** {curso.get('nivel')}")
+                            if curso.get('professor_nome'):
+                                st.write(f"**Professor:** {curso.get('professor_nome')}")
+                            if curso.get('duracao_estimada'):
+                                st.write(f"**Duração:** {curso.get('duracao_estimada')}")
+                            if curso.get('nivel'):
+                                st.write(f"**Nível:** {curso.get('nivel')}")
                             if curso.get('progresso', 0) > 0:
-                                st.write(f"**Último acesso:** {curso.get('ultimo_acesso', 'Não registrado')}")
-        
-        st.markdown('</div>', unsafe_allow_html=True)
+                                st.write(f"**Progresso atual:** {curso.get('progresso')}%")
 
 def render_tab_novos_cursos(usuario):
     """Renderiza aba 'Novos Cursos'"""
@@ -759,11 +761,16 @@ def render_painel_aluno(usuario):
     # ============= LAYOUT PRINCIPAL =============
     
     # Hero Section
+    # Corrigido: usando a chave correta do dicionário 'nome' em vez de 'name'
+    primeiro_nome = ""
+    if usuario.get('nome'):
+        primeiro_nome = usuario['nome'].split()[0] if len(usuario['nome'].split()) > 0 else usuario['nome']
+    
     st.components.v1.html(
         render_hero_section(
             "🥋 Academia Digital BJJ",
             "Domine as técnicas, evolua nas faixas, transforme seu jogo.",
-            usuario.get('nome', '').split()[0] if usuario.get('nome') else ""
+            primeiro_nome
         ),
         height=300
     )
